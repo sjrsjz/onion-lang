@@ -1,0 +1,11 @@
+[package]
+name = "onion-vm"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "onion_vm"
+crate-type = ["lib"]
+
+[dependencies]
+rust-arc-gc = "0.1.0"

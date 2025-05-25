@@ -1,0 +1,11 @@
+[package]
+name = "onion-frontend"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "onion_frontend"
+crate-type = ["lib"]
+
+[dependencies]
+onion-vm = { version = "0.1.0", path = "../onion-vm" }
