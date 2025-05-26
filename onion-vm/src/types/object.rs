@@ -46,10 +46,19 @@ impl Debug for OnionObject {
             OnionObject::Range(start, end) => write!(f, "Range({}, {})", start, end),
             OnionObject::Null => write!(f, "Null"),
             OnionObject::Undefined(s) => write!(f, "Undefined({})", s),
-            OnionObject::Tuple(tuple) => write!(f, "Tuple({:?})", tuple),
-            OnionObject::Pair(pair) => write!(f, "Pair({:?})", pair),
-            OnionObject::Named(named) => write!(f, "Named({:?})", named),
-            OnionObject::Mut(_) => write!(f, "Mut()"),
+            OnionObject::Tuple(tuple) => write!(f, "{:?}", tuple),
+            OnionObject::Pair(pair) => write!(f, "{:?}", pair),
+            OnionObject::Named(named) => write!(f, "{:?}", named),
+            OnionObject::Mut(r) => write!(f, "Mut({})", match r.upgrade() {
+                Some(strong) => {
+                    if !strong.isinstance::<OnionObject>() {
+                        "Invalid Mut Reference".to_string()
+                    } else {
+                        format!("{:?}", strong.downcast::<OnionObject>())
+                    }
+                },
+                None => "Broken Reference".to_string(),                
+            }),
         }
     }
 }
@@ -107,18 +116,8 @@ impl OnionObject {
     /// Warning: This method can cause stack overflow if there are nested Mut references.
     ///
     /// TODO: Add recursion depth limit after VM core is complete.
-    pub fn value(&self) -> Result<OnionStaticObject, ObjectError> {
-        match self {
-            OnionObject::Mut(weak) => {
-                if let Some(strong) = weak.upgrade() {
-                    // FIXME: Potential infinite recursion if Mut contains another Mut
-                    strong.downcast::<OnionObject>().value()
-                } else {
-                    Err(ObjectError::BrokenReference)
-                }
-            }
-            _ => Ok(OnionStaticObject::new(self.clone())),
-        }
+    pub fn clone_value(&self) -> Result<OnionStaticObject, ObjectError> {
+        self.with_data(|obj| Ok(obj.clone().stabilize()))
     }
 
     /// Warning: This method can cause stack overflow if there are nested Mut references.
@@ -261,26 +260,30 @@ impl OnionObject {
 
 impl OnionObject {
     pub fn equals(&self, other: &Self) -> Result<bool, ObjectError> {
-        match (self.value()?.weak(), other.value()?.weak()) {
-            (OnionObject::Integer(i1), OnionObject::Integer(i2)) => Ok(i1 == i2),
-            (OnionObject::Float(f1), OnionObject::Float(f2)) => Ok(f1 == f2),
-            (OnionObject::Integer(i1), OnionObject::Float(f2)) => Ok(*i1 as f64 == *f2),
-            (OnionObject::Float(f1), OnionObject::Integer(i2)) => Ok(*f1 == *i2 as f64),
-            (OnionObject::String(s1), OnionObject::String(s2)) => Ok(s1 == s2),
-            (OnionObject::Bytes(b1), OnionObject::Bytes(b2)) => Ok(b1 == b2),
-            (OnionObject::Boolean(b1), OnionObject::Boolean(b2)) => Ok(b1 == b2),
-            (OnionObject::Range(start1, end1), OnionObject::Range(start2, end2)) => {
-                Ok(start1 == start2 && end1 == end2)
-            }
-            (OnionObject::Null, OnionObject::Null) => Ok(true),
-            (OnionObject::Undefined(_), OnionObject::Undefined(_)) => Ok(true),
-            (OnionObject::Tuple(t1), _) => t1.equals(other),
-            (OnionObject::Pair(p1), _) => p1.equals(other),
-            (OnionObject::Named(n1), _) => n1.equals(other),
+        self.with_data(|left| {
+            other.with_data(|right| {
+                match (left, right) {
+                    (OnionObject::Integer(i1), OnionObject::Integer(i2)) => Ok(i1 == i2),
+                    (OnionObject::Float(f1), OnionObject::Float(f2)) => Ok(f1 == f2),
+                    (OnionObject::Integer(i1), OnionObject::Float(f2)) => Ok(*i1 as f64 == *f2),
+                    (OnionObject::Float(f1), OnionObject::Integer(i2)) => Ok(*f1 == *i2 as f64),
+                    (OnionObject::String(s1), OnionObject::String(s2)) => Ok(s1 == s2),
+                    (OnionObject::Bytes(b1), OnionObject::Bytes(b2)) => Ok(b1 == b2),
+                    (OnionObject::Boolean(b1), OnionObject::Boolean(b2)) => Ok(b1 == b2),
+                    (OnionObject::Range(start1, end1), OnionObject::Range(start2, end2)) => {
+                        Ok(start1 == start2 && end1 == end2)
+                    }
+                    (OnionObject::Null, OnionObject::Null) => Ok(true),
+                    (OnionObject::Undefined(_), OnionObject::Undefined(_)) => Ok(true),
+                    (OnionObject::Tuple(t1), _) => t1.equals(other),
+                    (OnionObject::Pair(p1), _) => p1.equals(other),
+                    (OnionObject::Named(n1), _) => n1.equals(other),
 
-            // 理论上Mut类型不应该出现在这里
-            _ => Ok(false),
-        }
+                    // 理论上Mut类型不应该出现在这里
+                    _ => Ok(false),
+                }
+            })
+        })
     }
 
     pub fn is_same(&self, other: &Self) -> Result<bool, ObjectError> {
@@ -588,28 +591,33 @@ impl OnionObject {
         })
     }
 
-    pub fn get_attribute<'t>(
-        &'t self,
-        key: &OnionObject,
-    ) -> Result<Option<&'t OnionObject>, ObjectError> {
+    pub fn with_attribute<F, R>(&self, key: &OnionObject, f: &F) -> Result<R, ObjectError>
+    where
+        F: Fn(&OnionObject) -> Result<R, ObjectError>,
+    {
         match self {
-            OnionObject::Tuple(tuple) => tuple.get_attribute(key),
-            OnionObject::Named(named) => named.get_attribute(key),
-            OnionObject::Pair(pair) => pair.get_attribute(key),
+            OnionObject::Tuple(tuple) => tuple.with_attribute(key, f),
+            OnionObject::Named(named) => named.with_attribute(key, f),
+            OnionObject::Pair(pair) => pair.with_attribute(key, f),
             _ => Err(ObjectError::InvalidOperation(format!(
-                "get_attribute() not supported for {:?}",
+                "with_attribute() not supported for {:?}",
                 self
             ))),
         }
     }
 
-    pub fn get_attr(&self, key: &OnionObject) -> Result<OnionStaticObject, ObjectError> {
-        match self.get_attribute(key)? {
-            Some(value) => Ok(OnionStaticObject::new(value.clone())),
-            None => Ok(OnionStaticObject::new(OnionObject::Undefined(format!(
-                "Attribute not found: {:?}",
-                key
-            )))),
+    pub fn with_attribute_mut<F, R>(&mut self, key: &OnionObject, f: &F) -> Result<R, ObjectError>
+    where
+        F: Fn(&mut OnionObject) -> Result<R, ObjectError>,
+    {
+        match self {
+            OnionObject::Tuple(tuple) => tuple.with_attribute_mut(key, f),
+            OnionObject::Named(named) => named.with_attribute_mut(key, f),
+            OnionObject::Pair(pair) => pair.with_attribute_mut(key, f),
+            _ => Err(ObjectError::InvalidOperation(format!(
+                "with_attribute_mut() not supported for {:?}",
+                self
+            ))),
         }
     }
 
@@ -653,6 +661,13 @@ pub struct OnionStaticObject {
     arcs: Option<Vec<GCArc>>,
 }
 
+impl Debug for OnionStaticObject {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "OnionStaticObject({:?})", self.obj)
+    }
+    
+}
+
 impl OnionStaticObject {
     pub fn new(obj: OnionObject) -> Self {
         let arcs = obj.upgrade();
@@ -674,7 +689,7 @@ impl OnionStaticObject {
 
 #[cfg(test)]
 mod tests {
-    use crate::{onion_tuple, types::tuple};
+    use crate::onion_tuple;
 
     use super::*;
     use arc_gc::gc::GC;
@@ -926,7 +941,7 @@ mod tests {
         let mut mut_obj = int_obj.mutablize(&mut gc);
 
         // Test value extraction
-        let value = mut_obj.weak().value().unwrap();
+        let value = mut_obj.weak().clone_value().unwrap();
         assert!(matches!(value.weak(), OnionObject::Integer(42)));
 
         // Test assignment through with_data_mut
@@ -951,7 +966,9 @@ mod tests {
         assert!(null_obj.to_float().is_err());
 
         // Invalid attribute access
-        assert!(int_obj.get_attribute(&string_obj).is_err());
+        assert!(int_obj
+            .with_attribute(&string_obj, &|_| { Ok(()) })
+            .is_err());
     }
 
     #[test]
@@ -1012,8 +1029,21 @@ mod tests {
             })
         ));
 
+        println!("{:?}", tuple_obj);
 
-        
-
+        match tuple_obj.weak().at(1) {
+            Ok(OnionStaticObject {
+                obj: OnionObject::Mut(weak),
+                ..
+            }) => {
+                if let Some(strong) = weak.upgrade() {
+                    assert!(matches!(strong.weak(), OnionObject::Integer(2)));
+                } else {
+                    panic!("Weak reference should be valid");
+                }
+            }
+            _ => panic!("Expected a mutable object at index 1"),
+            
+        }
     }
 }

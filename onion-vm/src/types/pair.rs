@@ -73,13 +73,21 @@ impl OnionPair {
         Ok(false)
     }
 
-    pub fn get_attribute<'t>(&'t self, key: &OnionObject) -> Result<Option<&'t OnionObject>, ObjectError> {
-        match self.value.get_attribute(key)? {
-            Some(value) => Ok(Some(value)),
-            None => match self.key.get_attribute(key)? {
-                Some(value) => Ok(Some(value)),
-                None => Ok(None),
-            },
-        }
+    pub fn with_attribute<F, R>(&self, key: &OnionObject, f: &F) -> Result<R, ObjectError>
+    where
+        F: Fn(&OnionObject) -> Result<R, ObjectError>,
+    {
+        self.value
+            .with_attribute(key, f)
+            .or_else(|_| self.key.with_attribute(key, f))
+    }
+
+    pub fn with_attribute_mut<F, R>(&mut self, key: &OnionObject, f: &F) -> Result<R, ObjectError>
+    where
+        F: Fn(&mut OnionObject) -> Result<R, ObjectError>,
+    {
+        self.value
+            .with_attribute_mut(key, f)
+            .or_else(|_| self.key.with_attribute_mut(key, f))
     }
 }

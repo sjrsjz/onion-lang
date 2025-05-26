@@ -11,7 +11,15 @@ pub struct OnionTuple {
 
 impl Debug for OnionTuple {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Tuple({:?})", self.elements)
+        match self.elements.len() {
+            0 => write!(f, "()"),
+            1 => write!(f, "({:?},)", self.elements[0]),
+            _ => {
+                let elements: Vec<String> = self.elements.iter().map(|e| format!("{:?}", e)).collect();
+                write!(f, "({})", elements.join(", "))
+            }
+            
+        }
     }
 }
 
@@ -21,13 +29,11 @@ macro_rules! onion_tuple {
         OnionTuple::new_static(vec![$($x),*])
     };
     () => {
-        
+
     };
 }
 
 impl OnionTuple {
-    
-
     pub fn new(elements: Vec<OnionObject>) -> Self {
         OnionTuple { elements }
     }
@@ -71,7 +77,10 @@ impl OnionTuple {
         ))
     }
 
-    pub fn get_attribute<'t>(&'t self, key: &OnionObject) -> Result<Option<&'t OnionObject>, ObjectError> {
+    pub fn get_attribute<'t>(
+        &'t self,
+        key: &OnionObject,
+    ) -> Result<Option<&'t OnionObject>, ObjectError> {
         for element in &self.elements {
             match element {
                 OnionObject::Named(named) => {
@@ -88,6 +97,56 @@ impl OnionTuple {
             }
         }
         Ok(None)
+    }
+
+    pub fn with_attribute<F, R>(&self, key: &OnionObject, f: F) -> Result<R, ObjectError>
+    where
+        F: Fn(&OnionObject) -> Result<R, ObjectError>,
+    {
+        for element in &self.elements {
+            match element {
+                OnionObject::Named(named) => {
+                    if named.key.as_ref().equals(key)? {
+                        return f(named.value.as_ref());
+                    }
+                }
+                OnionObject::Pair(pair) => {
+                    if pair.key.as_ref().equals(key)? {
+                        return f(pair.value.as_ref());
+                    }
+                }
+                _ => {}
+            }
+        }
+        Err(ObjectError::InvalidOperation(format!(
+            "Attribute {:?} not found in tuple",
+            key
+        )))
+    }
+
+    pub fn with_attribute_mut<F, R>(&mut self, key: &OnionObject, f: F) -> Result<R, ObjectError>
+    where
+        F: Fn(&mut OnionObject) -> Result<R, ObjectError>,
+    {
+        for element in &mut self.elements {
+            match element {
+                OnionObject::Named(named) => {
+                    if named.key.as_ref().equals(key)? {
+                        return f(named.value.as_mut());
+                    }
+                }
+                OnionObject::Pair(pair) => {
+                    if pair.key.as_ref().equals(key)? {
+                        return f(pair.value.as_mut());
+                    }
+                }
+                _ => {}
+            }
+        }
+        Err(ObjectError::InvalidOperation(format!(
+            "Attribute {:?} not found in tuple",
+            key
+        )))
     }
 
     pub fn binary_add(&self, other: &OnionObject) -> Result<OnionStaticObject, ObjectError> {
