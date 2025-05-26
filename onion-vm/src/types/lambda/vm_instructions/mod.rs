@@ -15,7 +15,7 @@ use crate::{
 };
 
 use super::{
-    context::{Frame, StackObject},
+    context::Frame,
     definition::{LambdaBody, OnionLambdaDefinition},
     runnable::OnionLambdaRunnable as LambdaRunnable,
 };

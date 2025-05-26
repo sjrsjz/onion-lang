@@ -5,25 +5,25 @@ use onion_vm::{lambda::{runnable::{Runnable, StepResult}, scheduler::scheduler::
 
 fn main() {
     let code = r#"
-    // foo := (a?, b?) -> {
-    //     i := mut 0;
-    //     while (i < 1000000) {
-    //         i = i + 1;
-    //     };
+    foo := (a?, b?) -> {
+        i := mut 0;
+        while (i < 1000000) {
+            i = i + 1;
+        };
 
-    //     return a + b + i
-    // };
-    // return foo(1, 2);
-
-    obj := {
-        "name": mut "Onion",
-        "version": 1.0,
-        "features": ["fast", "reliable", "secure"]
+        return a + b + i
     };
+    return foo(1, 2);
 
-    // obj[1] = "updated value"; // panic: cannot assign to immutable field
-    obj.name = "updated value"; // this is allowed, as the field is mutable
-    return obj;
+    // obj := {
+    //     "name": mut "Onion",
+    //     "version": 1.0,
+    //     "features": ["fast", "reliable", "secure"]
+    // };
+
+    // // obj[1] = "updated value"; // panic: cannot assign to immutable field
+    // obj.name = "updated value"; // this is allowed, as the field is mutable
+    // return obj;
 
     "#;
     let dir_stack = onion_frontend::dir_stack::DirStack::new(None);
@@ -98,7 +98,7 @@ fn main() {
             }            
         }
         counter += 1;
-        if counter > 10000000 {
+        if counter > 100000000 {
             gc.collect();
         }
     }

@@ -5,24 +5,20 @@ use crate::{
     types::object::{ObjectError, OnionStaticObject},
 };
 
-#[derive(Clone, Debug)]
-pub enum StackObject {
-    Object(OnionStaticObject), // Object with optional reference to a vector of references
-    ReturnPoint(isize),
-}
+
 
 #[derive(Clone, Debug)]
 pub enum Frame {
-    Normal(HashMap<String, OnionStaticObject>, Vec<StackObject>), // Normal frame
+    Normal(HashMap<String, OnionStaticObject>, Vec<OnionStaticObject>), // Normal frame
 }
 
 impl Frame {
-    pub fn get_stack(&self) -> &Vec<StackObject> {
+    pub fn get_stack(&self) -> &Vec<OnionStaticObject> {
         match self {
             Frame::Normal(_, stack) => stack,
         }
     }
-    pub fn get_stack_mut(&mut self) -> &mut Vec<StackObject> {
+    pub fn get_stack_mut(&mut self) -> &mut Vec<OnionStaticObject> {
         match self {
             Frame::Normal(_, stack) => stack,
         }
@@ -71,27 +67,6 @@ impl Context {
         Ok(())       
         
     }
-
-    pub fn local_return(&mut self) -> Result<Option<Vec<StackObject>>, RuntimeError> {
-        if self.frames.len() == 0 {
-            return Err(RuntimeError::DetailedError(
-                "Cannot pop frame from empty context".to_string(),
-            ));
-        }
-
-        let last_frame = self.frames.pop().unwrap();
-        let stack = last_frame.get_stack();
-        if self.frames.len() == 0 {
-            return Ok(Some(stack.clone()));
-        }
-        self.frames
-            .last_mut()
-            .unwrap()
-            .get_stack_mut()
-            .extend(stack.clone());
-        Ok(None)
-    }
-
     pub fn clear_stack(&mut self) {
         if self.frames.len() > 0 {
             self.frames.last_mut().unwrap().get_stack_mut().clear();
@@ -99,21 +74,6 @@ impl Context {
     }
 
     pub fn push_object(&mut self, object: OnionStaticObject) -> Result<(), RuntimeError> {
-        if self.frames.len() > 0 {
-            self.frames
-                .last_mut()
-                .unwrap()
-                .get_stack_mut()
-                .push(StackObject::Object(object));
-            Ok(())
-        } else {
-            Err(RuntimeError::DetailedError(
-                "Cannot push object to empty context".to_string(),
-            ))
-        }
-    }
-
-    pub fn push(&mut self, object: StackObject) -> Result<(), RuntimeError> {
         if self.frames.len() > 0 {
             self.frames
                 .last_mut()
@@ -128,16 +88,7 @@ impl Context {
         }
     }
 
-    pub fn push_return_point(&mut self, return_point: isize) {
-        if self.frames.len() > 0 {
-            self.frames
-                .last_mut()
-                .unwrap()
-                .get_stack_mut()
-                .push(StackObject::ReturnPoint(return_point));
-        }
-    }
-    pub fn pop(&mut self) -> Result<StackObject, RuntimeError> {
+    pub fn pop(&mut self) -> Result<OnionStaticObject, RuntimeError> {
         if self.frames.len() == 0 {
             return Err(RuntimeError::DetailedError(
                 "Cannot pop object from empty context".to_string(),
@@ -208,11 +159,12 @@ impl Context {
             ));
         }
         let stack = last_frame.get_stack();
-        match &stack[stack.len() - 1 - idx] {
-            StackObject::Object(object) => Ok(object),
-            StackObject::ReturnPoint(_) => Err(RuntimeError::DetailedError(
-                "Expected object, found return point".to_string(),
+        match stack.get(stack.len() - 1 - idx) {
+            None => Err(RuntimeError::DetailedError(
+                "Index out of bounds".to_string(),
             )),
+            Some(o) => Ok(o)
+            
         }
     }
 
@@ -233,12 +185,13 @@ impl Context {
         }
         let stack = last_frame.get_stack_mut();
         let idx = stack.len() - 1 - idx;
-        match &mut stack[idx] {
-            StackObject::Object(object) => Ok(object),
-            StackObject::ReturnPoint(_) => Err(RuntimeError::DetailedError(
-                "Expected object, found return point".to_string(),
+        match stack.get_mut(idx) {
+            None => Err(RuntimeError::DetailedError(
+                "Index out of bounds".to_string(),
             )),
+            Some(o) => Ok(o)
         }
+
     }
 
     pub fn let_variable(
