@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use arc_gc::traceable::GCTraceable;
+use arc_gc::{arc::GCArc, traceable::GCTraceable};
 
 use super::object::{OnionObject, OnionStaticObject};
 
@@ -33,8 +33,8 @@ impl OnionLazySet {
 
     pub fn new_static(container: &OnionStaticObject, filter: &OnionStaticObject) -> OnionStaticObject {
         OnionObject::LazySet(OnionLazySet {
-            container: Box::new(container.clone()),
-            filter: Box::new(filter.clone()),
+            container: Box::new(container.weak().clone()),
+            filter: Box::new(filter.weak().clone()),
         }).stabilize()
     }
 
@@ -44,5 +44,15 @@ impl OnionLazySet {
 
     pub fn get_filter(&self) -> &OnionObject {
         &self.filter
+    }
+
+    pub fn upgrade(&self) -> Option<Vec<GCArc>> {
+        match (self.container.upgrade(), self.filter.upgrade()) {
+            (Some(mut container_arcs), Some(filter_arcs)) => {
+                container_arcs.extend(filter_arcs);
+                Some(container_arcs)
+            }
+            _ => None,
+        }
     }
 }

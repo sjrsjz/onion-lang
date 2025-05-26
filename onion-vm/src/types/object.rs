@@ -10,7 +10,7 @@ use arc_gc::{
 };
 
 use super::{
-    lambda::vm_instructions::instruction_set::VMInstructionPackage, lazy_set::OnionLazySet,
+    lambda::{definition::OnionLambdaDefinition, vm_instructions::instruction_set::VMInstructionPackage}, lazy_set::OnionLazySet,
     named::OnionNamed, pair::OnionPair, tuple::OnionTuple,
 };
 
@@ -48,6 +48,7 @@ pub enum OnionObject {
     Named(OnionNamed),
     LazySet(OnionLazySet),
     InstructionPackage(VMInstructionPackage),
+    Lambda(OnionLambdaDefinition),
 
     // mutable types, DO NOT USE THIS TYPE DIRECTLY, use `mutablize` instead
     Mut(GCArcWeak),
@@ -69,6 +70,7 @@ impl Debug for OnionObject {
             OnionObject::Named(named) => write!(f, "{:?}", named),
             OnionObject::LazySet(lazy_set) => write!(f, "{:?}", lazy_set),
             OnionObject::InstructionPackage(pkg) => write!(f, "InstructionPackage({:?})", pkg),
+            OnionObject::Lambda(lambda) => write!(f, "Lambda({:?})", lambda),
             OnionObject::Mut(r) => write!(
                 f,
                 "Mut({})",
@@ -99,6 +101,7 @@ impl GCTraceable for OnionObject {
             OnionObject::Pair(pair) => pair.visit(),
             OnionObject::Named(named) => named.visit(),
             OnionObject::LazySet(lazy_set) => lazy_set.visit(),
+            OnionObject::Lambda(lambda) => lambda.visit(),
 
             _ => {}
         }
@@ -115,6 +118,9 @@ impl OnionObject {
                 }
             }
             OnionObject::Tuple(tuple) => tuple.upgrade(),
+            OnionObject::Pair(pair) => pair.upgrade(),
+            OnionObject::Named(named) => named.upgrade(),
+            OnionObject::LazySet(lazy_set) => lazy_set.upgrade(),
             _ => None,
         }
     }
@@ -140,6 +146,29 @@ impl OnionObject {
                 self
             ))),
         }
+    }
+
+    pub fn contains(&self, other: &OnionObject) -> Result<bool, ObjectError> {
+        self.with_data(|obj| {
+            other.with_data(|other_obj| match (obj, other_obj) {
+                (OnionObject::Tuple(tuple), _) => tuple.contains(other_obj),
+                (OnionObject::String(s), OnionObject::String(other_s)) => Ok(s.contains(other_s)),
+                (OnionObject::Bytes(b), OnionObject::Bytes(other_b)) => {
+                    Ok(b.windows(other_b.len()).any(|window| window == other_b))
+                }
+                (OnionObject::Range(l, r), OnionObject::Integer(i)) => Ok(*i >= *l && *i < *r),
+                (OnionObject::Range(start, end), OnionObject::Float(f)) => {
+                    Ok(*f >= *start as f64 && *f < *end as f64)
+                }
+                (OnionObject::Range(start, end), OnionObject::Range(other_start, other_end)) => {
+                    Ok(*other_start >= *start && *other_end <= *end)
+                }
+                _ => Err(ObjectError::InvalidOperation(format!(
+                    "contains() not supported for {:?}",
+                    obj
+                ))),
+            })
+        })
     }
 
     /// Warning: This method can cause stack overflow if there are nested Mut references.
@@ -613,6 +642,17 @@ impl OnionObject {
         })
     }
 
+    pub fn unary_plus(&self) -> Result<OnionStaticObject, ObjectError> {
+        self.with_data(|obj| match obj {
+            OnionObject::Integer(i) => Ok(OnionStaticObject::new(OnionObject::Integer(i.abs()))),
+            OnionObject::Float(f) => Ok(OnionStaticObject::new(OnionObject::Float(f.abs()))),
+            _ => Err(ObjectError::InvalidOperation(format!(
+                "Invalid unary plus operation for {:?}",
+                obj
+            ))),
+        })
+    }
+
     pub fn unary_not(&self) -> Result<OnionStaticObject, ObjectError> {
         self.with_data(|obj| match obj {
             OnionObject::Boolean(b) => Ok(OnionStaticObject::new(OnionObject::Boolean(!b))),
@@ -684,6 +724,53 @@ impl OnionObject {
                 self
             ))),
         }
+    }
+
+    pub fn key_of(&self) -> Result<OnionStaticObject, ObjectError> {
+        self.with_data(|obj| match obj {
+            OnionObject::Named(named) => Ok(named.get_key().clone().stabilize()),
+            OnionObject::Pair(pair) => Ok(pair.get_key().clone().stabilize()),
+            _ => Err(ObjectError::InvalidOperation(format!(
+                "key_of() not supported for {:?}",
+                obj
+            ))),
+        })
+    }
+
+    pub fn value_of(&self) -> Result<OnionStaticObject, ObjectError> {
+        self.with_data(|obj| match obj {
+            OnionObject::Named(named) => Ok(named.get_value().clone().stabilize()),
+            OnionObject::Pair(pair) => Ok(pair.get_value().clone().stabilize()),
+            _ => Err(ObjectError::InvalidOperation(format!(
+                "value_of() not supported for {:?}",
+                obj
+            ))),
+        })
+    }
+
+    pub fn type_of(&self) -> Result<String, ObjectError> {
+        self.with_data(|obj| match obj {
+            OnionObject::Integer(_) => Ok("Integer".to_string()),
+            OnionObject::Float(_) => Ok("Float".to_string()),
+            OnionObject::String(_) => Ok("String".to_string()),
+            OnionObject::Bytes(_) => Ok("Bytes".to_string()),
+            OnionObject::Boolean(_) => Ok("Boolean".to_string()),
+            OnionObject::Null => Ok("Null".to_string()),
+            OnionObject::Undefined(_) => Ok("Undefined".to_string()),
+            OnionObject::Tuple(_) => Ok("Tuple".to_string()),
+            OnionObject::Pair(_) => Ok("Pair".to_string()),
+            OnionObject::Named(_) => Ok("Named".to_string()),
+            OnionObject::LazySet(_) => Ok("LazySet".to_string()),
+            OnionObject::InstructionPackage(_) => Ok("InstructionPackage".to_string()),
+            _ => Err(ObjectError::InvalidOperation(format!(
+                "type_of() not supported for {:?}",
+                obj
+            ))),
+        })
+    }
+
+    pub fn copy(&self) -> Result<OnionStaticObject, ObjectError> {
+        self.with_data(|obj| Ok(obj.clone().stabilize()))
     }
 }
 

@@ -1,13 +1,21 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, result};
 
 use arc_gc::gc::GC;
 use opcode::{OpcodeArgument, ProcessedOpcode};
 
-use crate::{lambda::runnable::{RuntimeError, StepResult}, types::{lazy_set::OnionLazySet, named::OnionNamed, object::OnionObject, pair::OnionPair, tuple::OnionTuple}};
+use crate::{
+    lambda::runnable::{RuntimeError, StepResult},
+    types::{
+        lazy_set::OnionLazySet, named::OnionNamed, object::OnionObject, pair::OnionPair,
+        tuple::OnionTuple,
+    },
+};
 
-use super::{context::StackObject, runnable::OnionLambdaRunnable as LambdaRunnable};
-
-
+use super::{
+    context::{Frame, StackObject},
+    definition::{LambdaBody, OnionLambdaDefinition},
+    runnable::OnionLambdaRunnable as LambdaRunnable,
+};
 
 pub mod instruction_set;
 pub mod ir;
@@ -20,7 +28,9 @@ pub fn load_int(
     gc: &mut GC,
 ) -> Result<StepResult, RuntimeError> {
     if let OpcodeArgument::Int64(value) = opcode.operand1 {
-        runnable.context.push_object(OnionObject::Integer(value).stabilize())?;
+        runnable
+            .context
+            .push_object(OnionObject::Integer(value).stabilize())?;
         Ok(StepResult::Continue)
     } else {
         Err(RuntimeError::DetailedError(format!(
@@ -35,7 +45,9 @@ pub fn load_null(
     opcode: &ProcessedOpcode,
     gc: &mut GC,
 ) -> Result<StepResult, RuntimeError> {
-    runnable.context.push_object(OnionObject::Null.stabilize())?;
+    runnable
+        .context
+        .push_object(OnionObject::Null.stabilize())?;
     Ok(StepResult::Continue)
 }
 
@@ -56,7 +68,9 @@ pub fn load_float(
     gc: &mut GC,
 ) -> Result<StepResult, RuntimeError> {
     if let OpcodeArgument::Float64(value) = opcode.operand1 {
-        runnable.context.push_object(OnionObject::Float(value).stabilize())?;
+        runnable
+            .context
+            .push_object(OnionObject::Float(value).stabilize())?;
         Ok(StepResult::Continue)
     } else {
         Err(RuntimeError::DetailedError(format!(
@@ -74,7 +88,8 @@ pub fn load_string(
     if let OpcodeArgument::String(value) = opcode.operand1 {
         let string = OnionObject::String(
             runnable.borrow_instruction()?.get_string_pool()[value as usize].clone(),
-        ).stabilize();
+        )
+        .stabilize();
         runnable.context.push_object(string)?;
         Ok(StepResult::Continue)
     } else {
@@ -93,7 +108,8 @@ pub fn load_bytes(
     if let OpcodeArgument::ByteArray(value) = opcode.operand1 {
         let bytes = OnionObject::Bytes(
             runnable.borrow_instruction()?.get_bytes_pool()[value as usize].clone(),
-        ).stabilize();
+        )
+        .stabilize();
         runnable.context.push_object(bytes)?;
         Ok(StepResult::Continue)
     } else {
@@ -187,12 +203,15 @@ pub fn build_range(
     let left = runnable.context.get_object_rev(1)?;
     let right = runnable.context.get_object_rev(0)?;
     let range = OnionObject::Range(
-        left.weak().to_integer()
+        left.weak()
+            .to_integer()
             .map_err(|e| RuntimeError::DetailedError(format!("Failed to build range: {}", e)))?,
         right
-            .weak().to_integer()
+            .weak()
+            .to_integer()
             .map_err(|e| RuntimeError::DetailedError(format!("Failed to build range: {}", e)))?,
-    ).stabilize();
+    )
+    .stabilize();
 
     runnable.context.discard_objects(2)?;
     runnable.context.push_object(range)?;
@@ -206,10 +225,7 @@ pub fn build_set(
 ) -> Result<StepResult, RuntimeError> {
     let container = runnable.context.get_object_rev(1)?;
     let filter = runnable.context.get_object_rev(0)?;
-    let set =  OnionLazySet::new_static(
-        container,
-        filter,
-    );  
+    let set = OnionLazySet::new_static(container, filter);
     runnable.context.discard_objects(2)?;
     runnable.context.push_object(set)?;
     Ok(StepResult::Continue)
@@ -248,17 +264,13 @@ pub fn load_lambda(
                 "Signature index out of bounds: {}",
                 signature_index
             ))
-        })?.clone();
+        })?
+        .clone();
 
     let should_capture = flags & 0x01 != 0;
-    let dynamic_params = flags & 0x02 != 0;
 
     let captured_value = if should_capture {
-        Some(
-            runnable
-                .context
-                .get_object_rev(1)?
-        )
+        Some(runnable.context.get_object_rev(1)?)
     } else {
         None
     };
@@ -266,7 +278,9 @@ pub fn load_lambda(
     let default_parameters = runnable
         .context
         .get_object_rev(if should_capture { 2 } else { 1 })?
-        .weak().clone_value().map_err(RuntimeError::ObjectError)?;
+        .weak()
+        .clone_value()
+        .map_err(RuntimeError::ObjectError)?;
 
     let OnionObject::Tuple(_) = default_parameters.weak() else {
         return Err(RuntimeError::DetailedError(format!(
@@ -278,7 +292,9 @@ pub fn load_lambda(
     let instruction_package = runnable
         .context
         .get_object_rev(0)?
-        .weak().clone_value().map_err(RuntimeError::ObjectError)?;
+        .weak()
+        .clone_value()
+        .map_err(RuntimeError::ObjectError)?;
     let OnionObject::InstructionPackage(_) = instruction_package.weak() else {
         return Err(RuntimeError::DetailedError(format!(
             "Invalid object type for instruction package: {}",
@@ -286,10 +302,18 @@ pub fn load_lambda(
         )));
     };
 
-    Err(RuntimeError::DetailedError(format!(
-        "LoadLambda is not implemented yet. Signature: {}, Code Position: {}, Flags: {}",
-        signature, code_position, flags
-    )))
+    let lambda = OnionLambdaDefinition::new_static(
+        &default_parameters,
+        LambdaBody::Instruction(Box::new(instruction_package.weak().clone())),
+        captured_value,
+        None,
+    );
+
+    runnable
+        .context
+        .discard_objects(if should_capture { 3 } else { 2 })?;
+    runnable.context.push_object(lambda)?;
+    Ok(StepResult::Continue)
 }
 
 pub fn let_var(
@@ -309,11 +333,13 @@ pub fn let_var(
         .borrow_instruction()?
         .get_string_pool()
         .get(index as usize)
-        .ok_or_else(|| {
-            RuntimeError::DetailedError(format!("Name index out of bounds: {}", index))
-        })?.clone();
+        .ok_or_else(|| RuntimeError::DetailedError(format!("Name index out of bounds: {}", index)))?
+        .clone();
 
-    runnable.context.let_variable(&name, value.clone())?;
+    runnable
+        .context
+        .let_variable(&name, value.clone())
+        .map_err(RuntimeError::ObjectError)?;
     Ok(StepResult::Continue)
 }
 
@@ -333,9 +359,8 @@ pub fn get_var(
         .borrow_instruction()?
         .get_string_pool()
         .get(index as usize)
-        .ok_or_else(|| {
-            RuntimeError::DetailedError(format!("Name index out of bounds: {}", index))
-        })?.clone();
+        .ok_or_else(|| RuntimeError::DetailedError(format!("Name index out of bounds: {}", index)))?
+        .clone();
 
     let value = runnable.context.get_variable(&name)?;
     runnable.context.push_object(value.clone())?;
@@ -349,7 +374,9 @@ pub fn set_var(
 ) -> Result<StepResult, RuntimeError> {
     let right = runnable.context.get_object_rev(0)?.clone();
     let left = runnable.context.get_object_rev_mut(1)?;
-    left.weak_mut().assign(right.weak()).map_err(RuntimeError::ObjectError)?;
+    left.weak_mut()
+        .assign(right.weak())
+        .map_err(RuntimeError::ObjectError)?;
     // 保留右侧对象的引用
     runnable.context.discard_objects_offset(1, 1)?;
     Ok(StepResult::Continue)
@@ -360,15 +387,18 @@ pub fn get_attr(
     opcode: &ProcessedOpcode,
     gc: &mut GC,
 ) -> Result<StepResult, RuntimeError> {
-    let attr = runnable.context.get_object_rev(0)?;
+    let attr = runnable.context.get_object_rev(0)?.weak();
     let obj = runnable.context.get_object_rev(1)?;
-    let element = match obj.get_attr(attr) {
-        Some(element) => element,
-        None => Object::Undefined(format!("Attribute {} not found in object {}", attr, obj)),
-    };
+    let element = match obj.weak().with_attribute(attr, &|attr| Ok(attr.clone())) {
+        Ok(value) => value,
+        Err(e) => {
+            return Err(RuntimeError::ObjectError(e));
+        }
+    }
+    .stabilize();
     runnable.context.discard_objects(2)?;
-    runnable.context.push_object(element, None)?;
-    Ok(None)
+    runnable.context.push_object(element)?;
+    Ok(StepResult::Continue)
 }
 
 pub fn index_of(
@@ -377,11 +407,17 @@ pub fn index_of(
     gc: &mut GC,
 ) -> Result<StepResult, RuntimeError> {
     let index = runnable.context.get_object_rev(0)?;
-    let obj = runnable.context.get_object_rev(1)?;
-    let element = obj.at(index.as_int().map_err(RuntimeError::ObjectError)? as usize);
+    let OnionObject::Integer(index) = index.weak() else {
+        return Err(RuntimeError::DetailedError(format!(
+            "Invalid index type for IndexOf: {}",
+            index
+        )));
+    };
+    let obj = runnable.context.get_object_rev(1)?.weak();
+    let element = obj.at(*index).map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(2)?;
-    runnable.context.push_object(element, None)?;
-    Ok(None)
+    runnable.context.push_object(element)?;
+    Ok(StepResult::Continue)
 }
 
 pub fn key_of(
@@ -390,10 +426,10 @@ pub fn key_of(
     gc: &mut GC,
 ) -> Result<StepResult, RuntimeError> {
     let obj = runnable.context.get_object_rev(0)?;
-    let key = obj.key_of();
+    let key = obj.weak().key_of().map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(1)?;
-    runnable.context.push_object(key, None)?;
-    Ok(None)
+    runnable.context.push_object(key)?;
+    Ok(StepResult::Continue)
 }
 
 pub fn value_of(
@@ -402,10 +438,10 @@ pub fn value_of(
     gc: &mut GC,
 ) -> Result<StepResult, RuntimeError> {
     let obj = runnable.context.get_object_rev(0)?;
-    let value = obj.value_of();
+    let value = obj.weak().value_of().map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(1)?;
-    runnable.context.push_object(value, None)?;
-    Ok(None)
+    runnable.context.push_object(value)?;
+    Ok(StepResult::Continue)
 }
 
 pub fn type_of(
@@ -414,12 +450,12 @@ pub fn type_of(
     gc: &mut GC,
 ) -> Result<StepResult, RuntimeError> {
     let obj = runnable.context.get_object_rev(0)?;
-    let type_name = obj.type_of();
+    let type_name = obj.weak().type_of().map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(1)?;
     runnable
         .context
-        .push_object(Object::String(type_name), None)?;
-    Ok(None)
+        .push_object(OnionObject::String(type_name).stabilize())?;
+    Ok(StepResult::Continue)
 }
 
 pub fn copy(
@@ -428,10 +464,10 @@ pub fn copy(
     gc: &mut GC,
 ) -> Result<StepResult, RuntimeError> {
     let obj = runnable.context.get_object_rev(0)?;
-    let copied_obj = obj.copy();
+    let copied_obj = obj.weak().copy().map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(1)?;
-    runnable.context.push_object(copied_obj, None)?;
-    Ok(None)
+    runnable.context.push_object(copied_obj)?;
+    Ok(StepResult::Continue)
 }
 
 pub fn check_is_same_object(
@@ -441,12 +477,15 @@ pub fn check_is_same_object(
 ) -> Result<StepResult, RuntimeError> {
     let obj1 = runnable.context.get_object_rev(0)?;
     let obj2 = runnable.context.get_object_rev(1)?;
-    let is_same = obj1.is_same_object(obj2);
+    let is_same = obj1
+        .weak()
+        .is_same(obj2.weak())
+        .map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(2)?;
     runnable
         .context
-        .push_object(Object::Boolean(is_same), None)?;
-    Ok(None)
+        .push_object(OnionObject::Boolean(is_same).stabilize())?;
+    Ok(StepResult::Continue)
 }
 
 pub fn binary_add(
@@ -456,10 +495,13 @@ pub fn binary_add(
 ) -> Result<StepResult, RuntimeError> {
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
-    let result = left.add(right, gc).map_err(RuntimeError::ObjectError)?;
+    let result = left
+        .weak()
+        .binary_add(right.weak())
+        .map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(2)?;
-    runnable.context.push_object(result.0, result.1)?;
-    Ok(None)
+    runnable.context.push_object(result)?;
+    Ok(StepResult::Continue)
 }
 pub fn binary_subtract(
     runnable: &mut LambdaRunnable,
@@ -469,11 +511,12 @@ pub fn binary_subtract(
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
     let result = left
-        .subtract(right, gc)
+        .weak()
+        .binary_sub(right.weak())
         .map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(2)?;
-    runnable.context.push_object(result.0, result.1)?;
-    Ok(None)
+    runnable.context.push_object(result)?;
+    Ok(StepResult::Continue)
 }
 pub fn binary_multiply(
     runnable: &mut LambdaRunnable,
@@ -483,11 +526,12 @@ pub fn binary_multiply(
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
     let result = left
-        .multiply(right, gc)
+        .weak()
+        .binary_mul(right.weak())
         .map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(2)?;
-    runnable.context.push_object(result.0, result.1)?;
-    Ok(None)
+    runnable.context.push_object(result)?;
+    Ok(StepResult::Continue)
 }
 pub fn binary_divide(
     runnable: &mut LambdaRunnable,
@@ -496,10 +540,13 @@ pub fn binary_divide(
 ) -> Result<StepResult, RuntimeError> {
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
-    let result = left.divide(right, gc).map_err(RuntimeError::ObjectError)?;
+    let result = left
+        .weak()
+        .binary_div(right.weak())
+        .map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(2)?;
-    runnable.context.push_object(result.0, result.1)?;
-    Ok(None)
+    runnable.context.push_object(result)?;
+    Ok(StepResult::Continue)
 }
 pub fn binary_modulus(
     runnable: &mut LambdaRunnable,
@@ -508,10 +555,13 @@ pub fn binary_modulus(
 ) -> Result<StepResult, RuntimeError> {
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
-    let result = left.modulus(right, gc).map_err(RuntimeError::ObjectError)?;
+    let result = left
+        .weak()
+        .binary_mod(right.weak())
+        .map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(2)?;
-    runnable.context.push_object(result.0, result.1)?;
-    Ok(None)
+    runnable.context.push_object(result)?;
+    Ok(StepResult::Continue)
 }
 pub fn binary_power(
     runnable: &mut LambdaRunnable,
@@ -520,10 +570,13 @@ pub fn binary_power(
 ) -> Result<StepResult, RuntimeError> {
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
-    let result = left.power(right, gc).map_err(RuntimeError::ObjectError)?;
+    let result = left
+        .weak()
+        .binary_pow(right.weak())
+        .map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(2)?;
-    runnable.context.push_object(result.0, result.1)?;
-    Ok(None)
+    runnable.context.push_object(result)?;
+    Ok(StepResult::Continue)
 }
 pub fn binary_bitwise_or(
     runnable: &mut LambdaRunnable,
@@ -533,11 +586,12 @@ pub fn binary_bitwise_or(
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
     let result = left
-        .bitwise_or(right, gc)
+        .weak()
+        .binary_or(right.weak())
         .map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(2)?;
-    runnable.context.push_object(result.0, result.1)?;
-    Ok(None)
+    runnable.context.push_object(result)?;
+    Ok(StepResult::Continue)
 }
 pub fn binary_bitwise_and(
     runnable: &mut LambdaRunnable,
@@ -547,11 +601,12 @@ pub fn binary_bitwise_and(
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
     let result = left
-        .bitwise_and(right, gc)
+        .weak()
+        .binary_and(right.weak())
         .map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(2)?;
-    runnable.context.push_object(result.0, result.1)?;
-    Ok(None)
+    runnable.context.push_object(result)?;
+    Ok(StepResult::Continue)
 }
 pub fn binary_bitwise_xor(
     runnable: &mut LambdaRunnable,
@@ -561,11 +616,12 @@ pub fn binary_bitwise_xor(
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
     let result = left
-        .bitwise_xor(right, gc)
+        .weak()
+        .binary_xor(right.weak())
         .map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(2)?;
-    runnable.context.push_object(result.0, result.1)?;
-    Ok(None)
+    runnable.context.push_object(result)?;
+    Ok(StepResult::Continue)
 }
 pub fn binary_shift_left(
     runnable: &mut LambdaRunnable,
@@ -575,11 +631,12 @@ pub fn binary_shift_left(
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
     let result = left
-        .shift_left(right, gc)
+        .weak()
+        .binary_shl(right.weak())
         .map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(2)?;
-    runnable.context.push_object(result.0, result.1)?;
-    Ok(None)
+    runnable.context.push_object(result)?;
+    Ok(StepResult::Continue)
 }
 pub fn binary_shift_right(
     runnable: &mut LambdaRunnable,
@@ -589,11 +646,12 @@ pub fn binary_shift_right(
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
     let result = left
-        .shift_right(right, gc)
+        .weak()
+        .binary_shr(right.weak())
         .map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(2)?;
-    runnable.context.push_object(result.0, result.1)?;
-    Ok(None)
+    runnable.context.push_object(result)?;
+    Ok(StepResult::Continue)
 }
 pub fn binary_equal(
     runnable: &mut LambdaRunnable,
@@ -602,10 +660,15 @@ pub fn binary_equal(
 ) -> Result<StepResult, RuntimeError> {
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
-    let result = left.equal(right, gc).map_err(RuntimeError::ObjectError)?;
+    let result = left
+        .weak()
+        .binary_eq(right.weak())
+        .map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(2)?;
-    runnable.context.push_object(result.0, result.1)?;
-    Ok(None)
+    runnable
+        .context
+        .push_object(OnionObject::Boolean(result).stabilize())?;
+    Ok(StepResult::Continue)
 }
 pub fn binary_not_equal(
     runnable: &mut LambdaRunnable,
@@ -615,11 +678,14 @@ pub fn binary_not_equal(
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
     let result = left
-        .not_equal(right, gc)
+        .weak()
+        .binary_eq(right.weak())
         .map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(2)?;
-    runnable.context.push_object(result.0, result.1)?;
-    Ok(None)
+    runnable
+        .context
+        .push_object(OnionObject::Boolean(!result).stabilize())?;
+    Ok(StepResult::Continue)
 }
 pub fn binary_greater(
     runnable: &mut LambdaRunnable,
@@ -629,11 +695,14 @@ pub fn binary_greater(
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
     let result = left
-        .greater_than(right, gc)
+        .weak()
+        .binary_gt(right.weak())
         .map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(2)?;
-    runnable.context.push_object(result.0, result.1)?;
-    Ok(None)
+    runnable
+        .context
+        .push_object(OnionObject::Boolean(result).stabilize())?;
+    Ok(StepResult::Continue)
 }
 pub fn binary_greater_equal(
     runnable: &mut LambdaRunnable,
@@ -643,11 +712,14 @@ pub fn binary_greater_equal(
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
     let result = left
-        .greater_equal(right, gc)
+        .weak()
+        .binary_lt(right.weak())
         .map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(2)?;
-    runnable.context.push_object(result.0, result.1)?;
-    Ok(None)
+    runnable
+        .context
+        .push_object(OnionObject::Boolean(!result).stabilize())?;
+    Ok(StepResult::Continue)
 }
 pub fn binary_less(
     runnable: &mut LambdaRunnable,
@@ -657,11 +729,14 @@ pub fn binary_less(
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
     let result = left
-        .less_than(right, gc)
+        .weak()
+        .binary_lt(right.weak())
         .map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(2)?;
-    runnable.context.push_object(result.0, result.1)?;
-    Ok(None)
+    runnable
+        .context
+        .push_object(OnionObject::Boolean(result).stabilize())?;
+    Ok(StepResult::Continue)
 }
 pub fn binary_less_equal(
     runnable: &mut LambdaRunnable,
@@ -671,11 +746,14 @@ pub fn binary_less_equal(
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
     let result = left
-        .less_equal(right, gc)
+        .weak()
+        .binary_gt(right.weak())
         .map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(2)?;
-    runnable.context.push_object(result.0, result.1)?;
-    Ok(None)
+    runnable
+        .context
+        .push_object(OnionObject::Boolean(!result).stabilize())?;
+    Ok(StepResult::Continue)
 }
 
 pub fn unary_bitwise_not(
@@ -684,10 +762,10 @@ pub fn unary_bitwise_not(
     gc: &mut GC,
 ) -> Result<StepResult, RuntimeError> {
     let obj = runnable.context.get_object_rev(0)?;
-    let result = obj.bitwise_not(gc).map_err(RuntimeError::ObjectError)?;
+    let result = obj.weak().unary_not().map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(1)?;
-    runnable.context.push_object(result.0, result.1)?;
-    Ok(None)
+    runnable.context.push_object(result)?;
+    Ok(StepResult::Continue)
 }
 pub fn unary_plus(
     runnable: &mut LambdaRunnable,
@@ -695,10 +773,10 @@ pub fn unary_plus(
     gc: &mut GC,
 ) -> Result<StepResult, RuntimeError> {
     let obj = runnable.context.get_object_rev(0)?;
-    let result = obj.plus(gc).map_err(RuntimeError::ObjectError)?;
+    let result = obj.weak().unary_plus().map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(1)?;
-    runnable.context.push_object(result.0, result.1)?;
-    Ok(None)
+    runnable.context.push_object(result)?;
+    Ok(StepResult::Continue)
 }
 pub fn unary_minus(
     runnable: &mut LambdaRunnable,
@@ -706,10 +784,10 @@ pub fn unary_minus(
     gc: &mut GC,
 ) -> Result<StepResult, RuntimeError> {
     let obj = runnable.context.get_object_rev(0)?;
-    let result = obj.minus(gc).map_err(RuntimeError::ObjectError)?;
+    let result = obj.weak().unary_neg().map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(1)?;
-    runnable.context.push_object(result.0, result.1)?;
-    Ok(None)
+    runnable.context.push_object(result)?;
+    Ok(StepResult::Continue)
 }
 pub fn swap(
     runnable: &mut LambdaRunnable,
@@ -723,7 +801,7 @@ pub fn swap(
         )));
     };
     runnable.context.swap(0, index as usize)?;
-    Ok(None)
+    Ok(StepResult::Continue)
 }
 pub fn jump(
     runnable: &mut LambdaRunnable,
@@ -737,7 +815,7 @@ pub fn jump(
         )));
     };
     runnable.ip += offset as isize;
-    Ok(None)
+    Ok(StepResult::Continue)
 }
 
 pub fn jump_if_false(
@@ -752,11 +830,15 @@ pub fn jump_if_false(
         )));
     };
     let condition = runnable.context.get_object_rev(0)?;
-    if !condition.as_bool().map_err(RuntimeError::ObjectError)? {
+    if !condition
+        .weak()
+        .to_boolean()
+        .map_err(RuntimeError::ObjectError)?
+    {
         runnable.ip += offset as isize;
     }
     runnable.context.discard_objects(1)?;
-    Ok(None)
+    Ok(StepResult::Continue)
 }
 pub fn get_length(
     runnable: &mut LambdaRunnable,
@@ -764,12 +846,10 @@ pub fn get_length(
     gc: &mut GC,
 ) -> Result<StepResult, RuntimeError> {
     let obj = runnable.context.get_object_rev(0)?;
-    let length = obj.len().map_err(RuntimeError::ObjectError)?;
+    let length = obj.weak().len().map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(1)?;
-    runnable
-        .context
-        .push_object(Object::Integer(length as i64), None)?;
-    Ok(None)
+    runnable.context.push_object(length)?;
+    Ok(StepResult::Continue)
 }
 
 pub fn new_frame(
@@ -780,7 +860,7 @@ pub fn new_frame(
     runnable
         .context
         .push_frame(Frame::Normal(HashMap::new(), vec![]));
-    Ok(None)
+    Ok(StepResult::Continue)
 }
 
 pub fn pop_frame(
@@ -789,7 +869,7 @@ pub fn pop_frame(
     gc: &mut GC,
 ) -> Result<StepResult, RuntimeError> {
     runnable.context.pop_frame();
-    Ok(None)
+    Ok(StepResult::Continue)
 }
 
 pub fn clear_stack(
@@ -798,7 +878,7 @@ pub fn clear_stack(
     gc: &mut GC,
 ) -> Result<StepResult, RuntimeError> {
     runnable.context.clear_stack();
-    Ok(None)
+    Ok(StepResult::Continue)
 }
 
 pub fn assert(
@@ -807,14 +887,18 @@ pub fn assert(
     gc: &mut GC,
 ) -> Result<StepResult, RuntimeError> {
     let condition = runnable.context.get_object_rev(0)?;
-    if !condition.as_bool().map_err(RuntimeError::ObjectError)? {
+    if !condition
+        .weak()
+        .to_boolean()
+        .map_err(RuntimeError::ObjectError)?
+    {
         return Err(RuntimeError::DetailedError(format!(
             "Assertion failed: {}",
             condition
         )));
     }
     runnable.context.discard_objects(1)?;
-    Ok(None)
+    Ok(StepResult::Continue)
 }
 
 pub fn is_in(
@@ -825,7 +909,7 @@ pub fn is_in(
     let element = runnable.context.get_object_rev(0)?;
     let container = runnable.context.get_object_rev(1)?;
 
-    let Object::LazySet(lazy_set) = container else {
+    let OnionObject::LazySet(lazy_set) = container.weak() else {
         return Err(RuntimeError::DetailedError(format!(
             "Container is not a LazySet: {}",
             container
@@ -835,32 +919,24 @@ pub fn is_in(
     // 先检查元素是否在惰性集合的容器中
     let is_in = lazy_set
         .get_container()
-        .contains(&element)
+        .contains(element.weak())
         .map_err(|e| RuntimeError::DetailedError(format!("Failed to check containment: {}", e)))?;
 
     // 如果在容器中，则调用惰性集合的过滤器
-    let filter = lazy_set
-        .get_filter()
-        .value()
-        .map_err(|e| RuntimeError::DetailedError(format!("Failed to get filter: {}", e)))?;
-    let Object::Lambda(filter) = filter else {
+    let filter = lazy_set.get_filter();
+    let OnionObject::Lambda(_) = filter else {
         // 过滤器不是 Lambda 对象，认定为惰性求值结果为 filter
         runnable.context.discard_objects_offset(1, 1)?;
-        return Ok(None);
+        return Ok(StepResult::Continue);
     };
-    let (args, arcs) = Tuple::from_vec(
-        &vec![element.value().map_err(RuntimeError::ObjectError)?],
-        gc,
-    )
-    .map_err(|e| RuntimeError::DetailedError(format!("Failed to create tuple: {}", e)))?;
+    let args = OnionTuple::new_static(vec![element]);
+    let filter = filter.clone().stabilize();
+
     runnable.context.discard_objects(2)?;
-    let filter_arcs = filter.upgrade_values();
-    runnable
-        .context
-        .push_object(Object::Lambda(filter), Some(filter_arcs))?;
-    runnable
-        .context
-        .push_object(Object::Tuple(args), Some(arcs))?;
+
+    runnable.context.push_object(args)?;
+
+    runnable.context.push_object(filter)?;
 
     // 运行过滤器
     return call_lambda(runnable, opcode, gc);
@@ -871,5 +947,37 @@ pub fn call_lambda(
     opcode: &ProcessedOpcode,
     gc: &mut GC,
 ) -> Result<StepResult, RuntimeError> {
-    Ok(None)
+    let lambda = runnable.context.get_object_rev(0)?;
+    let args = runnable.context.get_object_rev(1)?;
+
+    let OnionObject::Lambda(lambda) = lambda.weak() else {
+        return Err(RuntimeError::DetailedError(format!(
+            "Object is not a Lambda: {}",
+            lambda
+        )));
+    };
+
+    let OnionObject::Tuple(parameters) = lambda.parameter.as_ref() else {
+        return Err(RuntimeError::DetailedError(format!(
+            "Lambda parameters are not a Tuple: {:?}",
+            lambda
+        )));
+    };
+
+    let OnionObject::Tuple(args_tuple) = args.weak() else {
+        return Err(RuntimeError::DetailedError(format!(
+            "Arguments are not a Tuple: {}",
+            args
+        )));
+    };
+
+    let assigned = parameters
+        .clone_and_named_assignment(args_tuple)
+        .map_err(RuntimeError::ObjectError)?;
+
+    let new_runnable = lambda.create_runnable(assigned).map_err(|e| {
+        RuntimeError::DetailedError(format!("Failed to create runnable from lambda: {}", e))
+    })?;
+    runnable.context.discard_objects(2)?;
+    Ok(StepResult::NewRunnable(new_runnable))
 }

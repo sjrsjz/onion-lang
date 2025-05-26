@@ -23,10 +23,10 @@ impl Debug for OnionTuple {
             0 => write!(f, "()"),
             1 => write!(f, "({:?},)", self.elements[0]),
             _ => {
-                let elements: Vec<String> = self.elements.iter().map(|e| format!("{:?}", e)).collect();
+                let elements: Vec<String> =
+                    self.elements.iter().map(|e| format!("{:?}", e)).collect();
                 write!(f, "({})", elements.join(", "))
             }
-            
         }
     }
 }
@@ -162,6 +162,15 @@ impl OnionTuple {
             ))),
         }
     }
+
+    pub fn contains(&self, other: &OnionObject) -> Result<bool, ObjectError> {
+        for element in &self.elements {
+            if element.equals(other)? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
 }
 
 impl OnionTuple {
@@ -180,5 +189,84 @@ impl OnionTuple {
             }
             _ => Ok(false),
         }
+    }
+}
+
+impl OnionTuple {
+    pub fn clone_and_named_assignment(
+        &self,
+        other: &OnionTuple,
+    ) -> Result<OnionStaticObject, ObjectError> {
+        let mut new_elements = self.elements.clone();
+        let mut assigned = vec![false; new_elements.len()];
+
+        for other_element in &other.elements {
+            match other_element {
+                OnionObject::Named(named) => {
+                    let key = named.key.as_ref();
+                    let mut found = false;
+
+                    // 查找是否有相同的key
+                    for (i, element) in new_elements.iter_mut().enumerate() {
+                        match element {
+                            OnionObject::Named(existing_named) => {
+                                if existing_named.key.as_ref().equals(key)? {
+                                    // 如果有相同的key，则赋值
+                                    *element = named.value.as_ref().clone();
+                                    assigned[i] = true;
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            OnionObject::Pair(existing_pair) => {
+                                if existing_pair.key.as_ref().equals(key)? {
+                                    // 如果有相同的key，则赋值
+                                    *element = named.value.as_ref().clone();
+                                    assigned[i] = true;
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+
+                    if !found {
+                        // 如果没有相同的key，则添加到新的元素中
+                        new_elements.push(other_element.clone());
+                        assigned.push(true);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // 处理未赋值的元素
+        for other_element in &other.elements {
+            match other_element {
+                OnionObject::Named(_) => {}
+                _ => {
+                    // 找到第一个未赋值的元素，并赋值
+                    let mut found = false;
+                    for (i, assigned_flag) in assigned.iter_mut().enumerate() {
+                        if !*assigned_flag {
+                            new_elements[i] = other_element.clone();
+                            *assigned_flag = true;
+                            found = true;
+                            break;
+                        }
+                    }
+                    if !found {
+                        // 如果没有未赋值的元素，则添加到新的元素中
+                        new_elements.push(other_element.clone());
+                        assigned.push(true);
+                    }
+                }
+            }
+        }
+
+        Ok(OnionStaticObject::new(OnionObject::Tuple(OnionTuple {
+            elements: new_elements,
+        })))
     }
 }

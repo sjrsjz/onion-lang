@@ -53,4 +53,12 @@ impl Runnable for Scheduler {
             ))
         }
     }
+
+    fn copy(&self) -> Box<dyn Runnable> {
+        Box::new(Scheduler {
+            argument: self.argument.clone(),
+            runnable_stack: self.runnable_stack.iter().map(|r| r.copy()).collect(),
+            result: self.result.clone(),
+        })
+    }
 }

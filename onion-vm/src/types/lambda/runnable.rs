@@ -1,11 +1,17 @@
-use std::{cell::{Ref, RefCell}, sync::Arc};
+use std::{
+    cell::{Ref, RefCell},
+    sync::Arc,
+};
 
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
-    types::object::OnionStaticObject,
+    types::object::{ObjectError, OnionObject, OnionStaticObject},
 };
 
-use super::{context::Context, vm_instructions::instruction_set::VMInstructionPackage};
+use super::{
+    context::{Context, Frame},
+    vm_instructions::instruction_set::VMInstructionPackage,
+};
 
 pub struct OnionLambdaRunnable {
     pub(crate) argument: OnionStaticObject,
@@ -17,6 +23,45 @@ pub struct OnionLambdaRunnable {
 }
 
 impl OnionLambdaRunnable {
+    pub fn new(
+        argument: OnionStaticObject,
+        instruction: Arc<RefCell<VMInstructionPackage>>,
+    ) -> Result<Self, ObjectError> {
+        let mut new_context = Context::new();
+        Context::push_frame(
+            &mut new_context,
+            Frame::Normal(std::collections::HashMap::new(), Vec::new()),
+        );
+
+        let OnionObject::Tuple(tuple) = argument.weak() else {
+            return Err(ObjectError::InvalidOperation(
+                "Argument must be a tuple".to_string(),
+            ));
+        };
+
+        for (_, item) in tuple.elements.iter().enumerate() {
+            match item {
+                OnionObject::Named(named) => {
+                    named.get_key().with_data(|key| match key {
+                        OnionObject::String(key_str) => {
+                            new_context.let_variable(key_str, named.get_value().clone().stabilize())
+                        }
+                        _ => Ok(()),
+                    })?;
+                }
+                _ => {}
+            }
+        }
+
+        Ok(OnionLambdaRunnable {
+            argument,
+            context: new_context,
+            result: OnionStaticObject::default(),
+            error: None,
+            ip: 0,
+            instruction,
+        })
+    }
     pub fn borrow_instruction(&self) -> Result<Ref<VMInstructionPackage>, RuntimeError> {
         self.instruction
             .try_borrow()
@@ -40,7 +85,17 @@ impl Runnable for OnionLambdaRunnable {
             return Ok(StepResult::Error(error.clone()));
         }
 
-
         Ok(StepResult::Continue)
+    }
+
+    fn copy(&self) -> Box<dyn Runnable> {
+        Box::new(OnionLambdaRunnable {
+            argument: self.argument.clone(),
+            context: self.context.clone(),
+            result: self.result.clone(),
+            error: self.error.clone(),
+            ip: self.ip,
+            instruction: Arc::clone(&self.instruction),
+        })
     }
 }

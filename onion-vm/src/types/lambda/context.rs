@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{lambda::runnable::RuntimeError, types::object::OnionStaticObject};
+use crate::{lambda::runnable::RuntimeError, types::object::{ObjectError, OnionStaticObject}};
 
 #[derive(Clone)]
 pub enum StackObject {
@@ -8,6 +8,7 @@ pub enum StackObject {
     ReturnPoint(isize),
 }
 
+#[derive(Clone)]
 pub enum Frame {
     Normal(HashMap<String, OnionStaticObject>, Vec<StackObject>), // Normal frame
 }
@@ -25,6 +26,7 @@ impl Frame {
     }
 }
 
+#[derive(Clone)]
 pub struct Context {
     pub(crate) frames: Vec<Frame>,
 }
@@ -194,10 +196,10 @@ impl Context {
         }
     }
 
-    pub fn let_variable(&mut self, name: &String, value: OnionStaticObject) -> Result<(), RuntimeError> {
+    pub fn let_variable(&mut self, name: &String, value: OnionStaticObject) -> Result<(), ObjectError> {
 
         if self.frames.len() == 0 {
-            return Err(RuntimeError::DetailedError(
+            return Err(ObjectError::InvalidOperation(
                 "Cannot let variable in empty context".to_string(),
             ));
         }
