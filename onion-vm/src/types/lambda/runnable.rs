@@ -42,7 +42,7 @@ impl OnionLambdaRunnable {
         let mut new_context = Context::new();
         Context::push_frame(
             &mut new_context,
-            Frame::Normal(std::collections::HashMap::new(), Vec::new()),
+            Frame::Normal(rustc_hash::FxHashMap::default(), Vec::new()),
         );
 
         let OnionObject::Tuple(tuple) = argument.weak() else {

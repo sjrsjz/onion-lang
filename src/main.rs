@@ -1,19 +1,30 @@
 use std::{cell::RefCell, sync::Arc};
 
 use onion_frontend::compile::build_code;
-use onion_vm::{lambda::{runnable::{Runnable, StepResult}, scheduler::scheduler::Scheduler}, onion_tuple, types::{lambda::{runnable::OnionLambdaRunnable, vm_instructions::ir_translator::IRTranslator}, object::OnionObject, tuple::OnionTuple}, GC};
+use onion_vm::{lambda::{runnable::{Runnable, StepResult}, scheduler::scheduler::Scheduler}, types::{lambda::{runnable::OnionLambdaRunnable, vm_instructions::ir_translator::IRTranslator}, object::OnionObject, tuple::OnionTuple}, GC};
 
 fn main() {
     let code = r#"
-    foo := (a?, b?) -> {
-        i := mut 0;
-        while (i < 10000000) {
-            i = i + 1;
-        };
+    // foo := (a?, b?) -> {
+    //     i := mut 0;
+    //     while (i < 1000000) {
+    //         i = i + 1;
+    //     };
 
-        return a + b + i
+    //     return a + b + i
+    // };
+    // return foo(1, 2);
+
+    obj := {
+        "name": mut "Onion",
+        "version": 1.0,
+        "features": ["fast", "reliable", "secure"]
     };
-    return foo(1, 2);
+
+    // obj[1] = "updated value"; // panic: cannot assign to immutable field
+    obj.name = "updated value"; // this is allowed, as the field is mutable
+    return obj;
+
     "#;
     let dir_stack = onion_frontend::dir_stack::DirStack::new(None);
     if let Err(e) = dir_stack {
@@ -58,6 +69,7 @@ fn main() {
 
     let mut gc = GC::new();
 
+    let mut counter = 0;
     loop {
         match scheduler.step(&mut gc) {
             Ok(step_result) => {
@@ -85,7 +97,10 @@ fn main() {
                 break;
             }            
         }
-        gc.collect();
+        counter += 1;
+        if counter > 10000000 {
+            gc.collect();
+        }
     }
 
 

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, result};
+use rustc_hash::FxHashMap as HashMap;
 
 use arc_gc::gc::GC;
 use opcode::{OpcodeArgument, ProcessedOpcode};
@@ -362,9 +362,13 @@ pub fn get_var(
     let name = runnable
         .borrow_instruction()?
         .get_string_pool()
-        .get(index as usize)
-        .ok_or_else(|| RuntimeError::DetailedError(format!("Name index out of bounds: {}", index)))?
-        .clone();
+        .get(index as usize).cloned();
+    let Some(name) = name else {
+        return Err(RuntimeError::DetailedError(format!(
+            "Name index out of bounds: {}",
+            index
+        )));
+    };
 
     let value = runnable.context.get_variable(&name)?;
     runnable.context.push_object(value.clone())?;
@@ -863,7 +867,7 @@ pub fn new_frame(
 ) -> Result<StepResult, RuntimeError> {
     runnable
         .context
-        .push_frame(Frame::Normal(HashMap::new(), vec![]));
+        .push_frame(Frame::Normal(HashMap::default(), vec![]));
     Ok(StepResult::Continue)
 }
 

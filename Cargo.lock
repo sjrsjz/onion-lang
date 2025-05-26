@@ -67,6 +67,7 @@ version = "0.1.0"
 dependencies = [
  "bincode",
  "rust-arc-gc",
+ "rustc-hash",
  "serde",
 ]
 
@@ -122,6 +123,12 @@ name = "rust-arc-gc"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0553de1578b0f7225aa4c9911714a0c26302f32828d53999374175fdaeb3f5f9"
+
+[[package]]
+name = "rustc-hash"
+version = "2.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "357703d41365b4b27c590e3ed91eabb1b663f07c4c084095e60cbed4362dff0d"
 
 [[package]]
 name = "serde"
