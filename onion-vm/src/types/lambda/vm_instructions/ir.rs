@@ -49,48 +49,33 @@ pub enum IR{
     Let(String), // pop value from stack and store it in variable
     Get(String), // get value from context and push the reference to stack
     Set, // pop value and reference from stack and set value
-    Wrap, // wrap value to object
     GetAttr, // pop object and attribute from stack and push the reference to attribute to stack
     IndexOf, // pop object and index from stack and push the reference to index to stack
     KeyOf, // pop object and get the key of the object
     ValueOf, // pop object and get the value of the object
-    SelfOf, // pop object and get the self of the object
     TypeOf, // pop object and get the type of the object
     CallLambda, // pop lambda and arguments from stack and call lambda
     Return, // pop value from stack and return it
-    Raise, // raise value
     NewFrame, // create new frame
-    NewBoundaryFrame(isize), // create new boundary frame
     PopFrame, // pop frame
-    PopBoundaryFrame, // pop boundary frame
     Pop, // pop value from stack and discard it
     JumpOffset(isize), // jump to offset
     JumpIfFalseOffset(isize), // jump to offset if false
     ResetStack, // reset stack
     DeepCopyValue, // copy value
     CopyValue, // copy value
-    RefValue, // get reference value
-    DerefValue, // get dereference value
+    Mut, // make value mutable
+    Const, // make value constant
     Assert, // assert value
     Import, // import module from file
     RedirectJump(String), // redirect ir, not for vm just for ir generation
     RedirectJumpIfFalse(String), 
     RedirectLabel(String),
-    RedirectNewBoundaryFrame(String),
-    RedirectNextOrJump(String),
-    Alias(String),
-    WipeAlias,
-    AliasOf,
+    Namespace(String),
     In,
     Emit,
     AsyncCallLambda,
-    IsFinished,
-    NextOrJump(isize),
-    ResetIter,
     Swap(usize, usize), // swap two values in stack
-    ForkStackObjectRef(usize), // fork stack object
-    PushValueIntoTuple(usize), // push value into tuple on stack
-    CaptureOf, // capture value
     LengthOf, // get length of object
     IsSameObject, // check if two objects are the same
 }

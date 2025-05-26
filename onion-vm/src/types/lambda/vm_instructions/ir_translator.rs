@@ -274,7 +274,7 @@ impl IRTranslator {
                     self.code.push(
                         Opcode32::build_opcode(
                             VMInstruction::StoreVar as u8,
-                            OperandFlag::Valid | OperandFlag::ArgSize64,
+                            OperandFlag::Valid | OperandFlag::ArgSize64 | OperandFlag::UseConstPool,
                             0,
                             0,
                         )
@@ -288,7 +288,7 @@ impl IRTranslator {
                     self.code.push(
                         Opcode32::build_opcode(
                             VMInstruction::LoadVar as u8,
-                            OperandFlag::Valid | OperandFlag::ArgSize64,
+                            OperandFlag::Valid | OperandFlag::ArgSize64 | OperandFlag::UseConstPool,
                             0,
                             0,
                         )
@@ -302,17 +302,6 @@ impl IRTranslator {
                     self.code.push(
                         Opcode32::build_opcode(
                             VMInstruction::SetValue as u8,
-                            0,
-                            0,
-                            0,
-                        )
-                        .get_opcode(),
-                    );
-                }
-                IR::Wrap => {
-                    self.code.push(
-                        Opcode32::build_opcode(
-                            VMInstruction::WrapObj as u8,
                             0,
                             0,
                             0,
@@ -364,17 +353,6 @@ impl IRTranslator {
                         .get_opcode(),
                     );
                 }
-                IR::SelfOf => {
-                    self.code.push(
-                        Opcode32::build_opcode(
-                            VMInstruction::SelfOf as u8,
-                            0,
-                            0,
-                            0,
-                        )
-                        .get_opcode(),
-                    );
-                }
                 IR::TypeOf => {
                     self.code.push(
                         Opcode32::build_opcode(
@@ -408,17 +386,6 @@ impl IRTranslator {
                         .get_opcode(),
                     );
                 }
-                IR::Raise => {
-                    self.code.push(
-                        Opcode32::build_opcode(
-                            VMInstruction::Raise as u8,
-                            0,
-                            0,
-                            0,
-                        )
-                        .get_opcode(),
-                    );
-                }
                 IR::NewFrame => {
                     self.code.push(
                         Opcode32::build_opcode(
@@ -430,35 +397,10 @@ impl IRTranslator {
                         .get_opcode(),
                     );
                 }
-                IR::NewBoundaryFrame(ir_offset) => {
-                    self.code.push(
-                        Opcode32::build_opcode(
-                            VMInstruction::NewBoundaryFrame as u8,
-                            OperandFlag::Valid | OperandFlag::ArgSize64,
-                            0,
-                            0,
-                        )
-                        .get_opcode(),
-                    );
-                    self.code.push(0u32);
-                    self.code.push(0u32);
-                    redirect_table.push((self.code.len(), self.code.len() - 2, (idx as isize + ir_offset + 1) as usize, true));
-                }
                 IR::PopFrame => {
                     self.code.push(
                         Opcode32::build_opcode(
                             VMInstruction::PopFrame as u8,
-                            0,
-                            0,
-                            0,
-                        )
-                        .get_opcode(),
-                    );
-                }
-                IR::PopBoundaryFrame => {
-                    self.code.push(
-                        Opcode32::build_opcode(
-                            VMInstruction::PopBoundaryFrame as u8,
                             0,
                             0,
                             0,
@@ -538,10 +480,10 @@ impl IRTranslator {
                         .get_opcode(),
                     );
                 }
-                IR::RefValue => {
+                IR::Mut => {
                     self.code.push(
                         Opcode32::build_opcode(
-                            VMInstruction::MakeRef as u8,
+                            VMInstruction::Mut as u8,
                             0,
                             0,
                             0,
@@ -549,10 +491,10 @@ impl IRTranslator {
                         .get_opcode(),
                     );
                 }
-                IR::DerefValue => {
+                IR::Const => {
                     self.code.push(
                         Opcode32::build_opcode(
-                            VMInstruction::Deref as u8,
+                            VMInstruction::Const as u8,
                             0,
                             0,
                             0,
@@ -582,31 +524,20 @@ impl IRTranslator {
                         .get_opcode(),
                     );
                 }
-                IR::Alias(name) => {
-                    self.code.push(
-                        Opcode32::build_opcode(
-                            VMInstruction::Alias as u8,
-                            OperandFlag::Valid | OperandFlag::ArgSize64,
-                            0,
-                            0,
-                        )
-                        .get_opcode(),
-                    );
-                    let index = self.alloc_string(name);
-                    self.code.push(Opcode32::lower32(index as u64));
-                    self.code.push(Opcode32::upper32(index as u64));
-                }
-                IR::WipeAlias => {
-                    self.code.push(
-                        Opcode32::build_opcode(
-                            VMInstruction::WipeAlias as u8,
-                            0,
-                            0,
-                            0,
-                        )
-                        .get_opcode(),
-                    );
-                }
+                // IR::Namespace(name) => {
+                //     self.code.push(
+                //         Opcode32::build_opcode(
+                //             VMInstruction::Namespace as u8,
+                //             OperandFlag::Valid | OperandFlag::ArgSize64,
+                //             0,
+                //             0,
+                //         )
+                //         .get_opcode(),
+                //     );
+                //     let index = self.alloc_string(name);
+                //     self.code.push(Opcode32::lower32(index as u64));
+                //     self.code.push(Opcode32::upper32(index as u64));
+                // }
                 IR::In => {
                     self.code.push(
                         Opcode32::build_opcode(
@@ -622,17 +553,6 @@ impl IRTranslator {
                     self.code.push(
                         Opcode32::build_opcode(
                             VMInstruction::BinaryIs as u8,
-                            0,
-                            0,
-                            0,
-                        )
-                        .get_opcode(),
-                    );
-                }
-                IR::AliasOf => {
-                    self.code.push(
-                        Opcode32::build_opcode(
-                            VMInstruction::AliasOf as u8,
                             0,
                             0,
                             0,
@@ -662,31 +582,6 @@ impl IRTranslator {
                         .get_opcode(),
                     );
                 }
-                IR::IsFinished => {
-                    self.code.push(
-                        Opcode32::build_opcode(
-                            VMInstruction::IsFinished as u8,
-                            0,
-                            0,
-                            0,
-                        )
-                        .get_opcode(),
-                    );
-                }
-                IR::NextOrJump(ir_offset) => {
-                    self.code.push(
-                        Opcode32::build_opcode(
-                            VMInstruction::NextOrJump as u8,
-                            OperandFlag::Valid | OperandFlag::ArgSize64,
-                            0,
-                            0,
-                        )
-                        .get_opcode(),
-                    );
-                    self.code.push(0u32);
-                    self.code.push(0u32);
-                    redirect_table.push((self.code.len(), self.code.len() - 2, (idx as isize + ir_offset + 1) as usize, true));
-                }
                 IR::BuildSet => {
                     self.code.push(
                         Opcode32::build_opcode(
@@ -712,54 +607,6 @@ impl IRTranslator {
                     self.code.push(Opcode32::upper32(a as u64));
                     self.code.push(Opcode32::lower32(b as u64));
                     self.code.push(Opcode32::upper32(b as u64));
-                }
-                IR::ResetIter => {
-                    self.code.push(
-                        Opcode32::build_opcode(
-                            VMInstruction::ResetIter as u8,
-                            0,
-                            0,
-                            0,
-                        )
-                        .get_opcode(),
-                    );
-                }
-                IR::ForkStackObjectRef(offset) => {
-                    self.code.push(
-                        Opcode32::build_opcode(
-                            VMInstruction::ForkStackObjectRef as u8,
-                            OperandFlag::Valid | OperandFlag::ArgSize64,
-                            0,
-                            0,
-                        )
-                        .get_opcode(),
-                    );
-                    self.code.push(Opcode32::lower32(offset as u64));
-                    self.code.push(Opcode32::upper32(offset as u64));
-                }
-                IR::PushValueIntoTuple(offset) => {
-                    self.code.push(
-                        Opcode32::build_opcode(
-                            VMInstruction::PushValueIntoTuple as u8,
-                            OperandFlag::Valid | OperandFlag::ArgSize64,
-                            0,
-                            0,
-                        )
-                        .get_opcode(),
-                    );
-                    self.code.push(Opcode32::lower32(offset as u64));
-                    self.code.push(Opcode32::upper32(offset as u64));
-                }
-                IR::CaptureOf => {
-                    self.code.push(
-                        Opcode32::build_opcode(
-                            VMInstruction::CaptureOf as u8,
-                            0,
-                            0,
-                            0,
-                        )
-                        .get_opcode(),
-                    );
                 }
                 IR::LengthOf => {
                     self.code.push(

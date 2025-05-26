@@ -1,6 +1,6 @@
 use std::{cell::RefCell, fmt::Debug, sync::Arc};
 
-use arc_gc::traceable::GCTraceable;
+use arc_gc::{gc::GC, traceable::GCTraceable};
 
 use crate::{
     lambda::runnable::Runnable,
@@ -26,10 +26,11 @@ impl Debug for LambdaBody {
 
 #[derive(Clone)]
 pub struct OnionLambdaDefinition {
-    pub parameter: Box<OnionObject>,
-    pub body: LambdaBody,
-    pub capture: Box<OnionObject>,
-    pub self_object: Box<OnionObject>,
+    pub(crate) parameter: Box<OnionObject>,
+    pub(crate) body: LambdaBody,
+    pub(crate) capture: Box<OnionObject>,
+    pub(crate) self_object: Box<OnionObject>,
+    pub(crate) signature: String,
 }
 
 impl OnionLambdaDefinition {
@@ -38,6 +39,7 @@ impl OnionLambdaDefinition {
         body: LambdaBody,
         capture: Option<&OnionStaticObject>,
         self_object: Option<&OnionStaticObject>,
+        signature: String,
     ) -> OnionStaticObject {
         OnionObject::Lambda(OnionLambdaDefinition {
             parameter: Box::new(parameter.weak().clone()),
@@ -50,12 +52,15 @@ impl OnionLambdaDefinition {
                 Some(self_object) => self_object.weak().clone(),
                 None => OnionObject::Undefined("No self object".to_string()),
             }),
-        }).stabilize()
+            signature,
+        })
+        .stabilize()
     }
 
     pub fn create_runnable(
         &self,
         argument: OnionStaticObject,
+        gc: &mut GC,
     ) -> Result<Box<dyn Runnable>, ObjectError> {
         match &self.body {
             LambdaBody::Instruction(instruction) => match instruction.as_ref() {
@@ -63,6 +68,15 @@ impl OnionLambdaDefinition {
                     let runnable = OnionLambdaRunnable::new(
                         argument,
                         Arc::new(RefCell::new(package.clone())),
+                        match package.get_table().get(&self.signature) {
+                            Some(ip) => *ip as isize,
+                            None => {
+                                return Err(ObjectError::InvalidOperation(format!(
+                                    "Signature '{}' not found in instruction package",
+                                    self.signature
+                                )));
+                            }
+                        },
                     )?;
                     Ok(Box::new(runnable))
                 }
@@ -73,8 +87,8 @@ impl OnionLambdaDefinition {
                 }
             },
             LambdaBody::NativeFunction(native_function) => {
-                let mut runnable = native_function.borrow().copy();
-                runnable.set_argument(argument)?;
+                let mut runnable = native_function.borrow().copy(gc);
+                runnable.set_argument(argument, gc)?;
                 Ok(runnable)
             }
         }

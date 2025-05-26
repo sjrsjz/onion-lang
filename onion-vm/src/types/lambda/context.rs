@@ -221,40 +221,47 @@ impl Context {
                 "Cannot get variable from empty context".to_string(),
             ));
         }
-        let last_frame = self.frames.last().unwrap();
-        match last_frame {
-            Frame::Normal(vars, _) => {
-                if let Some(value) = vars.get(name) {
-                    return Ok(value);
+        
+        // 反向遍历所有帧，从最新的帧开始查找
+        for frame in self.frames.iter().rev() {
+            match frame {
+                Frame::Normal(vars, _) => {
+                    if let Some(value) = vars.get(name) {
+                        return Ok(value);
+                    }
                 }
             }
         }
+        
         Err(RuntimeError::DetailedError(format!(
-            "Variable {} not found",
+            "Variable `{}` not found",
             name
         )))
     }
-
+    
     pub fn get_variable_mut(&mut self, name: &String) -> Result<&mut OnionStaticObject, RuntimeError> {
         if self.frames.len() == 0 {
             return Err(RuntimeError::DetailedError(
                 "Cannot get variable from empty context".to_string(),
             ));
         }
-        let last_frame = self.frames.last_mut().unwrap();
-        match last_frame {
-            Frame::Normal(vars, _) => {
-                if let Some(value) = vars.get_mut(name) {
-                    return Ok(value);
+        
+        // 反向遍历所有帧，从最新的帧开始查找
+        for frame in self.frames.iter_mut().rev() {
+            match frame {
+                Frame::Normal(vars, _) => {
+                    if let Some(value) = vars.get_mut(name) {
+                        return Ok(value);
+                    }
                 }
             }
         }
+        
         Err(RuntimeError::DetailedError(format!(
-            "Variable {} not found",
+            "Variable `{}` not found",
             name
         )))
     }
-
     pub fn swap(&mut self, idx1: usize, idx2: usize) -> Result<(), RuntimeError> {
         if self.frames.len() == 0 {
             return Err(RuntimeError::DetailedError(

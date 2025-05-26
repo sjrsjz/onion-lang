@@ -1,28 +1,28 @@
+use arc_gc::gc::GC;
+
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
     types::object::OnionStaticObject,
 };
 
 pub struct Scheduler {
-    pub(crate) argument: OnionStaticObject,
     pub(crate) runnable_stack: Vec<Box<dyn Runnable>>,
     pub(crate) result: OnionStaticObject,
 }
 
 impl Scheduler {
-    pub fn new(argument: OnionStaticObject) -> Self {
+    pub fn new(runnable_stack: Vec<Box<dyn Runnable>>) -> Self {
         Scheduler {
-            argument,
-            runnable_stack: Vec::new(),
+            runnable_stack,
             result: OnionStaticObject::default(),
         }
     }
 }
 
 impl Runnable for Scheduler {
-    fn step(&mut self) -> Result<StepResult, RuntimeError> {
+    fn step(&mut self, gc: &mut GC) -> Result<StepResult, RuntimeError> {
         if let Some(runnable) = self.runnable_stack.last_mut() {
-            match runnable.step()? {
+            match runnable.step(gc)? {
                 StepResult::Continue => Ok(StepResult::Continue),
                 StepResult::NewRunnable(new_runnable) => {
                     self.runnable_stack.push(new_runnable);
@@ -31,7 +31,7 @@ impl Runnable for Scheduler {
                 StepResult::Return(result) => {
                     self.runnable_stack.pop();
                     if let Some(top_runnable) = self.runnable_stack.last_mut() {
-                        top_runnable.receive(StepResult::Return(result.clone()))?;
+                        top_runnable.receive(StepResult::Return(result.clone()), gc)?;
                         Ok(StepResult::Continue)
                     } else {
                         self.result = result;
@@ -44,9 +44,9 @@ impl Runnable for Scheduler {
             Ok(StepResult::Return(self.result.clone()))
         }
     }
-    fn receive(&mut self, step_result: StepResult) -> Result<(), RuntimeError> {
+    fn receive(&mut self, step_result: StepResult, gc: &mut GC) -> Result<(), RuntimeError> {
         if let Some(runnable) = self.runnable_stack.last_mut() {
-            runnable.receive(step_result)
+            runnable.receive(step_result, gc)
         } else {
             Err(RuntimeError::DetailedError(
                 "No runnable in stack".to_string(),
@@ -54,10 +54,9 @@ impl Runnable for Scheduler {
         }
     }
 
-    fn copy(&self) -> Box<dyn Runnable> {
+    fn copy(&self, gc: &mut GC) -> Box<dyn Runnable> {
         Box::new(Scheduler {
-            argument: self.argument.clone(),
-            runnable_stack: self.runnable_stack.iter().map(|r| r.copy()).collect(),
+            runnable_stack: self.runnable_stack.iter().map(|r| r.copy(gc)).collect(),
             result: self.result.clone(),
         })
     }

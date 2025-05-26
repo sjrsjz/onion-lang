@@ -8,4 +8,8 @@ name = "onion_frontend"
 crate-type = ["lib"]
 
 [dependencies]
+base64 = "0.22.1"
+colored = "3.0.0"
 onion-vm = { version = "0.1.0", path = "../onion-vm" }
+regex = "1.11.1"
+unicode-segmentation = "1.12.0"

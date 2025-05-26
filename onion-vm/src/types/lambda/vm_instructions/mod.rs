@@ -6,7 +6,10 @@ use opcode::{OpcodeArgument, ProcessedOpcode};
 use crate::{
     lambda::runnable::{RuntimeError, StepResult},
     types::{
-        lazy_set::OnionLazySet, named::OnionNamed, object::OnionObject, pair::OnionPair,
+        lazy_set::OnionLazySet,
+        named::OnionNamed,
+        object::{OnionObject, OnionStaticObject},
+        pair::OnionPair,
         tuple::OnionTuple,
     },
 };
@@ -236,7 +239,7 @@ pub fn load_lambda(
     opcode: &ProcessedOpcode,
     gc: &mut GC,
 ) -> Result<StepResult, RuntimeError> {
-    let OpcodeArgument::Int64(signature_index) = opcode.operand1 else {
+    let OpcodeArgument::String(signature_index) = opcode.operand1 else {
         return Err(RuntimeError::DetailedError(format!(
             "Invalid argument type for Lambda's signature index: {:?}",
             opcode.operand1
@@ -307,6 +310,7 @@ pub fn load_lambda(
         LambdaBody::Instruction(Box::new(instruction_package.weak().clone())),
         captured_value,
         None,
+        signature,
     );
 
     runnable
@@ -321,7 +325,7 @@ pub fn let_var(
     opcode: &ProcessedOpcode,
     gc: &mut GC,
 ) -> Result<StepResult, RuntimeError> {
-    let OpcodeArgument::Int64(index) = opcode.operand1 else {
+    let OpcodeArgument::String(index) = opcode.operand1 else {
         return Err(RuntimeError::DetailedError(format!(
             "Invalid argument type for LetVariable: {:?}",
             opcode.operand1
@@ -348,7 +352,7 @@ pub fn get_var(
     opcode: &ProcessedOpcode,
     gc: &mut GC,
 ) -> Result<StepResult, RuntimeError> {
-    let OpcodeArgument::Int64(index) = opcode.operand1 else {
+    let OpcodeArgument::String(index) = opcode.operand1 else {
         return Err(RuntimeError::DetailedError(format!(
             "Invalid argument type for GetVariable: {:?}",
             opcode.operand1
@@ -868,7 +872,7 @@ pub fn pop_frame(
     opcode: &ProcessedOpcode,
     gc: &mut GC,
 ) -> Result<StepResult, RuntimeError> {
-    runnable.context.pop_frame();
+    runnable.context.pop_frame()?;
     Ok(StepResult::Continue)
 }
 
@@ -947,8 +951,8 @@ pub fn call_lambda(
     opcode: &ProcessedOpcode,
     gc: &mut GC,
 ) -> Result<StepResult, RuntimeError> {
-    let lambda = runnable.context.get_object_rev(0)?;
-    let args = runnable.context.get_object_rev(1)?;
+    let lambda = runnable.context.get_object_rev(1)?;
+    let args = runnable.context.get_object_rev(0)?;
 
     let OnionObject::Lambda(lambda) = lambda.weak() else {
         return Err(RuntimeError::DetailedError(format!(
@@ -975,9 +979,59 @@ pub fn call_lambda(
         .clone_and_named_assignment(args_tuple)
         .map_err(RuntimeError::ObjectError)?;
 
-    let new_runnable = lambda.create_runnable(assigned).map_err(|e| {
+    let new_runnable = lambda.create_runnable(assigned, gc).map_err(|e| {
         RuntimeError::DetailedError(format!("Failed to create runnable from lambda: {}", e))
     })?;
     runnable.context.discard_objects(2)?;
     Ok(StepResult::NewRunnable(new_runnable))
+}
+
+pub fn heap_to_gc(
+    runnable: &mut LambdaRunnable,
+    opcode: &ProcessedOpcode,
+    gc: &mut GC,
+) -> Result<StepResult, RuntimeError> {
+    let heap = runnable
+        .context
+        .get_object_rev(0)?
+        .mutablize(gc)
+        .map_err(RuntimeError::ObjectError)?;
+    runnable.context.discard_objects(1)?;
+    runnable.context.push_object(heap)?;
+    Ok(StepResult::Continue)
+}
+
+pub fn immutablize(
+    runnable: &mut LambdaRunnable,
+    opcode: &ProcessedOpcode,
+    gc: &mut GC,
+) -> Result<StepResult, RuntimeError> {
+    let obj = runnable.context.get_object_rev(0)?;
+    let immutable_obj = obj
+        .weak()
+        .clone_value()
+        .map_err(RuntimeError::ObjectError)?;
+    runnable.context.discard_objects(1)?;
+    runnable.context.push_object(immutable_obj)?;
+    Ok(StepResult::Continue)
+}
+
+pub fn return_value(
+    runnable: &mut LambdaRunnable,
+    opcode: &ProcessedOpcode,
+    gc: &mut GC,
+) -> Result<StepResult, RuntimeError> {
+    let return_value = runnable.context.get_object_rev(0)?;
+    Ok(StepResult::Return(return_value.clone()))
+}
+
+pub fn fork_instruction(
+    runnable: &mut LambdaRunnable,
+    opcode: &ProcessedOpcode,
+    gc: &mut GC,
+) -> Result<StepResult, RuntimeError> {
+    let forked =
+        OnionObject::InstructionPackage(runnable.borrow_instruction()?.clone()).stabilize();
+    runnable.context.push_object(forked)?;
+    Ok(StepResult::Continue)
 }
