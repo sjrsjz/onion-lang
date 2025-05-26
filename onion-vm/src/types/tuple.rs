@@ -1,12 +1,20 @@
 use std::fmt::Debug;
 
-use arc_gc::arc::GCArc;
+use arc_gc::{arc::GCArc, traceable::GCTraceable};
 
 use super::object::{ObjectError, OnionObject, OnionStaticObject};
 
 #[derive(Clone)]
 pub struct OnionTuple {
     pub elements: Vec<OnionObject>,
+}
+
+impl GCTraceable for OnionTuple {
+    fn visit(&self) {
+        for element in &self.elements {
+            element.visit();
+        }
+    }
 }
 
 impl Debug for OnionTuple {
@@ -38,7 +46,7 @@ impl OnionTuple {
         OnionTuple { elements }
     }
 
-    pub fn new_static(elements: Vec<OnionStaticObject>) -> OnionStaticObject {
+    pub fn new_static(elements: Vec<&OnionStaticObject>) -> OnionStaticObject {
         OnionStaticObject::new(OnionObject::Tuple(OnionTuple {
             elements: elements.into_iter().map(|e| e.weak().clone()).collect(),
         }))
@@ -77,29 +85,20 @@ impl OnionTuple {
         ))
     }
 
-    pub fn get_attribute<'t>(
-        &'t self,
-        key: &OnionObject,
-    ) -> Result<Option<&'t OnionObject>, ObjectError> {
-        for element in &self.elements {
-            match element {
-                OnionObject::Named(named) => {
-                    if named.key.as_ref().equals(key)? {
-                        return Ok(Some(named.value.as_ref()));
-                    }
-                }
-                OnionObject::Pair(pair) => {
-                    if pair.key.as_ref().equals(key)? {
-                        return Ok(Some(pair.value.as_ref()));
-                    }
-                }
-                _ => {}
-            }
+    pub fn with_index<F, R>(&self, index: i64, f: &F) -> Result<R, ObjectError>
+    where
+        F: Fn(&OnionObject) -> Result<R, ObjectError>,
+    {
+        if index < 0 || index >= self.elements.len() as i64 {
+            return Err(ObjectError::InvalidOperation(format!(
+                "Index out of bounds: {}",
+                index
+            )));
         }
-        Ok(None)
+        f(&self.elements[index as usize])
     }
 
-    pub fn with_attribute<F, R>(&self, key: &OnionObject, f: F) -> Result<R, ObjectError>
+    pub fn with_attribute<F, R>(&self, key: &OnionObject, f: &F) -> Result<R, ObjectError>
     where
         F: Fn(&OnionObject) -> Result<R, ObjectError>,
     {

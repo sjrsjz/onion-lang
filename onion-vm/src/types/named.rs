@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use arc_gc::{arc::GCArc, traceable::GCTraceable};
 
-use super::object::{ObjectError, OnionObject};
+use super::object::{ObjectError, OnionObject, OnionStaticObject};
 
 #[derive(Clone)]
 pub struct OnionNamed {
@@ -29,6 +29,13 @@ impl OnionNamed {
             key: Box::new(key),
             value: Box::new(value),
         }
+    }
+
+    pub fn new_static(key: &OnionStaticObject, value: &OnionStaticObject) -> OnionStaticObject {
+        OnionObject::Named(OnionNamed {
+            key: Box::new(key.weak().clone()),
+            value: Box::new(value.weak().clone()),
+        }).stabilize()
     }
 
     pub fn get_key(&self) -> &OnionObject {

@@ -1,4 +1,7 @@
-use std::{fmt::Debug, ptr::addr_eq};
+use std::{
+    fmt::{Debug, Display},
+    ptr::addr_eq,
+};
 
 use arc_gc::{
     arc::{GCArc, GCArcWeak},
@@ -6,14 +9,27 @@ use arc_gc::{
     traceable::GCTraceable,
 };
 
-use super::{named::OnionNamed, pair::OnionPair, tuple::OnionTuple};
+use super::{
+    lambda::vm_instructions::instruction_set::VMInstructionPackage, lazy_set::OnionLazySet,
+    named::OnionNamed, pair::OnionPair, tuple::OnionTuple,
+};
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ObjectError {
     InvalidType,
     InvalidOperation(String),
     BrokenReference,
+}
+
+impl Display for ObjectError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ObjectError::InvalidType => write!(f, "Invalid type"),
+            ObjectError::InvalidOperation(msg) => write!(f, "Invalid operation: {}", msg),
+            ObjectError::BrokenReference => write!(f, "Broken reference"),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -30,6 +46,8 @@ pub enum OnionObject {
     Tuple(OnionTuple),
     Pair(OnionPair),
     Named(OnionNamed),
+    LazySet(OnionLazySet),
+    InstructionPackage(VMInstructionPackage),
 
     // mutable types, DO NOT USE THIS TYPE DIRECTLY, use `mutablize` instead
     Mut(GCArcWeak),
@@ -49,16 +67,22 @@ impl Debug for OnionObject {
             OnionObject::Tuple(tuple) => write!(f, "{:?}", tuple),
             OnionObject::Pair(pair) => write!(f, "{:?}", pair),
             OnionObject::Named(named) => write!(f, "{:?}", named),
-            OnionObject::Mut(r) => write!(f, "Mut({})", match r.upgrade() {
-                Some(strong) => {
-                    if !strong.isinstance::<OnionObject>() {
-                        "Invalid Mut Reference".to_string()
-                    } else {
-                        format!("{:?}", strong.downcast::<OnionObject>())
+            OnionObject::LazySet(lazy_set) => write!(f, "{:?}", lazy_set),
+            OnionObject::InstructionPackage(pkg) => write!(f, "InstructionPackage({:?})", pkg),
+            OnionObject::Mut(r) => write!(
+                f,
+                "Mut({})",
+                match r.upgrade() {
+                    Some(strong) => {
+                        if !strong.isinstance::<OnionObject>() {
+                            "Invalid Mut Reference".to_string()
+                        } else {
+                            format!("{:?}", strong.downcast::<OnionObject>())
+                        }
                     }
-                },
-                None => "Broken Reference".to_string(),                
-            }),
+                    None => "Broken Reference".to_string(),
+                }
+            ),
         }
     }
 }
@@ -71,6 +95,11 @@ impl GCTraceable for OnionObject {
                     strong.mark_and_visit();
                 }
             }
+            OnionObject::Tuple(tuple) => tuple.visit(),
+            OnionObject::Pair(pair) => pair.visit(),
+            OnionObject::Named(named) => named.visit(),
+            OnionObject::LazySet(lazy_set) => lazy_set.visit(),
+
             _ => {}
         }
     }
@@ -160,7 +189,7 @@ impl OnionObject {
         }
     }
     /// Assign a new value to a mutable object.
-    pub fn assign(&mut self, other: OnionObject) -> Result<(), ObjectError> {
+    pub fn assign(&mut self, other: &OnionObject) -> Result<(), ObjectError> {
         // 由于我们无法保证赋值后GCArcWeak指向对象的稳定性，对不可变对象进行赋值操作会导致潜在的内存安全问题。
         // Mut类型由于是被GC管理的，因此可以安全地进行赋值操作（前提是GCArcWeak指向的对象仍然存在）。
         if !matches!(self, OnionObject::Mut(_)) {
@@ -170,7 +199,7 @@ impl OnionObject {
             )));
         }
         self.with_data_mut(|obj| {
-            *obj = other;
+            *obj = other.clone();
             Ok(())
         })
     }
@@ -189,27 +218,27 @@ impl OnionObject {
     }
 
     pub fn to_integer(&self) -> Result<i64, ObjectError> {
-        match self {
+        self.with_data(|obj| match obj {
             OnionObject::Integer(i) => Ok(*i),
             OnionObject::Float(f) => Ok(*f as i64),
             OnionObject::String(s) => s.parse::<i64>().map_err(|_| ObjectError::InvalidType),
             OnionObject::Boolean(b) => Ok(if *b { 1 } else { 0 }),
             _ => Err(ObjectError::InvalidType),
-        }
+        })
     }
 
     pub fn to_float(&self) -> Result<f64, ObjectError> {
-        match self {
+        self.with_data(|obj| match obj {
             OnionObject::Integer(i) => Ok(*i as f64),
             OnionObject::Float(f) => Ok(*f),
             OnionObject::String(s) => s.parse::<f64>().map_err(|_| ObjectError::InvalidType),
             OnionObject::Boolean(b) => Ok(if *b { 1.0 } else { 0.0 }),
             _ => Err(ObjectError::InvalidType),
-        }
+        })
     }
 
     pub fn to_string(&self) -> Result<String, ObjectError> {
-        match self {
+        self.with_data(|obj| match obj {
             OnionObject::Integer(i) => Ok(i.to_string()),
             OnionObject::Float(f) => Ok(f.to_string()),
             OnionObject::String(s) => Ok(s.clone()),
@@ -220,29 +249,33 @@ impl OnionObject {
                 "false".to_string()
             }),
             _ => Err(ObjectError::InvalidType),
-        }
+        })
     }
 
     pub fn to_bytes(&self) -> Result<Vec<u8>, ObjectError> {
-        match self {
+        self.with_data(|obj| match obj {
             OnionObject::Integer(i) => Ok(i.to_string().into_bytes()),
             OnionObject::Float(f) => Ok(f.to_string().into_bytes()),
-            OnionObject::String(s) => Ok(s.clone().into_bytes()),
+            OnionObject::String(s) => Ok(s.as_bytes().to_vec()),
             OnionObject::Bytes(b) => Ok(b.clone()),
-            OnionObject::Boolean(b) => Ok(if *b { vec![1] } else { vec![0] }),
+            OnionObject::Boolean(b) => Ok(if *b {
+                b"true".to_vec()
+            } else {
+                b"false".to_vec()
+            }),
             _ => Err(ObjectError::InvalidType),
-        }
+        })
     }
 
     pub fn to_boolean(&self) -> Result<bool, ObjectError> {
-        match self {
+        self.with_data(|obj| match obj {
             OnionObject::Integer(i) => Ok(*i != 0),
             OnionObject::Float(f) => Ok(*f != 0.0),
             OnionObject::String(s) => Ok(!s.is_empty()),
             OnionObject::Bytes(b) => Ok(!b.is_empty()),
             OnionObject::Boolean(b) => Ok(*b),
             _ => Err(ObjectError::InvalidType),
-        }
+        })
     }
 
     pub fn heap(self, gc: &mut GC) -> GCArc {
@@ -661,11 +694,25 @@ pub struct OnionStaticObject {
     arcs: Option<Vec<GCArc>>,
 }
 
+impl Default for OnionStaticObject {
+    fn default() -> Self {
+        OnionStaticObject {
+            obj: OnionObject::Undefined("not initialized".to_string()),
+            arcs: None,
+        }
+    }
+}
+
 impl Debug for OnionStaticObject {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "OnionStaticObject({:?})", self.obj)
     }
-    
+}
+
+impl Display for OnionStaticObject {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "OnionStaticObject({:?})", self.obj)
+    }
 }
 
 impl OnionStaticObject {
@@ -946,7 +993,7 @@ mod tests {
 
         // Test assignment through with_data_mut
         let new_value = OnionObject::Integer(100);
-        let result = mut_obj.weak_mut().assign(new_value);
+        let result = mut_obj.weak_mut().assign(&new_value);
         assert!(result.is_ok());
     }
 
@@ -1006,19 +1053,19 @@ mod tests {
 
         let mut int_obj = OnionObject::Integer(42).stabilize();
         assert!(matches!(
-            int_obj.weak_mut().assign(OnionObject::Integer(100)),
+            int_obj.weak_mut().assign(&OnionObject::Integer(100)),
             Err(ObjectError::InvalidOperation(_))
         ));
 
         let mut mutable_obj = int_obj.mutablize(&mut gc).expect("Failed to mutablize");
         assert!(matches!(
-            mutable_obj.weak_mut().assign(OnionObject::Integer(100)),
+            mutable_obj.weak_mut().assign(&OnionObject::Integer(100)),
             Ok(())
         ));
 
-        let tuple_obj = onion_tuple![
-            OnionObject::Integer(1).stabilize(),
-            OnionObject::Integer(2).mutablize(&mut gc)
+        let mut tuple_obj = onion_tuple![
+            &OnionObject::Integer(1).stabilize(),
+            &OnionObject::Integer(2).mutablize(&mut gc)
         ];
 
         assert!(matches!(
@@ -1032,18 +1079,51 @@ mod tests {
         println!("{:?}", tuple_obj);
 
         match tuple_obj.weak().at(1) {
-            Ok(OnionStaticObject {
-                obj: OnionObject::Mut(weak),
-                ..
-            }) => {
-                if let Some(strong) = weak.upgrade() {
-                    assert!(matches!(strong.weak(), OnionObject::Integer(2)));
-                } else {
-                    panic!("Weak reference should be valid");
-                }
+            Ok(obj) => {
+                obj.weak()
+                    .with_data(|data| {
+                        if let OnionObject::Integer(i) = data {
+                            assert_eq!(*i, 2);
+                            Ok(())
+                        } else {
+                            Err(ObjectError::InvalidType)
+                        }
+                    })
+                    .expect("Failed to access mutable object at index 1");
             }
             _ => panic!("Expected a mutable object at index 1"),
-            
+        }
+
+        match tuple_obj.weak_mut().at(1) {
+            Ok(mut obj) => {
+                obj.weak_mut()
+                    .with_data_mut(|data| {
+                        if let OnionObject::Integer(i) = data {
+                            *i = 3; // 修改为3
+                            Ok(())
+                        } else {
+                            Err(ObjectError::InvalidType)
+                        }
+                    })
+                    .expect("Failed to modify mutable object at index 1");
+            }
+            _ => panic!("Expected a mutable object at index 1"),
+        }
+
+        match tuple_obj.weak().at(1) {
+            Ok(obj) => {
+                obj.weak()
+                    .with_data(|data| {
+                        if let OnionObject::Integer(i) = data {
+                            assert_eq!(*i, 3); // 验证修改成功
+                            Ok(())
+                        } else {
+                            Err(ObjectError::InvalidType)
+                        }
+                    })
+                    .expect("Failed to access modified object at index 1");
+            }
+            _ => panic!("Expected a modified object at index 1"),
         }
     }
 }

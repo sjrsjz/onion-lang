@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 onion-frontend = { version = "0.1.0", path = "./onion-frontend" }
 onion-vm = { version = "0.1.0", path = "./onion-vm" }
+serde = "1.0.219"
 
 [workspace]
 members = [

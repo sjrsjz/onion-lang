@@ -9,3 +9,4 @@ crate-type = ["lib"]
 
 [dependencies]
 rust-arc-gc = "0.1.0"
+serde = { version = "1.0.219", features = ["derive"] }

@@ -274,7 +274,7 @@ mod tests {
         assert!(null_obj.to_float().is_err());
 
         // Invalid attribute access
-        assert!(int_obj.get_attribute(&string_obj).is_err());
+        assert!(int_obj.with_attribute(&string_obj, |_| {}).is_err());
     }
 
     #[test]
