@@ -10,14 +10,19 @@ use arc_gc::{
 };
 
 use super::{
-    lambda::{definition::OnionLambdaDefinition, vm_instructions::instruction_set::VMInstructionPackage}, lazy_set::OnionLazySet,
-    named::OnionNamed, pair::OnionPair, tuple::OnionTuple,
+    lambda::{
+        definition::OnionLambdaDefinition, vm_instructions::instruction_set::VMInstructionPackage,
+    },
+    lazy_set::OnionLazySet,
+    named::OnionNamed,
+    pair::OnionPair,
+    tuple::OnionTuple,
 };
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum ObjectError {
-    InvalidType,
+    InvalidType(String),
     InvalidOperation(String),
     BrokenReference,
 }
@@ -25,7 +30,7 @@ pub enum ObjectError {
 impl Display for ObjectError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ObjectError::InvalidType => write!(f, "Invalid type"),
+            ObjectError::InvalidType(msg) => write!(f, "Invalid type: {}", msg),
             ObjectError::InvalidOperation(msg) => write!(f, "Invalid operation: {}", msg),
             ObjectError::BrokenReference => write!(f, "Broken reference"),
         }
@@ -250,9 +255,12 @@ impl OnionObject {
         self.with_data(|obj| match obj {
             OnionObject::Integer(i) => Ok(*i),
             OnionObject::Float(f) => Ok(*f as i64),
-            OnionObject::String(s) => s.parse::<i64>().map_err(|_| ObjectError::InvalidType),
+            OnionObject::String(s) => s.parse::<i64>().map_err(|e| ObjectError::InvalidType(e.to_string())),
             OnionObject::Boolean(b) => Ok(if *b { 1 } else { 0 }),
-            _ => Err(ObjectError::InvalidType),
+            _ => Err(ObjectError::InvalidType(format!(
+                "Cannot convert {:?} to Integer",
+                obj
+            ))),
         })
     }
 
@@ -260,9 +268,12 @@ impl OnionObject {
         self.with_data(|obj| match obj {
             OnionObject::Integer(i) => Ok(*i as f64),
             OnionObject::Float(f) => Ok(*f),
-            OnionObject::String(s) => s.parse::<f64>().map_err(|_| ObjectError::InvalidType),
+            OnionObject::String(s) => s.parse::<f64>().map_err(|e| ObjectError::InvalidType(e.to_string())),
             OnionObject::Boolean(b) => Ok(if *b { 1.0 } else { 0.0 }),
-            _ => Err(ObjectError::InvalidType),
+            _ => Err(ObjectError::InvalidType(format!(
+                "Cannot convert {:?} to Float",
+                obj
+            ))),
         })
     }
 
@@ -277,7 +288,12 @@ impl OnionObject {
             } else {
                 "false".to_string()
             }),
-            _ => Err(ObjectError::InvalidType),
+            OnionObject::Null => Ok("null".to_string()),
+            OnionObject::Undefined(s) => Ok(s.clone()),
+            _ => Err(ObjectError::InvalidType(format!(
+                "Cannot convert {:?} to String",
+                obj
+            ))),
         })
     }
 
@@ -292,7 +308,10 @@ impl OnionObject {
             } else {
                 b"false".to_vec()
             }),
-            _ => Err(ObjectError::InvalidType),
+            _ => Err(ObjectError::InvalidType(format!(
+                "Cannot convert {:?} to Bytes",
+                obj
+            ))),
         })
     }
 
@@ -303,7 +322,12 @@ impl OnionObject {
             OnionObject::String(s) => Ok(!s.is_empty()),
             OnionObject::Bytes(b) => Ok(!b.is_empty()),
             OnionObject::Boolean(b) => Ok(*b),
-            _ => Err(ObjectError::InvalidType),
+            OnionObject::Null => Ok(false),
+            OnionObject::Undefined(_) => Ok(false),
+            _ => Err(ObjectError::InvalidType(format!(
+                "Cannot convert {:?} to Boolean",
+                obj
+            ))),
         })
     }
 
@@ -1173,7 +1197,10 @@ mod tests {
                             assert_eq!(*i, 2);
                             Ok(())
                         } else {
-                            Err(ObjectError::InvalidType)
+                            Err(ObjectError::InvalidType(format!(
+                                "Expected Integer at index 1, found {:?}",
+                                data
+                            )))
                         }
                     })
                     .expect("Failed to access mutable object at index 1");
@@ -1189,7 +1216,10 @@ mod tests {
                             *i = 3; // 修改为3
                             Ok(())
                         } else {
-                            Err(ObjectError::InvalidType)
+                            Err(ObjectError::InvalidType(format!(
+                                "Expected Integer at index 1, found {:?}",
+                                data
+                            )))
                         }
                     })
                     .expect("Failed to modify mutable object at index 1");
@@ -1205,7 +1235,10 @@ mod tests {
                             assert_eq!(*i, 3); // 验证修改成功
                             Ok(())
                         } else {
-                            Err(ObjectError::InvalidType)
+                            Err(ObjectError::InvalidType(format!(
+                                "Expected Integer at index 1, found {:?}",
+                                data
+                            )))
                         }
                     })
                     .expect("Failed to access modified object at index 1");

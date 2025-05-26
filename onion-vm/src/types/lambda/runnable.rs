@@ -134,7 +134,6 @@ impl OnionLambdaRunnable {
         instruction_table[VMInstruction::Const as usize] = vm_instructions::immutablize;
         instruction_table[VMInstruction::Fork as usize] = vm_instructions::fork_instruction;
 
-
         // 控制流
         instruction_table[VMInstruction::Call as usize] = vm_instructions::call_lambda;
         instruction_table[VMInstruction::Return as usize] = vm_instructions::return_value;
@@ -145,7 +144,6 @@ impl OnionLambdaRunnable {
         instruction_table[VMInstruction::NewFrame as usize] = vm_instructions::new_frame;
         instruction_table[VMInstruction::PopFrame as usize] = vm_instructions::pop_frame;
         instruction_table[VMInstruction::ResetStack as usize] = vm_instructions::clear_stack;
-
 
         // 模块操作
         //instruction_table[VMInstruction::Import as usize] = vm_instructions::import;
@@ -198,11 +196,16 @@ impl Runnable for OnionLambdaRunnable {
             let opcode = instruction.get_code()[self.ip as usize];
             let mut ip = self.ip as usize;
             let mut instruction32 = Instruction32::new(instruction.get_code(), &mut ip);
-            let code = instruction32.get_processed_opcode();
+            let code: Option<ProcessedOpcode> = instruction32.get_processed_opcode();
             (code, opcode, ip)
         };
         match code {
             Some(opcode) => {
+                // println!(
+                //     "Executing opcode: {} at IP: {}",
+                //     opcode._to_string(),
+                //     self.ip
+                // );
                 let handler = self
                     .instruction_table
                     .get(opcode.instruction as usize)
@@ -212,8 +215,8 @@ impl Runnable for OnionLambdaRunnable {
                             opcode.instruction
                         ))
                     })?;
-                let result = handler(self, &opcode, gc)?;
                 self.ip = new_ip as isize;
+                let result = handler(self, &opcode, gc)?;
                 return Ok(result);
             }
             None => {

@@ -6,7 +6,12 @@ use onion_vm::{lambda::{runnable::{Runnable, StepResult}, scheduler::scheduler::
 fn main() {
     let code = r#"
     foo := (a?, b?) -> {
-        return a + b
+        i := mut 0;
+        while (i < 10000000) {
+            i = i + 1;
+        };
+
+        return a + b + i
     };
     return foo(1, 2);
     "#;

@@ -250,7 +250,15 @@ impl OnionTuple {
                     let mut found = false;
                     for (i, assigned_flag) in assigned.iter_mut().enumerate() {
                         if !*assigned_flag {
-                            new_elements[i] = other_element.clone();
+                            match &mut new_elements[i] {
+                                OnionObject::Named(v) => {
+                                    *v.get_value_mut() = other_element.clone();
+                                }
+                                _ => {
+                                    // 如果是其他类型的元素，直接赋值
+                                    new_elements[i] = other_element.clone();
+                                }
+                            }
                             *assigned_flag = true;
                             found = true;
                             break;

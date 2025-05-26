@@ -13,3 +13,7 @@ members = [
     "onion-vm",
     "onion-frontend",
 ]
+
+[profile.release]
+debug = 1
+opt-level = 3

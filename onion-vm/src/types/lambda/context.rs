@@ -1,14 +1,17 @@
 use std::collections::HashMap;
 
-use crate::{lambda::runnable::RuntimeError, types::object::{ObjectError, OnionStaticObject}};
+use crate::{
+    lambda::runnable::RuntimeError,
+    types::object::{ObjectError, OnionStaticObject},
+};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum StackObject {
     Object(OnionStaticObject), // Object with optional reference to a vector of references
     ReturnPoint(isize),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Frame {
     Normal(HashMap<String, OnionStaticObject>, Vec<StackObject>), // Normal frame
 }
@@ -46,8 +49,27 @@ impl Context {
             None => Err(RuntimeError::DetailedError(
                 "Cannot pop frame from empty context".to_string(),
             )),
-            
         }
+    }
+
+    pub fn concat_last_frame(&mut self) -> Result<(), RuntimeError> {
+        if self.frames.len() < 2 {
+            return Ok(());
+        }
+
+        let last_frame = self.frames.pop().unwrap();
+        let second_last_frame = self.frames.last_mut().unwrap();
+        match second_last_frame {
+            Frame::Normal(_, stack) => {
+                match last_frame {
+                    Frame::Normal(_, last_stack) => {
+                        stack.extend(last_stack.clone());
+                    }                    
+                }
+            }
+        }
+        Ok(())       
+        
     }
 
     pub fn local_return(&mut self) -> Result<Option<Vec<StackObject>>, RuntimeError> {
@@ -90,6 +112,22 @@ impl Context {
             ))
         }
     }
+
+    pub fn push(&mut self, object: StackObject) -> Result<(), RuntimeError> {
+        if self.frames.len() > 0 {
+            self.frames
+                .last_mut()
+                .unwrap()
+                .get_stack_mut()
+                .push(object);
+            Ok(())
+        } else {
+            Err(RuntimeError::DetailedError(
+                "Cannot push object to empty context".to_string(),
+            ))
+        }
+    }
+
     pub fn push_return_point(&mut self, return_point: isize) {
         if self.frames.len() > 0 {
             self.frames
@@ -134,7 +172,11 @@ impl Context {
         Ok(())
     }
 
-    pub fn discard_objects_offset(&mut self, offset: usize, count: usize) -> Result<(), RuntimeError> {
+    pub fn discard_objects_offset(
+        &mut self,
+        offset: usize,
+        count: usize,
+    ) -> Result<(), RuntimeError> {
         if self.frames.len() == 0 {
             return Err(RuntimeError::DetailedError(
                 "Cannot discard objects from empty context".to_string(),
@@ -174,7 +216,10 @@ impl Context {
         }
     }
 
-    pub fn get_object_rev_mut(&mut self, idx: usize) -> Result<&mut OnionStaticObject, RuntimeError> {
+    pub fn get_object_rev_mut(
+        &mut self,
+        idx: usize,
+    ) -> Result<&mut OnionStaticObject, RuntimeError> {
         if self.frames.len() == 0 {
             return Err(RuntimeError::DetailedError(
                 "Cannot get object from empty context".to_string(),
@@ -196,8 +241,11 @@ impl Context {
         }
     }
 
-    pub fn let_variable(&mut self, name: &String, value: OnionStaticObject) -> Result<(), ObjectError> {
-
+    pub fn let_variable(
+        &mut self,
+        name: &String,
+        value: OnionStaticObject,
+    ) -> Result<(), ObjectError> {
         if self.frames.len() == 0 {
             return Err(ObjectError::InvalidOperation(
                 "Cannot let variable in empty context".to_string(),
@@ -205,7 +253,7 @@ impl Context {
         }
 
         let last_frame = self.frames.last_mut().unwrap();
-        
+
         match last_frame {
             Frame::Normal(vars, _) => {
                 vars.insert(name.clone(), value);
@@ -221,7 +269,7 @@ impl Context {
                 "Cannot get variable from empty context".to_string(),
             ));
         }
-        
+
         // 反向遍历所有帧，从最新的帧开始查找
         for frame in self.frames.iter().rev() {
             match frame {
@@ -232,20 +280,30 @@ impl Context {
                 }
             }
         }
-        
+
         Err(RuntimeError::DetailedError(format!(
             "Variable `{}` not found",
             name
         )))
     }
-    
-    pub fn get_variable_mut(&mut self, name: &String) -> Result<&mut OnionStaticObject, RuntimeError> {
+
+    fn _debug_print(&self) {
+        println!("Context Debug Print:");
+        for (i, frame) in self.frames.iter().enumerate() {
+            println!("Frame {}: {:?}", i, frame);
+        }
+    }
+
+    pub fn get_variable_mut(
+        &mut self,
+        name: &String,
+    ) -> Result<&mut OnionStaticObject, RuntimeError> {
         if self.frames.len() == 0 {
             return Err(RuntimeError::DetailedError(
                 "Cannot get variable from empty context".to_string(),
             ));
         }
-        
+
         // 反向遍历所有帧，从最新的帧开始查找
         for frame in self.frames.iter_mut().rev() {
             match frame {
@@ -256,7 +314,7 @@ impl Context {
                 }
             }
         }
-        
+
         Err(RuntimeError::DetailedError(format!(
             "Variable `{}` not found",
             name
@@ -280,5 +338,4 @@ impl Context {
         stack[idx2] = temp;
         Ok(())
     }
-
 }

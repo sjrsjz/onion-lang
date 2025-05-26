@@ -8,7 +8,7 @@ use crate::{
     types::{
         lazy_set::OnionLazySet,
         named::OnionNamed,
-        object::{OnionObject, OnionStaticObject},
+        object::{ObjectError, OnionObject, OnionStaticObject},
         pair::OnionPair,
         tuple::OnionTuple,
     },
@@ -872,7 +872,7 @@ pub fn pop_frame(
     opcode: &ProcessedOpcode,
     gc: &mut GC,
 ) -> Result<StepResult, RuntimeError> {
-    runnable.context.pop_frame()?;
+    runnable.context.concat_last_frame()?;
     Ok(StepResult::Continue)
 }
 
@@ -960,28 +960,29 @@ pub fn call_lambda(
             lambda
         )));
     };
+    let assigned = lambda
+        .parameter
+        .as_ref()
+        .with_data(|parameter| {
+            let OnionObject::Tuple(parameters) = parameter else {
+                return Err(ObjectError::InvalidType(format!(
+                    "Lambda parameters are not a Tuple: {:?}",
+                    lambda
+                )));
+            };
 
-    let OnionObject::Tuple(parameters) = lambda.parameter.as_ref() else {
-        return Err(RuntimeError::DetailedError(format!(
-            "Lambda parameters are not a Tuple: {:?}",
-            lambda
-        )));
-    };
-
-    let OnionObject::Tuple(args_tuple) = args.weak() else {
-        return Err(RuntimeError::DetailedError(format!(
-            "Arguments are not a Tuple: {}",
-            args
-        )));
-    };
-
-    let assigned = parameters
-        .clone_and_named_assignment(args_tuple)
+            let OnionObject::Tuple(args_tuple) = args.weak() else {
+                return Err(ObjectError::InvalidType(format!(
+                    "Arguments are not a Tuple: {}",
+                    args
+                )));
+            };
+            parameters.clone_and_named_assignment(args_tuple)
+        })
         .map_err(RuntimeError::ObjectError)?;
-
     let new_runnable = lambda.create_runnable(assigned, gc).map_err(|e| {
-        RuntimeError::DetailedError(format!("Failed to create runnable from lambda: {}", e))
-    })?;
+        ObjectError::InvalidType(format!("Failed to create runnable from lambda: {}", e))
+    }).map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(2)?;
     Ok(StepResult::NewRunnable(new_runnable))
 }
