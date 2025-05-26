@@ -1,7 +1,9 @@
 use std::{fmt::Debug, ptr::addr_eq};
 
 use arc_gc::{
-    arc::{GCArc, GCArcWeak}, gc::GC, traceable::GCTraceable
+    arc::{GCArc, GCArcWeak},
+    gc::GC,
+    traceable::GCTraceable,
 };
 
 use super::{named::OnionNamed, pair::OnionPair, tuple::OnionTuple};
@@ -79,6 +81,10 @@ impl OnionObject {
         }
     }
 
+    pub fn stabilize(self) -> OnionStaticObject {
+        OnionStaticObject::new(self)
+    }
+
     pub fn len(&self) -> Result<OnionStaticObject, ObjectError> {
         match self {
             OnionObject::Tuple(tuple) => tuple.len(),
@@ -154,8 +160,16 @@ impl OnionObject {
             _ => f(self),
         }
     }
-    /// Assign a new value
+    /// Assign a new value to a mutable object.
     pub fn assign(&mut self, other: OnionObject) -> Result<(), ObjectError> {
+        // 由于我们无法保证赋值后GCArcWeak指向对象的稳定性，对不可变对象进行赋值操作会导致潜在的内存安全问题。
+        // Mut类型由于是被GC管理的，因此可以安全地进行赋值操作（前提是GCArcWeak指向的对象仍然存在）。
+        if !matches!(self, OnionObject::Mut(_)) {
+            return Err(ObjectError::InvalidOperation(format!(
+                "Cannot assign to immutable object: {:?}",
+                self
+            )));
+        }
         self.with_data_mut(|obj| {
             *obj = other;
             Ok(())
@@ -174,7 +188,6 @@ impl OnionObject {
             ))),
         }
     }
-
 
     pub fn to_integer(&self) -> Result<i64, ObjectError> {
         match self {
@@ -202,7 +215,11 @@ impl OnionObject {
             OnionObject::Float(f) => Ok(f.to_string()),
             OnionObject::String(s) => Ok(s.clone()),
             OnionObject::Bytes(b) => Ok(String::from_utf8_lossy(b).to_string()),
-            OnionObject::Boolean(b) => Ok(if *b { "true".to_string() } else { "false".to_string() }),
+            OnionObject::Boolean(b) => Ok(if *b {
+                "true".to_string()
+            } else {
+                "false".to_string()
+            }),
             _ => Err(ObjectError::InvalidType),
         }
     }
@@ -240,7 +257,6 @@ impl OnionObject {
             arcs: Some(vec![arc]),
         }
     }
-
 }
 
 impl OnionObject {
@@ -597,7 +613,7 @@ impl OnionObject {
         }
     }
 
-    pub fn index_of(&self, index: i64) -> Result<OnionStaticObject, ObjectError> {
+    pub fn at(&self, index: i64) -> Result<OnionStaticObject, ObjectError> {
         match self {
             OnionObject::Tuple(tuple) => tuple.at(index),
             OnionObject::String(s) => {
@@ -632,8 +648,9 @@ impl OnionObject {
 
 #[derive(Clone)]
 pub struct OnionStaticObject {
-    pub obj: OnionObject,
-    pub arcs: Option<Vec<GCArc>>,
+    obj: OnionObject,
+    #[allow(dead_code)]
+    arcs: Option<Vec<GCArc>>,
 }
 
 impl OnionStaticObject {
@@ -649,10 +666,16 @@ impl OnionStaticObject {
     pub fn weak_mut(&mut self) -> &mut OnionObject {
         &mut self.obj
     }
+
+    pub fn mutablize(&self, gc: &mut GC) -> Result<OnionStaticObject, ObjectError> {
+        self.obj.with_data(|obj| Ok(obj.clone().mutablize(gc)))
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::{onion_tuple, types::tuple};
+
     use super::*;
     use arc_gc::gc::GC;
 
@@ -663,7 +686,7 @@ mod tests {
         let string_obj = OnionObject::String("hello".to_string());
         let bool_obj = OnionObject::Boolean(true);
         let null_obj = OnionObject::Null;
-        
+
         assert!(matches!(int_obj, OnionObject::Integer(42)));
         assert!(matches!(float_obj, OnionObject::Float(f) if (f - 3.14).abs() < f64::EPSILON));
         assert!(matches!(string_obj, OnionObject::String(s) if s == "hello"));
@@ -758,11 +781,11 @@ mod tests {
         assert!(matches!(result.weak(), OnionObject::Integer(5)));
 
         // String indexing
-        let result = str1.index_of(1).unwrap();
+        let result = str1.at(1).unwrap();
         assert!(matches!(result.weak(), OnionObject::String(s) if s == "e"));
 
         // Out of bounds
-        assert!(str1.index_of(10).is_err());
+        assert!(str1.at(10).is_err());
     }
 
     #[test]
@@ -779,7 +802,7 @@ mod tests {
         assert!(matches!(result.weak(), OnionObject::Integer(3)));
 
         // Bytes indexing
-        let result = bytes1.index_of(0).unwrap();
+        let result = bytes1.at(0).unwrap();
         assert!(matches!(result.weak(), OnionObject::Bytes(b) if *b == vec![1]));
     }
 
@@ -898,7 +921,7 @@ mod tests {
     #[test]
     fn test_mutable_objects() {
         let mut gc = GC::new();
-        
+
         let int_obj = OnionObject::Integer(42);
         let mut mut_obj = int_obj.mutablize(&mut gc);
 
@@ -958,5 +981,39 @@ mod tests {
 
         let debug_str = format!("{:?}", null_obj);
         assert!(debug_str.contains("Null"));
+    }
+
+    #[test]
+    fn test_mutablize() {
+        let mut gc = GC::new();
+
+        let mut int_obj = OnionObject::Integer(42).stabilize();
+        assert!(matches!(
+            int_obj.weak_mut().assign(OnionObject::Integer(100)),
+            Err(ObjectError::InvalidOperation(_))
+        ));
+
+        let mut mutable_obj = int_obj.mutablize(&mut gc).expect("Failed to mutablize");
+        assert!(matches!(
+            mutable_obj.weak_mut().assign(OnionObject::Integer(100)),
+            Ok(())
+        ));
+
+        let tuple_obj = onion_tuple![
+            OnionObject::Integer(1).stabilize(),
+            OnionObject::Integer(2).mutablize(&mut gc)
+        ];
+
+        assert!(matches!(
+            tuple_obj.weak().at(0),
+            Ok(OnionStaticObject {
+                obj: OnionObject::Integer(1),
+                ..
+            })
+        ));
+
+
+        
+
     }
 }

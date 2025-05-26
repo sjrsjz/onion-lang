@@ -15,7 +15,29 @@ impl Debug for OnionTuple {
     }
 }
 
+#[macro_export]
+macro_rules! onion_tuple {
+    ($($x:expr),*) => {
+        OnionTuple::new_static(vec![$($x),*])
+    };
+    () => {
+        
+    };
+}
+
 impl OnionTuple {
+    
+
+    pub fn new(elements: Vec<OnionObject>) -> Self {
+        OnionTuple { elements }
+    }
+
+    pub fn new_static(elements: Vec<OnionStaticObject>) -> OnionStaticObject {
+        OnionStaticObject::new(OnionObject::Tuple(OnionTuple {
+            elements: elements.into_iter().map(|e| e.weak().clone()).collect(),
+        }))
+    }
+
     pub fn upgrade(&self) -> Option<Vec<GCArc>> {
         if self.elements.is_empty() {
             return None;
