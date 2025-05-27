@@ -56,7 +56,7 @@ pub enum OnionObject {
     Lambda(OnionLambdaDefinition),
 
     // mutable types, DO NOT USE THIS TYPE DIRECTLY, use `mutablize` instead
-    Mut(GCArcWeak),
+    Mut(GCArcWeak<OnionObject>),
 }
 
 impl Debug for OnionObject {
@@ -81,11 +81,7 @@ impl Debug for OnionObject {
                 "Mut({})",
                 match r.upgrade() {
                     Some(strong) => {
-                        if !strong.isinstance::<OnionObject>() {
-                            "Invalid Mut Reference".to_string()
-                        } else {
-                            format!("{:?}", strong.downcast::<OnionObject>())
-                        }
+                            format!("{:?}", strong.as_ref())
                     }
                     None => "Broken Reference".to_string(),
                 }
@@ -113,7 +109,7 @@ impl GCTraceable for OnionObject {
     }
 }
 impl OnionObject {
-    pub fn upgrade(&self) -> Option<Vec<GCArc>> {
+    pub fn upgrade(&self) -> Option<Vec<GCArc<OnionObject>>> {
         match self {
             OnionObject::Mut(weak) => {
                 if let Some(strong) = weak.upgrade() {
@@ -126,10 +122,12 @@ impl OnionObject {
             OnionObject::Pair(pair) => pair.upgrade(),
             OnionObject::Named(named) => named.upgrade(),
             OnionObject::LazySet(lazy_set) => lazy_set.upgrade(),
+            OnionObject::Lambda(lambda) => lambda.upgrade(),
             _ => None,
         }
     }
 
+    #[inline(always)]
     pub fn stabilize(self) -> OnionStaticObject {
         OnionStaticObject::new(self)
     }
@@ -194,7 +192,7 @@ impl OnionObject {
             OnionObject::Mut(weak) => {
                 if let Some(strong) = weak.upgrade() {
                     // FIXME: Potential infinite recursion if Mut contains another Mut
-                    strong.downcast::<OnionObject>().with_data(f)
+                    strong.as_ref().with_data(f)
                 } else {
                     Err(ObjectError::BrokenReference)
                 }
@@ -214,7 +212,7 @@ impl OnionObject {
             OnionObject::Mut(weak) => {
                 if let Some(mut strong) = weak.upgrade() {
                     // FIXME: Potential infinite recursion if Mut contains another Mut
-                    strong.downcast_mut::<OnionObject>().with_data_mut(f)
+                    strong.as_mut().with_data_mut(f)
                 } else {
                     Err(ObjectError::BrokenReference)
                 }
@@ -255,7 +253,9 @@ impl OnionObject {
         self.with_data(|obj| match obj {
             OnionObject::Integer(i) => Ok(*i),
             OnionObject::Float(f) => Ok(*f as i64),
-            OnionObject::String(s) => s.parse::<i64>().map_err(|e| ObjectError::InvalidType(e.to_string())),
+            OnionObject::String(s) => s
+                .parse::<i64>()
+                .map_err(|e| ObjectError::InvalidType(e.to_string())),
             OnionObject::Boolean(b) => Ok(if *b { 1 } else { 0 }),
             _ => Err(ObjectError::InvalidType(format!(
                 "Cannot convert {:?} to Integer",
@@ -268,7 +268,9 @@ impl OnionObject {
         self.with_data(|obj| match obj {
             OnionObject::Integer(i) => Ok(*i as f64),
             OnionObject::Float(f) => Ok(*f),
-            OnionObject::String(s) => s.parse::<f64>().map_err(|e| ObjectError::InvalidType(e.to_string())),
+            OnionObject::String(s) => s
+                .parse::<f64>()
+                .map_err(|e| ObjectError::InvalidType(e.to_string())),
             OnionObject::Boolean(b) => Ok(if *b { 1.0 } else { 0.0 }),
             _ => Err(ObjectError::InvalidType(format!(
                 "Cannot convert {:?} to Float",
@@ -331,12 +333,8 @@ impl OnionObject {
         })
     }
 
-    pub fn heap(self, gc: &mut GC) -> GCArc {
-        gc.create(self)
-    }
-
-    pub fn mutablize(self, gc: &mut GC) -> OnionStaticObject {
-        let arc = self.heap(gc);
+    pub fn mutablize(self, gc: &mut GC<OnionObject>) -> OnionStaticObject {
+        let arc = gc.create(self);
         OnionStaticObject {
             obj: OnionObject::Mut(arc.as_weak()),
             arcs: Some(vec![arc]),
@@ -376,7 +374,7 @@ impl OnionObject {
         match (self, other) {
             (OnionObject::Mut(weak1), OnionObject::Mut(weak2)) => {
                 if let (Some(strong1), Some(strong2)) = (weak1.upgrade(), weak2.upgrade()) {
-                    Ok(addr_eq(strong1.raw_ptr(), strong2.raw_ptr()))
+                    Ok(addr_eq(strong1.as_ref(), strong2.as_ref()))
                 } else {
                     Ok(false)
                 }
@@ -793,6 +791,7 @@ impl OnionObject {
         })
     }
 
+    #[inline(always)]
     pub fn copy(&self) -> Result<OnionStaticObject, ObjectError> {
         self.with_data(|obj| Ok(obj.clone().stabilize()))
     }
@@ -802,7 +801,7 @@ impl OnionObject {
 pub struct OnionStaticObject {
     obj: OnionObject,
     #[allow(dead_code)]
-    arcs: Option<Vec<GCArc>>,
+    arcs: Option<Vec<GCArc<OnionObject>>>,
 }
 
 impl Default for OnionStaticObject {
@@ -832,21 +831,25 @@ impl OnionStaticObject {
         OnionStaticObject { obj, arcs }
     }
 
+    #[inline(always)]
     pub fn weak(&self) -> &OnionObject {
         &self.obj
     }
 
+    #[inline(always)]
     pub fn weak_mut(&mut self) -> &mut OnionObject {
         &mut self.obj
     }
 
-    pub fn mutablize(&self, gc: &mut GC) -> Result<OnionStaticObject, ObjectError> {
+    #[inline(always)]
+    pub fn mutablize(&self, gc: &mut GC<OnionObject>) -> Result<OnionStaticObject, ObjectError> {
         self.obj.with_data(|obj| Ok(obj.clone().mutablize(gc)))
     }
 }
 
 #[cfg(test)]
 mod tests {
+
     use crate::onion_tuple;
 
     use super::*;

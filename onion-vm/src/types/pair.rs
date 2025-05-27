@@ -54,7 +54,7 @@ impl OnionPair {
         &mut self.value
     }
 
-    pub fn upgrade(&self) -> Option<Vec<GCArc>> {
+    pub fn upgrade(&self) -> Option<Vec<GCArc<OnionObject>>> {
         match (self.key.upgrade(), self.value.upgrade()) {
             (Some(mut key_arcs), Some(value_arcs)) => {
                 key_arcs.extend(value_arcs);

@@ -35,7 +35,8 @@ impl OnionNamed {
         OnionObject::Named(OnionNamed {
             key: Box::new(key.weak().clone()),
             value: Box::new(value.weak().clone()),
-        }).stabilize()
+        })
+        .stabilize()
     }
 
     pub fn get_key(&self) -> &OnionObject {
@@ -54,7 +55,7 @@ impl OnionNamed {
         &mut self.value
     }
 
-    pub fn upgrade(&self) -> Option<Vec<GCArc>> {
+    pub fn upgrade(&self) -> Option<Vec<GCArc<OnionObject>>> {
         match (self.key.upgrade(), self.value.upgrade()) {
             (Some(mut key_arcs), Some(value_arcs)) => {
                 key_arcs.extend(value_arcs);

@@ -52,7 +52,7 @@ impl OnionTuple {
         }))
     }
 
-    pub fn upgrade(&self) -> Option<Vec<GCArc>> {
+    pub fn upgrade(&self) -> Option<Vec<GCArc<OnionObject>>> {
         if self.elements.is_empty() {
             return None;
         }

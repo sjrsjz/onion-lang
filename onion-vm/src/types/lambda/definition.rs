@@ -1,6 +1,6 @@
 use std::{cell::RefCell, fmt::Debug, sync::Arc};
 
-use arc_gc::{gc::GC, traceable::GCTraceable};
+use arc_gc::{arc::GCArc, gc::GC, traceable::GCTraceable};
 
 use crate::{
     lambda::runnable::Runnable,
@@ -60,12 +60,12 @@ impl OnionLambdaDefinition {
     pub fn create_runnable(
         &self,
         argument: OnionStaticObject,
-        gc: &mut GC,
+        gc: &mut GC<OnionObject>,
     ) -> Result<Box<dyn Runnable>, ObjectError> {
         match &self.body {
-            LambdaBody::Instruction(instruction) => match instruction.as_ref() {
-                OnionObject::InstructionPackage(package) => {
-                    let runnable = OnionLambdaRunnable::new(
+            LambdaBody::Instruction(instruction) => {
+                let runnable = instruction.with_data(|instruction| match instruction {
+                    OnionObject::InstructionPackage(package) => OnionLambdaRunnable::new(
                         argument,
                         Arc::new(RefCell::new(package.clone())),
                         match package.get_table().get(&self.signature) {
@@ -77,20 +77,46 @@ impl OnionLambdaDefinition {
                                 )));
                             }
                         },
-                    )?;
-                    Ok(Box::new(runnable))
-                }
-                _ => {
-                    return Err(ObjectError::InvalidOperation(
-                        "Lambda body must be an instruction package".to_string(),
-                    ));
-                }
-            },
+                    ),
+                    _ => {
+                        return Err(ObjectError::InvalidOperation(
+                            "Lambda body must be an instruction package".to_string(),
+                        ));
+                    }
+                })?;
+                Ok(Box::new(runnable))
+            }
             LambdaBody::NativeFunction(native_function) => {
                 let mut runnable = native_function.borrow().copy(gc);
                 runnable.set_argument(argument, gc)?;
                 Ok(runnable)
             }
+        }
+    }
+
+    pub fn upgrade(&self) -> Option<Vec<GCArc<OnionObject>>> {
+        let mut arcs = Vec::new();
+        if let Some(param_arcs) = self.parameter.upgrade() {
+            arcs.extend(param_arcs);
+        }
+        if let Some(capture_arcs) = self.capture.upgrade() {
+            arcs.extend(capture_arcs);
+        }
+        if let Some(self_object_arcs) = self.self_object.upgrade() {
+            arcs.extend(self_object_arcs);
+        }
+        match &self.body {
+            LambdaBody::Instruction(instruction) => {
+                if let Some(instruction_arcs) = instruction.upgrade() {
+                    arcs.extend(instruction_arcs);
+                }
+            }
+            LambdaBody::NativeFunction(_) => {}
+        }
+        if arcs.is_empty() {
+            None
+        } else {
+            Some(arcs)
         }
     }
 }

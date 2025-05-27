@@ -246,7 +246,7 @@ mod tests {
         let mut gc = GC::new();
         
         let int_obj = OnionObject::Integer(42);
-        let mut_obj = int_obj.mutablize(&mut gc);
+        let mut_obj = int_obj.mutablize(&mut GC<OnionObject>);
 
         // Test value extraction
         let value = mut_obj.weak().value().unwrap();

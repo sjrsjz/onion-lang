@@ -6,7 +6,7 @@ use super::ir::DebugInfo;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum VMInstruction {
-    // 栈操作
+    // 栈操作 (0-9)
     LoadNull = 0,
     LoadInt32 = 1,
     LoadInt64 = 2,
@@ -18,14 +18,14 @@ pub enum VMInstruction {
     LoadLambda = 8,
     Pop = 9,
 
-    // 数据结构构建
+    // 数据结构构建 (10-19)
     BuildTuple = 10,
     BuildKeyValue = 11,
     BuildNamed = 12,
     BuildRange = 13,
     BuildSet = 14,
 
-    // 二元操作符
+    // 二元操作符 (20-39)
     BinaryAdd = 20,    // +
     BinarySub = 21,    // -
     BinaryMul = 22,    // *
@@ -46,44 +46,44 @@ pub enum VMInstruction {
     BinaryIn = 37,     // in
     BinaryIs = 38,     // is
 
-    // 一元操作
+    // 一元操作 (40-49)
     UnaryBitNot = 40, // ~
     UnaryAbs = 41,    // abs
     UnaryNeg = 42,    // -
 
-    // 变量与引用
+    // 变量与引用 (50-69)
     StoreVar = 50,    // 存储变量
     LoadVar = 51,     // 加载变量
     SetValue = 52,    // 设置值
-    GetAttr = 54,     // 获取属性
-    IndexOf = 55,     // 获取索引
-    KeyOf = 56,       // 获取键
-    ValueOf = 57,     // 获取值
-    TypeOf = 59,      // 获取类型
-    DeepCopy = 60,    // 深拷贝
-    ShallowCopy = 61, // 浅拷贝
-    Mut = 62,         // 创建引用
-    Const = 63,       // 解引用
-    Swap = 64,        // 交换栈两个值
-    LengthOf = 69,    // 获取对象长度
+    GetAttr = 53,     // 获取属性
+    IndexOf = 54,     // 获取索引
+    KeyOf = 55,       // 获取键
+    ValueOf = 56,     // 获取值
+    TypeOf = 57,      // 获取类型
+    DeepCopy = 58,    // 深拷贝
+    ShallowCopy = 59, // 浅拷贝
+    Mut = 60,         // 创建引用
+    Const = 61,       // 解引用
+    Swap = 62,        // 交换栈两个值
+    LengthOf = 63,    // 获取对象长度
 
-    // 控制流
+    // 控制流 (70-79)
     Call = 70,        // 调用函数
     AsyncCall = 71,   // 异步调用
     Return = 72,      // 返回
-    Jump = 74,        // 跳转
-    JumpIfFalse = 75, // 条件跳转
+    Jump = 73,        // 跳转
+    JumpIfFalse = 74, // 条件跳转
 
-    // 帧操作
+    // 帧操作 (80-89)
     NewFrame = 80,   // 新建帧
-    PopFrame = 82,   // 弹出帧
-    ResetStack = 84, // 重置栈
+    PopFrame = 81,   // 弹出帧
+    ResetStack = 82, // 重置栈
 
-    // 模块操作
+    // 模块操作 (90-99)
     Import = 90, // 导入模块
 
-    // 特殊操作
-    Fork = 100,     // 分叉指令
+    // 特殊操作 (100-109)
+    ForkInstruction = 100,     // 复制当前函数指令集
     BindSelf = 101, // 绑定self
     Assert = 102,   // 断言
     Emit = 103,     // 发射事件
@@ -140,31 +140,31 @@ impl VMInstruction {
             50 => Some(Self::StoreVar),
             51 => Some(Self::LoadVar),
             52 => Some(Self::SetValue),
-            54 => Some(Self::GetAttr),
-            55 => Some(Self::IndexOf),
-            56 => Some(Self::KeyOf),
-            57 => Some(Self::ValueOf),
-            59 => Some(Self::TypeOf),
-            60 => Some(Self::DeepCopy),
-            61 => Some(Self::ShallowCopy),
-            62 => Some(Self::Mut),
-            63 => Some(Self::Const),
-            64 => Some(Self::Swap),
-            69 => Some(Self::LengthOf),
+            53 => Some(Self::GetAttr),
+            54 => Some(Self::IndexOf),
+            55 => Some(Self::KeyOf),
+            56 => Some(Self::ValueOf),
+            57 => Some(Self::TypeOf),
+            58 => Some(Self::DeepCopy),
+            59 => Some(Self::ShallowCopy),
+            60 => Some(Self::Mut),
+            61 => Some(Self::Const),
+            62 => Some(Self::Swap),
+            63 => Some(Self::LengthOf),
 
             70 => Some(Self::Call),
             71 => Some(Self::AsyncCall),
             72 => Some(Self::Return),
-            74 => Some(Self::Jump),
-            75 => Some(Self::JumpIfFalse),
+            73 => Some(Self::Jump),
+            74 => Some(Self::JumpIfFalse),
 
             80 => Some(Self::NewFrame),
-            82 => Some(Self::PopFrame),
-            84 => Some(Self::ResetStack),
+            81 => Some(Self::PopFrame),
+            82 => Some(Self::ResetStack),
 
             90 => Some(Self::Import),
 
-            100 => Some(Self::Fork),
+            100 => Some(Self::ForkInstruction),
             101 => Some(Self::BindSelf),
             102 => Some(Self::Assert),
             103 => Some(Self::Emit),

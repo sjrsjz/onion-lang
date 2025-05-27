@@ -2,7 +2,7 @@ use arc_gc::gc::GC;
 
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
-    types::object::OnionStaticObject,
+    types::object::{OnionObject, OnionStaticObject},
 };
 
 pub struct Scheduler {
@@ -20,7 +20,7 @@ impl Scheduler {
 }
 
 impl Runnable for Scheduler {
-    fn step(&mut self, gc: &mut GC) -> Result<StepResult, RuntimeError> {
+    fn step(&mut self, gc: &mut GC<OnionObject>) -> Result<StepResult, RuntimeError> {
         if let Some(runnable) = self.runnable_stack.last_mut() {
             match runnable.step(gc)? {
                 StepResult::Continue => Ok(StepResult::Continue),
@@ -44,7 +44,7 @@ impl Runnable for Scheduler {
             Ok(StepResult::Return(self.result.clone()))
         }
     }
-    fn receive(&mut self, step_result: StepResult, gc: &mut GC) -> Result<(), RuntimeError> {
+    fn receive(&mut self, step_result: StepResult, gc: &mut GC<OnionObject>) -> Result<(), RuntimeError> {
         if let Some(runnable) = self.runnable_stack.last_mut() {
             runnable.receive(step_result, gc)
         } else {
@@ -54,7 +54,7 @@ impl Runnable for Scheduler {
         }
     }
 
-    fn copy(&self, gc: &mut GC) -> Box<dyn Runnable> {
+    fn copy(&self, gc: &mut GC<OnionObject>) -> Box<dyn Runnable> {
         Box::new(Scheduler {
             runnable_stack: self.runnable_stack.iter().map(|r| r.copy(gc)).collect(),
             result: self.result.clone(),

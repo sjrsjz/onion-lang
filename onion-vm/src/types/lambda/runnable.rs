@@ -20,7 +20,7 @@ use super::{
 };
 
 type InstructionHandler =
-    fn(&mut OnionLambdaRunnable, &ProcessedOpcode, &mut GC) -> Result<StepResult, RuntimeError>;
+    fn(&mut OnionLambdaRunnable, &ProcessedOpcode, &mut GC<OnionObject>) -> Result<StepResult, RuntimeError>;
 
 pub struct OnionLambdaRunnable {
     pub(crate) argument: OnionStaticObject,
@@ -132,7 +132,7 @@ impl OnionLambdaRunnable {
         instruction_table[VMInstruction::LengthOf as usize] = vm_instructions::get_length;
         instruction_table[VMInstruction::Mut as usize] = vm_instructions::heap_to_gc;
         instruction_table[VMInstruction::Const as usize] = vm_instructions::immutablize;
-        instruction_table[VMInstruction::Fork as usize] = vm_instructions::fork_instruction;
+        instruction_table[VMInstruction::ForkInstruction as usize] = vm_instructions::fork_instruction;
 
         // 控制流
         instruction_table[VMInstruction::Call as usize] = vm_instructions::call_lambda;
@@ -170,7 +170,7 @@ impl OnionLambdaRunnable {
 }
 
 impl Runnable for OnionLambdaRunnable {
-    fn receive(&mut self, step_result: StepResult, gc: &mut GC) -> Result<(), RuntimeError> {
+    fn receive(&mut self, step_result: StepResult, _gc: &mut GC<OnionObject>) -> Result<(), RuntimeError> {
         if let StepResult::Return(result) = step_result {
             self.context.push_object(result)?;
             Ok(())
@@ -180,7 +180,7 @@ impl Runnable for OnionLambdaRunnable {
             ))
         }
     }
-    fn step(&mut self, gc: &mut GC) -> Result<StepResult, RuntimeError> {
+    fn step(&mut self, gc: &mut GC<OnionObject>) -> Result<StepResult, RuntimeError> {
         if let Some(error) = &self.error {
             return Ok(StepResult::Error(error.clone()));
         }
@@ -229,7 +229,7 @@ impl Runnable for OnionLambdaRunnable {
         }
     }
 
-    fn copy(&self, gc: &mut GC) -> Box<dyn Runnable> {
+    fn copy(&self, _gc: &mut GC<OnionObject>) -> Box<dyn Runnable> {
         Box::new(OnionLambdaRunnable {
             argument: self.argument.clone(),
             context: self.context.clone(),

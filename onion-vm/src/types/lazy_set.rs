@@ -31,11 +31,15 @@ impl OnionLazySet {
         }
     }
 
-    pub fn new_static(container: &OnionStaticObject, filter: &OnionStaticObject) -> OnionStaticObject {
+    pub fn new_static(
+        container: &OnionStaticObject,
+        filter: &OnionStaticObject,
+    ) -> OnionStaticObject {
         OnionObject::LazySet(OnionLazySet {
             container: Box::new(container.weak().clone()),
             filter: Box::new(filter.weak().clone()),
-        }).stabilize()
+        })
+        .stabilize()
     }
 
     pub fn get_container(&self) -> &OnionObject {
@@ -46,7 +50,7 @@ impl OnionLazySet {
         &self.filter
     }
 
-    pub fn upgrade(&self) -> Option<Vec<GCArc>> {
+    pub fn upgrade(&self) -> Option<Vec<GCArc<OnionObject>>> {
         match (self.container.upgrade(), self.filter.upgrade()) {
             (Some(mut container_arcs), Some(filter_arcs)) => {
                 container_arcs.extend(filter_arcs);

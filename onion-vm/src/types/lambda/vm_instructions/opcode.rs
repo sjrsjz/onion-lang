@@ -8,12 +8,7 @@ pub struct Opcode32 {
 }
 #[allow(dead_code)]
 impl Opcode32 {
-    pub fn build_opcode(
-        instruction: u8,
-        operand1: u8,
-        operand2: u8,
-        operand3: u8,
-    ) -> Opcode32 {
+    pub fn build_opcode(instruction: u8, operand1: u8, operand2: u8, operand3: u8) -> Opcode32 {
         let opcode = ((instruction as u32) << 24)
             | ((operand1 as u32) << 16)
             | ((operand2 as u32) << 8)
@@ -38,7 +33,6 @@ impl Opcode32 {
         ((bits >> 32) & 0xFFFFFFFF) as u32
     }
     pub fn f32lower32(uint: f32) -> u32 {
-        
         uint.to_bits()
     }
 }
@@ -55,7 +49,7 @@ impl BitOr for OperandFlag {
 
     fn bitor(self, rhs: Self) -> Self::Output {
         (self as u8) | (rhs as u8)
-    }   
+    }
 }
 
 impl BitOr<u8> for OperandFlag {
@@ -83,11 +77,14 @@ pub struct DecodedOpcode {
     operand3: u8,
 }
 
-impl DecodedOpcode{
+impl DecodedOpcode {
     pub fn to_string(&self) -> String {
         format!(
             "Instruction: {:?}, Operand1: {}, Operand2: {}, Operand3: {}",
-            VMInstruction::from_opcode(self.instruction), self.operand1, self.operand2, self.operand3
+            VMInstruction::from_opcode(self.instruction),
+            self.operand1,
+            self.operand2,
+            self.operand3
         )
     }
 }
@@ -114,12 +111,15 @@ pub struct ProcessedOpcode {
 
 impl ProcessedOpcode {
     pub fn _to_string(&self) -> String {
-        let mut result = format!("Instruction: {:?}, ", VMInstruction::from_opcode(self.instruction));
+        let mut result = format!(
+            "Instruction: {:?}, ",
+            VMInstruction::from_opcode(self.instruction)
+        );
         result += &format!("Operand1: {:?}, ", self.operand1);
         result += &format!("Operand2: {:?}, ", self.operand2);
         result += &format!("Operand3: {:?}", self.operand3);
         result
-    }    
+    }
 }
 
 #[derive(Debug)]
@@ -147,8 +147,8 @@ impl<'t> Instruction32<'t> {
     #[inline]
     pub fn take_u64(&mut self) -> Option<u64> {
         if *self.pointer + 1 < self.bytes.len() {
-            let byte = ((self.bytes[*self.pointer + 1] as u64) << 32)
-                | (self.bytes[*self.pointer] as u64);
+            let byte =
+                ((self.bytes[*self.pointer + 1] as u64) << 32) | (self.bytes[*self.pointer] as u64);
             *self.pointer += 2;
             Some(byte)
         } else {

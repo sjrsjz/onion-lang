@@ -8,7 +8,7 @@ use crate::{
     types::{
         lazy_set::OnionLazySet,
         named::OnionNamed,
-        object::{ObjectError, OnionObject, OnionStaticObject},
+        object::{ObjectError, OnionObject},
         pair::OnionPair,
         tuple::OnionTuple,
     },
@@ -28,7 +28,7 @@ pub mod opcode;
 pub fn load_int(
     runnable: &mut LambdaRunnable,
     opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     if let OpcodeArgument::Int64(value) = opcode.operand1 {
         runnable
@@ -45,8 +45,8 @@ pub fn load_int(
 
 pub fn load_null(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     runnable
         .context
@@ -56,8 +56,8 @@ pub fn load_null(
 
 pub fn load_undefined(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     runnable
         .context
@@ -68,7 +68,7 @@ pub fn load_undefined(
 pub fn load_float(
     runnable: &mut LambdaRunnable,
     opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     if let OpcodeArgument::Float64(value) = opcode.operand1 {
         runnable
@@ -86,7 +86,7 @@ pub fn load_float(
 pub fn load_string(
     runnable: &mut LambdaRunnable,
     opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     if let OpcodeArgument::String(value) = opcode.operand1 {
         let string = OnionObject::String(
@@ -106,7 +106,7 @@ pub fn load_string(
 pub fn load_bytes(
     runnable: &mut LambdaRunnable,
     opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     if let OpcodeArgument::ByteArray(value) = opcode.operand1 {
         let bytes = OnionObject::Bytes(
@@ -126,7 +126,7 @@ pub fn load_bytes(
 pub fn load_bool(
     runnable: &mut LambdaRunnable,
     opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     if let OpcodeArgument::Int32(value) = opcode.operand1 {
         runnable
@@ -143,8 +143,8 @@ pub fn load_bool(
 
 pub fn discard_top(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     runnable.context.pop()?;
     Ok(StepResult::Continue)
@@ -153,7 +153,7 @@ pub fn discard_top(
 pub fn build_tuple(
     runnable: &mut LambdaRunnable,
     opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     if let OpcodeArgument::Int64(size) = opcode.operand1 {
         let mut tuple = Vec::with_capacity(size as usize);
@@ -174,8 +174,8 @@ pub fn build_tuple(
 
 pub fn build_keyval(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let key = runnable.context.get_object_rev(1)?;
     let value = runnable.context.get_object_rev(0)?;
@@ -187,8 +187,8 @@ pub fn build_keyval(
 
 pub fn build_named(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let key = runnable.context.get_object_rev(1)?;
     let value = runnable.context.get_object_rev(0)?;
@@ -200,8 +200,8 @@ pub fn build_named(
 
 pub fn build_range(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let left = runnable.context.get_object_rev(1)?;
     let right = runnable.context.get_object_rev(0)?;
@@ -223,8 +223,8 @@ pub fn build_range(
 
 pub fn build_set(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let container = runnable.context.get_object_rev(1)?;
     let filter = runnable.context.get_object_rev(0)?;
@@ -237,7 +237,7 @@ pub fn build_set(
 pub fn load_lambda(
     runnable: &mut LambdaRunnable,
     opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let OpcodeArgument::String(signature_index) = opcode.operand1 else {
         return Err(RuntimeError::DetailedError(format!(
@@ -245,7 +245,7 @@ pub fn load_lambda(
             opcode.operand1
         )));
     };
-    let OpcodeArgument::Int64(code_position) = opcode.operand2 else {
+    let OpcodeArgument::Int64(_code_position) = opcode.operand2 else {
         return Err(RuntimeError::DetailedError(format!(
             "Invalid argument type for Lambda's code position: {:?}",
             opcode.operand2
@@ -323,7 +323,7 @@ pub fn load_lambda(
 pub fn let_var(
     runnable: &mut LambdaRunnable,
     opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let OpcodeArgument::String(index) = opcode.operand1 else {
         return Err(RuntimeError::DetailedError(format!(
@@ -350,7 +350,7 @@ pub fn let_var(
 pub fn get_var(
     runnable: &mut LambdaRunnable,
     opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let OpcodeArgument::String(index) = opcode.operand1 else {
         return Err(RuntimeError::DetailedError(format!(
@@ -362,7 +362,8 @@ pub fn get_var(
     let name = runnable
         .borrow_instruction()?
         .get_string_pool()
-        .get(index as usize).cloned();
+        .get(index as usize)
+        .cloned();
     let Some(name) = name else {
         return Err(RuntimeError::DetailedError(format!(
             "Name index out of bounds: {}",
@@ -377,8 +378,8 @@ pub fn get_var(
 
 pub fn set_var(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let right = runnable.context.get_object_rev(0)?.clone();
     let left = runnable.context.get_object_rev_mut(1)?;
@@ -392,8 +393,8 @@ pub fn set_var(
 
 pub fn get_attr(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let attr = runnable.context.get_object_rev(0)?.weak();
     let obj = runnable.context.get_object_rev(1)?;
@@ -411,8 +412,8 @@ pub fn get_attr(
 
 pub fn index_of(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let index = runnable.context.get_object_rev(0)?;
     let OnionObject::Integer(index) = index.weak() else {
@@ -430,8 +431,8 @@ pub fn index_of(
 
 pub fn key_of(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let obj = runnable.context.get_object_rev(0)?;
     let key = obj.weak().key_of().map_err(RuntimeError::ObjectError)?;
@@ -442,8 +443,8 @@ pub fn key_of(
 
 pub fn value_of(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let obj = runnable.context.get_object_rev(0)?;
     let value = obj.weak().value_of().map_err(RuntimeError::ObjectError)?;
@@ -454,8 +455,8 @@ pub fn value_of(
 
 pub fn type_of(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let obj = runnable.context.get_object_rev(0)?;
     let type_name = obj.weak().type_of().map_err(RuntimeError::ObjectError)?;
@@ -468,8 +469,8 @@ pub fn type_of(
 
 pub fn copy(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let obj = runnable.context.get_object_rev(0)?;
     let copied_obj = obj.weak().copy().map_err(RuntimeError::ObjectError)?;
@@ -480,8 +481,8 @@ pub fn copy(
 
 pub fn check_is_same_object(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let obj1 = runnable.context.get_object_rev(0)?;
     let obj2 = runnable.context.get_object_rev(1)?;
@@ -498,8 +499,8 @@ pub fn check_is_same_object(
 
 pub fn binary_add(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
@@ -513,8 +514,8 @@ pub fn binary_add(
 }
 pub fn binary_subtract(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
@@ -528,8 +529,8 @@ pub fn binary_subtract(
 }
 pub fn binary_multiply(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
@@ -543,8 +544,8 @@ pub fn binary_multiply(
 }
 pub fn binary_divide(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
@@ -558,8 +559,8 @@ pub fn binary_divide(
 }
 pub fn binary_modulus(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
@@ -573,8 +574,8 @@ pub fn binary_modulus(
 }
 pub fn binary_power(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
@@ -588,8 +589,8 @@ pub fn binary_power(
 }
 pub fn binary_bitwise_or(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
@@ -603,8 +604,8 @@ pub fn binary_bitwise_or(
 }
 pub fn binary_bitwise_and(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
@@ -618,8 +619,8 @@ pub fn binary_bitwise_and(
 }
 pub fn binary_bitwise_xor(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
@@ -633,8 +634,8 @@ pub fn binary_bitwise_xor(
 }
 pub fn binary_shift_left(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
@@ -648,8 +649,8 @@ pub fn binary_shift_left(
 }
 pub fn binary_shift_right(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
@@ -663,8 +664,8 @@ pub fn binary_shift_right(
 }
 pub fn binary_equal(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
@@ -680,8 +681,8 @@ pub fn binary_equal(
 }
 pub fn binary_not_equal(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
@@ -697,8 +698,8 @@ pub fn binary_not_equal(
 }
 pub fn binary_greater(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
@@ -714,8 +715,8 @@ pub fn binary_greater(
 }
 pub fn binary_greater_equal(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
@@ -731,8 +732,8 @@ pub fn binary_greater_equal(
 }
 pub fn binary_less(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
@@ -748,8 +749,8 @@ pub fn binary_less(
 }
 pub fn binary_less_equal(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
@@ -766,8 +767,8 @@ pub fn binary_less_equal(
 
 pub fn unary_bitwise_not(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let obj = runnable.context.get_object_rev(0)?;
     let result = obj.weak().unary_not().map_err(RuntimeError::ObjectError)?;
@@ -777,8 +778,8 @@ pub fn unary_bitwise_not(
 }
 pub fn unary_plus(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let obj = runnable.context.get_object_rev(0)?;
     let result = obj.weak().unary_plus().map_err(RuntimeError::ObjectError)?;
@@ -788,8 +789,8 @@ pub fn unary_plus(
 }
 pub fn unary_minus(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let obj = runnable.context.get_object_rev(0)?;
     let result = obj.weak().unary_neg().map_err(RuntimeError::ObjectError)?;
@@ -800,7 +801,7 @@ pub fn unary_minus(
 pub fn swap(
     runnable: &mut LambdaRunnable,
     opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let OpcodeArgument::Int64(index) = opcode.operand1 else {
         return Err(RuntimeError::DetailedError(format!(
@@ -814,7 +815,7 @@ pub fn swap(
 pub fn jump(
     runnable: &mut LambdaRunnable,
     opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let OpcodeArgument::Int64(offset) = opcode.operand1 else {
         return Err(RuntimeError::DetailedError(format!(
@@ -829,7 +830,7 @@ pub fn jump(
 pub fn jump_if_false(
     runnable: &mut LambdaRunnable,
     opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let OpcodeArgument::Int64(offset) = opcode.operand1 else {
         return Err(RuntimeError::DetailedError(format!(
@@ -850,8 +851,8 @@ pub fn jump_if_false(
 }
 pub fn get_length(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let obj = runnable.context.get_object_rev(0)?;
     let length = obj.weak().len().map_err(RuntimeError::ObjectError)?;
@@ -862,8 +863,8 @@ pub fn get_length(
 
 pub fn new_frame(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     runnable
         .context
@@ -873,8 +874,8 @@ pub fn new_frame(
 
 pub fn pop_frame(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     runnable.context.concat_last_frame()?;
     Ok(StepResult::Continue)
@@ -882,8 +883,8 @@ pub fn pop_frame(
 
 pub fn clear_stack(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     runnable.context.clear_stack();
     Ok(StepResult::Continue)
@@ -891,8 +892,8 @@ pub fn clear_stack(
 
 pub fn assert(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let condition = runnable.context.get_object_rev(0)?;
     if !condition
@@ -912,7 +913,7 @@ pub fn assert(
 pub fn is_in(
     runnable: &mut LambdaRunnable,
     opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let element = runnable.context.get_object_rev(0)?;
     let container = runnable.context.get_object_rev(1)?;
@@ -929,6 +930,15 @@ pub fn is_in(
         .get_container()
         .contains(element.weak())
         .map_err(|e| RuntimeError::DetailedError(format!("Failed to check containment: {}", e)))?;
+
+    if !is_in {
+        // 元素不在容器中，直接返回 false
+        runnable.context.discard_objects(2)?;
+        runnable
+            .context
+            .push_object(OnionObject::Boolean(false).stabilize())?;
+        return Ok(StepResult::Continue);
+    }
 
     // 如果在容器中，则调用惰性集合的过滤器
     let filter = lazy_set.get_filter();
@@ -952,49 +962,54 @@ pub fn is_in(
 
 pub fn call_lambda(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let lambda = runnable.context.get_object_rev(1)?;
     let args = runnable.context.get_object_rev(0)?;
+    let new_runnable = lambda
+        .weak()
+        .with_data(|lambda| {
+            if let OnionObject::Lambda(lambda) = lambda {
+                let assigned = lambda.parameter.as_ref().with_data(|parameter| {
+                    let OnionObject::Tuple(parameters) = parameter else {
+                        return Err(ObjectError::InvalidType(format!(
+                            "Lambda parameters are not a Tuple: {:?}",
+                            lambda
+                        )));
+                    };
 
-    let OnionObject::Lambda(lambda) = lambda.weak() else {
-        return Err(RuntimeError::DetailedError(format!(
-            "Object is not a Lambda: {}",
-            lambda
-        )));
-    };
-    let assigned = lambda
-        .parameter
-        .as_ref()
-        .with_data(|parameter| {
-            let OnionObject::Tuple(parameters) = parameter else {
-                return Err(ObjectError::InvalidType(format!(
-                    "Lambda parameters are not a Tuple: {:?}",
+                    let OnionObject::Tuple(args_tuple) = args.weak() else {
+                        return Err(ObjectError::InvalidType(format!(
+                            "Arguments are not a Tuple: {}",
+                            args
+                        )));
+                    };
+                    parameters.clone_and_named_assignment(args_tuple)
+                })?;
+                lambda.create_runnable(assigned, gc).map_err(|e| {
+                    ObjectError::InvalidType(format!(
+                        "Failed to create runnable from lambda: {}",
+                        e
+                    ))
+                })
+            } else {
+                Err(ObjectError::InvalidType(format!(
+                    "Object is not a Lambda: {:?}",
                     lambda
-                )));
-            };
-
-            let OnionObject::Tuple(args_tuple) = args.weak() else {
-                return Err(ObjectError::InvalidType(format!(
-                    "Arguments are not a Tuple: {}",
-                    args
-                )));
-            };
-            parameters.clone_and_named_assignment(args_tuple)
+                )))
+            }
         })
         .map_err(RuntimeError::ObjectError)?;
-    let new_runnable = lambda.create_runnable(assigned, gc).map_err(|e| {
-        ObjectError::InvalidType(format!("Failed to create runnable from lambda: {}", e))
-    }).map_err(RuntimeError::ObjectError)?;
+
     runnable.context.discard_objects(2)?;
     Ok(StepResult::NewRunnable(new_runnable))
 }
 
 pub fn heap_to_gc(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let heap = runnable
         .context
@@ -1008,8 +1023,8 @@ pub fn heap_to_gc(
 
 pub fn immutablize(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let obj = runnable.context.get_object_rev(0)?;
     let immutable_obj = obj
@@ -1023,8 +1038,8 @@ pub fn immutablize(
 
 pub fn return_value(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let return_value = runnable.context.get_object_rev(0)?;
     Ok(StepResult::Return(return_value.clone()))
@@ -1032,8 +1047,8 @@ pub fn return_value(
 
 pub fn fork_instruction(
     runnable: &mut LambdaRunnable,
-    opcode: &ProcessedOpcode,
-    gc: &mut GC,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     let forked =
         OnionObject::InstructionPackage(runnable.borrow_instruction()?.clone()).stabilize();

@@ -5,15 +5,23 @@ use onion_vm::{lambda::{runnable::{Runnable, StepResult}, scheduler::scheduler::
 
 fn main() {
     let code = r#"
-    foo := (a?, b?) -> {
-        i := mut 0;
-        while (i < 1000000) {
-            i = i + 1;
-        };
+    // foo := (a?, b?) -> {
+    //     i := mut 0;
+    //     while (i < 10000000) (
+    //         i = i + 1;
+    //     );
 
-        return a + b + i
+    //     return a + b + i
+    // };
+    // return foo(1, 2);
+
+    fib := mut (fn?, n?) -> {
+        if (n <= 1) {
+            return n;
+        };
+        return fn(fn, n - 1) + fn(fn, n - 2);
     };
-    return foo(1, 2);
+    return fib(fib, 30);
 
     // obj := {
     //     "name": mut "Onion",
@@ -69,7 +77,6 @@ fn main() {
 
     let mut gc = GC::new();
 
-    let mut counter = 0;
     loop {
         match scheduler.step(&mut gc) {
             Ok(step_result) => {
@@ -96,10 +103,6 @@ fn main() {
                 println!("Error during execution: {}", e);
                 break;
             }            
-        }
-        counter += 1;
-        if counter > 100000000 {
-            gc.collect();
         }
     }
 

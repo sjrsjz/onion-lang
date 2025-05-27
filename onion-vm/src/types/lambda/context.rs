@@ -59,7 +59,7 @@ impl Context {
             Frame::Normal(_, stack) => {
                 match last_frame {
                     Frame::Normal(_, last_stack) => {
-                        stack.extend(last_stack.clone());
+                        stack.extend(last_stack);
                     }                    
                 }
             }
@@ -290,5 +290,32 @@ impl Context {
         stack[idx1] = stack[idx2].clone();
         stack[idx2] = temp;
         Ok(())
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::object::OnionObject;
+
+    // 计时
+    use std::time::Instant;
+    use arc_gc::gc::GC;
+
+    #[test]
+    fn benchmark() {
+        let mut context = Context::new();
+        let frame = Frame::Normal(HashMap::default(), Vec::new());
+        context.push_frame(frame);
+        let mut gc = GC::new();
+        
+        context.let_variable(&"i".to_string(), OnionObject::Integer(0).stabilize().mutablize(&mut gc).unwrap()).unwrap();
+        let start = Instant::now();
+        for _ in 0..30_000_000 {
+            let _ = context.get_variable_mut(&"i".to_string()).unwrap().clone();
+        }
+        let duration = start.elapsed();
+        println!("Time taken for 30,000,000 iterations: {:?}", duration);
     }
 }

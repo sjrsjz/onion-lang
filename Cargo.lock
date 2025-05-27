@@ -120,9 +120,9 @@ checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
 
 [[package]]
 name = "rust-arc-gc"
-version = "0.1.2"
+version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0553de1578b0f7225aa4c9911714a0c26302f32828d53999374175fdaeb3f5f9"
+checksum = "c75d6787c6bcba9d279f693a789ded72a0dcced2e642b93001b0873a52db0b89"
 
 [[package]]
 name = "rustc-hash"

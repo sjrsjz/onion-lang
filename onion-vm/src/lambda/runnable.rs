@@ -2,13 +2,13 @@ use std::fmt::Display;
 
 use arc_gc::gc::GC;
 
-use crate::types::object::{ObjectError, OnionStaticObject};
+use crate::types::object::{ObjectError, OnionObject, OnionStaticObject};
 
 #[derive(Clone, Debug)]
 pub enum RuntimeError {
     StepError(String),
     DetailedError(String),
-    ObjectError(ObjectError)
+    ObjectError(ObjectError),
 }
 
 impl Display for RuntimeError {
@@ -19,7 +19,6 @@ impl Display for RuntimeError {
             RuntimeError::ObjectError(err) => write!(f, "Object Error: {}", err),
         }
     }
-    
 }
 
 pub enum StepResult {
@@ -29,13 +28,22 @@ pub enum StepResult {
     Error(RuntimeError),
 }
 
+#[allow(unused_variables)]
 pub trait Runnable {
-    fn set_argument(&mut self, argument: OnionStaticObject, gc: &mut GC) -> Result<(), ObjectError> {
-        Err(ObjectError::InvalidOperation("set_argument not implemented".to_string()))
+    fn set_argument(
+        &mut self,
+        argument: OnionStaticObject,
+        gc: &mut GC<OnionObject>,
+    ) -> Result<(), ObjectError> {
+        Err(ObjectError::InvalidOperation(
+            "set_argument not implemented".to_string(),
+        ))
     }
-    fn step(&mut self, gc: &mut GC) -> Result<StepResult, RuntimeError>;
-    fn receive(&mut self, step_result: StepResult, gc: &mut GC) -> Result<(), RuntimeError> {
-        Err(RuntimeError::DetailedError("receive not implemented".to_string()))
+    fn step(&mut self, gc: &mut GC<OnionObject>) -> Result<StepResult, RuntimeError>;
+    fn receive(&mut self, step_result: StepResult, gc: &mut GC<OnionObject>) -> Result<(), RuntimeError> {
+        Err(RuntimeError::DetailedError(
+            "receive not implemented".to_string(),
+        ))
     }
-    fn copy(&self, gc: &mut GC) -> Box<dyn Runnable>;
+    fn copy(&self, gc: &mut GC<OnionObject>) -> Box<dyn Runnable>;
 }
