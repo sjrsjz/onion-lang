@@ -67,6 +67,9 @@ impl OnionLambdaDefinition {
                 let runnable = instruction.with_data(|instruction| match instruction {
                     OnionObject::InstructionPackage(package) => OnionLambdaRunnable::new(
                         argument,
+                        self.capture.as_ref().clone().stabilize(),
+                        self.self_object.as_ref().clone().stabilize(),
+                        OnionObject::Lambda(self.clone()).stabilize(),
                         Arc::new(RefCell::new(package.clone())),
                         match package.get_table().get(&self.signature) {
                             Some(ip) => *ip as isize,
@@ -117,6 +120,39 @@ impl OnionLambdaDefinition {
             None
         } else {
             Some(arcs)
+        }
+    }
+
+    pub fn with_attribute<F, R>(&self, key: &OnionObject, f: &F) -> Result<R, ObjectError>
+    where
+        F: Fn(&OnionObject) -> Result<R, ObjectError>,
+    {
+        match key {
+            OnionObject::String(s) if s.as_str() == "parameter" => f(&self.parameter),
+            OnionObject::String(s) if s.as_str() == "capture" => f(&self.capture),
+            OnionObject::String(s) if s.as_str() == "self" => f(&self.self_object),
+            OnionObject::String(s) if s.as_str() == "signature" => {
+                f(&OnionObject::String(self.signature.clone()))
+            }
+            _ => Err(ObjectError::InvalidOperation(format!(
+                "Attribute '{:?}' not found in lambda definition",
+                key
+            ))),
+        }
+    }
+
+    pub fn with_attribute_mut<F, R>(&mut self, key: &OnionObject, f: &F) -> Result<R, ObjectError>
+    where
+        F: Fn(&mut OnionObject) -> Result<R, ObjectError>,
+    {
+        match key {
+            OnionObject::String(s) if s.as_str() == "parameter" => f(&mut self.parameter),
+            OnionObject::String(s) if s.as_str() == "capture" => f(&mut self.capture),
+            OnionObject::String(s) if s.as_str() == "self" => f(&mut self.self_object),
+            _ => Err(ObjectError::InvalidOperation(format!(
+                "Attribute '{:?}' not found in lambda definition",
+                key
+            ))),
         }
     }
 }

@@ -74,14 +74,14 @@ impl Debug for OnionObject {
             OnionObject::Pair(pair) => write!(f, "{:?}", pair),
             OnionObject::Named(named) => write!(f, "{:?}", named),
             OnionObject::LazySet(lazy_set) => write!(f, "{:?}", lazy_set),
-            OnionObject::InstructionPackage(pkg) => write!(f, "InstructionPackage({:?})", pkg),
+            OnionObject::InstructionPackage(_) => write!(f, "InstructionPackage(...)"),
             OnionObject::Lambda(lambda) => write!(f, "Lambda({:?})", lambda),
             OnionObject::Mut(r) => write!(
                 f,
                 "Mut({})",
                 match r.upgrade() {
                     Some(strong) => {
-                            format!("{:?}", strong.as_ref())
+                        format!("{:?}", strong.as_ref())
                     }
                     None => "Broken Reference".to_string(),
                 }
@@ -690,30 +690,34 @@ impl OnionObject {
     where
         F: Fn(&OnionObject) -> Result<R, ObjectError>,
     {
-        match self {
+        self.with_data(|obj| match obj {
             OnionObject::Tuple(tuple) => tuple.with_attribute(key, f),
             OnionObject::Named(named) => named.with_attribute(key, f),
             OnionObject::Pair(pair) => pair.with_attribute(key, f),
+            OnionObject::Lambda(lambda) => lambda.with_attribute(key, f),
+            OnionObject::LazySet(lazy_set) => lazy_set.with_attribute(key, f),
             _ => Err(ObjectError::InvalidOperation(format!(
                 "with_attribute() not supported for {:?}",
                 self
             ))),
-        }
+        })
     }
 
     pub fn with_attribute_mut<F, R>(&mut self, key: &OnionObject, f: &F) -> Result<R, ObjectError>
     where
         F: Fn(&mut OnionObject) -> Result<R, ObjectError>,
     {
-        match self {
+        self.with_data_mut(|obj| match obj {
             OnionObject::Tuple(tuple) => tuple.with_attribute_mut(key, f),
             OnionObject::Named(named) => named.with_attribute_mut(key, f),
             OnionObject::Pair(pair) => pair.with_attribute_mut(key, f),
+            OnionObject::Lambda(lambda) => lambda.with_attribute_mut(key, f),
+            OnionObject::LazySet(lazy_set) => lazy_set.with_attribute_mut(key, f),
             _ => Err(ObjectError::InvalidOperation(format!(
                 "with_attribute_mut() not supported for {:?}",
-                self
+                obj
             ))),
-        }
+        })
     }
 
     pub fn at(&self, index: i64) -> Result<OnionStaticObject, ObjectError> {

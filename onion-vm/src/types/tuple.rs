@@ -51,7 +51,12 @@ impl OnionTuple {
             elements: elements.into_iter().map(|e| e.weak().clone()).collect(),
         }))
     }
-
+    
+    pub fn new_static_no_ref(elements: Vec<OnionStaticObject>) -> OnionStaticObject {
+        OnionStaticObject::new(OnionObject::Tuple(OnionTuple {
+            elements: elements.into_iter().map(|e| e.weak().clone()).collect(),
+        }))
+    }
     pub fn upgrade(&self) -> Option<Vec<GCArc<OnionObject>>> {
         if self.elements.is_empty() {
             return None;

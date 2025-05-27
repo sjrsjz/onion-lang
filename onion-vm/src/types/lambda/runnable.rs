@@ -24,8 +24,11 @@ type InstructionHandler =
 
 pub struct OnionLambdaRunnable {
     pub(crate) argument: OnionStaticObject,
-    pub(crate) context: Context,
     pub(crate) result: OnionStaticObject,
+    pub(crate) capture: OnionStaticObject,
+    pub(crate) self_object: OnionStaticObject,
+    pub(crate) this_lambda: OnionStaticObject,
+    pub(crate) context: Context,
     pub(crate) error: Option<RuntimeError>,
     pub(crate) ip: isize, // Instruction pointer
     pub(crate) instruction: Arc<RefCell<VMInstructionPackage>>,
@@ -36,6 +39,9 @@ pub struct OnionLambdaRunnable {
 impl OnionLambdaRunnable {
     pub fn new(
         argument: OnionStaticObject,
+        capture: OnionStaticObject,
+        self_object: OnionStaticObject,
+        this_lambda: OnionStaticObject,
         instruction: Arc<RefCell<VMInstructionPackage>>,
         ip: isize,
     ) -> Result<Self, ObjectError> {
@@ -50,6 +56,10 @@ impl OnionLambdaRunnable {
                 "Argument must be a tuple".to_string(),
             ));
         };
+
+        new_context.let_variable(&"this".to_string(), this_lambda.clone())?;
+        new_context.let_variable(&"self".to_string(), self_object.clone())?;
+        new_context.let_variable(&"arguments".to_string(), argument.clone())?;
 
         for (_, item) in tuple.elements.iter().enumerate() {
             match item {
@@ -130,7 +140,7 @@ impl OnionLambdaRunnable {
         instruction_table[VMInstruction::ShallowCopy as usize] = vm_instructions::copy;
         instruction_table[VMInstruction::Swap as usize] = vm_instructions::swap;
         instruction_table[VMInstruction::LengthOf as usize] = vm_instructions::get_length;
-        instruction_table[VMInstruction::Mut as usize] = vm_instructions::heap_to_gc;
+        instruction_table[VMInstruction::Mut as usize] = vm_instructions::mutablize;
         instruction_table[VMInstruction::Const as usize] = vm_instructions::immutablize;
         instruction_table[VMInstruction::ForkInstruction as usize] = vm_instructions::fork_instruction;
 
@@ -154,8 +164,11 @@ impl OnionLambdaRunnable {
 
         Ok(OnionLambdaRunnable {
             argument,
-            context: new_context,
+            capture,
+            self_object,
+            this_lambda,
             result: OnionStaticObject::default(),
+            context: new_context,
             error: None,
             ip,
             instruction,
@@ -232,8 +245,11 @@ impl Runnable for OnionLambdaRunnable {
     fn copy(&self, _gc: &mut GC<OnionObject>) -> Box<dyn Runnable> {
         Box::new(OnionLambdaRunnable {
             argument: self.argument.clone(),
-            context: self.context.clone(),
+            capture: self.capture.clone(),
+            self_object: self.self_object.clone(),
+            this_lambda: self.this_lambda.clone(),
             result: self.result.clone(),
+            context: self.context.clone(),
             error: self.error.clone(),
             ip: self.ip,
             instruction: Arc::clone(&self.instruction),

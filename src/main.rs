@@ -1,37 +1,80 @@
-use std::{cell::RefCell, sync::Arc};
-
 use onion_frontend::compile::build_code;
-use onion_vm::{lambda::{runnable::{Runnable, StepResult}, scheduler::scheduler::Scheduler}, types::{lambda::{runnable::OnionLambdaRunnable, vm_instructions::ir_translator::IRTranslator}, object::OnionObject, tuple::OnionTuple}, GC};
+use onion_vm::{
+    lambda::{
+        runnable::{Runnable, StepResult},
+        scheduler::scheduler::Scheduler,
+    },
+    types::{
+        lambda::{
+            definition::{LambdaBody, OnionLambdaDefinition},
+            vm_instructions::ir_translator::IRTranslator,
+        },
+        object::OnionObject,
+        tuple::OnionTuple,
+    },
+    GC,
+};
 
 fn main() {
     let code = r#"
-    // foo := (a?, b?) -> {
-    //     i := mut 0;
-    //     while (i < 10000000) (
-    //         i = i + 1;
-    //     );
-
-    //     return a + b + i
-    // };
-    // return foo(1, 2);
-
-    fib := mut (fn?, n?) -> {
+    // This is a simple Onion code example
+    fib := mut (n?) -> {
         if (n <= 1) {
             return n;
         };
-        return fn(fn, n - 1) + fn(fn, n - 2);
+        return this(n - 1) + this(n - 2);
     };
-    return fib(fib, 30);
+    assert(fib(10) == 55);
 
-    // obj := {
-    //     "name": mut "Onion",
-    //     "version": 1.0,
-    //     "features": ["fast", "reliable", "secure"]
-    // };
+    obj := {
+        "name": mut "Onion",
+        "version": 1.0,
+        "features": ["fast", "reliable", "secure"]
+    };
 
-    // // obj[1] = "updated value"; // panic: cannot assign to immutable field
-    // obj.name = "updated value"; // this is allowed, as the field is mutable
-    // return obj;
+    // obj[1] = "updated value"; // panic: cannot assign to immutable field
+    obj.name = "updated value"; // this is allowed, as the field is mutable
+    assert(obj.name == "updated value");
+
+
+    interface := mut {
+        greet => (name?) -> {
+            self.member = "Hello, Onion Prototype!";
+            return "Greeting: " + name + " " + self.member;
+        },
+    };
+
+    A := {
+        'member' : mut "Hello, Onion from A!",
+    } : interface;
+
+    B := {
+        'member' : mut "Hello Onion from B!",
+    } : interface;
+
+    isinstance := (obj?, interface?) -> (valueof obj) is interface;
+
+    assert isinstance(A, interface);
+    assert isinstance(B, interface);
+
+    assert(A.greet("World") == "Greeting: World Hello, Onion Prototype!");
+
+    foo := (a?, b?) -> return arguments.a;
+    assert(foo(1, 2) == 1);
+
+    n := mut 10;
+    foo := (v?) -> (v = 5);
+    foo(n);
+    assert(n == 5);
+
+    lazy_set1 := "abc" | (x?) -> x;
+    lazy_set2 := "abc" | true;
+    assert("a" in lazy_set1 == "a");
+    assert("a" in lazy_set2 == true);
+    assert("d" in lazy_set1 == false);
+
+    lazy_set3 := ["a", "b", "a", "b", "c"] | (x?) -> x == "a";
+    lazy_set3.collect()
 
     "#;
     let dir_stack = onion_frontend::dir_stack::DirStack::new(None);
@@ -64,16 +107,32 @@ fn main() {
     // println!("IR Package: {:?}", ir_package);
     // println!("VM Instructions Package: {:?}", vm_instructions_package);
 
+    let lambda = OnionLambdaDefinition::new_static(
+        &OnionObject::Tuple(OnionTuple::new(vec![])).stabilize(),
+        LambdaBody::Instruction(Box::new(OnionObject::InstructionPackage(
+            vm_instructions_package,
+        ))),
+        None,
+        None,
+        "__main__".to_string(),
+    );
 
-    let entry = *vm_instructions_package.get_table().get("__main__").expect("Entry point '__main__' not found in VM instructions package");
+    let OnionObject::Lambda(lambda) = lambda.weak() else {
+        println!("Failed to create lambda definition");
+        return;
+    };
 
-    let lambda = OnionLambdaRunnable::new(OnionObject::Tuple(OnionTuple::new(vec![])).stabilize(), Arc::new(RefCell::new(vm_instructions_package)), entry as isize); 
+    let lambda = lambda.create_runnable(
+        OnionObject::Tuple(OnionTuple::new(vec![])).stabilize(),
+        &mut GC::new(),
+    );
+
     let Ok(lambda) = lambda else {
         println!("Failed to create runnable lambda");
         return;
     };
 
-    let mut scheduler = Scheduler::new(vec![Box::new(lambda)]);
+    let mut scheduler = Scheduler::new(vec![lambda]);
 
     let mut gc = GC::new();
 
@@ -83,16 +142,16 @@ fn main() {
                 match step_result {
                     StepResult::Continue => {
                         // Continue to the next step
-                    },
+                    }
                     StepResult::NewRunnable(_) => {
                         // Add the new runnable to the scheduler
                         unreachable!()
-                    },
+                    }
                     StepResult::Return(result) => {
                         // Print the result and exit
                         println!("Execution completed with result: {:?}", result);
                         break;
-                    },
+                    }
                     StepResult::Error(err) => {
                         println!("Runtime error: {}", err);
                         break;
@@ -102,9 +161,7 @@ fn main() {
             Err(e) => {
                 println!("Error during execution: {}", e);
                 break;
-            }            
+            }
         }
     }
-
-
 }

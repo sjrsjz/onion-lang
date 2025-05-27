@@ -398,13 +398,29 @@ pub fn get_attr(
 ) -> Result<StepResult, RuntimeError> {
     let attr = runnable.context.get_object_rev(0)?.weak();
     let obj = runnable.context.get_object_rev(1)?;
-    let element = match obj.weak().with_attribute(attr, &|attr| Ok(attr.clone())) {
-        Ok(value) => value,
-        Err(e) => {
-            return Err(RuntimeError::ObjectError(e));
-        }
-    }
-    .stabilize();
+    let element = attr
+        .with_data(|attr| {
+            Ok(
+                match obj.weak().with_attribute(attr, &|attr| Ok(attr.clone())) {
+                    Ok(value) => match value {
+                        OnionObject::Lambda(mut lambda) => {
+                            lambda.self_object = Box::new(obj.weak().clone());
+                            OnionObject::Lambda(lambda)
+                        }
+                        _ => value,
+                    },
+                    Err(e) => {
+                        return Err(ObjectError::InvalidOperation(format!(
+                            "Failed to get attribute {:?} from object {:?}: {}",
+                            attr, obj, e
+                        )));
+                    }
+                },
+            )
+        })
+        .map_err(RuntimeError::ObjectError)?
+        .stabilize();
+
     runnable.context.discard_objects(2)?;
     runnable.context.push_object(element)?;
     Ok(StepResult::Continue)
@@ -915,8 +931,8 @@ pub fn is_in(
     opcode: &ProcessedOpcode,
     gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let element = runnable.context.get_object_rev(0)?;
-    let container = runnable.context.get_object_rev(1)?;
+    let element = runnable.context.get_object_rev(1)?;
+    let container = runnable.context.get_object_rev(0)?;
 
     let OnionObject::LazySet(lazy_set) = container.weak() else {
         return Err(RuntimeError::DetailedError(format!(
@@ -941,23 +957,31 @@ pub fn is_in(
     }
 
     // 如果在容器中，则调用惰性集合的过滤器
-    let filter = lazy_set.get_filter();
-    let OnionObject::Lambda(_) = filter else {
-        // 过滤器不是 Lambda 对象，认定为惰性求值结果为 filter
-        runnable.context.discard_objects_offset(1, 1)?;
-        return Ok(StepResult::Continue);
-    };
-    let args = OnionTuple::new_static(vec![element]);
-    let filter = filter.clone().stabilize();
+    let (args, filter) = lazy_set
+        .get_filter()
+        .with_data(|filter| {
+            let OnionObject::Lambda(_) = filter else {
+                // 过滤器不是 Lambda 对象，认定为惰性求值结果为 filter
+                let filter = filter.clone().stabilize();
+                return Ok((None, filter));
+            };
+            let args = OnionTuple::new_static(vec![element]);
+            let filter = filter.clone().stabilize();
+            return Ok((Some(args), filter));
+        })
+        .map_err(RuntimeError::ObjectError)?;
 
     runnable.context.discard_objects(2)?;
 
-    runnable.context.push_object(args)?;
+    if let Some(args) = args {
+        runnable.context.push_object(filter)?;
+        runnable.context.push_object(args)?;
+        // 运行过滤器
+        return call_lambda(runnable, opcode, gc);
+    };
 
     runnable.context.push_object(filter)?;
-
-    // 运行过滤器
-    return call_lambda(runnable, opcode, gc);
+    return Ok(StepResult::Continue);
 }
 
 pub fn call_lambda(
@@ -1006,7 +1030,7 @@ pub fn call_lambda(
     Ok(StepResult::NewRunnable(new_runnable))
 }
 
-pub fn heap_to_gc(
+pub fn mutablize(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
     gc: &mut GC<OnionObject>,
