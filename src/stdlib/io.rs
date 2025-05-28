@@ -28,7 +28,7 @@ fn println(
                     tuple
                         .elements
                         .iter()
-                        .map(|element| element.to_string().unwrap_or("<unkown>".to_string()))
+                        .map(|element| element.to_string().unwrap_or("<unknown>".to_string()))
                         .collect::<Vec<_>>()
                         .join(" ")
                 );
@@ -51,7 +51,7 @@ fn print(
                     tuple
                         .elements
                         .iter()
-                        .map(|element| element.to_string().unwrap_or("<unkown>".to_string()))
+                        .map(|element| element.to_string().unwrap_or("<unknown>".to_string()))
                         .collect::<Vec<_>>()
                         .join(" ")
                 );

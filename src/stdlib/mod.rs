@@ -11,6 +11,9 @@ use onion_vm::{
 
 mod io;
 mod types;
+mod math;
+mod string;
+mod http;
 
 pub fn build_named_dict(dict: HashMap<String, OnionStaticObject>) -> OnionStaticObject {
     let mut pairs = vec![];
@@ -105,5 +108,8 @@ pub fn build_module() -> OnionStaticObject {
     let mut module = HashMap::new();
     module.insert("io".to_string(), io::build_module());
     module.insert("types".to_string(), types::build_module());
+    module.insert("math".to_string(), math::build_module());
+    module.insert("string".to_string(), string::build_module());
+    module.insert("http".to_string(), http::build_module());
     build_named_dict(module)
 }

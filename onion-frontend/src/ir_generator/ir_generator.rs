@@ -498,7 +498,7 @@ impl<'t> IRGenerator<'t> {
                         self.generate_debug_info(ast_node),
                         IR::RedirectLabel(if_label.clone()),
                     ));
-                    instructions.push((self.generate_debug_info(ast_node), IR::LoadNull));
+                    instructions.push((self.generate_debug_info(ast_node), IR::LoadUndefined));
                     instructions.push((
                         self.generate_debug_info(ast_node),
                         IR::RedirectLabel(else_label.clone()),
@@ -621,7 +621,7 @@ impl<'t> IRGenerator<'t> {
                     self.generate_debug_info(ast_node),
                     IR::RedirectLabel(med_label.clone()),
                 ));
-                instructions.push((self.generate_debug_info(ast_node), IR::LoadNull));
+                instructions.push((self.generate_debug_info(ast_node), IR::LoadUndefined));
                 instructions.push((
                     self.generate_debug_info(ast_node),
                     IR::RedirectLabel(end_label.clone()),

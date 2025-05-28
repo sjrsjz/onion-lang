@@ -34,6 +34,12 @@ impl Runnable for AsyncScheduler {
                         }
                         StepResult::NewRunnable(new_runnable) => {
                             self.runnables.push(new_runnable);
+                            self.runnables[i].receive(
+                                StepResult::Return(
+                                    OnionObject::Undefined("Task Launched".to_string()).stabilize(),
+                                ),
+                                gc,
+                            )?;
                             i += 1; // 继续处理下一个runnable
                         }
                         StepResult::Return(_) => {

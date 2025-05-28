@@ -114,3 +114,5 @@ async_foo := () -> {
 
 // 同步启动异步调度器，使用async_foo()作为调度器的初始任务
 async async_foo();
+
+stdlib.io.println("sin(0.5):", stdlib.math.sin(0.5));
