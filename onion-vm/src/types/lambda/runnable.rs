@@ -91,7 +91,8 @@ impl OnionLambdaRunnable {
         instruction_table[VMInstruction::LoadBytes as usize] = vm_instructions::load_bytes;
         instruction_table[VMInstruction::LoadBool as usize] = vm_instructions::load_bool;
         instruction_table[VMInstruction::LoadLambda as usize] = vm_instructions::load_lambda;
-        instruction_table[VMInstruction::Pop as usize] = vm_instructions::discard_top;
+        instruction_table[VMInstruction::LoadUndefined as usize] = vm_instructions::load_undefined;
+
 
         // 数据结构构建
         instruction_table[VMInstruction::BuildTuple as usize] = vm_instructions::build_tuple;
@@ -154,13 +155,14 @@ impl OnionLambdaRunnable {
         instruction_table[VMInstruction::NewFrame as usize] = vm_instructions::new_frame;
         instruction_table[VMInstruction::PopFrame as usize] = vm_instructions::pop_frame;
         instruction_table[VMInstruction::ResetStack as usize] = vm_instructions::clear_stack;
+        instruction_table[VMInstruction::Pop as usize] = vm_instructions::discard_top;
 
         // 模块操作
-        //instruction_table[VMInstruction::Import as usize] = vm_instructions::import;
+        instruction_table[VMInstruction::Import as usize] = vm_instructions::import;
 
-        // 特殊操作
-        //instruction_table[VMInstruction::BindSelf as usize] = vm_instructions::bind_self;
         instruction_table[VMInstruction::Assert as usize] = vm_instructions::assert;
+
+        instruction_table[VMInstruction::Run as usize] = vm_instructions::run_lambda;
 
         Ok(OnionLambdaRunnable {
             argument,

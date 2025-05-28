@@ -453,7 +453,12 @@ impl<'t> IRGenerator<'t> {
             }
             ASTNodeType::None => {
                 let mut instructions = Vec::new();
-                instructions.push((self.generate_debug_info(ast_node), IR::LoadNull));
+                instructions.push((self.generate_debug_info(ast_node), IR::LoadUndefined));
+                Ok(instructions)
+            }
+            ASTNodeType::Undefined => {
+                let mut instructions = Vec::new();
+                instructions.push((self.generate_debug_info(ast_node), IR::LoadUndefined));
                 Ok(instructions)
             }
             ASTNodeType::Boolean(bool_str) => {
@@ -673,11 +678,9 @@ impl<'t> IRGenerator<'t> {
                         instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                         instructions.push((self.generate_debug_info(ast_node), IR::BindSelf));
                     }
-                    ASTNodeModifier::Collect => {
-                        // TODO: handle collect in the future
-                        return Err(IRGeneratorError::InvalidASTNodeType(
-                            ast_node.node_type.clone(),
-                        ));
+                    ASTNodeModifier::Run => {
+                        instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
+                        instructions.push((self.generate_debug_info(ast_node), IR::Run));
                     }
                     ASTNodeModifier::LengthOf => {
                         instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);

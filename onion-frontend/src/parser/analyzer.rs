@@ -536,25 +536,24 @@ fn analyze_node<'t>(
                                     let _ = dir_stack.pop();
 
                                     match compile_result {
-                                        Ok(ir_package) => {
-                                            // 替换文件扩展名为xbc
-                                            let xbc_file_path =
+                                        Ok(ir_package) => {                                            // 替换文件扩展名为onionc
+                                            let onionc_file_path =
                                                 if let Some(pos) = file_path.rfind('.') {
-                                                    format!("{}.xbc", &file_path[..pos])
+                                                    format!("{}.onionc", &file_path[..pos])
                                                 } else {
-                                                    format!("{}.xbc", file_path)
+                                                    format!("{}.onionc", file_path)
                                                 };
                                             let byte_code = compile_to_bytecode(&ir_package);
                                             match byte_code {
                                                 Ok(byte_code) => {
                                                     // 将字节码写入文件
                                                     if let Err(e) =
-                                                        byte_code.write_to_file(&xbc_file_path)
+                                                        byte_code.write_to_file(&onionc_file_path)
                                                     {
                                                         // 使用 AnalyzeWarn::CompileError 记录写入错误
                                                         let error_message = format!(
                                                         "Failed to write bytecode to file '{}': {}",
-                                                        xbc_file_path, e
+                                                        onionc_file_path, e
                                                     );
                                                         warnings.push(AnalyzeWarn::CompileError(
                                                             child,

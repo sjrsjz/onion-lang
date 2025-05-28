@@ -1,0 +1,29 @@
+// 这是一个Onion语言测试文件
+
+@required stdlib;
+stdlib.io.println("======== Onion语言测试文件 ========");
+
+// 斐波那契函数
+fib := mut (n?) -> {
+    if (n <= 1) {
+        return n;
+    };
+    return this(n - 1) + this(n - 2);
+};
+
+stdlib.io.println("斐波那契数列第10个数是:", fib(10));
+stdlib.io.println("-------------------------");
+
+// 测试对象和属性
+person := {
+    "name": mut "张三",
+    "age": 25
+};
+
+stdlib.io.println("姓名:", person.name);
+stdlib.io.println("年龄:", person.age);
+
+// 修改可变属性
+person.name = "李四";
+stdlib.io.println("修改后姓名:", person.name);
+stdlib.io.println("======== 测试结束 ========");

@@ -2,3 +2,5 @@
 /flamegraph.svg
 /perf.*
 /.VSCodeCounter
+**.onionr
+**.onionc

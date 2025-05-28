@@ -291,11 +291,14 @@ impl OnionObject {
                 "false".to_string()
             }),
             OnionObject::Null => Ok("null".to_string()),
-            OnionObject::Undefined(s) => Ok(s.clone()),
-            _ => Err(ObjectError::InvalidType(format!(
-                "Cannot convert {:?} to String",
-                obj
-            ))),
+            OnionObject::Undefined(s) => Ok(match s.as_str() {
+                "" => "undefined".to_string(),
+                _ => format!("undefined({})", s),                
+            }),
+            _ => {
+                // 使用 Debug trait来处理其他类型的转换
+                Ok(format!("{:?}", obj))
+            },
         })
     }
 
@@ -767,6 +770,7 @@ impl OnionObject {
         self.with_data(|obj| match obj {
             OnionObject::Named(named) => Ok(named.get_value().clone().stabilize()),
             OnionObject::Pair(pair) => Ok(pair.get_value().clone().stabilize()),
+            OnionObject::Undefined(s) => Ok(OnionStaticObject::new(OnionObject::Undefined(s.clone()))),
             _ => Err(ObjectError::InvalidOperation(format!(
                 "value_of() not supported for {:?}",
                 obj

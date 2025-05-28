@@ -2,7 +2,10 @@ use arc_gc::gc::GC;
 
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
-    types::object::{OnionObject, OnionStaticObject},
+    types::{
+        object::{OnionObject, OnionStaticObject},
+        pair::OnionPair,
+    },
 };
 
 pub struct Scheduler {
@@ -22,7 +25,15 @@ impl Scheduler {
 impl Runnable for Scheduler {
     fn step(&mut self, gc: &mut GC<OnionObject>) -> Result<StepResult, RuntimeError> {
         if let Some(runnable) = self.runnable_stack.last_mut() {
-            match runnable.step(gc)? {
+            match match runnable.step(gc) {
+                Ok(step_result) => step_result,
+                Err(e) => {
+                    return Ok(StepResult::Return(OnionPair::new_static(
+                        &OnionObject::Boolean(false).stabilize(),
+                        &OnionObject::String(e.to_string()).stabilize(),
+                    )))
+                }
+            } {
                 StepResult::Continue => Ok(StepResult::Continue),
                 StepResult::NewRunnable(new_runnable) => {
                     self.runnable_stack.push(new_runnable);
@@ -31,20 +42,41 @@ impl Runnable for Scheduler {
                 StepResult::Return(result) => {
                     self.runnable_stack.pop();
                     if let Some(top_runnable) = self.runnable_stack.last_mut() {
-                        top_runnable.receive(StepResult::Return(result.clone()), gc)?;
+                        match top_runnable.receive(StepResult::Return(result.clone()), gc) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                return Ok(StepResult::Return(OnionPair::new_static(
+                                    &OnionObject::Boolean(false).stabilize(),
+                                    &OnionObject::String(e.to_string()).stabilize(),
+                                )))
+                            }
+                        };
                         Ok(StepResult::Continue)
                     } else {
                         self.result = result;
-                        Ok(StepResult::Return(self.result.clone()))
+                        Ok(StepResult::Return(OnionPair::new_static(
+                            &OnionObject::Boolean(true).stabilize(),
+                            &self.result.clone(),
+                        )))
                     }
                 }
-                StepResult::Error(error) => Ok(StepResult::Error(error)),
+                StepResult::Error(error) => Ok(StepResult::Return(OnionPair::new_static(
+                    &OnionObject::Boolean(false).stabilize(),
+                    &OnionObject::String(error.to_string()).stabilize(),
+                ))),
             }
         } else {
-            Ok(StepResult::Return(self.result.clone()))
+            Ok(StepResult::Return(OnionPair::new_static(
+                &OnionObject::Boolean(true).stabilize(),
+                &self.result.clone(),
+            )))
         }
     }
-    fn receive(&mut self, step_result: StepResult, gc: &mut GC<OnionObject>) -> Result<(), RuntimeError> {
+    fn receive(
+        &mut self,
+        step_result: StepResult,
+        gc: &mut GC<OnionObject>,
+    ) -> Result<(), RuntimeError> {
         if let Some(runnable) = self.runnable_stack.last_mut() {
             runnable.receive(step_result, gc)
         } else {

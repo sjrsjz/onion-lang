@@ -51,7 +51,7 @@ impl OnionTuple {
             elements: elements.into_iter().map(|e| e.weak().clone()).collect(),
         }))
     }
-    
+
     pub fn new_static_no_ref(elements: Vec<OnionStaticObject>) -> OnionStaticObject {
         OnionStaticObject::new(OnionObject::Tuple(OnionTuple {
             elements: elements.into_iter().map(|e| e.weak().clone()).collect(),
@@ -217,16 +217,7 @@ impl OnionTuple {
                             OnionObject::Named(existing_named) => {
                                 if existing_named.key.as_ref().equals(key)? {
                                     // 如果有相同的key，则赋值
-                                    *element = named.value.as_ref().clone();
-                                    assigned[i] = true;
-                                    found = true;
-                                    break;
-                                }
-                            }
-                            OnionObject::Pair(existing_pair) => {
-                                if existing_pair.key.as_ref().equals(key)? {
-                                    // 如果有相同的key，则赋值
-                                    *element = named.value.as_ref().clone();
+                                    *element = other_element.clone();
                                     assigned[i] = true;
                                     found = true;
                                     break;

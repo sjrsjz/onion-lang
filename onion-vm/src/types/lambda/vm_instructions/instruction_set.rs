@@ -16,7 +16,7 @@ pub enum VMInstruction {
     LoadBytes = 6,
     LoadBool = 7,
     LoadLambda = 8,
-    Pop = 9,
+    LoadUndefined = 9, // 未定义值
 
     // 数据结构构建 (10-19)
     BuildTuple = 10,
@@ -73,11 +73,13 @@ pub enum VMInstruction {
     Return = 72,      // 返回
     Jump = 73,        // 跳转
     JumpIfFalse = 74, // 条件跳转
+    Run = 75, // 运行函数
 
     // 帧操作 (80-89)
     NewFrame = 80,   // 新建帧
     PopFrame = 81,   // 弹出帧
     ResetStack = 82, // 重置栈
+    Pop = 83,
 
     // 模块操作 (90-99)
     Import = 90, // 导入模块
@@ -105,7 +107,6 @@ impl VMInstruction {
             6 => Some(Self::LoadBytes),
             7 => Some(Self::LoadBool),
             8 => Some(Self::LoadLambda),
-            9 => Some(Self::Pop),
 
             10 => Some(Self::BuildTuple),
             11 => Some(Self::BuildKeyValue),
@@ -157,10 +158,12 @@ impl VMInstruction {
             72 => Some(Self::Return),
             73 => Some(Self::Jump),
             74 => Some(Self::JumpIfFalse),
+            75 => Some(Self::Run),
 
             80 => Some(Self::NewFrame),
             81 => Some(Self::PopFrame),
             82 => Some(Self::ResetStack),
+            83 => Some(Self::Pop),
 
             90 => Some(Self::Import),
 

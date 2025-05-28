@@ -1,10 +1,14 @@
+use instruction_set::VMInstructionPackage;
 use rustc_hash::FxHashMap as HashMap;
 
 use arc_gc::gc::GC;
 use opcode::{OpcodeArgument, ProcessedOpcode};
 
 use crate::{
-    lambda::runnable::{RuntimeError, StepResult},
+    lambda::{
+        runnable::{RuntimeError, StepResult},
+        scheduler::scheduler::Scheduler,
+    },
     types::{
         lazy_set::OnionLazySet,
         named::OnionNamed,
@@ -1078,4 +1082,49 @@ pub fn fork_instruction(
         OnionObject::InstructionPackage(runnable.borrow_instruction()?.clone()).stabilize();
     runnable.context.push_object(forked)?;
     Ok(StepResult::Continue)
+}
+
+pub fn import(
+    runnable: &mut LambdaRunnable,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObject>,
+) -> Result<StepResult, RuntimeError> {
+    let path = runnable.context.get_object_rev(0)?;
+    let OnionObject::String(path) = path.weak() else {
+        return Err(RuntimeError::DetailedError(format!(
+            "Invalid path type for `import`: {}",
+            path
+        )));
+    };
+    let package = VMInstructionPackage::read_from_file(path).map_err(|e| {
+        RuntimeError::DetailedError(format!(
+            "Failed to read instruction package from file: {}",
+            e
+        ))
+    })?;
+    runnable.context.discard_objects(1)?;
+    runnable
+        .context
+        .push_object(OnionObject::InstructionPackage(package).stabilize())?;
+    Ok(StepResult::Continue)
+}
+
+pub fn run_lambda(
+    runnable: &mut LambdaRunnable,
+    _opcode: &ProcessedOpcode,
+    gc: &mut GC<OnionObject>,
+) -> Result<StepResult, RuntimeError> {
+    let lambda = runnable.context.get_object_rev(0)?;
+    let OnionObject::Lambda(lambda) = lambda.weak() else {
+        return Err(RuntimeError::DetailedError(format!(
+            "Invalid object type for RunLambda: {}",
+            lambda
+        )));
+    };
+
+    let scheduler = Scheduler::new(vec![lambda
+        .create_runnable(lambda.parameter.as_ref().clone().stabilize(), gc)
+        .map_err(RuntimeError::ObjectError)?]);
+    runnable.context.discard_objects(1)?;
+    return Ok(StepResult::NewRunnable(Box::new(scheduler)));
 }

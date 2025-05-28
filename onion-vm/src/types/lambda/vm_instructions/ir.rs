@@ -30,6 +30,7 @@ pub struct DebugInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum IR {
     LoadNull,                              // load null to stack
+    LoadUndefined,                       // load undefined to stack
     LoadInt(i64),                          // load integer to stack
     LoadFloat(f64),                        // load float to stack
     LoadString(String),                    // load string to stack
@@ -77,6 +78,7 @@ pub enum IR {
     Swap(usize, usize), // swap two values in stack
     LengthOf,           // get length of object
     IsSameObject,       // check if two objects are the same
+    Run, // run lambda
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

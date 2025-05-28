@@ -450,6 +450,7 @@ fn gather(tokens: GatheredTokens<'_>) -> Result<Vec<GatheredTokens<'_>>, ParserE
 pub enum ASTNodeType {
     None,                        // No expression
     Null,                        // Null
+    Undefined,
     String(String),              // String
     Boolean(String),             // Boolean
     Number(String),              // Number (Integer, Float)
@@ -520,7 +521,7 @@ pub enum ASTNodeModifier {
     TypeOf,   // TypeOf
     Await,
     BindSelf,
-    Collect,
+    Run,
     LengthOf,  // LengthOf
 }
 
@@ -2577,7 +2578,7 @@ fn match_modifier<'t>(
             "typeof",
             "await",
             "bind",
-            "collect",
+            "run",
             "lengthof",
             "dynamic",
             "static",
@@ -2647,7 +2648,7 @@ fn match_modifier<'t>(
             "typeof" => ASTNodeModifier::TypeOf,
             "await" => ASTNodeModifier::Await,
             "bind" => ASTNodeModifier::BindSelf,
-            "collect" => ASTNodeModifier::Collect,
+            "run" => ASTNodeModifier::Run,
             "lengthof" => ASTNodeModifier::LengthOf,
             _ => return Ok((None, 0)),
         };
@@ -3340,6 +3341,19 @@ fn match_variable<'t>(
         return Ok((
             Some(ASTNode::new(
                 ASTNodeType::Null,
+                Some(&tokens[current].first().unwrap()),
+                Some(&tokens[current].last().unwrap()),
+                None,
+            )),
+            1,
+        ));
+    }
+
+    // undefined
+    if is_identifier(&tokens[current], "undefined") {
+        return Ok((
+            Some(ASTNode::new(
+                ASTNodeType::Undefined,
                 Some(&tokens[current].first().unwrap()),
                 Some(&tokens[current].last().unwrap()),
                 None,

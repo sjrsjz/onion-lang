@@ -4,25 +4,29 @@ use onion_vm::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
     onion_tuple,
     types::{
-        lambda::definition::{LambdaBody, OnionLambdaDefinition},
-        object::{ObjectError, OnionObject, OnionStaticObject},
-        pair::OnionPair,
-        tuple::OnionTuple,
+        lambda::definition::{LambdaBody, OnionLambdaDefinition}, named::OnionNamed, object::{ObjectError, OnionObject, OnionStaticObject}, tuple::OnionTuple
     },
     GC,
 };
 
 mod io;
+mod types;
 
-pub fn build_dict(dict: HashMap<String, OnionStaticObject>) -> OnionStaticObject {
+pub fn build_named_dict(dict: HashMap<String, OnionStaticObject>) -> OnionStaticObject {
     let mut pairs = vec![];
     for (key, value) in dict {
-        pairs.push(OnionPair::new_static(
+        pairs.push(OnionNamed::new_static(
             &OnionObject::String(key).stabilize(),
             &value,
         ));
     }
     OnionTuple::new_static_no_ref(pairs)
+}
+
+pub fn get_attr_direct(obj: &OnionObject, key: String) -> Result<OnionStaticObject, ObjectError> {
+    obj.with_attribute(&OnionObject::String(key), &|obj| {
+        Ok(obj.clone().stabilize())
+    })
 }
 
 pub struct NativeFunctionGenerator<F>
@@ -97,12 +101,9 @@ where
     )
 }
 
-
 pub fn build_module() -> OnionStaticObject {
     let mut module = HashMap::new();
-    module.insert(
-        "io".to_string(),
-        io::build_module(),
-    );
-    build_dict(module)
+    module.insert("io".to_string(), io::build_module());
+    module.insert("types".to_string(), types::build_module());
+    build_named_dict(module)
 }

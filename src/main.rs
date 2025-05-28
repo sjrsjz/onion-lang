@@ -1,4 +1,9 @@
-use onion_frontend::compile::build_code;
+use clap::{Parser, Subcommand};
+use colored::*;
+use std::path::{Path, PathBuf};
+
+// Import necessary modules
+use onion_frontend::compile::{build_code, compile_to_bytecode};
 use onion_vm::{
     lambda::{
         runnable::{Runnable, StepResult},
@@ -7,120 +12,287 @@ use onion_vm::{
     types::{
         lambda::{
             definition::{LambdaBody, OnionLambdaDefinition},
-            vm_instructions::ir_translator::IRTranslator,
+            vm_instructions::{
+                ir::IRPackage,
+                ir_translator::IRTranslator,
+                instruction_set::VMInstructionPackage,
+            },
         },
+        named::OnionNamed,
         object::{ObjectError, OnionObject},
-        pair::OnionPair,
         tuple::OnionTuple,
     },
     unwrap_object, GC,
 };
+
 mod stdlib;
+mod repl;
+
+/// A modern CLI for the Onion programming language
+#[derive(Parser)]
+#[command(name = "onion-lang")]
+#[command(about = "The Onion Programming Language CLI", long_about = None)]
+#[command(version = "0.1.0")]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Compile source files to IR or bytecode
+    Compile {
+        /// Path to the source file
+        #[arg(value_name = "FILE")]
+        file: PathBuf,
+        /// Output file path
+        #[arg(short, long, value_name = "OUTPUT")]
+        output: Option<PathBuf>,
+        /// Compile to bytecode instead of IR
+        #[arg(short, long)]
+        bytecode: bool,
+    },
+    /// Run source files, IR files, or bytecode
+    Run {
+        /// Path to the file to run
+        #[arg(value_name = "FILE")]
+        file: PathBuf,
+    },
+    /// Display formatted IR from source files
+    DisplayIr {
+        /// Path to the source file
+        #[arg(value_name = "FILE")]
+        file: PathBuf,
+    },
+    /// Translate IR files to bytecode
+    Translate {
+        /// Path to the IR file
+        #[arg(value_name = "IR_FILE")]
+        file: PathBuf,
+        /// Output bytecode file path
+        #[arg(short, long, value_name = "OUTPUT")]
+        output: Option<PathBuf>,
+    },
+    /// Start an interactive REPL
+    Repl,
+    /// Start the Language Server Protocol (LSP) server
+    Lsp,
+}
 
 fn main() {
-    let code = r#"
-    // This is a simple Onion code example
-    fib := mut (n?) -> {
-        if (n <= 1) {
-            return n;
+    let cli = Cli::parse();
+
+    let result = match cli.command {
+        Commands::Compile { file, output, bytecode } => {
+            cmd_compile(file, output, bytecode)
+        }
+        Commands::Run { file } => {
+            cmd_run(file)
+        }
+        Commands::DisplayIr { file } => {
+            cmd_display_ir(file)
+        }
+        Commands::Translate { file, output } => {
+            cmd_translate(file, output)
+        }
+        Commands::Repl => {
+            cmd_repl()
+        }
+        Commands::Lsp => {
+            cmd_lsp()
+        }
+    };
+
+    if let Err(e) = result {
+        eprintln!("{} {}", "error:".red().bold(), e);
+        std::process::exit(1);
+    }
+}
+
+fn cmd_compile(file: PathBuf, output: Option<PathBuf>, bytecode: bool) -> Result<(), String> {
+    println!("{} {}", "Compiling".green().bold(), file.display());
+    
+    if !file.exists() {
+        return Err(format!("File '{}' not found", file.display()));
+    }
+      let code = std::fs::read_to_string(&file)
+        .map_err(|e| format!("Failed to read file '{}': {}", file.display(), e))?;
+    
+    // Store current working directory BEFORE dir_stack changes it
+    let current_dir = std::env::current_dir()
+        .map_err(|e| format!("Failed to get current directory: {}", e))?;
+        
+    let mut dir_stack = create_dir_stack(file.parent())?;
+    
+    if bytecode {
+        // Compile to IR first, then to bytecode
+        let ir_package = build_code(&code, &mut dir_stack)
+            .map_err(|e| format!("Compilation failed: {}", e))?;        let bytecode_package = compile_to_bytecode(&ir_package)
+            .map_err(|e| format!("Bytecode compilation failed: {}", e))?;
+          // Restore working directory before writing output
+        std::env::set_current_dir(&current_dir)
+            .map_err(|e| format!("Failed to restore current directory: {}", e))?;        let output_path = output.unwrap_or_else(|| file.with_extension("onionc"));
+        
+        // Convert relative path to absolute using the original working directory
+        let abs_path = if output_path.is_absolute() {
+            output_path.clone()
+        } else {
+            current_dir.join(&output_path)
         };
-        return this(n - 1) + this(n - 2);
-    };
-    assert(fib(10) == 55);
-
-    obj := {
-        "name": mut "Onion",
-        "version": 1.0,
-        "features": ["fast", "reliable", "secure"]
-    };
-
-    // obj[1] = "updated value"; // panic: cannot assign to immutable field
-    obj.name = "updated value"; // this is allowed, as the field is mutable
-    assert(obj.name == "updated value");
-
-
-    interface := mut {
-        greet => (name?) -> {
-            self.member = "Hello, Onion Prototype!";
-            return "Greeting: " + name + " " + self.member;
-        },
-    };
-
-    A := {
-        'member' : mut "Hello, Onion from A!",
-    } : interface;
-
-    B := {
-        'member' : mut "Hello Onion from B!",
-    } : interface;
-
-    isinstance := (obj?, interface?) -> (valueof obj) is interface;
-
-    assert isinstance(A, interface);
-    assert isinstance(B, interface);
-
-    assert(A.greet("World") == "Greeting: World Hello, Onion Prototype!");
-
-    foo := (a?, b?) -> return arguments.a;
-    assert(foo(1, 2) == 1);
-
-    n := mut 10;
-    foo := (v?) -> (v = 5);
-    foo(n);
-    assert(n == 5);
-
-    lazy_set1 := "abc" | (x?) -> x;
-    lazy_set2 := "abc" | true;
-    assert("a" in lazy_set1 == "a");
-    assert("a" in lazy_set2 == true);
-    assert("d" in lazy_set1 == false);
-
-    lazy_set3 := [mut "a", "b", "a", "b", "c"] | (x?) -> x == "a";
-    lazy_set3.collect();
-
-    @required stdlib;
-    stdlib.io.print("Hello, Onion World!");
-
-    "#;
-    let dir_stack = onion_frontend::dir_stack::DirStack::new(None);
-    if let Err(e) = dir_stack {
-        panic!("Failed to push directory: {}", e);
-    }
-    // Test the build_code function
-    let mut dir_stack = dir_stack.unwrap();
-    let ir_package = build_code(code, &mut dir_stack);
-    match &ir_package {
-        Ok(_) => {}
-        Err(e) => {
-            println!("Failed to build code: {}", e);
-            return;
+        
+        match bytecode_package.write_to_file(abs_path.to_str().unwrap()) {
+            Ok(_) => {
+                println!("{} {}", "Generated bytecode:".green(), output_path.display());
+            },
+            Err(e) => {
+                return Err(format!("Failed to write bytecode to '{}': {:?}", abs_path.display(), e));
+            }
         }
+    } else {        // Compile to IR
+        let ir_package = build_code(&code, &mut dir_stack)
+            .map_err(|e| format!("Compilation failed: {}", e))?;
+        
+        // Restore working directory before writing output
+        std::env::set_current_dir(&current_dir)
+            .map_err(|e| format!("Failed to restore current directory: {}", e))?;
+        
+        let output_path = output.unwrap_or_else(|| file.with_extension("onionr"));
+        ir_package.write_to_file(output_path.to_str().unwrap())
+            .map_err(|e| format!("Failed to write IR: {:?}", e))?;
+        
+        println!("{} {}", "Generated IR:".green(), output_path.display());
     }
-    let ir_package = ir_package.unwrap();
+    
+    Ok(())
+}
 
-    // transform the IR package to a runtime package
-    let mut vm_instructions_package = IRTranslator::new(&ir_package);
-    match vm_instructions_package.translate() {
-        Ok(_) => {}
-        Err(e) => {
-            println!("Failed to translate IR package: {:?}", e);
-            return;
-        }
+fn cmd_run(file: PathBuf) -> Result<(), String> {
+    println!("{} {}", "Running".green().bold(), file.display());
+    
+    if !file.exists() {
+        return Err(format!("File '{}' not found", file.display()));
     }
-    let vm_instructions_package = vm_instructions_package.get_result();
+    
+    let extension = file.extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
+      match extension {
+        "onionc" => run_bytecode_file(&file),
+        "onionr" => run_ir_file(&file),
+        _ => run_source_file(&file),
+    }
+}
 
-    // println!("IR Package: {:?}", ir_package);
-    // println!("VM Instructions Package: {:?}", vm_instructions_package);
+fn cmd_display_ir(file: PathBuf) -> Result<(), String> {
+    println!("{} {}", "Displaying IR for".cyan().bold(), file.display());
+    
+    if !file.exists() {
+        return Err(format!("File '{}' not found", file.display()));
+    }
+    
+    let code = std::fs::read_to_string(&file)
+        .map_err(|e| format!("Failed to read file '{}': {}", file.display(), e))?;
+    
+    let mut dir_stack = create_dir_stack(file.parent())?;
+    let ir_package = build_code(&code, &mut dir_stack)
+        .map_err(|e| format!("Compilation failed: {}", e))?;
+    
+    println!("\n{}", "IR Code:".cyan().bold());
+    println!("{}", format!("{:#?}", ir_package).dimmed());
+    
+    Ok(())
+}
 
-    let stdlib_pair = OnionPair::new_static(
+fn cmd_translate(file: PathBuf, output: Option<PathBuf>) -> Result<(), String> {
+    println!("{} {}", "Translating".yellow().bold(), file.display());
+    
+    if !file.exists() {
+        return Err(format!("File '{}' not found", file.display()));
+    }
+    
+    let ir_package = IRPackage::read_from_file(file.to_str().unwrap())
+        .map_err(|e| format!("Failed to read IR file: {:?}", e))?;
+      let bytecode_package = compile_to_bytecode(&ir_package)
+        .map_err(|e| format!("Translation failed: {}", e))?;
+    
+    let output_path = output.unwrap_or_else(|| file.with_extension("onionc"));
+    
+    bytecode_package.write_to_file(output_path.to_str().unwrap())
+        .map_err(|e| format!("Failed to write bytecode: {:?}", e))?;
+    
+    println!("{} {}", "Generated bytecode:".green(), output_path.display());
+    Ok(())
+}
+
+fn cmd_repl() -> Result<(), String> {
+    repl::start_repl()
+        .map_err(|e| format!("REPL error: {:?}", e))
+}
+
+fn cmd_lsp() -> Result<(), String> {
+    println!("{}", "LSP server not yet implemented".yellow());
+    println!("This feature will be available in a future version.");
+    Ok(())
+}
+
+// Helper functions
+
+fn run_source_file(file: &Path) -> Result<(), String> {
+    let code = std::fs::read_to_string(file)
+        .map_err(|e| format!("Failed to read file '{}': {}", file.display(), e))?;
+    
+    let mut dir_stack = create_dir_stack(file.parent())?;
+    execute_code(&code, &mut dir_stack)
+}
+
+fn run_ir_file(file: &Path) -> Result<(), String> {
+    let ir_package = IRPackage::read_from_file(file.to_str().unwrap())
+        .map_err(|e| format!("Failed to read IR file: {:?}", e))?;
+    
+    execute_ir_package(&ir_package)
+}
+
+fn run_bytecode_file(file: &Path) -> Result<(), String> {
+    let bytecode_package = VMInstructionPackage::read_from_file(file.to_str().unwrap())
+        .map_err(|e| format!("Failed to read bytecode file: {:?}", e))?;
+    
+    execute_bytecode_package(&bytecode_package)
+}
+
+fn create_dir_stack(base_dir: Option<&Path>) -> Result<onion_frontend::dir_stack::DirStack, String> {
+    let dir = base_dir.unwrap_or_else(|| Path::new(".")).to_path_buf();
+    onion_frontend::dir_stack::DirStack::new(Some(&dir))
+        .map_err(|e| format!("Failed to initialize directory stack: {}", e))
+}
+
+fn execute_code(code: &str, dir_stack: &mut onion_frontend::dir_stack::DirStack) -> Result<(), String> {
+    let ir_package = build_code(code, dir_stack)
+        .map_err(|e| format!("Compilation failed: {}", e))?;
+    
+    execute_ir_package(&ir_package)
+}
+
+fn execute_ir_package(ir_package: &IRPackage) -> Result<(), String> {
+    let mut translator = IRTranslator::new(ir_package);
+    translator.translate()
+        .map_err(|e| format!("IR translation failed: {:?}", e))?;
+    
+    let vm_instructions_package = translator.get_result();
+    execute_bytecode_package(&vm_instructions_package)
+}
+
+fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> Result<(), String> {
+    // Create standard library object
+    let stdlib_pair = OnionNamed::new_static(
         &OnionObject::String("stdlib".to_string()).stabilize(),
         &stdlib::build_module(),
     );
 
+    // Create Lambda definition
     let lambda = OnionLambdaDefinition::new_static(
         &OnionTuple::new_static(vec![&stdlib_pair]),
         LambdaBody::Instruction(Box::new(OnionObject::InstructionPackage(
-            vm_instructions_package,
+            vm_instructions_package.clone(),
         ))),
         None,
         None,
@@ -128,54 +300,52 @@ fn main() {
     );
 
     let OnionObject::Lambda(lambda) = lambda.weak() else {
-        println!("Failed to create lambda definition");
-        return;
+        return Err("Failed to create Lambda definition".to_string());
     };
+    
     let args = OnionTuple::new_static(vec![]);
 
+    // Bind arguments
     let assigned_argument = lambda
         .with_parameter(|param| {
             unwrap_object!(param, OnionObject::Tuple)?
                 .clone_and_named_assignment(unwrap_object!(args.weak(), OnionObject::Tuple)?)
         })
-        .expect("Failed to assign argument to lambda");
-    let lambda = lambda.create_runnable(assigned_argument, &mut GC::new());
+        .map_err(|e| format!("Failed to assign arguments to Lambda: {:?}", e))?;
+    
+    let lambda = lambda.create_runnable(assigned_argument, &mut GC::new())
+        .map_err(|e| format!("Failed to create runnable Lambda: {:?}", e))?;
 
-    let Ok(lambda) = lambda else {
-        println!("Failed to create runnable lambda");
-        return;
-    };
-
+    // Initialize scheduler and GC
     let mut scheduler = Scheduler::new(vec![lambda]);
-
     let mut gc = GC::new();
 
+    // Execute code
     loop {
         match scheduler.step(&mut gc) {
             Ok(step_result) => {
                 match step_result {
                     StepResult::Continue => {
-                        // Continue to the next step
+                        // Continue to next step
                     }
                     StepResult::NewRunnable(_) => {
-                        // Add the new runnable to the scheduler
+                        // Add new runnable to scheduler
                         unreachable!()
-                    }
-                    StepResult::Return(result) => {
-                        // Print the result and exit
-                        println!("Execution completed with result: {:?}", result);
+                    }                    StepResult::Return(result) => {
+                        // Print result and exit
+                        println!("{} {:?}", "Result:".cyan(), result);
                         break;
                     }
                     StepResult::Error(err) => {
-                        println!("Runtime error: {}", err);
-                        break;
+                        return Err(format!("Runtime error: {}", err));
                     }
                 }
             }
             Err(e) => {
-                println!("Error during execution: {}", e);
-                break;
+                return Err(format!("Execution error: {}", e));
             }
         }
     }
+    
+    Ok(())
 }

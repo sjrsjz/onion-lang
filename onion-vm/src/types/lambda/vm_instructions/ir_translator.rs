@@ -94,6 +94,12 @@ impl IRTranslator {
                         Opcode32::build_opcode(VMInstruction::LoadNull as u8, 0, 0, 0).get_opcode(),
                     );
                 }
+                IR::LoadUndefined => {
+                    self.code.push(
+                        Opcode32::build_opcode(VMInstruction::LoadUndefined as u8, 0, 0, 0)
+                            .get_opcode(),
+                    );
+                }
                 IR::LoadString(value) => {
                     self.code.push(
                         Opcode32::build_opcode(
@@ -157,7 +163,8 @@ impl IRTranslator {
                 }
                 IR::ForkInstruction => {
                     self.code.push(
-                        Opcode32::build_opcode(VMInstruction::ForkInstruction as u8, 0, 0, 0).get_opcode(),
+                        Opcode32::build_opcode(VMInstruction::ForkInstruction as u8, 0, 0, 0)
+                            .get_opcode(),
                     );
                 }
                 IR::BuildTuple(size) => {
@@ -454,6 +461,11 @@ impl IRTranslator {
                 IR::LengthOf => {
                     self.code.push(
                         Opcode32::build_opcode(VMInstruction::LengthOf as u8, 0, 0, 0).get_opcode(),
+                    );
+                }
+                IR::Run => {
+                    self.code.push(
+                        Opcode32::build_opcode(VMInstruction::Run as u8, 0, 0, 0).get_opcode(),
                     );
                 }
                 _ => {
