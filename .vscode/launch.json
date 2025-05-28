@@ -49,11 +49,11 @@
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=onion-lang",
+                    "--bin=onion",
                     "--package=onion-lang"
                 ],
                 "filter": {
-                    "name": "onion-lang",
+                    "name": "onion",
                     "kind": "bin"
                 }
             },
@@ -71,11 +71,11 @@
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=onion-lang",
+                    "--bin=onion",
                     "--package=onion-lang"
                 ],
                 "filter": {
-                    "name": "onion-lang",
+                    "name": "onion",
                     "kind": "bin"
                 }
             },

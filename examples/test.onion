@@ -74,3 +74,43 @@ if (isinstance(instanceA, classB)) {
 } else {
     stdlib.io.println("instanceA 不是 classB 的实例");
 };
+
+try_or := (f?, except?) -> {
+    result := run f;
+    if (keyof result) {
+        return valueof result;
+    } else {
+        return except(err => valueof result);
+    }
+};
+
+stdlib.io.println(
+    try_or(
+        f => () -> {
+        "A"[-1]
+        },
+        except => (err?) -> "捕获到错误: " + err
+    )
+);
+
+async_foo := () -> {
+    f1 := () -> {
+        i := mut 0;
+        while (i < 50) {
+            stdlib.io.println("f1:", i);
+            i = i + 1;
+        }
+    };
+    f2 := () -> {
+        i := mut 0;
+        while (i < 50) {
+            stdlib.io.println("f2:", i);
+            i = i + 1;
+        }
+    };
+    run f1; // 异步运行f1，会向异步任务池推入同步函数f1
+    run f2; // 异步运行f2，会向异步任务池推入同步函数f2
+};
+
+// 同步启动异步调度器，使用async_foo()作为调度器的初始任务
+async async_foo();

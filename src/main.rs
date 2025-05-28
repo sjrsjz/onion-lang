@@ -23,6 +23,7 @@ use onion_vm::{
     unwrap_object, GC,
 };
 
+mod lsp;
 mod repl;
 mod stdlib;
 
@@ -74,7 +75,11 @@ enum Commands {
     /// Start an interactive REPL
     Repl,
     /// Start the Language Server Protocol (LSP) server
-    Lsp,
+    Lsp {
+        /// Port to run the REPL on
+        #[arg(short, long, default_value = "4000", value_name = "PORT")]
+        port: u16,
+    },
 }
 
 fn main() {
@@ -90,7 +95,10 @@ fn main() {
         Commands::DisplayIr { file } => cmd_display_ir(file),
         Commands::Translate { file, output } => cmd_translate(file, output),
         Commands::Repl => cmd_repl(),
-        Commands::Lsp => cmd_lsp(),
+        Commands::Lsp { port } => {
+            lsp::start_lsp_server(port)
+                .map_err(|e| format!("Failed to start LSP server: {}", e))
+        }
     };
 
     if let Err(e) = result {
@@ -233,11 +241,6 @@ fn cmd_repl() -> Result<(), String> {
     repl::start_repl().map_err(|e| format!("REPL error: {:?}", e))
 }
 
-fn cmd_lsp() -> Result<(), String> {
-    println!("{}", "LSP server not yet implemented".yellow());
-    println!("This feature will be available in a future version.");
-    Ok(())
-}
 
 // Helper functions
 

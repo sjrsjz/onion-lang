@@ -148,6 +148,7 @@ impl OnionLambdaRunnable {
 
         // 控制流
         instruction_table[VMInstruction::Call as usize] = vm_instructions::call_lambda;
+        instruction_table[VMInstruction::AsyncCall as usize] = vm_instructions::async_call;
         instruction_table[VMInstruction::Return as usize] = vm_instructions::return_value;
         instruction_table[VMInstruction::Jump as usize] = vm_instructions::jump;
         instruction_table[VMInstruction::JumpIfFalse as usize] = vm_instructions::jump_if_false;
