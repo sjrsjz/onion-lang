@@ -1,0 +1,8 @@
+@required stdlib;
+@compile "./module.onion";
+
+module := () -> dyn { // dyn是指定lambda依靠动态生成的字节码进行构建而非编译时确定
+    import "./module.onionc" // 导入编译后的模块的字节码
+};
+module := module();
+stdlib.io.println("导入的模块版本:", module.get_version());
