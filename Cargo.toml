@@ -10,7 +10,7 @@ documentation = "https://github.com/sjrsjz/onion-lang/blob/main/README.md"
 readme = "README.md"
 license = "MIT"
 keywords = ["programming-language", "functional", "async", "compiler", "vm"]
-categories = ["development-tools", "compilers"]
+categories = ["development-tools", "compilers", "programming-languages", "scripting"]
 rust-version = "1.70"
 exclude = [
     "target/",
