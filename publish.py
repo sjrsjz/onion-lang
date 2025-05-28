@@ -130,14 +130,20 @@ class CargoPublisher:
         
         print(f"✅ {package['name']} 验证通过")
         return True
-    
-    def publish_package(self, package: Dict, dry_run: bool = False) -> bool:
+    def publish_package(self, package: Dict, dry_run: bool = False, skip_existing: bool = False) -> bool:
         """发布单个包"""
         package_name = package['name']
         package_path = package['path']
         
         print(f"\n🚀 {'模拟' if dry_run else ''}发布包: {package_name}")
         print(f"📁 路径: {package_path}")
+        
+        # 如果启用跳过已存在包，先检查包是否已存在
+        if skip_existing and not dry_run:
+            version = self.get_package_version(package_path)
+            if version and self.check_package_exists(package_name, version):
+                print(f"⏭️  跳过已存在的包: {package_name} v{version}")
+                return True
         
         # 构建发布命令
         cmd = ["cargo", "publish"]
@@ -152,13 +158,17 @@ class CargoPublisher:
             if not dry_run:
                 print(f"🎉 {package_name} 已上传到 crates.io")
         else:
-            print(f"❌ {package_name} {'模拟' if dry_run else ''}发布失败:")
-            print(output)
-            return False
+            # 检查是否是因为包已存在而失败
+            if skip_existing and "already exists" in output:
+                print(f"⏭️  包已存在，跳过: {package_name}")
+                return True
+            else:
+                print(f"❌ {package_name} {'模拟' if dry_run else ''}发布失败:")
+                print(output)
+                return False
         
         return True
-    
-    def publish_all(self, dry_run: bool = False, skip_validation: bool = False):
+    def publish_all(self, dry_run: bool = False, skip_validation: bool = False, skip_existing: bool = False):
         """按顺序发布所有包"""
         print("🎯 Onion Language 包发布工具")
         print("=" * 50)
@@ -177,12 +187,14 @@ class CargoPublisher:
         
         print(f"\n🚀 开始{'模拟' if dry_run else ''}发布流程...")
         print("📦 发布顺序: onion-vm -> onion-frontend -> onion-lang")
+        if skip_existing:
+            print("⏭️  已启用跳过已存在包模式")
         
         # 按顺序发布包
         for i, package in enumerate(self.packages):
             print(f"\n步骤 {i+1}/{len(self.packages)}")
             
-            if not self.publish_package(package, dry_run):
+            if not self.publish_package(package, dry_run, skip_existing):
                 print(f"\n❌ 发布失败，停止流程")
                 return False
             
@@ -218,11 +230,16 @@ def main():
         action='store_true',
         help='模拟发布，不实际上传到crates.io'
     )
-    
     parser.add_argument(
         '--skip-validation',
         action='store_true', 
         help='跳过包验证步骤'
+    )
+    
+    parser.add_argument(
+        '--skip-existing',
+        action='store_true',
+        help='跳过已存在的包，继续发布其他包'
     )
     
     parser.add_argument(
@@ -240,7 +257,8 @@ def main():
     try:
         success = publisher.publish_all(
             dry_run=args.dry_run,
-            skip_validation=args.skip_validation
+            skip_validation=args.skip_validation,
+            skip_existing=args.skip_existing
         )
         sys.exit(0 if success else 1)
     except KeyboardInterrupt:
