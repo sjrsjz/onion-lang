@@ -1,0 +1,40 @@
+@required stdlib;
+
+isinstance := (x?, class?) -> (valueof x) is class.parameter.interface;
+
+ClassA := (struct?, interface => mut {
+    print => () -> {
+        stdlib.io.println("这是类A的print方法");
+    },
+    to_string => () -> "类A的字符串表示: " + stdlib.types.to_string(self)
+}) -> struct : interface;
+
+ClassB := (struct?, interface => mut {
+    print => () -> {
+        stdlib.io.println("这是类B的print方法");
+    },
+    to_string => () -> "类B的字符串表示: " + stdlib.types.to_string(self)
+}) -> struct : interface;
+
+instanceA := #ClassA mut {
+    "name": "实例A",
+    "value": 42
+};
+
+stdlib.io.println("实例A的名称:", instanceA.name);
+
+instanceA.print();
+
+stdlib.io.println("实例A的字符串表示:", instanceA.to_string());
+
+if (isinstance(instanceA, ClassA)) {
+    stdlib.io.println("instanceA 是 ClassA 的实例");
+} else {
+    stdlib.io.println("instanceA 不是 ClassA 的实例");
+};
+
+if (isinstance(instanceA, ClassB)) {
+    stdlib.io.println("instanceA 是 ClassB 的实例");
+} else {
+    stdlib.io.println("instanceA 不是 ClassB 的实例");
+};

@@ -75,7 +75,7 @@ impl Debug for OnionObject {
             OnionObject::Named(named) => write!(f, "{:?}", named),
             OnionObject::LazySet(lazy_set) => write!(f, "{:?}", lazy_set),
             OnionObject::InstructionPackage(_) => write!(f, "InstructionPackage(...)"),
-            OnionObject::Lambda(lambda) => write!(f, "Lambda({:?})", lambda),
+            OnionObject::Lambda(lambda) => write!(f, "{:?}", lambda),
             OnionObject::Mut(r) => write!(
                 f,
                 "Mut({})",
@@ -293,7 +293,7 @@ impl OnionObject {
             OnionObject::Null => Ok("null".to_string()),
             OnionObject::Undefined(s) => Ok(match s.as_str() {
                 "" => "undefined".to_string(),
-                _ => format!("undefined({})", s),                
+                _ => format!("undefined({})", s),
             }),
             OnionObject::Range(start, end) => Ok(format!("{}..{}", start, end)),
             OnionObject::Tuple(tuple) => match tuple.elements.len() {
@@ -307,33 +307,32 @@ impl OnionObject {
                         tuple.elements.iter().map(|e| e.to_string()).collect();
                     Ok(format!("({})", elements?.join(", ")))
                 }
-                
             },
             OnionObject::Pair(pair) => {
                 let left = pair.key.to_string()?;
                 let right = pair.value.to_string()?;
                 Ok(format!("{} : {}", left, right))
-            },
+            }
             OnionObject::Named(named) => {
                 let name = named.key.to_string()?;
                 let value = named.value.to_string()?;
                 Ok(format!("{} => {}", name, value))
-            },
+            }
             OnionObject::LazySet(lazy_set) => {
                 let container = lazy_set.container.to_string()?;
                 let filter = lazy_set.filter.to_string()?;
                 Ok(format!("[{} | {}]", container, filter))
-            },
+            }
             OnionObject::InstructionPackage(_) => Ok("InstructionPackage(...)".to_string()),
             OnionObject::Lambda(lambda) => {
                 let params = lambda.parameter.to_string()?;
                 let body = lambda.body.to_string();
-                Ok(format!("Lambda({} => {})", params, body))
-            },
+                Ok(format!("{}::{} -> {}", lambda.signature, params, body))
+            }
             _ => {
                 // 使用 Debug trait来处理其他类型的转换
                 Ok(format!("{:?}", obj))
-            },
+            }
         })
     }
 
@@ -805,7 +804,9 @@ impl OnionObject {
         self.with_data(|obj| match obj {
             OnionObject::Named(named) => Ok(named.get_value().clone().stabilize()),
             OnionObject::Pair(pair) => Ok(pair.get_value().clone().stabilize()),
-            OnionObject::Undefined(s) => Ok(OnionStaticObject::new(OnionObject::Undefined(s.clone()))),
+            OnionObject::Undefined(s) => {
+                Ok(OnionStaticObject::new(OnionObject::Undefined(s.clone())))
+            }
             _ => Err(ObjectError::InvalidOperation(format!(
                 "value_of() not supported for {:?}",
                 obj
@@ -888,7 +889,6 @@ impl OnionStaticObject {
     pub fn mutablize(&self, gc: &mut GC<OnionObject>) -> Result<OnionStaticObject, ObjectError> {
         self.obj.with_data(|obj| Ok(obj.clone().mutablize(gc)))
     }
-
 }
 
 #[macro_export]
@@ -900,11 +900,10 @@ macro_rules! unwrap_object {
                 "Expected {}, found {:?}",
                 stringify!($variant),
                 $obj
-            )))
+            ))),
         }
     };
 }
-
 
 #[cfg(test)]
 mod tests {

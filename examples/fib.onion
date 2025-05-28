@@ -1,0 +1,10 @@
+@required stdlib;
+
+fib := mut (n => 0) -> {
+    if (n <= 1) {
+        return n;
+    };
+    return this(n - 1) + this(n - 2);
+};
+
+stdlib.io.println("斐波那契数列第25个数是:", fib(25));

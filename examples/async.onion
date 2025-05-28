@@ -1,0 +1,27 @@
+@required stdlib;
+
+yield := mut 0;
+
+task1 := () -> {
+    i := mut 0;
+    while (i < 50) {
+        stdlib.io.println("task1:", i);
+        yield = i * 2;
+        i = i + 1;
+    }
+};
+
+task2 := () -> {
+    i := mut 0;
+    while (i < 50) {
+        stdlib.io.println("task2: task1 yield", yield);
+        i = i + 1;
+    }
+};
+
+main := () -> {
+    run task1;
+    run task2;
+};
+
+async main()
