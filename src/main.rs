@@ -336,7 +336,6 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
 
     // Execute code
     loop {
-        gc.collect(); // Run garbage collection
         match scheduler.step(&mut gc) {
             Ok(step_result) => {
                 match step_result {

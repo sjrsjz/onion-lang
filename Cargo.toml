@@ -1,6 +1,6 @@
 [package]
 name = "onion-lang"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["sjrsjz <sjrsjz@gmail.com>"]
 description = "A modern functional programming language with asynchronous execution and lazy evaluation"
