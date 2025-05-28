@@ -2,6 +2,20 @@
 name = "onion-frontend"
 version = "0.1.0"
 edition = "2021"
+authors = ["sjrsjz <sjrsjz@gmail.com>"]
+description = "Compilation frontend for the Onion programming language - lexer, parser, and IR generator"
+homepage = "https://github.com/sjrsjz/onion-lang"
+repository = "https://github.com/sjrsjz/onion-lang"
+documentation = "https://github.com/sjrsjz/onion-lang/blob/main/onion-frontend/README.md"
+readme = "README.md"
+license = "MIT"
+keywords = ["compiler", "parser", "lexer", "frontend", "onion"]
+categories = ["development-tools", "compilers"]
+rust-version = "1.70"
+
+[features]
+default = ["debug"]
+debug = ["colored"]
 
 [lib]
 name = "onion_frontend"
@@ -9,7 +23,10 @@ crate-type = ["lib"]
 
 [dependencies]
 base64 = "0.22.1"
-colored = "3.0.0"
+colored = { workspace = true, optional = true }
 onion-vm = { version = "0.1.0", path = "../onion-vm" }
 regex = "1.11.1"
 unicode-segmentation = "1.12.0"
+
+[dev-dependencies]
+criterion = { workspace = true }

@@ -2,7 +2,35 @@
 name = "onion-lang"
 version = "0.1.0"
 edition = "2021"
+authors = ["sjrsjz <sjrsjz@gmail.com>"]
+description = "A modern functional programming language with asynchronous execution and lazy evaluation"
+homepage = "https://github.com/sjrsjz/onion-lang"
+repository = "https://github.com/sjrsjz/onion-lang"
+documentation = "https://github.com/sjrsjz/onion-lang/blob/main/README.md"
+readme = "README.md"
+license = "MIT"
+keywords = ["programming-language", "functional", "async", "compiler", "vm"]
+categories = ["development-tools", "compilers"]
+rust-version = "1.70"
+exclude = [
+    "target/",
+    "flamegraph.svg",
+    "*.onionc",
+    "*.onionr",
+    ".gitignore",
+    ".git/"
+]
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+default = ["repl", "lsp"]
+repl = ["rustyline"]
+lsp = ["log", "env_logger"]
+debug = ["log", "env_logger"]
+full = ["repl", "lsp", "debug"]
 
 [[bin]]
 name = "onion"
@@ -11,23 +39,46 @@ path = "src/main.rs"
 [dependencies]
 onion-frontend = { version = "0.1.0", path = "./onion-frontend" }
 onion-vm = { version = "0.1.0", path = "./onion-vm" }
-serde = "1.0.219"
+serde = { workspace = true }
 clap = { version = "4.5", features = ["derive"] }
-colored = "3.0.0"
-rustyline = { version = "14.0", features = ["derive"] }
+colored = { workspace = true }
+rustyline = { version = "14.0", features = ["derive"], optional = true }
 dirs = "5.0"
-log = "0.4.27"
+log = { version = "0.4.27", optional = true }
 serde_json = "1.0.140"
 url = "2.5.4"
-env_logger = "0.11.8"
+env_logger = { version = "0.11.8", optional = true }
 regex = "1.11.1"
+
+[dev-dependencies]
+criterion = { workspace = true }
+tempfile = "3.0"
+
+[profile.release]
+debug = 1
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.dev]
+opt-level = 0
+debug = true
+panic = "unwind"
 
 [workspace]
 members = [
     "onion-vm",
     "onion-frontend",
 ]
+resolver = "2"
 
-[profile.release]
-debug = 1
-opt-level = 3
+[workspace.dependencies]
+serde = { version = "1.0.219", features = ["derive"] }
+colored = "3.0.0"
+criterion = "0.5"
+
+# Metadata for the entire workspace
+[workspace.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

@@ -2,6 +2,21 @@
 name = "onion-vm"
 version = "0.1.0"
 edition = "2021"
+authors = ["sjrsjz <sjrsjz@gmail.com>"]
+description = "Virtual machine runtime for the Onion programming language with async execution and garbage collection"
+homepage = "https://github.com/sjrsjz/onion-lang"
+repository = "https://github.com/sjrsjz/onion-lang"
+documentation = "https://github.com/sjrsjz/onion-lang/blob/main/onion-vm/README.md"
+readme = "README.md"
+license = "MIT"
+keywords = ["virtual-machine", "runtime", "async", "gc", "onion"]
+categories = ["development-tools", "compilers"]
+rust-version = "1.70"
+
+[features]
+default = ["serde_support"]
+debug = []
+serde_support = ["serde"]
 
 [lib]
 name = "onion_vm"
@@ -11,4 +26,7 @@ crate-type = ["lib"]
 bincode = "1.3.3"
 rust-arc-gc = "0.1.0"
 rustc-hash = "2.1.1"
-serde = { version = "1.0.219", features = ["derive"] }
+serde = { workspace = true, optional = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
