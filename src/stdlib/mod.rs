@@ -1,0 +1,108 @@
+use std::{cell::RefCell, collections::HashMap, sync::Arc};
+
+use onion_vm::{
+    lambda::runnable::{Runnable, RuntimeError, StepResult},
+    onion_tuple,
+    types::{
+        lambda::definition::{LambdaBody, OnionLambdaDefinition},
+        object::{ObjectError, OnionObject, OnionStaticObject},
+        pair::OnionPair,
+        tuple::OnionTuple,
+    },
+    GC,
+};
+
+mod io;
+
+pub fn build_dict(dict: HashMap<String, OnionStaticObject>) -> OnionStaticObject {
+    let mut pairs = vec![];
+    for (key, value) in dict {
+        pairs.push(OnionPair::new_static(
+            &OnionObject::String(key).stabilize(),
+            &value,
+        ));
+    }
+    OnionTuple::new_static_no_ref(pairs)
+}
+
+pub struct NativeFunctionGenerator<F>
+where
+    F: Fn(OnionStaticObject, &mut GC<OnionObject>) -> Result<OnionStaticObject, RuntimeError>
+        + 'static,
+{
+    argument: OnionStaticObject,
+    function: Arc<RefCell<F>>,
+}
+
+impl<F> Runnable for NativeFunctionGenerator<F>
+where
+    F: Fn(OnionStaticObject, &mut GC<OnionObject>) -> Result<OnionStaticObject, RuntimeError>
+        + 'static,
+{
+    fn set_argument(
+        &mut self,
+        argument: OnionStaticObject,
+        _gc: &mut GC<OnionObject>,
+    ) -> Result<(), ObjectError> {
+        self.argument = argument;
+        Ok(())
+    }
+
+    fn step(&mut self, gc: &mut GC<OnionObject>) -> Result<StepResult, RuntimeError> {
+        let argument = self.argument.clone();
+        match &self.function.borrow_mut()(argument, gc) {
+            Ok(result) => Ok(StepResult::Return(result.clone())),
+            Err(err) => Ok(StepResult::Error(err.clone())),
+        }
+    }
+
+    fn receive(
+        &mut self,
+        _step_result: StepResult,
+        _gc: &mut GC<OnionObject>,
+    ) -> Result<(), RuntimeError> {
+        Err(RuntimeError::DetailedError(
+            "receive not implemented".to_string(),
+        ))
+    }
+
+    fn copy(&self, _gc: &mut onion_vm::GC<OnionObject>) -> Box<dyn Runnable> {
+        Box::new(NativeFunctionGenerator {
+            argument: self.argument.clone(),
+            function: Arc::clone(&self.function),
+        })
+    }
+}
+
+pub fn wrap_native_function<F>(
+    params: &OnionStaticObject,
+    capture: Option<&OnionStaticObject>,
+    self_object: Option<&OnionStaticObject>,
+    signature: String,
+    function: F,
+) -> OnionStaticObject
+where
+    F: Fn(OnionStaticObject, &mut GC<OnionObject>) -> Result<OnionStaticObject, RuntimeError>
+        + 'static,
+{
+    OnionLambdaDefinition::new_static(
+        params,
+        LambdaBody::NativeFunction(Arc::new(RefCell::new(NativeFunctionGenerator {
+            argument: onion_tuple!(),
+            function: Arc::new(RefCell::new(function)),
+        }))),
+        capture,
+        self_object,
+        signature,
+    )
+}
+
+
+pub fn build_module() -> OnionStaticObject {
+    let mut module = HashMap::new();
+    module.insert(
+        "io".to_string(),
+        io::build_module(),
+    );
+    build_dict(module)
+}

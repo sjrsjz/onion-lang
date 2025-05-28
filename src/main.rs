@@ -9,11 +9,13 @@ use onion_vm::{
             definition::{LambdaBody, OnionLambdaDefinition},
             vm_instructions::ir_translator::IRTranslator,
         },
-        object::OnionObject,
+        object::{ObjectError, OnionObject},
+        pair::OnionPair,
         tuple::OnionTuple,
     },
-    GC,
+    unwrap_object, GC,
 };
+mod stdlib;
 
 fn main() {
     let code = r#"
@@ -73,8 +75,11 @@ fn main() {
     assert("a" in lazy_set2 == true);
     assert("d" in lazy_set1 == false);
 
-    lazy_set3 := ["a", "b", "a", "b", "c"] | (x?) -> x == "a";
-    lazy_set3.collect()
+    lazy_set3 := [mut "a", "b", "a", "b", "c"] | (x?) -> x == "a";
+    lazy_set3.collect();
+
+    @required stdlib;
+    stdlib.io.print("Hello, Onion World!");
 
     "#;
     let dir_stack = onion_frontend::dir_stack::DirStack::new(None);
@@ -107,8 +112,13 @@ fn main() {
     // println!("IR Package: {:?}", ir_package);
     // println!("VM Instructions Package: {:?}", vm_instructions_package);
 
+    let stdlib_pair = OnionPair::new_static(
+        &OnionObject::String("stdlib".to_string()).stabilize(),
+        &stdlib::build_module(),
+    );
+
     let lambda = OnionLambdaDefinition::new_static(
-        &OnionObject::Tuple(OnionTuple::new(vec![])).stabilize(),
+        &OnionTuple::new_static(vec![&stdlib_pair]),
         LambdaBody::Instruction(Box::new(OnionObject::InstructionPackage(
             vm_instructions_package,
         ))),
@@ -121,11 +131,15 @@ fn main() {
         println!("Failed to create lambda definition");
         return;
     };
+    let args = OnionTuple::new_static(vec![]);
 
-    let lambda = lambda.create_runnable(
-        OnionObject::Tuple(OnionTuple::new(vec![])).stabilize(),
-        &mut GC::new(),
-    );
+    let assigned_argument = lambda
+        .with_parameter(|param| {
+            unwrap_object!(param, OnionObject::Tuple)?
+                .clone_and_named_assignment(unwrap_object!(args.weak(), OnionObject::Tuple)?)
+        })
+        .expect("Failed to assign argument to lambda");
+    let lambda = lambda.create_runnable(assigned_argument, &mut GC::new());
 
     let Ok(lambda) = lambda else {
         println!("Failed to create runnable lambda");

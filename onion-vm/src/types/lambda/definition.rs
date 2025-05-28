@@ -155,6 +155,13 @@ impl OnionLambdaDefinition {
             ))),
         }
     }
+
+    pub fn with_parameter<F, R>(&self, f: F) -> Result<R, ObjectError>
+    where
+        F: Fn(&OnionObject) -> Result<R, ObjectError>,
+    {
+        f(&self.parameter)
+    }
 }
 
 impl GCTraceable for OnionLambdaDefinition {

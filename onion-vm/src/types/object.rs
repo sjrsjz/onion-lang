@@ -849,7 +849,23 @@ impl OnionStaticObject {
     pub fn mutablize(&self, gc: &mut GC<OnionObject>) -> Result<OnionStaticObject, ObjectError> {
         self.obj.with_data(|obj| Ok(obj.clone().mutablize(gc)))
     }
+
 }
+
+#[macro_export]
+macro_rules! unwrap_object {
+    ($obj:expr, $variant:path) => {
+        match $obj {
+            $variant(o) => Ok(o),
+            _ => Err(ObjectError::InvalidType(format!(
+                "Expected {}, found {:?}",
+                stringify!($variant),
+                $obj
+            )))
+        }
+    };
+}
+
 
 #[cfg(test)]
 mod tests {
