@@ -746,9 +746,11 @@ impl<'t> IRGenerator<'t> {
                 Ok(instructions)
             }
             ASTNodeType::Map => {
-                return Err(IRGeneratorError::InvalidASTNodeType(
-                    ast_node.node_type.clone(),
-                ));
+                let mut instructions = Vec::new();
+                instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
+                instructions.extend(self.generate_without_redirect(&ast_node.children[1])?);
+                instructions.push((self.generate_debug_info(ast_node), IR::MapTo));
+                Ok(instructions)                
             }
         }
     }

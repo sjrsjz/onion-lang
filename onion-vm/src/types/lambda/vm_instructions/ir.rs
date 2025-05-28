@@ -79,6 +79,7 @@ pub enum IR {
     LengthOf,           // get length of object
     IsSameObject,       // check if two objects are the same
     Run, // run lambda
+    MapTo
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

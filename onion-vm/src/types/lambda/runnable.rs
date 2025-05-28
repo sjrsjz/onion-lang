@@ -123,6 +123,7 @@ impl OnionLambdaRunnable {
         instruction_table[VMInstruction::BinaryLt as usize] = vm_instructions::binary_less;
         instruction_table[VMInstruction::BinaryGe as usize] = vm_instructions::binary_greater_equal;
         instruction_table[VMInstruction::BinaryLe as usize] = vm_instructions::binary_less_equal;
+        instruction_table[VMInstruction::MapTo as usize] = vm_instructions::map_to;
 
         // 一元操作
         instruction_table[VMInstruction::UnaryBitNot as usize] = vm_instructions::unary_bitwise_not;

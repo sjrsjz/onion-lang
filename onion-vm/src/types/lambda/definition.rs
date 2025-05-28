@@ -1,4 +1,4 @@
-use std::{cell::RefCell, fmt::Debug, sync::Arc};
+use std::{cell::RefCell, fmt::{Debug, Display}, sync::Arc};
 
 use arc_gc::{arc::GCArc, gc::GC, traceable::GCTraceable};
 
@@ -22,6 +22,15 @@ impl Debug for LambdaBody {
             LambdaBody::NativeFunction(_) => write!(f, "NativeFunction"),
         }
     }
+}
+
+impl Display for LambdaBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LambdaBody::Instruction(instruction) => write!(f, "Instruction({:?})", instruction),
+            LambdaBody::NativeFunction(_) => write!(f, "NativeFunction"),
+        }
+    }    
 }
 
 #[derive(Clone)]

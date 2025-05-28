@@ -65,9 +65,7 @@ impl OnionTuple {
         for element in &self.elements {
             match element.upgrade() {
                 Some(arc) => arcs.extend(arc),
-                None => {
-                    return None;
-                }
+                None => {}
             }
         }
         Some(arcs)

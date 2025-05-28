@@ -11,7 +11,7 @@ fib := mut (n?) -> {
     return this(n - 1) + this(n - 2);
 };
 
-stdlib.io.println("斐波那契数列第10个数是:", fib(10));
+stdlib.io.println("斐波那契数列第4个数是:", fib(4));
 stdlib.io.println("-------------------------");
 
 // 测试对象和属性
@@ -19,6 +19,7 @@ person := {
     "name": mut "张三",
     "age": 25
 };
+stdlib.io.println(person);
 
 stdlib.io.println("姓名:", person.name);
 stdlib.io.println("年龄:", person.age);
@@ -27,3 +28,49 @@ stdlib.io.println("年龄:", person.age);
 person.name = "李四";
 stdlib.io.println("修改后姓名:", person.name);
 stdlib.io.println("======== 测试结束 ========");
+
+stdlib.io.println([1,2,3,4,5,6,7] |> (x?) -> x * 2);
+stdlib.io.println(
+    {
+        [1,2,3,4,5,6,7] | (x?) -> x < 5
+    }.collect()
+);
+
+
+classA := (struct?, interface => mut {
+    print => () -> {
+        stdlib.io.println("这是类A的print方法");
+    },
+    toString => () -> "类A的字符串表示: " + stdlib.types.to_string(self)
+}) -> struct : interface;
+
+classB := (struct?, interface => mut {
+    print => () -> {
+        stdlib.io.println("这是类B的print方法");
+    },
+    toString => () -> "类B的字符串表示: " + stdlib.types.to_string(self)
+}) -> struct : interface;
+
+
+isinstance := (obj?, class?) -> (valueof obj) is class.parameter.interface;
+
+instanceA := #classA mut {
+    "name": "实例A",
+    "value": 42
+};
+
+stdlib.io.println("实例A的名称:", instanceA.name);
+instanceA.print();
+stdlib.io.println("实例A的字符串表示:", instanceA.toString());
+
+if (isinstance(instanceA, classA)) {
+    stdlib.io.println("instanceA 是 classA 的实例");
+} else {
+    stdlib.io.println("instanceA 不是 classA 的实例");
+};
+
+if (isinstance(instanceA, classB)) {
+    stdlib.io.println("instanceA 是 classB 的实例");
+} else {
+    stdlib.io.println("instanceA 不是 classB 的实例");
+};

@@ -468,6 +468,12 @@ impl IRTranslator {
                         Opcode32::build_opcode(VMInstruction::Run as u8, 0, 0, 0).get_opcode(),
                     );
                 }
+                IR::MapTo => {
+                    self.code.push(
+                        Opcode32::build_opcode(VMInstruction::MapTo as u8, 0, 0, 0)
+                            .get_opcode(),
+                    );
+                }
                 _ => {
                     return Err(IRTranslatorError::InvalidInstruction(ir));
                 }

@@ -45,6 +45,7 @@ pub enum VMInstruction {
     BinaryLe = 36,     // <=
     BinaryIn = 37,     // in
     BinaryIs = 38,     // is
+    MapTo = 39,     // map to
 
     // 一元操作 (40-49)
     UnaryBitNot = 40, // ~
@@ -133,6 +134,7 @@ impl VMInstruction {
             36 => Some(Self::BinaryLe),
             37 => Some(Self::BinaryIn),
             38 => Some(Self::BinaryIs),
+            39 => Some(Self::MapTo),
 
             40 => Some(Self::UnaryBitNot),
             41 => Some(Self::UnaryAbs),

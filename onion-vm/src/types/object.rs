@@ -295,6 +295,41 @@ impl OnionObject {
                 "" => "undefined".to_string(),
                 _ => format!("undefined({})", s),                
             }),
+            OnionObject::Range(start, end) => Ok(format!("{}..{}", start, end)),
+            OnionObject::Tuple(tuple) => match tuple.elements.len() {
+                0 => Ok("()".to_string()),
+                1 => {
+                    let first = tuple.elements.first().unwrap();
+                    Ok(format!("({},)", first.to_string()?))
+                }
+                _ => {
+                    let elements: Result<Vec<String>, ObjectError> =
+                        tuple.elements.iter().map(|e| e.to_string()).collect();
+                    Ok(format!("({})", elements?.join(", ")))
+                }
+                
+            },
+            OnionObject::Pair(pair) => {
+                let left = pair.key.to_string()?;
+                let right = pair.value.to_string()?;
+                Ok(format!("{} : {}", left, right))
+            },
+            OnionObject::Named(named) => {
+                let name = named.key.to_string()?;
+                let value = named.value.to_string()?;
+                Ok(format!("{} => {}", name, value))
+            },
+            OnionObject::LazySet(lazy_set) => {
+                let container = lazy_set.container.to_string()?;
+                let filter = lazy_set.filter.to_string()?;
+                Ok(format!("[{} | {}]", container, filter))
+            },
+            OnionObject::InstructionPackage(_) => Ok("InstructionPackage(...)".to_string()),
+            OnionObject::Lambda(lambda) => {
+                let params = lambda.parameter.to_string()?;
+                let body = lambda.body.to_string();
+                Ok(format!("Lambda({} => {})", params, body))
+            },
             _ => {
                 // 使用 Debug trait来处理其他类型的转换
                 Ok(format!("{:?}", obj))

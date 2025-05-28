@@ -57,7 +57,10 @@
                     "kind": "bin"
                 }
             },
-            "args": [],
+            "args": [
+                "run",
+                "examples/test.onion"
+            ],
             "cwd": "${workspaceFolder}"
         },
         {

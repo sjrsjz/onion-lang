@@ -153,7 +153,6 @@ impl Runnable for OnionLazySetCollector {
                                 // 如果是布尔值 true，表示需要收集当前元素
                                 if let Some(item) = tuple.elements.get(self.current_index - 1) {
                                     self.collected.push(item.clone().stabilize());
-                                    self.current_index += 1; // 移动到下一个元素
                                     Ok(())
                                 } else {
                                     // 所有元素都处理完了
