@@ -8,6 +8,7 @@ use onion_frontend::parser::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SemanticTokenTypes {
     Null,        // Null
+    Undefined,  // Undefined
     String,      // String
     Boolean,     // Boolean
     Number,      // Number (Integer, Float)
@@ -36,6 +37,7 @@ pub enum SemanticTokenTypes {
     In,
     Emit,
     AsyncLambdaCall,
+    SyncLambdaCall, // 同步调用
     Namespace, // Type::Value
     Set,   // collection | filter
     Map,   // collection |> map
@@ -80,6 +82,7 @@ fn process_node(
     if range_start < range_end && range_start < tokens.len() && range_end <= tokens.len() {
         let token_type = match &node.node_type {
             ASTNodeType::Null => SemanticTokenTypes::Null,
+            ASTNodeType::Undefined => SemanticTokenTypes::Undefined,
             ASTNodeType::String(_) => SemanticTokenTypes::String,
             ASTNodeType::Boolean(_) => SemanticTokenTypes::Boolean,
             ASTNodeType::Number(_) => SemanticTokenTypes::Number,
@@ -92,6 +95,7 @@ fn process_node(
             ASTNodeType::Expressions => SemanticTokenTypes::Expressions,
             ASTNodeType::LambdaCall => SemanticTokenTypes::LambdaCall,
             ASTNodeType::AsyncLambdaCall => SemanticTokenTypes::AsyncLambdaCall,
+            ASTNodeType::SyncLambdaCall => SemanticTokenTypes::SyncLambdaCall, // 同步调用
             ASTNodeType::Operation(_) => SemanticTokenTypes::Operation,
             ASTNodeType::Tuple => SemanticTokenTypes::Tuple,
             ASTNodeType::AssumeTuple => SemanticTokenTypes::AssumeTuple,
@@ -275,6 +279,7 @@ pub(super) fn encode_semantic_tokens(tokens: &[SemanticTokenTypes], text: &str) 
     let get_token_type_index = |token_type: &SemanticTokenTypes| -> Option<u32> {
         match token_type {
             SemanticTokenTypes::Null => Some(22),
+            SemanticTokenTypes::Undefined => Some(21),
             SemanticTokenTypes::String => Some(18),
             SemanticTokenTypes::Boolean => Some(23),
             SemanticTokenTypes::Number => Some(19),
@@ -287,6 +292,7 @@ pub(super) fn encode_semantic_tokens(tokens: &[SemanticTokenTypes], text: &str) 
             SemanticTokenTypes::Expressions => Some(30),
             SemanticTokenTypes::LambdaCall => Some(31),
             SemanticTokenTypes::AsyncLambdaCall => Some(32),
+            SemanticTokenTypes::SyncLambdaCall => Some(32), // 同步调用与异步调用使用相同的索引
             SemanticTokenTypes::Operation => Some(33),
             SemanticTokenTypes::Tuple => Some(34),
             SemanticTokenTypes::AssumeTuple => Some(35),

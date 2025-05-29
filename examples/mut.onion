@@ -5,15 +5,15 @@ obj := [
     1,
 ];
 
-stdlib.io.println(run () -> { // 使用run创建新的同步调度器阻止vm直接抛出异常停止
+stdlib.io.println(sync () -> { // 使用sync创建新的同步调度器阻止vm直接抛出异常停止
     obj[0] = 42; // 修改 obj 的第一个元素
-});
+}());
 
 stdlib.io.println("obj 的第一个元素现在是:", obj[0]);
 
-stdlib.io.println(run () -> {
+stdlib.io.println(sync () -> {
     obj[1] = 100; // 修改 obj 的第二个元素
-}); // 失败！
+}()); // 失败！
 
 stdlib.io.println("obj 的第二个元素现在是:", obj[1]);
 
@@ -23,6 +23,6 @@ stdlib.io.println("obj 的第一个元素现在是:", obj[0]); // 99, 因为 ref
 
 const_ref := const obj[0]; // 获取 obj 的第一个元素
 
-stdlib.io.println(run () -> {
+stdlib.io.println(sync () -> {
     const_ref = 100; // 尝试修改 const_ref 的值
-}); // 失败！
+}()); // 失败！

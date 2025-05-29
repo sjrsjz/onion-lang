@@ -74,7 +74,7 @@ pub enum VMInstruction {
     Return = 72,      // 返回
     Jump = 73,        // 跳转
     JumpIfFalse = 74, // 条件跳转
-    Run = 75, // 运行函数
+    SyncCall = 75, // 运行函数
 
     // 帧操作 (80-89)
     NewFrame = 80,   // 新建帧
@@ -160,7 +160,7 @@ impl VMInstruction {
             72 => Some(Self::Return),
             73 => Some(Self::Jump),
             74 => Some(Self::JumpIfFalse),
-            75 => Some(Self::Run),
+            75 => Some(Self::SyncCall),
 
             80 => Some(Self::NewFrame),
             81 => Some(Self::PopFrame),

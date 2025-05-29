@@ -1,0 +1,42 @@
+@required stdlib;
+
+stdlib.io.println("======== HTTP模块演示 ========");
+
+// 演示1: 简单的GET请求
+stdlib.io.println("\n1. 简单GET请求演示:");
+try_get := () -> {
+    result := stdlib.http.get_sync(url => "https://httpbin.org/json");
+    stdlib.io.println("   状态: 成功");
+    stdlib.io.println("   响应: ", stdlib.string.length(string => result), " 字符");
+    return result;
+};
+
+get_response := try_get();
+
+// 演示2: POST请求发送JSON数据
+stdlib.io.println("\n2. POST请求演示:");
+try_post := () -> {
+    json_data := "{\"language\":\"Onion\", \"version\":\"0.1.2\", \"feature\":\"HTTP支持\"}";
+    result := stdlib.http.post_sync(
+        url => "https://httpbin.org/post",
+        body => json_data
+    );
+    stdlib.io.println("   状态: 成功");
+    stdlib.io.println("   发送数据: ", json_data);
+    return result;
+};
+
+post_response := try_post();
+
+// 演示3: 错误处理
+stdlib.io.println("\n3. 错误处理演示:");
+try_error := () -> {
+    result := stdlib.http.get_sync(url => "https://invalid-url-that-does-not-exist.com");
+    stdlib.io.println("   错误信息: ", result);
+    return result;
+};
+
+error_response := try_error();
+
+stdlib.io.println("\n======== HTTP演示完成 ========");
+stdlib.io.println("HTTP模块已成功实现并可以正常使用!");

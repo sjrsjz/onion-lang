@@ -258,8 +258,6 @@ impl LspServer {
             "and",
             "or",
             "not",
-            "null",
-            "undefined",
             "in",
             "async",
             "await",
@@ -269,7 +267,6 @@ impl LspServer {
             "keyof",
             "valueof",
             "typeof",
-            "selfof",
             "dyn",
             "copy",
             "mut",
@@ -279,7 +276,7 @@ impl LspServer {
             "lengthof",
             "arguments",
             "is",
-            "run",
+            "sync",
         ];
         for keyword in keywords {
             items.push(CompletionItem {
@@ -293,7 +290,7 @@ impl LspServer {
         }
 
         // 添加常量
-        let constants = vec!["true", "false"];
+        let constants = vec!["true", "false", "null", "undefined"];
         for constant in constants {
             items.push(CompletionItem {
                 label: constant.to_string(),

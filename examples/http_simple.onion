@@ -4,9 +4,9 @@ stdlib.io.println("======== HTTP请求测试 ========");
 
 result := mut undefined;
 f := () -> {
-    run () -> {
+    sync () -> {
         result = request();
-    };
+    }();
 };
 async f();
 stdlib.io.println("请求结果:", result);

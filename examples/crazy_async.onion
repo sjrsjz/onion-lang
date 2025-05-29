@@ -1,0 +1,91 @@
+@required stdlib;
+
+// 共享状态 - 会产生严重的竞态条件
+counter := mut 0;
+shared_value := mut 42;
+
+// 修正的递归并发函数 - 不依赖返回值
+fibonacci_chaos := (n?, id?) -> {
+    if (n <= 1) {
+        stdlib.io.println("Fib worker", id, "base case:", n);
+        return;
+    };
+    // 每次递归调用都是并发的，创建更多任务
+    this(n - 1, id * 10 + 1);   // 并发执行
+    this(n - 2, id * 10 + 2);   // 并发执行
+    stdlib.io.println("Fib worker", id, "processing:", n);
+};
+
+// 大量IO操作的函数
+io_heavy := (id?) -> {
+    i := mut 0;
+    while (i < 30) {  // 减少到30避免输出过多
+        // 每次println都是并发的
+        stdlib.io.println("Worker", id, "iteration", i, "counter:", counter);
+        counter = counter + 1;  // 竞态条件！
+        i = i + 1;
+    }
+};
+
+// 嵌套函数调用
+nested_calls := (depth?, id?) -> {
+    if (depth > 0) {
+        stdlib.io.println("Depth:", depth, "ID:", id);
+        this(depth - 1, id * 2);     // 递归也是并发的
+        this(depth - 1, id * 2 + 1); // 每次调用都并发
+    }
+};
+
+// 共享值操作混乱
+value_chaos := (worker_id?) -> {
+    i := mut 0;
+    while (i < 10) {
+        old_value := shared_value;
+        shared_value = shared_value * worker_id + i;  // 并发修改共享值
+        stdlib.io.println("Worker", worker_id, "changed shared_value from", old_value, "to", shared_value);
+        i = i + 1;
+    }
+};
+
+// 疯狂的并发函数调用
+chaos_generator := (level?) -> {
+    if (level > 0) {
+        stdlib.io.println("Chaos level:", level);
+        // 每个调用都会产生更多并发任务
+        io_heavy(level);
+        value_chaos(level);
+        this(level - 1);  // 递归产生更多混乱
+    }
+};
+
+main := () -> {
+    // 所有这些调用都是并发的，会产生指数级的任务数量
+    fibonacci_chaos(7, 1);    // 会产生大量并发递归任务
+    io_heavy(100);           // 30次并发println + counter修改
+    io_heavy(200);           // 又30次并发println + counter修改  
+    nested_calls(4, 1);      // 递归深度4的并发调用树
+    value_chaos(3);          // 并发共享值操作
+    value_chaos(5);          // 更多并发共享值操作
+    chaos_generator(3);      // 递归产生更多混乱
+    
+    // 甚至这些println也是并发的
+    stdlib.io.println("Main started all tasks");
+    stdlib.io.println("Counter at main end:", counter);
+    stdlib.io.println("Shared value at main end:", shared_value);
+};
+
+async main()
+
+stdlib.io.println("====================================");
+
+fork_boom := (n?) -> {
+    if (n <= 0) {
+        return;
+    };
+    stdlib.io.println("Forking boom at level", n);
+    // 每次fork都会产生新的并发任务
+    sync this(n - 1);
+    this(n - 1);
+};
+
+async fork_boom(7);  // 递归产生大量并发任务

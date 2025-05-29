@@ -438,6 +438,11 @@ impl IRTranslator {
                             .get_opcode(),
                     );
                 }
+                IR::SyncCallLambda => {
+                    self.code.push(
+                        Opcode32::build_opcode(VMInstruction::SyncCall as u8, 0, 0, 0).get_opcode(),
+                    );
+                }
                 IR::BuildSet => {
                     self.code.push(
                         Opcode32::build_opcode(VMInstruction::BuildSet as u8, 0, 0, 0).get_opcode(),
@@ -461,11 +466,6 @@ impl IRTranslator {
                 IR::LengthOf => {
                     self.code.push(
                         Opcode32::build_opcode(VMInstruction::LengthOf as u8, 0, 0, 0).get_opcode(),
-                    );
-                }
-                IR::Run => {
-                    self.code.push(
-                        Opcode32::build_opcode(VMInstruction::Run as u8, 0, 0, 0).get_opcode(),
                     );
                 }
                 IR::MapTo => {

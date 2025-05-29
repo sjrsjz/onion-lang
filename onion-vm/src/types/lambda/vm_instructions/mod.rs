@@ -1109,24 +1109,51 @@ pub fn import(
     Ok(StepResult::Continue)
 }
 
-pub fn run_lambda(
+pub fn sync_call(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
     gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let lambda = runnable.context.get_object_rev(0)?;
-    let OnionObject::Lambda(lambda) = lambda.weak() else {
-        return Err(RuntimeError::DetailedError(format!(
-            "Invalid object type for RunLambda: {}",
-            lambda
-        )));
-    };
+    let lambda = runnable.context.get_object_rev(1)?;
+    let args = runnable.context.get_object_rev(0)?;
+    let new_runnable = lambda
+        .weak()
+        .with_data(|lambda| {
+            if let OnionObject::Lambda(lambda) = lambda {
+                let assigned = lambda.parameter.as_ref().with_data(|parameter| {
+                    let OnionObject::Tuple(parameters) = parameter else {
+                        return Err(ObjectError::InvalidType(format!(
+                            "Lambda parameters are not a Tuple: {:?}",
+                            lambda
+                        )));
+                    };
 
-    let scheduler = Scheduler::new(vec![lambda
-        .create_runnable(lambda.parameter.as_ref().clone().stabilize(), gc)
-        .map_err(RuntimeError::ObjectError)?]);
-    runnable.context.discard_objects(1)?;
-    return Ok(StepResult::NewRunnable(Box::new(scheduler)));
+                    let OnionObject::Tuple(args_tuple) = args.weak() else {
+                        return Err(ObjectError::InvalidType(format!(
+                            "Arguments are not a Tuple: {}",
+                            args
+                        )));
+                    };
+                    parameters.clone_and_named_assignment(args_tuple)
+                })?;
+                lambda.create_runnable(assigned, gc).map_err(|e| {
+                    ObjectError::InvalidType(format!(
+                        "Failed to create runnable from lambda: {}",
+                        e
+                    ))
+                })
+            } else {
+                Err(ObjectError::InvalidType(format!(
+                    "Object is not a Lambda: {:?}",
+                    lambda
+                )))
+            }
+        })
+        .map_err(RuntimeError::ObjectError)?;
+
+    runnable.context.discard_objects(2)?;
+    let async_scheduler = Scheduler::new(vec![new_runnable]);
+    Ok(StepResult::NewRunnable(Box::new(async_scheduler)))
 }
 
 pub fn map_to(

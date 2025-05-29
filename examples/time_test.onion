@@ -1,0 +1,71 @@
+@required stdlib;
+
+stdlib.io.println("======== 时间模块测试 ========");
+
+// 获取当前时间戳
+current_timestamp := stdlib.time.timestamp();
+stdlib.io.println("当前时间戳（秒）:", current_timestamp);
+
+// 获取当前时间戳（毫秒）
+current_millis := stdlib.time.timestamp_millis();
+stdlib.io.println("当前时间戳（毫秒）:", current_millis);
+
+// 获取当前时间戳（纳秒）
+current_nanos := stdlib.time.timestamp_nanos();
+stdlib.io.println("当前时间戳（纳秒）:", current_nanos);
+
+// 获取格式化的当前时间
+current_time := stdlib.time.now_utc();
+stdlib.io.println("当前时间 (UTC):", current_time);
+
+// 格式化指定时间戳
+formatted_time := stdlib.time.format_time(timestamp => 1640995200); // 2022-01-01 00:00:00 UTC
+stdlib.io.println("格式化时间:", formatted_time);
+
+// 计算时间差
+start_time := stdlib.time.timestamp();
+stdlib.io.println("开始时间:", start_time);
+
+// 睡眠2秒
+stdlib.io.println("睡眠2秒...");
+stdlib.time.sleep_seconds(seconds => 2);
+
+end_time := stdlib.time.timestamp();
+stdlib.io.println("结束时间:", end_time);
+
+time_diff := stdlib.time.time_diff(start => start_time, end => end_time);
+stdlib.io.println("时间差（秒）:", time_diff);
+
+// 测试毫秒睡眠
+stdlib.io.println("睡眠500毫秒...");
+stdlib.time.sleep_millis(millis => 500);
+stdlib.io.println("毫秒睡眠完成");
+
+// 测试微秒睡眠
+stdlib.io.println("睡眠100微秒...");
+stdlib.time.sleep_micros(micros => 100);
+stdlib.io.println("微秒睡眠完成");
+
+// async_sleep
+
+task1 := () -> {
+    stdlib.io.println("开始异步睡眠任务...");
+    stdlib.time.async_sleep(millis => 1000);
+    stdlib.io.println("异步睡眠任务完成");
+};
+
+task2 := () -> {
+    stdlib.io.println("开始异步睡眠任务2...");
+    stdlib.time.async_sleep(millis => 5000);
+    stdlib.io.println("异步睡眠任务2完成");
+};
+
+pool := () -> {
+    sync task1();
+    sync task2();
+};
+
+async pool();
+
+
+stdlib.io.println("======== 时间模块测试完成 ========");

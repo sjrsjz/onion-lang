@@ -838,6 +838,76 @@ fn analyze_node<'t>(
 
             return AssumedType::Unknown;
         }
+        ASTNodeType::AsyncLambdaCall => {
+            if let Some(func_node) = node.children.first() {
+                analyze_node(
+                    func_node,
+                    context,
+                    errors,   // Pass errors
+                    warnings, // Pass warnings
+                    dynamic,
+                    break_at_position,
+                    context_at_break,
+                    dir_stack,
+                );
+                if context_at_break.is_some() {
+                    return AssumedType::Unknown;
+                }
+            }
+
+            if node.children.len() > 1 {
+                analyze_node(
+                    &node.children[1],
+                    context,
+                    errors,   // Pass errors
+                    warnings, // Pass warnings
+                    dynamic,
+                    break_at_position,
+                    context_at_break,
+                    dir_stack,
+                );
+                if context_at_break.is_some() {
+                    return AssumedType::Unknown;
+                }
+            }
+
+            return AssumedType::Unknown;
+        }
+        ASTNodeType::SyncLambdaCall => {
+            if let Some(func_node) = node.children.first() {
+                analyze_node(
+                    func_node,
+                    context,
+                    errors,   // Pass errors
+                    warnings, // Pass warnings
+                    dynamic,
+                    break_at_position,
+                    context_at_break,
+                    dir_stack,
+                );
+                if context_at_break.is_some() {
+                    return AssumedType::Unknown;
+                }
+            }
+
+            if node.children.len() > 1 {
+                analyze_node(
+                    &node.children[1],
+                    context,
+                    errors,   // Pass errors
+                    warnings, // Pass warnings
+                    dynamic,
+                    break_at_position,
+                    context_at_break,
+                    dir_stack,
+                );
+                if context_at_break.is_some() {
+                    return AssumedType::Unknown;
+                }
+            }
+
+            return AssumedType::Unknown;
+        }
         ASTNodeType::Expressions => {
             let mut last_type = AssumedType::Unknown;
             for child in &node.children {

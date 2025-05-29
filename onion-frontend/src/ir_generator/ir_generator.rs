@@ -229,6 +229,14 @@ impl<'t> IRGenerator<'t> {
                 instructions.push((self.generate_debug_info(ast_node), IR::AsyncCallLambda));
                 Ok(instructions)
             }
+            ASTNodeType::SyncLambdaCall => {
+                let mut instructions = Vec::new();
+                for child in &ast_node.children {
+                    instructions.extend(self.generate_without_redirect(child)?);
+                }
+                instructions.push((self.generate_debug_info(ast_node), IR::SyncCallLambda));
+                Ok(instructions)
+            }
             ASTNodeType::Operation(opeartion) => {
                 let mut instructions = Vec::new();
                 for child in &ast_node.children {
@@ -677,10 +685,6 @@ impl<'t> IRGenerator<'t> {
                     ASTNodeModifier::BindSelf => {
                         instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                         instructions.push((self.generate_debug_info(ast_node), IR::BindSelf));
-                    }
-                    ASTNodeModifier::Run => {
-                        instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
-                        instructions.push((self.generate_debug_info(ast_node), IR::Run));
                     }
                     ASTNodeModifier::LengthOf => {
                         instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);

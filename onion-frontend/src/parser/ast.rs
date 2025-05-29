@@ -448,8 +448,8 @@ fn gather(tokens: GatheredTokens<'_>) -> Result<Vec<GatheredTokens<'_>>, ParserE
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ASTNodeType {
-    None,                        // No expression
-    Null,                        // Null
+    None, // No expression
+    Null, // Null
     Undefined,
     String(String),              // String
     Boolean(String),             // Boolean
@@ -479,11 +479,12 @@ pub enum ASTNodeType {
     In,
     Emit,
     AsyncLambdaCall,
-    Namespace(String),      // Type::Value
+    SyncLambdaCall,
+    Namespace(String),  // Type::Value
     Set,                // collection | filter
     Map,                // collection |> map
     Annotation(String), // @annotation expr
-    Is, // x is y
+    Is,                 // x is y
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -521,8 +522,7 @@ pub enum ASTNodeModifier {
     TypeOf,   // TypeOf
     Await,
     BindSelf,
-    Run,
-    LengthOf,  // LengthOf
+    LengthOf, // LengthOf
 }
 
 #[derive(Debug, Clone)]
@@ -1123,9 +1123,7 @@ fn match_return_emit_raise<'t>(
     if current >= tokens.len() {
         return Ok((None, 0));
     }
-    if !is_identifier(&tokens[current], "return")
-        && !is_identifier(&tokens[current], "emit")
-    {
+    if !is_identifier(&tokens[current], "return") && !is_identifier(&tokens[current], "emit") {
         return Ok((None, 0));
     }
     let right_tokens = tokens[current + 1..].to_vec();
@@ -2567,21 +2565,8 @@ fn match_modifier<'t>(
     }
     if tokens[current].len() == 1
         && vec![
-            "deepcopy",
-            "copy",
-            "mut",
-            "const",
-            "keyof",
-            "valueof",
-            "assert",
-            "import",
-            "typeof",
-            "await",
-            "bind",
-            "run",
-            "lengthof",
-            "dynamic",
-            "static",
+            "deepcopy", "copy", "mut", "const", "keyof", "valueof", "assert", "import", "typeof",
+            "await", "bind", "lengthof", "dynamic", "static",
         ]
         .contains(&tokens[current].first().unwrap().token)
     {
@@ -2648,7 +2633,6 @@ fn match_modifier<'t>(
             "typeof" => ASTNodeModifier::TypeOf,
             "await" => ASTNodeModifier::Await,
             "bind" => ASTNodeModifier::BindSelf,
-            "run" => ASTNodeModifier::Run,
             "lengthof" => ASTNodeModifier::LengthOf,
             _ => return Ok((None, 0)),
         };
@@ -3019,6 +3003,12 @@ fn match_member_access_and_call<'t>(
             } else {
                 false
             };
+            let is_sync = if left_tokens[0].len() == 1 && left_tokens[0][0].token == "sync" {
+                left_tokens = left_tokens[1..].to_vec();
+                true
+            } else {
+                false
+            };
             let (left, left_offset) = match_all(&left_tokens, 0)?;
             if left.is_none() {
                 return Ok((None, 0));
@@ -3062,6 +3052,8 @@ fn match_member_access_and_call<'t>(
                 Some(ASTNode::new(
                     if is_async {
                         ASTNodeType::AsyncLambdaCall
+                    } else if is_sync {
+                        ASTNodeType::SyncLambdaCall
                     } else {
                         ASTNodeType::LambdaCall
                     },
@@ -3212,7 +3204,6 @@ fn match_is<'t>(
         right_offset + 2,
     ))
 }
-
 
 fn match_variable<'t>(
     tokens: &Vec<GatheredTokens<'t>>,
