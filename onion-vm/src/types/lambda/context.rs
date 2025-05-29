@@ -5,8 +5,6 @@ use crate::{
     types::object::{ObjectError, OnionStaticObject},
 };
 
-
-
 #[derive(Clone, Debug)]
 pub enum Frame {
     Normal(HashMap<String, OnionStaticObject>, Vec<OnionStaticObject>), // Normal frame
@@ -56,16 +54,13 @@ impl Context {
         let last_frame = self.frames.pop().unwrap();
         let second_last_frame = self.frames.last_mut().unwrap();
         match second_last_frame {
-            Frame::Normal(_, stack) => {
-                match last_frame {
-                    Frame::Normal(_, last_stack) => {
-                        stack.extend(last_stack);
-                    }                    
+            Frame::Normal(_, stack) => match last_frame {
+                Frame::Normal(_, last_stack) => {
+                    stack.extend(last_stack);
                 }
-            }
+            },
         }
-        Ok(())       
-        
+        Ok(())
     }
     pub fn clear_stack(&mut self) {
         if self.frames.len() > 0 {
@@ -75,11 +70,7 @@ impl Context {
 
     pub fn push_object(&mut self, object: OnionStaticObject) -> Result<(), RuntimeError> {
         if self.frames.len() > 0 {
-            self.frames
-                .last_mut()
-                .unwrap()
-                .get_stack_mut()
-                .push(object);
+            self.frames.last_mut().unwrap().get_stack_mut().push(object);
             Ok(())
         } else {
             Err(RuntimeError::DetailedError(
@@ -117,9 +108,10 @@ impl Context {
                 "Cannot discard more objects than available in stack".to_string(),
             ));
         }
-        for _ in 0..count {
-            stack.pop();
-        }
+        // for _ in 0..count {
+        //     stack.pop();
+        // }
+        stack.truncate(stack.len() - count);
         Ok(())
     }
 
@@ -140,9 +132,11 @@ impl Context {
                 "Cannot discard more objects than available in stack".to_string(),
             ));
         }
-        for _ in 0..count {
-            stack.remove(stack.len() - 1 - offset);
-        }
+
+        // 使用 drain 一次性删除范围内的元素
+        let remove_start = stack.len() - offset - count;
+        let remove_end = stack.len() - offset;
+        stack.drain(remove_start..remove_end);
         Ok(())
     }
 
@@ -163,8 +157,7 @@ impl Context {
             None => Err(RuntimeError::DetailedError(
                 "Index out of bounds".to_string(),
             )),
-            Some(o) => Ok(o)
-            
+            Some(o) => Ok(o),
         }
     }
 
@@ -189,9 +182,8 @@ impl Context {
             None => Err(RuntimeError::DetailedError(
                 "Index out of bounds".to_string(),
             )),
-            Some(o) => Ok(o)
+            Some(o) => Ok(o),
         }
-
     }
 
     pub fn let_variable(
@@ -286,13 +278,56 @@ impl Context {
                 "Cannot swap objects in empty stack".to_string(),
             ));
         }
-        let temp = stack[idx1].clone();
-        stack[idx1] = stack[idx2].clone();
-        stack[idx2] = temp;
+        let len = stack.len();
+        stack.swap(len - 1 - idx1, len - 1 - idx2);
         Ok(())
     }
-}
 
+    pub fn get_current_stack_mut(&mut self) -> Result<&mut Vec<OnionStaticObject>, RuntimeError> {
+        if self.frames.len() == 0 {
+            return Err(RuntimeError::DetailedError(
+                "Cannot get stack from empty context".to_string(),
+            ));
+        }
+        let last_frame = self.frames.last_mut().unwrap();
+        Ok(last_frame.get_stack_mut())
+    }
+
+    pub fn push_to_stack(stack: &mut Vec<OnionStaticObject>, object: OnionStaticObject) {
+        stack.push(object);
+    }
+
+    pub fn pop_from_stack(stack: &mut Vec<OnionStaticObject>) -> Result<OnionStaticObject, RuntimeError> {
+        if stack.is_empty() {
+            return Err(RuntimeError::DetailedError(
+                "Cannot pop from empty stack".to_string(),
+            ));
+        }
+        Ok(stack.pop().unwrap())
+    }
+
+    pub fn discard_from_stack(stack: &mut Vec<OnionStaticObject>, count: usize) -> Result<(), RuntimeError> {
+        if stack.len() < count {
+            return Err(RuntimeError::DetailedError(
+                "Cannot discard more objects than available in stack".to_string(),
+            ));
+        }
+        stack.truncate(stack.len() - count);
+        Ok(())
+    }
+
+    pub fn get_object_from_stack(
+        stack: &Vec<OnionStaticObject>,
+        idx: usize,
+    ) -> Result<&OnionStaticObject, RuntimeError> {
+        if stack.len() <= idx {
+            return Err(RuntimeError::DetailedError(
+                "Index out of bounds".to_string(),
+            ));
+        }
+        Ok(&stack[stack.len() - 1 - idx])
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -300,8 +335,8 @@ mod tests {
     use crate::types::object::OnionObject;
 
     // 计时
-    use std::time::Instant;
     use arc_gc::gc::GC;
+    use std::time::Instant;
 
     #[test]
     fn benchmark() {
@@ -309,8 +344,16 @@ mod tests {
         let frame = Frame::Normal(HashMap::default(), Vec::new());
         context.push_frame(frame);
         let mut gc = GC::new();
-        
-        context.let_variable(&"i".to_string(), OnionObject::Integer(0).stabilize().mutablize(&mut gc).unwrap()).unwrap();
+
+        context
+            .let_variable(
+                &"i".to_string(),
+                OnionObject::Integer(0)
+                    .stabilize()
+                    .mutablize(&mut gc)
+                    .unwrap(),
+            )
+            .unwrap();
         let start = Instant::now();
         for _ in 0..30_000_000 {
             let _ = context.get_variable_mut(&"i".to_string()).unwrap().clone();

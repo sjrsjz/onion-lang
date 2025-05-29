@@ -19,8 +19,11 @@ use super::{
     },
 };
 
-type InstructionHandler =
-    fn(&mut OnionLambdaRunnable, &ProcessedOpcode, &mut GC<OnionObject>) -> Result<StepResult, RuntimeError>;
+type InstructionHandler = fn(
+    &mut OnionLambdaRunnable,
+    &ProcessedOpcode,
+    &mut GC<OnionObject>,
+) -> Result<StepResult, RuntimeError>;
 
 pub struct OnionLambdaRunnable {
     pub(crate) argument: OnionStaticObject,
@@ -93,7 +96,6 @@ impl OnionLambdaRunnable {
         instruction_table[VMInstruction::LoadLambda as usize] = vm_instructions::load_lambda;
         instruction_table[VMInstruction::LoadUndefined as usize] = vm_instructions::load_undefined;
 
-
         // 数据结构构建
         instruction_table[VMInstruction::BuildTuple as usize] = vm_instructions::build_tuple;
         instruction_table[VMInstruction::BuildKeyValue as usize] = vm_instructions::build_keyval;
@@ -144,7 +146,8 @@ impl OnionLambdaRunnable {
         instruction_table[VMInstruction::LengthOf as usize] = vm_instructions::get_length;
         instruction_table[VMInstruction::Mut as usize] = vm_instructions::mutablize;
         instruction_table[VMInstruction::Const as usize] = vm_instructions::immutablize;
-        instruction_table[VMInstruction::ForkInstruction as usize] = vm_instructions::fork_instruction;
+        instruction_table[VMInstruction::ForkInstruction as usize] =
+            vm_instructions::fork_instruction;
 
         // 控制流
         instruction_table[VMInstruction::Call as usize] = vm_instructions::call_lambda;
@@ -164,7 +167,6 @@ impl OnionLambdaRunnable {
         instruction_table[VMInstruction::Import as usize] = vm_instructions::import;
 
         instruction_table[VMInstruction::Assert as usize] = vm_instructions::assert;
-
 
         Ok(OnionLambdaRunnable {
             argument,
@@ -187,7 +189,11 @@ impl OnionLambdaRunnable {
 }
 
 impl Runnable for OnionLambdaRunnable {
-    fn receive(&mut self, step_result: StepResult, _gc: &mut GC<OnionObject>) -> Result<(), RuntimeError> {
+    fn receive(
+        &mut self,
+        step_result: StepResult,
+        _gc: &mut GC<OnionObject>,
+    ) -> Result<(), RuntimeError> {
         if let StepResult::Return(result) = step_result {
             self.context.push_object(result)?;
             Ok(())
@@ -202,27 +208,22 @@ impl Runnable for OnionLambdaRunnable {
             return Ok(StepResult::Error(error.clone()));
         }
 
-        if self.ip < 0 || self.ip as usize >= self.borrow_instruction()?.get_code().len() {
-            return Err(RuntimeError::DetailedError(
-                "Instruction pointer out of bounds".to_string(),
-            ));
-        }
-
         let (code, raw, new_ip) = {
             let instruction = self.borrow_instruction()?;
-            let opcode = instruction.get_code()[self.ip as usize];
+            let code = instruction.get_code();
+            if self.ip < 0 || self.ip as usize >= code.len() {
+                return Err(RuntimeError::DetailedError(
+                    "Instruction pointer out of bounds".to_string(),
+                ));
+            }
+            let opcode = code[self.ip as usize];
             let mut ip = self.ip as usize;
-            let mut instruction32 = Instruction32::new(instruction.get_code(), &mut ip);
+            let mut instruction32 = Instruction32::new(code, &mut ip);
             let code: Option<ProcessedOpcode> = instruction32.get_processed_opcode();
             (code, opcode, ip)
         };
         match code {
             Some(opcode) => {
-                // println!(
-                //     "Executing opcode: {} at IP: {}",
-                //     opcode._to_string(),
-                //     self.ip
-                // );
                 let handler = self
                     .instruction_table
                     .get(opcode.instruction as usize)

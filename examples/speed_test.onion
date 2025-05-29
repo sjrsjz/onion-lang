@@ -1,0 +1,8 @@
+@required stdlib;
+start := stdlib.time.timestamp_millis();
+n := mut 10000000;
+while (n > 0) (
+    n = n - 1;
+);
+end := stdlib.time.timestamp_millis();
+stdlib.io.println("Speed test completed in", end - start, "milliseconds");

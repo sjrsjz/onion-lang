@@ -221,19 +221,22 @@ impl OnionObject {
         }
     }
     /// Assign a new value to a mutable object.
-    pub fn assign(&mut self, other: &OnionObject) -> Result<(), ObjectError> {
+    pub fn assign(&self, other: &OnionObject) -> Result<(), ObjectError> {
         // 由于我们无法保证赋值后GCArcWeak指向对象的稳定性，对不可变对象进行赋值操作会导致潜在的内存安全问题。
         // Mut类型由于是被GC管理的，因此可以安全地进行赋值操作（前提是GCArcWeak指向的对象仍然存在）。
-        if !matches!(self, OnionObject::Mut(_)) {
+        let OnionObject::Mut(weak) = self else {
             return Err(ObjectError::InvalidOperation(format!(
-                "Cannot assign to immutable object: {:?}",
+                "Cannot assign to non-mutable object: {:?}",
                 self
             )));
+        };
+        match weak.upgrade() {
+            Some(mut strong) => strong.as_mut().with_data_mut(|obj| {
+                *obj = other.clone();
+                Ok(())
+            }),
+            None => Err(ObjectError::BrokenReference),
         }
-        self.with_data_mut(|obj| {
-            *obj = other.clone();
-            Ok(())
-        })
     }
 
     /// Replace the value of a mutable object with another mutable object.

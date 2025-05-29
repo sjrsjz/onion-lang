@@ -19,7 +19,7 @@ use crate::{
 };
 
 use super::{
-    context::Frame,
+    context::{Frame, Context},
     definition::{LambdaBody, OnionLambdaDefinition},
     runnable::OnionLambdaRunnable as LambdaRunnable,
 };
@@ -150,7 +150,9 @@ pub fn discard_top(
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    runnable.context.pop()?;
+    // 快速路径：直接获取栈的可变引用，避免重复查找
+    let stack = runnable.context.get_current_stack_mut()?;
+    Context::discard_from_stack(stack, 1)?;
     Ok(StepResult::Continue)
 }
 
@@ -160,13 +162,15 @@ pub fn build_tuple(
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
     if let OpcodeArgument::Int64(size) = opcode.operand1 {
+        // 快速路径：一次获取栈的可变引用，避免重复查找
+        let stack = runnable.context.get_current_stack_mut()?;
         let mut tuple = Vec::with_capacity(size as usize);
         for i in 1..=size as usize {
-            tuple.push(runnable.context.get_object_rev(size as usize - i)?);
+            tuple.push(Context::get_object_from_stack(stack, size as usize - i)?);
         }
         let tuple = OnionTuple::new_static(tuple);
-        runnable.context.discard_objects(size as usize)?;
-        runnable.context.push_object(tuple)?;
+        Context::discard_from_stack(stack, size as usize)?;
+        Context::push_to_stack(stack, tuple);
         Ok(StepResult::Continue)
     } else {
         Err(RuntimeError::DetailedError(format!(
@@ -181,11 +185,13 @@ pub fn build_keyval(
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let key = runnable.context.get_object_rev(1)?;
-    let value = runnable.context.get_object_rev(0)?;
+    // 快速路径：一次获取栈的可变引用，避免重复查找
+    let stack = runnable.context.get_current_stack_mut()?;
+    let key = Context::get_object_from_stack(stack, 1)?;
+    let value = Context::get_object_from_stack(stack, 0)?;
     let keyval = OnionPair::new_static(key, value);
-    runnable.context.discard_objects(2)?;
-    runnable.context.push_object(keyval)?;
+    Context::discard_from_stack(stack, 2)?;
+    Context::push_to_stack(stack, keyval);
     Ok(StepResult::Continue)
 }
 
@@ -194,11 +200,13 @@ pub fn build_named(
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let key = runnable.context.get_object_rev(1)?;
-    let value = runnable.context.get_object_rev(0)?;
+    // 快速路径：一次获取栈的可变引用，避免重复查找
+    let stack = runnable.context.get_current_stack_mut()?;
+    let key = Context::get_object_from_stack(stack, 1)?;
+    let value = Context::get_object_from_stack(stack, 0)?;
     let named = OnionNamed::new_static(key, value);
-    runnable.context.discard_objects(2)?;
-    runnable.context.push_object(named)?;
+    Context::discard_from_stack(stack, 2)?;
+    Context::push_to_stack(stack, named);
     Ok(StepResult::Continue)
 }
 
@@ -207,8 +215,10 @@ pub fn build_range(
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let left = runnable.context.get_object_rev(1)?;
-    let right = runnable.context.get_object_rev(0)?;
+    // 快速路径：一次获取栈的可变引用，避免重复查找
+    let stack = runnable.context.get_current_stack_mut()?;
+    let left = Context::get_object_from_stack(stack, 1)?;
+    let right = Context::get_object_from_stack(stack, 0)?;
     let range = OnionObject::Range(
         left.weak()
             .to_integer()
@@ -220,8 +230,8 @@ pub fn build_range(
     )
     .stabilize();
 
-    runnable.context.discard_objects(2)?;
-    runnable.context.push_object(range)?;
+    Context::discard_from_stack(stack, 2)?;
+    Context::push_to_stack(stack, range);
     Ok(StepResult::Continue)
 }
 
@@ -230,11 +240,13 @@ pub fn build_set(
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let container = runnable.context.get_object_rev(1)?;
-    let filter = runnable.context.get_object_rev(0)?;
+    // 快速路径：一次获取栈的可变引用，避免重复查找
+    let stack = runnable.context.get_current_stack_mut()?;
+    let container = Context::get_object_from_stack(stack, 1)?;
+    let filter = Context::get_object_from_stack(stack, 0)?;
     let set = OnionLazySet::new_static(container, filter);
-    runnable.context.discard_objects(2)?;
-    runnable.context.push_object(set)?;
+    Context::discard_from_stack(stack, 2)?;
+    Context::push_to_stack(stack, set);
     Ok(StepResult::Continue)
 }
 
@@ -385,13 +397,13 @@ pub fn set_var(
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let right = runnable.context.get_object_rev(0)?.clone();
-    let left = runnable.context.get_object_rev_mut(1)?;
-    left.weak_mut()
+    let right = runnable.context.get_object_rev(0)?;
+    let left = runnable.context.get_object_rev(1)?;
+    left.weak()
         .assign(right.weak())
         .map_err(RuntimeError::ObjectError)?;
-    // 保留右侧对象的引用
-    runnable.context.discard_objects_offset(1, 1)?;
+    // 保留左侧对象的引用，由于其是不可变的可变对象的引用，assign不会导致GC错误回收
+    runnable.context.discard_objects(1)?;
     Ok(StepResult::Continue)
 }
 
@@ -478,12 +490,12 @@ pub fn type_of(
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let obj = runnable.context.get_object_rev(0)?;
+    // 快速路径：一次获取栈的可变引用，避免重复查找
+    let stack = runnable.context.get_current_stack_mut()?;
+    let obj = Context::get_object_from_stack(stack, 0)?;
     let type_name = obj.weak().type_of().map_err(RuntimeError::ObjectError)?;
-    runnable.context.discard_objects(1)?;
-    runnable
-        .context
-        .push_object(OnionObject::String(type_name).stabilize())?;
+    Context::discard_from_stack(stack, 1)?;
+    Context::push_to_stack(stack, OnionObject::String(type_name).stabilize());
     Ok(StepResult::Continue)
 }
 
@@ -492,10 +504,12 @@ pub fn copy(
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let obj = runnable.context.get_object_rev(0)?;
+    // 快速路径：一次获取栈的可变引用，避免重复查找
+    let stack = runnable.context.get_current_stack_mut()?;
+    let obj = Context::get_object_from_stack(stack, 0)?;
     let copied_obj = obj.weak().copy().map_err(RuntimeError::ObjectError)?;
-    runnable.context.discard_objects(1)?;
-    runnable.context.push_object(copied_obj)?;
+    Context::discard_from_stack(stack, 1)?;
+    Context::push_to_stack(stack, copied_obj);
     Ok(StepResult::Continue)
 }
 
@@ -522,266 +536,304 @@ pub fn binary_add(
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let right = runnable.context.get_object_rev(0)?;
-    let left = runnable.context.get_object_rev(1)?;
+    // 快速路径：一次获取栈的可变引用，避免重复查找
+    let stack = runnable.context.get_current_stack_mut()?;
+    let right = Context::get_object_from_stack(stack, 0)?.clone();
+    let left = Context::get_object_from_stack(stack, 1)?.clone();
     let result = left
         .weak()
         .binary_add(right.weak())
         .map_err(RuntimeError::ObjectError)?;
-    runnable.context.discard_objects(2)?;
-    runnable.context.push_object(result)?;
+    Context::discard_from_stack(stack, 2)?;
+    Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
 }
+
 pub fn binary_subtract(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let right = runnable.context.get_object_rev(0)?;
-    let left = runnable.context.get_object_rev(1)?;
+    // 快速路径：一次获取栈的可变引用，避免重复查找
+    let stack = runnable.context.get_current_stack_mut()?;
+    let right = Context::get_object_from_stack(stack, 0)?.clone();
+    let left = Context::get_object_from_stack(stack, 1)?.clone();
     let result = left
         .weak()
         .binary_sub(right.weak())
         .map_err(RuntimeError::ObjectError)?;
-    runnable.context.discard_objects(2)?;
-    runnable.context.push_object(result)?;
+    Context::discard_from_stack(stack, 2)?;
+    Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
 }
+
 pub fn binary_multiply(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let right = runnable.context.get_object_rev(0)?;
-    let left = runnable.context.get_object_rev(1)?;
+    // 快速路径：一次获取栈的可变引用，避免重复查找
+    let stack = runnable.context.get_current_stack_mut()?;
+    let right = Context::get_object_from_stack(stack, 0)?.clone();
+    let left = Context::get_object_from_stack(stack, 1)?.clone();
     let result = left
         .weak()
         .binary_mul(right.weak())
         .map_err(RuntimeError::ObjectError)?;
-    runnable.context.discard_objects(2)?;
-    runnable.context.push_object(result)?;
+    Context::discard_from_stack(stack, 2)?;
+    Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
 }
+
 pub fn binary_divide(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let right = runnable.context.get_object_rev(0)?;
-    let left = runnable.context.get_object_rev(1)?;
+    // 快速路径：一次获取栈的可变引用，避免重复查找
+    let stack = runnable.context.get_current_stack_mut()?;
+    let right = Context::get_object_from_stack(stack, 0)?.clone();
+    let left = Context::get_object_from_stack(stack, 1)?.clone();
     let result = left
         .weak()
         .binary_div(right.weak())
         .map_err(RuntimeError::ObjectError)?;
-    runnable.context.discard_objects(2)?;
-    runnable.context.push_object(result)?;
+    Context::discard_from_stack(stack, 2)?;
+    Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
 }
+
 pub fn binary_modulus(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let right = runnable.context.get_object_rev(0)?;
-    let left = runnable.context.get_object_rev(1)?;
+    // 快速路径：一次获取栈的可变引用，避免重复查找
+    let stack = runnable.context.get_current_stack_mut()?;
+    let right = Context::get_object_from_stack(stack, 0)?.clone();
+    let left = Context::get_object_from_stack(stack, 1)?.clone();
     let result = left
         .weak()
         .binary_mod(right.weak())
         .map_err(RuntimeError::ObjectError)?;
-    runnable.context.discard_objects(2)?;
-    runnable.context.push_object(result)?;
+    Context::discard_from_stack(stack, 2)?;
+    Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
 }
+
 pub fn binary_power(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let right = runnable.context.get_object_rev(0)?;
-    let left = runnable.context.get_object_rev(1)?;
+    // 快速路径：一次获取栈的可变引用，避免重复查找
+    let stack = runnable.context.get_current_stack_mut()?;
+    let right = Context::get_object_from_stack(stack, 0)?.clone();
+    let left = Context::get_object_from_stack(stack, 1)?.clone();
     let result = left
         .weak()
         .binary_pow(right.weak())
         .map_err(RuntimeError::ObjectError)?;
-    runnable.context.discard_objects(2)?;
-    runnable.context.push_object(result)?;
+    Context::discard_from_stack(stack, 2)?;
+    Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
 }
+
 pub fn binary_bitwise_or(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let right = runnable.context.get_object_rev(0)?;
-    let left = runnable.context.get_object_rev(1)?;
+    // 快速路径：一次获取栈的可变引用，避免重复查找
+    let stack = runnable.context.get_current_stack_mut()?;
+    let right = Context::get_object_from_stack(stack, 0)?.clone();
+    let left = Context::get_object_from_stack(stack, 1)?.clone();
     let result = left
         .weak()
         .binary_or(right.weak())
         .map_err(RuntimeError::ObjectError)?;
-    runnable.context.discard_objects(2)?;
-    runnable.context.push_object(result)?;
+    Context::discard_from_stack(stack, 2)?;
+    Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
 }
+
 pub fn binary_bitwise_and(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let right = runnable.context.get_object_rev(0)?;
-    let left = runnable.context.get_object_rev(1)?;
+    // 快速路径：一次获取栈的可变引用，避免重复查找
+    let stack = runnable.context.get_current_stack_mut()?;
+    let right = Context::get_object_from_stack(stack, 0)?.clone();
+    let left = Context::get_object_from_stack(stack, 1)?.clone();
     let result = left
         .weak()
         .binary_and(right.weak())
         .map_err(RuntimeError::ObjectError)?;
-    runnable.context.discard_objects(2)?;
-    runnable.context.push_object(result)?;
+    Context::discard_from_stack(stack, 2)?;
+    Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
 }
+
 pub fn binary_bitwise_xor(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let right = runnable.context.get_object_rev(0)?;
-    let left = runnable.context.get_object_rev(1)?;
+    // 快速路径：一次获取栈的可变引用，避免重复查找
+    let stack = runnable.context.get_current_stack_mut()?;
+    let right = Context::get_object_from_stack(stack, 0)?.clone();
+    let left = Context::get_object_from_stack(stack, 1)?.clone();
     let result = left
         .weak()
         .binary_xor(right.weak())
         .map_err(RuntimeError::ObjectError)?;
-    runnable.context.discard_objects(2)?;
-    runnable.context.push_object(result)?;
+    Context::discard_from_stack(stack, 2)?;
+    Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
 }
+
 pub fn binary_shift_left(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let right = runnable.context.get_object_rev(0)?;
-    let left = runnable.context.get_object_rev(1)?;
+    // 快速路径：一次获取栈的可变引用，避免重复查找
+    let stack = runnable.context.get_current_stack_mut()?;
+    let right = Context::get_object_from_stack(stack, 0)?.clone();
+    let left = Context::get_object_from_stack(stack, 1)?.clone();
     let result = left
         .weak()
         .binary_shl(right.weak())
         .map_err(RuntimeError::ObjectError)?;
-    runnable.context.discard_objects(2)?;
-    runnable.context.push_object(result)?;
+    Context::discard_from_stack(stack, 2)?;
+    Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
 }
+
 pub fn binary_shift_right(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let right = runnable.context.get_object_rev(0)?;
-    let left = runnable.context.get_object_rev(1)?;
+    // 快速路径：一次获取栈的可变引用，避免重复查找
+    let stack = runnable.context.get_current_stack_mut()?;
+    let right = Context::get_object_from_stack(stack, 0)?.clone();
+    let left = Context::get_object_from_stack(stack, 1)?.clone();
     let result = left
         .weak()
         .binary_shr(right.weak())
         .map_err(RuntimeError::ObjectError)?;
-    runnable.context.discard_objects(2)?;
-    runnable.context.push_object(result)?;
+    Context::discard_from_stack(stack, 2)?;
+    Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
 }
+
 pub fn binary_equal(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let right = runnable.context.get_object_rev(0)?;
-    let left = runnable.context.get_object_rev(1)?;
+    // 快速路径：一次获取栈的可变引用，避免重复查找
+    let stack = runnable.context.get_current_stack_mut()?;
+    let right = Context::get_object_from_stack(stack, 0)?.clone();
+    let left = Context::get_object_from_stack(stack, 1)?.clone();
     let result = left
         .weak()
         .binary_eq(right.weak())
         .map_err(RuntimeError::ObjectError)?;
-    runnable.context.discard_objects(2)?;
-    runnable
-        .context
-        .push_object(OnionObject::Boolean(result).stabilize())?;
+    Context::discard_from_stack(stack, 2)?;
+    Context::push_to_stack(stack, OnionObject::Boolean(result).stabilize());
     Ok(StepResult::Continue)
 }
+
 pub fn binary_not_equal(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let right = runnable.context.get_object_rev(0)?;
-    let left = runnable.context.get_object_rev(1)?;
+    // 快速路径：一次获取栈的可变引用，避免重复查找
+    let stack = runnable.context.get_current_stack_mut()?;
+    let right = Context::get_object_from_stack(stack, 0)?.clone();
+    let left = Context::get_object_from_stack(stack, 1)?.clone();
     let result = left
         .weak()
         .binary_eq(right.weak())
         .map_err(RuntimeError::ObjectError)?;
-    runnable.context.discard_objects(2)?;
-    runnable
-        .context
-        .push_object(OnionObject::Boolean(!result).stabilize())?;
+    Context::discard_from_stack(stack, 2)?;
+    Context::push_to_stack(stack, OnionObject::Boolean(!result).stabilize());
     Ok(StepResult::Continue)
 }
+
 pub fn binary_greater(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let right = runnable.context.get_object_rev(0)?;
-    let left = runnable.context.get_object_rev(1)?;
+    // 快速路径：一次获取栈的可变引用，避免重复查找
+    let stack = runnable.context.get_current_stack_mut()?;
+    let right = Context::get_object_from_stack(stack, 0)?.clone();
+    let left = Context::get_object_from_stack(stack, 1)?.clone();
     let result = left
         .weak()
         .binary_gt(right.weak())
         .map_err(RuntimeError::ObjectError)?;
-    runnable.context.discard_objects(2)?;
-    runnable
-        .context
-        .push_object(OnionObject::Boolean(result).stabilize())?;
+    Context::discard_from_stack(stack, 2)?;
+    Context::push_to_stack(stack, OnionObject::Boolean(result).stabilize());
     Ok(StepResult::Continue)
 }
+
 pub fn binary_greater_equal(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let right = runnable.context.get_object_rev(0)?;
-    let left = runnable.context.get_object_rev(1)?;
+    // 快速路径：一次获取栈的可变引用，避免重复查找
+    let stack = runnable.context.get_current_stack_mut()?;
+    let right = Context::get_object_from_stack(stack, 0)?.clone();
+    let left = Context::get_object_from_stack(stack, 1)?.clone();
     let result = left
         .weak()
         .binary_lt(right.weak())
         .map_err(RuntimeError::ObjectError)?;
-    runnable.context.discard_objects(2)?;
-    runnable
-        .context
-        .push_object(OnionObject::Boolean(!result).stabilize())?;
+    Context::discard_from_stack(stack, 2)?;
+    Context::push_to_stack(stack, OnionObject::Boolean(!result).stabilize());
     Ok(StepResult::Continue)
 }
+
 pub fn binary_less(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let right = runnable.context.get_object_rev(0)?;
-    let left = runnable.context.get_object_rev(1)?;
+    // 快速路径：一次获取栈的可变引用，避免重复查找
+    let stack = runnable.context.get_current_stack_mut()?;
+    let right = Context::get_object_from_stack(stack, 0)?.clone();
+    let left = Context::get_object_from_stack(stack, 1)?.clone();
     let result = left
         .weak()
         .binary_lt(right.weak())
         .map_err(RuntimeError::ObjectError)?;
-    runnable.context.discard_objects(2)?;
-    runnable
-        .context
-        .push_object(OnionObject::Boolean(result).stabilize())?;
+    Context::discard_from_stack(stack, 2)?;
+    Context::push_to_stack(stack, OnionObject::Boolean(result).stabilize());
     Ok(StepResult::Continue)
 }
+
 pub fn binary_less_equal(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let right = runnable.context.get_object_rev(0)?;
-    let left = runnable.context.get_object_rev(1)?;
+    // 快速路径：一次获取栈的可变引用，避免重复查找
+    let stack = runnable.context.get_current_stack_mut()?;
+    let right = Context::get_object_from_stack(stack, 0)?.clone();
+    let left = Context::get_object_from_stack(stack, 1)?.clone();
     let result = left
         .weak()
         .binary_gt(right.weak())
         .map_err(RuntimeError::ObjectError)?;
-    runnable.context.discard_objects(2)?;
-    runnable
-        .context
-        .push_object(OnionObject::Boolean(!result).stabilize())?;
+    Context::discard_from_stack(stack, 2)?;
+    Context::push_to_stack(stack, OnionObject::Boolean(!result).stabilize());
     Ok(StepResult::Continue)
 }
 
@@ -790,10 +842,12 @@ pub fn unary_bitwise_not(
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let obj = runnable.context.get_object_rev(0)?;
+    // 快速路径：一次获取栈的可变引用，避免重复查找
+    let stack = runnable.context.get_current_stack_mut()?;
+    let obj = Context::get_object_from_stack(stack, 0)?.clone();
     let result = obj.weak().unary_not().map_err(RuntimeError::ObjectError)?;
-    runnable.context.discard_objects(1)?;
-    runnable.context.push_object(result)?;
+    Context::discard_from_stack(stack, 1)?;
+    Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
 }
 pub fn unary_plus(
@@ -801,10 +855,12 @@ pub fn unary_plus(
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let obj = runnable.context.get_object_rev(0)?;
+    // 快速路径：一次获取栈的可变引用，避免重复查找
+    let stack = runnable.context.get_current_stack_mut()?;
+    let obj = Context::get_object_from_stack(stack, 0)?.clone();
     let result = obj.weak().unary_plus().map_err(RuntimeError::ObjectError)?;
-    runnable.context.discard_objects(1)?;
-    runnable.context.push_object(result)?;
+    Context::discard_from_stack(stack, 1)?;
+    Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
 }
 pub fn unary_minus(
@@ -812,10 +868,12 @@ pub fn unary_minus(
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let obj = runnable.context.get_object_rev(0)?;
+    // 快速路径：一次获取栈的可变引用，避免重复查找
+    let stack = runnable.context.get_current_stack_mut()?;
+    let obj = Context::get_object_from_stack(stack, 0)?.clone();
     let result = obj.weak().unary_neg().map_err(RuntimeError::ObjectError)?;
-    runnable.context.discard_objects(1)?;
-    runnable.context.push_object(result)?;
+    Context::discard_from_stack(stack, 1)?;
+    Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
 }
 pub fn swap(
