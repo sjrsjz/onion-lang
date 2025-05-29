@@ -15,6 +15,7 @@ mod math;
 mod string;
 mod http;
 mod time;
+mod json;
 
 pub fn build_named_dict(dict: HashMap<String, OnionStaticObject>) -> OnionStaticObject {
     let mut pairs = vec![];
@@ -113,5 +114,6 @@ pub fn build_module() -> OnionStaticObject {
     module.insert("string".to_string(), string::build_module());
     module.insert("http".to_string(), http::build_module());
     module.insert("time".to_string(), time::build_module());
+    module.insert("json".to_string(), json::build_module());
     build_named_dict(module)
 }

@@ -102,7 +102,7 @@ fn main() {
     };
 
     if let Err(e) = result {
-        eprintln!("{} {}", "error:".red().bold(), e);
+        eprintln!("{} {}", "Error:".red().bold(), e);
         std::process::exit(1);
     }
 }
@@ -177,7 +177,7 @@ fn cmd_compile(file: PathBuf, output: Option<PathBuf>, bytecode: bool) -> Result
 }
 
 fn cmd_run(file: PathBuf) -> Result<(), String> {
-    println!("{} {}", "Running".green().bold(), file.display());
+    // println!("{} {}", "Running".green().bold(), file.display());
 
     if !file.exists() {
         return Err(format!("File '{}' not found", file.display()));
@@ -360,10 +360,15 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
                             );
                             return Err("Execution failed".to_string());
                         }
+                        let is_undefined = result.get_value().with_data(|data| {
+                            Ok(unwrap_object!(data, OnionObject::Undefined).is_ok())
+                        }).map_err(|e| format!("Failed to check if result is undefined: {:?}", e))?;
+                        if is_undefined {
+                            return Ok(());
+                        }
                         // Print result and exit
                         println!(
-                            "{} {}",
-                            "Result:".cyan(),
+                            "{}",
                             result
                                 .get_value()
                                 .to_string()

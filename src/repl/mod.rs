@@ -1,13 +1,19 @@
+pub mod executor;
+
+pub use executor::ReplExecutor;
+
 use colored::*;
 use rustyline::error::ReadlineError;
 use rustyline::{DefaultEditor, Result};
 
-use crate::{execute_code, create_dir_stack};
+use crate::create_dir_stack;
 
 pub fn start_repl() -> Result<()> {
     println!("{}", "Onion Language REPL v0.1.0".cyan().bold());
     println!("{}", "Type 'exit' or press Ctrl+C to quit".dimmed());
-    println!();    let mut rl = DefaultEditor::new()?;
+    println!();
+
+    let mut rl = DefaultEditor::new()?;
 
     // Load history from file
     let history_file = get_history_file();
@@ -15,10 +21,10 @@ pub fn start_repl() -> Result<()> {
         let _ = rl.load_history(path);
     }
 
-    let mut line_number = 1;
+    let mut repl_executor = ReplExecutor::new();
 
     loop {
-        let prompt = format!("{}[{}] ", "onion".cyan().bold(), line_number);
+        let prompt = format!("{}[{}]:= ", "Out".cyan().bold(), repl_executor.history_count());
         
         match rl.readline(&prompt) {
             Ok(line) => {
@@ -41,10 +47,44 @@ pub fn start_repl() -> Result<()> {
                     print!("\x1B[2J\x1B[1;1H");
                     continue;
                 }
+
+                if trimmed == "history" {
+                    // 显示历史记录数量
+                    let count = repl_executor.history_count();
+                    println!("{} {} results", "History:".cyan().bold(), count);
+                    continue;
+                }
+
+                if trimmed == "last" {
+                    // 显示最后一次执行的结果
+                    match repl_executor.get_last_result() {
+                        Some(result) => {
+                            match result.weak().to_string() {
+                                Ok(result_str) => {
+                                    println!("{} {}", "Last result:".cyan().bold(), result_str);
+                                }
+                                Err(_) => {
+                                    println!("{} Failed to convert result to string", "Error:".red().bold());
+                                }
+                            }
+                        }
+                        None => {
+                            println!("{}", "No results available".dimmed());
+                        }
+                    }
+                    continue;
+                }
+
+                if trimmed == "clear_history" {
+                    // 清空历史记录
+                    repl_executor.clear_history();
+                    println!("{}", "History cleared".green());
+                    continue;
+                }
                 
                 rl.add_history_entry(&line)?;
                 
-                // Execute the code
+                // Execute the code using REPL executor
                 let mut dir_stack = match create_dir_stack(None) {
                     Ok(stack) => stack,
                     Err(e) => {
@@ -53,14 +93,12 @@ pub fn start_repl() -> Result<()> {
                     }
                 };
                 
-                match execute_code(&line, &mut dir_stack) {
+                match repl_executor.execute_code(&line, &mut dir_stack) {
                     Ok(_) => {},
                     Err(e) => {
                         eprintln!("{} {}", "error:".red().bold(), e);
                     }
-                }
-                
-                line_number += 1;
+                }                
             }
             Err(ReadlineError::Interrupted) => {
                 println!("{}", "Interrupted".yellow());
@@ -91,11 +129,19 @@ fn print_repl_help() {
     println!("  {}  - Show this help", "help".yellow());
     println!("  {}  - Clear the screen", "clear".yellow());
     println!("  {}  - Exit the REPL", "exit/quit".yellow());
+    println!("  {}  - Show history count", "history".yellow());
+    println!("  {}  - Show last execution result", "last".yellow());
+    println!("  {}  - Clear execution history", "clear_history".yellow());
     println!();
     println!("{}", "Language Features:".cyan().bold());
     println!("  - Variables: {} or {}", "let x = 5".green(), "x := 5".green());
     println!("  - Functions: {}", "fn add(a, b) { a + b }".green());
     println!("  - Standard library: {}", "@required stdlib".green());
+    println!("  - Output tuple: {} (contains execution results)", "Out".green());
+    println!();
+    println!("{}", "Output Tuple Usage:".cyan().bold());
+    println!("  - Access results: {} (Out is a tuple containing all results)", "Out".green());
+    println!("  - Results are automatically added to Out after each execution");
     println!();
 }
 

@@ -1,0 +1,93 @@
+// JSON 模块高级示例 - 处理复杂数据结构
+@required stdlib;
+
+stdlib.io.println("======== JSON 模块高级示例 ========");
+
+// 示例 1: 处理嵌套对象
+stdlib.io.println("示例 1: 处理嵌套对象");
+complex_data := {
+    "user": {
+        "id": 1001,
+        "profile": {
+            "name": "李明",
+            "email": "liming@example.com",
+            "preferences": {
+                "theme": "dark",
+                "language": "zh-CN"
+            }
+        }
+    },
+    "metadata": {
+        "version": "1.0",
+        "timestamp": 1640995200
+    }
+};
+
+json_output := stdlib.json.stringify_pretty(object => complex_data);
+stdlib.io.println("复杂对象的 JSON 输出:");
+stdlib.io.println(json_output);
+stdlib.io.println();
+
+// 示例 2: 处理混合数组
+stdlib.io.println("示例 2: 处理混合数组");
+mixed_array := [
+    {"type": "user", "id": 1, "active": true},
+    {"type": "admin", "id": 2, "active": false},
+    {"type": "guest", "id": 3, "active": true}
+];
+
+array_json := stdlib.json.stringify_pretty(object => mixed_array);
+stdlib.io.println("混合数组的 JSON 输出:");
+stdlib.io.println(array_json);
+stdlib.io.println();
+
+// 示例 3: API 响应模拟
+stdlib.io.println("示例 3: 模拟 API 响应处理");
+api_response := '{"status": "success", "data": {"items": [{"name": "商品A", "price": 99.99}, {"name": "商品B", "price": 149.99}], "total": 2}, "message": "数据获取成功"}';
+
+stdlib.io.println("模拟 API 响应:");
+stdlib.io.println(api_response);
+
+parsed_response := stdlib.json.parse(json_string => api_response);
+stdlib.io.println("解析后的响应:");
+stdlib.io.println(parsed_response);
+stdlib.io.println();
+
+// 示例 4: 配置文件处理
+stdlib.io.println("示例 4: 配置文件处理");
+config := {
+    "database": {
+        "host": "localhost",
+        "port": 5432,
+        "name": "myapp",
+        "ssl": true
+    },
+    "cache": {
+        "enabled": true,
+        "ttl": 3600,
+        "providers": ["redis", "memory"]
+    },
+    "logging": {
+        "level": "info",
+        "file": "/var/log/app.log"
+    }
+};
+
+config_json := stdlib.json.stringify_pretty(object => config);
+stdlib.io.println("应用配置:");
+stdlib.io.println(config_json);
+stdlib.io.println();
+
+// 示例 5: 数据转换和验证
+stdlib.io.println("示例 5: 数据转换和验证");
+input_json := '{"numbers": [1, 2, 3, 4, 5], "statistics": {"sum": 15, "average": 3.0, "count": 5}}';
+stdlib.io.println("输入数据:", input_json);
+
+parsed_input := stdlib.json.parse(json_string => input_json);
+stdlib.io.println("解析结果:", parsed_input);
+
+// 重新序列化验证数据完整性
+output_json := stdlib.json.stringify(object => parsed_input);
+stdlib.io.println("重新序列化:", output_json);
+
+stdlib.io.println("======== 示例完成 ========");
