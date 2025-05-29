@@ -372,12 +372,11 @@ impl OnionObject {
             ))),
         })
     }
-
     pub fn mutablize(self, gc: &mut GC<OnionObject>) -> OnionStaticObject {
         let arc = gc.create(self);
         OnionStaticObject {
             obj: OnionObject::Mut(arc.as_weak()),
-            arcs: Some(vec![arc]),
+            arcs: GCArcStorage::from_option_vec(Some(vec![arc])),
         }
     }
 }
@@ -845,17 +844,63 @@ impl OnionObject {
 }
 
 #[derive(Clone)]
+pub enum GCArcStorage {
+    None,
+    Single(GCArc<OnionObject>),
+    Multiple(Vec<GCArc<OnionObject>>),
+}
+
+impl Debug for GCArcStorage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::None => write!(f, "GCArcStorage::None"),
+            Self::Single(_) => write!(f, "GCArcStorage::Single(<arc>)"),
+            Self::Multiple(v) => write!(f, "GCArcStorage::Multiple({} arcs)", v.len()),
+        }
+    }
+}
+
+impl GCArcStorage {
+    pub fn from_option_vec(vec: Option<Vec<GCArc<OnionObject>>>) -> Self {
+        match vec {
+            None => Self::None,
+            Some(v) => match v.len() {
+                0 => Self::None,
+                1 => Self::Single(v.into_iter().next().unwrap()),
+                _ => Self::Multiple(v),
+            },
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        matches!(self, Self::None)
+    }
+
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
+
+    pub fn len(&self) -> usize {
+        match self {
+            Self::None => 0,
+            Self::Single(_) => 1,
+            Self::Multiple(v) => v.len(),
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct OnionStaticObject {
     obj: OnionObject,
     #[allow(dead_code)]
-    arcs: Option<Vec<GCArc<OnionObject>>>,
+    arcs: GCArcStorage,
 }
 
 impl Default for OnionStaticObject {
     fn default() -> Self {
         OnionStaticObject {
             obj: OnionObject::Undefined("not initialized".to_string()),
-            arcs: None,
+            arcs: GCArcStorage::None,
         }
     }
 }
@@ -874,7 +919,21 @@ impl Display for OnionStaticObject {
 
 impl OnionStaticObject {
     pub fn new(obj: OnionObject) -> Self {
-        let arcs = obj.upgrade();
+        let arcs = match &obj {
+            OnionObject::Mut(obj) => match obj.upgrade() {
+                None => GCArcStorage::None,
+                Some(arc) => GCArcStorage::Single(arc),
+            },
+            OnionObject::Boolean(_)
+            | OnionObject::Integer(_)
+            | OnionObject::Float(_)
+            | OnionObject::String(_)
+            | OnionObject::Bytes(_)
+            | OnionObject::Null
+            | OnionObject::Undefined(_)
+            | OnionObject::Range(_, _) => GCArcStorage::None,
+            _ => GCArcStorage::from_option_vec(obj.upgrade()),
+        };
         OnionStaticObject { obj, arcs }
     }
 
