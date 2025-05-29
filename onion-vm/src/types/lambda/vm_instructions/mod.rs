@@ -19,7 +19,7 @@ use crate::{
 };
 
 use super::{
-    context::{Frame, Context},
+    context::{Context, Frame},
     definition::{LambdaBody, OnionLambdaDefinition},
     runnable::OnionLambdaRunnable as LambdaRunnable,
 };
@@ -349,16 +349,21 @@ pub fn let_var(
     };
 
     let value = runnable.context.get_object_rev(0)?;
-    let name = runnable
-        .borrow_instruction()?
-        .get_string_pool()
-        .get(index as usize)
-        .ok_or_else(|| RuntimeError::DetailedError(format!("Name index out of bounds: {}", index)))?
-        .clone();
+
+    let name = {
+        let instruction = runnable.borrow_instruction()?;
+        instruction
+            .get_string_pool()
+            .get(index as usize)
+            .ok_or_else(|| {
+                RuntimeError::DetailedError(format!("Name index out of bounds: {}", index))
+            })?
+            .clone()
+    };
 
     runnable
         .context
-        .let_variable(&name, value.clone())
+        .let_variable(name, value.clone())
         .map_err(RuntimeError::ObjectError)?;
     Ok(StepResult::Continue)
 }
@@ -375,19 +380,16 @@ pub fn get_var(
         )));
     };
 
-    let name = runnable
-        .borrow_instruction()?
-        .get_string_pool()
-        .get(index as usize)
-        .cloned();
-    let Some(name) = name else {
-        return Err(RuntimeError::DetailedError(format!(
-            "Name index out of bounds: {}",
-            index
-        )));
+    let value = {
+        let instruction = runnable.borrow_instruction()?;
+        let name = instruction
+            .get_string_pool()
+            .get(index as usize)
+            .ok_or_else(|| {
+                RuntimeError::DetailedError(format!("Name index out of bounds: {}", index))
+            })?;
+        runnable.context.get_variable(name)?
     };
-
-    let value = runnable.context.get_variable(&name)?;
     runnable.context.push_object(value.clone())?;
     Ok(StepResult::Continue)
 }
@@ -538,8 +540,8 @@ pub fn binary_add(
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
-    let right = Context::get_object_from_stack(stack, 0)?.clone();
-    let left = Context::get_object_from_stack(stack, 1)?.clone();
+    let right = Context::get_object_from_stack(stack, 0)?;
+    let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
         .binary_add(right.weak())
@@ -556,8 +558,8 @@ pub fn binary_subtract(
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
-    let right = Context::get_object_from_stack(stack, 0)?.clone();
-    let left = Context::get_object_from_stack(stack, 1)?.clone();
+    let right = Context::get_object_from_stack(stack, 0)?;
+    let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
         .binary_sub(right.weak())
@@ -574,8 +576,8 @@ pub fn binary_multiply(
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
-    let right = Context::get_object_from_stack(stack, 0)?.clone();
-    let left = Context::get_object_from_stack(stack, 1)?.clone();
+    let right = Context::get_object_from_stack(stack, 0)?;
+    let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
         .binary_mul(right.weak())
@@ -592,8 +594,8 @@ pub fn binary_divide(
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
-    let right = Context::get_object_from_stack(stack, 0)?.clone();
-    let left = Context::get_object_from_stack(stack, 1)?.clone();
+    let right = Context::get_object_from_stack(stack, 0)?;
+    let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
         .binary_div(right.weak())
@@ -610,8 +612,8 @@ pub fn binary_modulus(
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
-    let right = Context::get_object_from_stack(stack, 0)?.clone();
-    let left = Context::get_object_from_stack(stack, 1)?.clone();
+    let right = Context::get_object_from_stack(stack, 0)?;
+    let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
         .binary_mod(right.weak())
@@ -628,8 +630,8 @@ pub fn binary_power(
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
-    let right = Context::get_object_from_stack(stack, 0)?.clone();
-    let left = Context::get_object_from_stack(stack, 1)?.clone();
+    let right = Context::get_object_from_stack(stack, 0)?;
+    let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
         .binary_pow(right.weak())
@@ -646,8 +648,8 @@ pub fn binary_bitwise_or(
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
-    let right = Context::get_object_from_stack(stack, 0)?.clone();
-    let left = Context::get_object_from_stack(stack, 1)?.clone();
+    let right = Context::get_object_from_stack(stack, 0)?;
+    let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
         .binary_or(right.weak())
@@ -664,8 +666,8 @@ pub fn binary_bitwise_and(
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
-    let right = Context::get_object_from_stack(stack, 0)?.clone();
-    let left = Context::get_object_from_stack(stack, 1)?.clone();
+    let right = Context::get_object_from_stack(stack, 0)?;
+    let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
         .binary_and(right.weak())
@@ -682,8 +684,8 @@ pub fn binary_bitwise_xor(
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
-    let right = Context::get_object_from_stack(stack, 0)?.clone();
-    let left = Context::get_object_from_stack(stack, 1)?.clone();
+    let right = Context::get_object_from_stack(stack, 0)?;
+    let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
         .binary_xor(right.weak())
@@ -700,8 +702,8 @@ pub fn binary_shift_left(
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
-    let right = Context::get_object_from_stack(stack, 0)?.clone();
-    let left = Context::get_object_from_stack(stack, 1)?.clone();
+    let right = Context::get_object_from_stack(stack, 0)?;
+    let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
         .binary_shl(right.weak())
@@ -718,8 +720,8 @@ pub fn binary_shift_right(
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
-    let right = Context::get_object_from_stack(stack, 0)?.clone();
-    let left = Context::get_object_from_stack(stack, 1)?.clone();
+    let right = Context::get_object_from_stack(stack, 0)?;
+    let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
         .binary_shr(right.weak())
@@ -736,8 +738,8 @@ pub fn binary_equal(
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
-    let right = Context::get_object_from_stack(stack, 0)?.clone();
-    let left = Context::get_object_from_stack(stack, 1)?.clone();
+    let right = Context::get_object_from_stack(stack, 0)?;
+    let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
         .binary_eq(right.weak())
@@ -754,8 +756,8 @@ pub fn binary_not_equal(
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
-    let right = Context::get_object_from_stack(stack, 0)?.clone();
-    let left = Context::get_object_from_stack(stack, 1)?.clone();
+    let right = Context::get_object_from_stack(stack, 0)?;
+    let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
         .binary_eq(right.weak())
@@ -772,8 +774,8 @@ pub fn binary_greater(
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
-    let right = Context::get_object_from_stack(stack, 0)?.clone();
-    let left = Context::get_object_from_stack(stack, 1)?.clone();
+    let right = Context::get_object_from_stack(stack, 0)?;
+    let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
         .binary_gt(right.weak())
@@ -790,8 +792,8 @@ pub fn binary_greater_equal(
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
-    let right = Context::get_object_from_stack(stack, 0)?.clone();
-    let left = Context::get_object_from_stack(stack, 1)?.clone();
+    let right = Context::get_object_from_stack(stack, 0)?;
+    let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
         .binary_lt(right.weak())
@@ -808,8 +810,8 @@ pub fn binary_less(
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
-    let right = Context::get_object_from_stack(stack, 0)?.clone();
-    let left = Context::get_object_from_stack(stack, 1)?.clone();
+    let right = Context::get_object_from_stack(stack, 0)?;
+    let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
         .binary_lt(right.weak())
@@ -826,8 +828,8 @@ pub fn binary_less_equal(
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
-    let right = Context::get_object_from_stack(stack, 0)?.clone();
-    let left = Context::get_object_from_stack(stack, 1)?.clone();
+    let right = Context::get_object_from_stack(stack, 0)?;
+    let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
         .binary_gt(right.weak())
@@ -844,7 +846,7 @@ pub fn unary_bitwise_not(
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
-    let obj = Context::get_object_from_stack(stack, 0)?.clone();
+    let obj = Context::get_object_from_stack(stack, 0)?;
     let result = obj.weak().unary_not().map_err(RuntimeError::ObjectError)?;
     Context::discard_from_stack(stack, 1)?;
     Context::push_to_stack(stack, result);
@@ -857,7 +859,7 @@ pub fn unary_plus(
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
-    let obj = Context::get_object_from_stack(stack, 0)?.clone();
+    let obj = Context::get_object_from_stack(stack, 0)?;
     let result = obj.weak().unary_plus().map_err(RuntimeError::ObjectError)?;
     Context::discard_from_stack(stack, 1)?;
     Context::push_to_stack(stack, result);
@@ -870,7 +872,7 @@ pub fn unary_minus(
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
-    let obj = Context::get_object_from_stack(stack, 0)?.clone();
+    let obj = Context::get_object_from_stack(stack, 0)?;
     let result = obj.weak().unary_neg().map_err(RuntimeError::ObjectError)?;
     Context::discard_from_stack(stack, 1)?;
     Context::push_to_stack(stack, result);

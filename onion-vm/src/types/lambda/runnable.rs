@@ -60,17 +60,16 @@ impl OnionLambdaRunnable {
             ));
         };
 
-        new_context.let_variable(&"this".to_string(), this_lambda.clone())?;
-        new_context.let_variable(&"self".to_string(), self_object.clone())?;
-        new_context.let_variable(&"arguments".to_string(), argument.clone())?;
+        new_context.let_variable("this".to_string(), this_lambda.clone())?;
+        new_context.let_variable("self".to_string(), self_object.clone())?;
+        new_context.let_variable("arguments".to_string(), argument.clone())?;
 
         for (_, item) in tuple.elements.iter().enumerate() {
             match item {
                 OnionObject::Named(named) => {
                     named.get_key().with_data(|key| match key {
-                        OnionObject::String(key_str) => {
-                            new_context.let_variable(key_str, named.get_value().clone().stabilize())
-                        }
+                        OnionObject::String(key_str) => new_context
+                            .let_variable(key_str.clone(), named.get_value().clone().stabilize()),
                         _ => Ok(()),
                     })?;
                 }

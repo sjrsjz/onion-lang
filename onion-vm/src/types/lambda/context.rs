@@ -188,7 +188,7 @@ impl Context {
 
     pub fn let_variable(
         &mut self,
-        name: &String,
+        name: String,
         value: OnionStaticObject,
     ) -> Result<(), ObjectError> {
         if self.frames.len() == 0 {
@@ -201,7 +201,7 @@ impl Context {
 
         match last_frame {
             Frame::Normal(vars, _) => {
-                vars.insert(name.clone(), value);
+                vars.insert(name, value);
             }
         }
 
@@ -347,7 +347,7 @@ mod tests {
 
         context
             .let_variable(
-                &"i".to_string(),
+                "i".to_string(),
                 OnionObject::Integer(0)
                     .stabilize()
                     .mutablize(&mut gc)
