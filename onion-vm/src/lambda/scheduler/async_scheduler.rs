@@ -20,7 +20,7 @@ impl Runnable for AsyncScheduler {
         if self.runnables.is_empty() {
             return Ok(StepResult::Return(OnionPair::new_static(
                 &OnionObject::Boolean(true).stabilize(),
-                &OnionObject::Undefined("All runnables completed".to_string()).stabilize(),
+                &OnionObject::Undefined(Some("All runnables completed".to_string())).stabilize(),
             )));
         }
 
@@ -36,7 +36,7 @@ impl Runnable for AsyncScheduler {
                             self.runnables.push(new_runnable);
                             self.runnables[i].receive(
                                 StepResult::Return(
-                                    OnionObject::Undefined("Task Launched".to_string()).stabilize(),
+                                    OnionObject::Undefined(Some("Task Launched".to_string())).stabilize(),
                                 ),
                                 gc,
                             )?;

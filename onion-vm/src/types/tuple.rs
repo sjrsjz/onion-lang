@@ -80,7 +80,7 @@ impl OnionTuple {
     pub fn at(&self, index: i64) -> Result<OnionStaticObject, ObjectError> {
         if index < 0 || index >= self.elements.len() as i64 {
             return Ok(OnionStaticObject::new(OnionObject::Undefined(
-                "Index out of bounds".to_string(),
+                Some("Index out of bounds".to_string()),
             )));
         }
         Ok(OnionStaticObject::new(
@@ -161,7 +161,10 @@ impl OnionTuple {
                 })))
             }
             _ => Ok(OnionStaticObject::new(OnionObject::Undefined(
-                "Invalid operation".to_string(),
+                Some(format!(
+                    "Cannot add tuple with {:?}",
+                    other
+                ))
             ))),
         }
     }

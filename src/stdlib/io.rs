@@ -32,7 +32,7 @@ fn println(
                         .collect::<Vec<_>>()
                         .join(" ")
                 );
-                Ok(OnionObject::Undefined("Print completed".to_string()).stabilize())
+                Ok(OnionObject::Undefined(Some("Print completed".to_string())).stabilize())
             })
         })
         .map_err(RuntimeError::ObjectError)?
@@ -55,7 +55,7 @@ fn print(
                         .collect::<Vec<_>>()
                         .join(" ")
                 );
-                Ok(OnionObject::Undefined("Print completed".to_string()).stabilize())
+                Ok(OnionObject::Undefined(Some("Print completed".to_string())).stabilize())
             })
         })
         .map_err(RuntimeError::ObjectError)?

@@ -47,7 +47,10 @@ impl ReplExecutor {
     /// 获取最后一次执行的结果
     pub fn get_last_result(&self) -> Option<OnionStaticObject> {
         if let OnionObject::Tuple(tuple) = self.out_tuple.weak() {
-            tuple.elements.last().map(|obj| OnionStaticObject::new(obj.clone()))
+            tuple
+                .elements
+                .last()
+                .map(|obj| OnionStaticObject::new(obj.clone()))
         } else {
             None
         }
@@ -108,22 +111,22 @@ impl ReplExecutor {
             "__main__".to_string(),
         );
 
-        let OnionObject::Lambda(lambda) = lambda.weak() else {
+        let OnionObject::Lambda(lambda_ref) = lambda.weak() else {
             return Err("Failed to create Lambda definition".to_string());
         };
 
         let args = OnionTuple::new_static(vec![]);
 
         // 绑定参数
-        let assigned_argument = lambda
+        let assigned_argument = lambda_ref
             .with_parameter(|param| {
                 unwrap_object!(param, OnionObject::Tuple)?
                     .clone_and_named_assignment(unwrap_object!(args.weak(), OnionObject::Tuple)?)
             })
             .map_err(|e| format!("Failed to assign arguments to Lambda: {:?}", e))?;
 
-        let lambda = lambda
-            .create_runnable(assigned_argument, &mut GC::new())
+        let lambda = lambda_ref
+            .create_runnable(assigned_argument, &lambda, &mut GC::new())
             .map_err(|e| format!("Failed to create runnable Lambda: {:?}", e))?;
 
         // 初始化调度器和GC
@@ -146,7 +149,7 @@ impl ReplExecutor {
                             .map_err(|e| format!("Failed to unwrap result: {:?}", e))?;
                         let success = unwrap_object!(result.get_key(), OnionObject::Boolean)
                             .map_err(|e| format!("Failed to get success key: {:?}", e))?;
-                        
+
                         if !success {
                             let error_msg = unwrap_object!(result.get_value(), OnionObject::String)
                                 .map_err(|e| format!("Failed to get error message: {:?}", e))?;
@@ -156,12 +159,16 @@ impl ReplExecutor {
 
                         // 获取执行结果并存储到Out元组中
                         let result_value = result.get_value();
-                        
+
                         // 将结果添加到Out元组中
                         self.add_result_to_out(result_value.clone());
-                        let is_undefined = result_value.with_data(|data| {
-                            Ok(unwrap_object!(data, OnionObject::Undefined).is_ok())
-                        }).map_err(|e| format!("Failed to check if result is Undefined: {:?}", e))?;
+                        let is_undefined = result_value
+                            .with_data(|data| {
+                                Ok(unwrap_object!(data, OnionObject::Undefined).is_ok())
+                            })
+                            .map_err(|e| {
+                                format!("Failed to check if result is Undefined: {:?}", e)
+                            })?;
                         if is_undefined {
                             break; // 如果结果是Undefined，则不需要打印
                         }
@@ -194,7 +201,7 @@ impl ReplExecutor {
                 new_elements
                     .into_iter()
                     .map(|obj| OnionStaticObject::new(obj))
-                    .collect()
+                    .collect(),
             );
         }
     }

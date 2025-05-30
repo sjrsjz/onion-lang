@@ -47,11 +47,13 @@ impl OnionLambdaRunnable {
         this_lambda: OnionStaticObject,
         instruction: Arc<RefCell<VMInstructionPackage>>,
         ip: isize,
-    ) -> Result<Self, ObjectError> {
-        let mut new_context = Context::new();
+    ) -> Result<Self, ObjectError> {        let mut new_context = Context::new();
         Context::push_frame(
             &mut new_context,
-            Frame::Normal(rustc_hash::FxHashMap::default(), Vec::new()),
+            Frame {
+                variables: rustc_hash::FxHashMap::default(),
+                stack: Vec::new(),
+            },
         );
 
         let OnionObject::Tuple(tuple) = argument.weak() else {
@@ -60,16 +62,101 @@ impl OnionLambdaRunnable {
             ));
         };
 
-        new_context.let_variable("this".to_string(), this_lambda.clone())?;
-        new_context.let_variable("self".to_string(), self_object.clone())?;
-        new_context.let_variable("arguments".to_string(), argument.clone())?;
+        let (index_this, index_self, index_arguments) = {
+            let instruction_ref = instruction.try_borrow().map_err(|_| {
+                ObjectError::InvalidOperation(
+                    "Cannot access instruction package (already borrowed)".to_string(),
+                )
+            })?;
+
+            let string_pool = instruction_ref.get_string_pool();
+
+            let index_this = string_pool
+                .iter()
+                .position(|s| s == "this")
+                .ok_or_else(|| {
+                    ObjectError::InvalidOperation(
+                        "Missing required variable 'this' in string pool".to_string(),
+                    )
+                })?;
+
+            let index_self = string_pool
+                .iter()
+                .position(|s| s == "self")
+                .ok_or_else(|| {
+                    ObjectError::InvalidOperation(
+                        "Missing required variable 'self' in string pool".to_string(),
+                    )
+                })?;
+
+            let index_arguments = string_pool
+                .iter()
+                .position(|s| s == "arguments")
+                .ok_or_else(|| {
+                    ObjectError::InvalidOperation(
+                        "Missing required variable 'arguments' in string pool".to_string(),
+                    )
+                })?;
+
+            (index_this, index_self, index_arguments)
+        };
+
+        // 设置内置变量
+        new_context
+            .let_variable(index_this, this_lambda.clone())
+            .map_err(|e| {
+                ObjectError::InvalidOperation(format!(
+                    "Failed to initialize 'this' variable: {}",
+                    e
+                ))
+            })?;
+
+        new_context
+            .let_variable(index_self, self_object.clone())
+            .map_err(|e| {
+                ObjectError::InvalidOperation(format!(
+                    "Failed to initialize 'self' variable: {}",
+                    e
+                ))
+            })?;
+
+        new_context
+            .let_variable(index_arguments, argument.clone())
+            .map_err(|e| {
+                ObjectError::InvalidOperation(format!(
+                    "Failed to initialize 'arguments' variable: {}",
+                    e
+                ))
+            })?;
 
         for (_, item) in tuple.elements.iter().enumerate() {
             match item {
                 OnionObject::Named(named) => {
                     named.get_key().with_data(|key| match key {
-                        OnionObject::String(key_str) => new_context
-                            .let_variable(key_str.clone(), named.get_value().clone().stabilize()),
+                        OnionObject::String(key_str) => {
+                            match instruction
+                                .try_borrow()
+                                .map_err(|_| {
+                                    ObjectError::InvalidOperation(
+                                        "Failed to borrow instruction".to_string(),
+                                    )
+                                })?
+                                .get_string_pool()
+                                .iter()
+                                .position(|s| s == key_str)
+                            {
+                                Some(index) => new_context
+                                    .let_variable(index, named.get_value().clone().stabilize()),
+                                None => {
+                                    // do nothing because the runnable does not need this variable
+                                    Ok(())
+                                }
+                            }
+                            // new_context.let_variable(
+                            //     key_str.clone(),
+                            //     named.get_value().clone().stabilize(),
+                            // )
+                        }
                         _ => Ok(()),
                     })?;
                 }

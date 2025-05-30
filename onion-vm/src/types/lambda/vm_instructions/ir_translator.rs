@@ -17,33 +17,59 @@ pub enum IRTranslatorError {
 #[derive(Debug)]
 pub struct IRTranslator {
     ir_package: IRPackage,
-    function_ips: HashMap<String, usize>, // 签名定位表
-    ir_to_ip: Vec<usize>,                 // ir -> 指令集地址映射
+    function_ips: HashMap<String, usize>,
+    ir_to_ip: Vec<usize>,
     code: Vec<u32>,
     string_pool: Vec<String>,
+    string_to_index: HashMap<String, usize>, // 新增：字符串到索引的映射
     bytes_pool: Vec<Vec<u8>>,
+    bytes_to_index: HashMap<Vec<u8>, usize>, // 新增：字节数组去重
     debug_infos: HashMap<usize, DebugInfo>,
 }
 
 impl IRTranslator {
     pub fn new(ir_package: &IRPackage) -> Self {
-        IRTranslator {
+        let mut translator = IRTranslator {
             ir_package: ir_package.clone(),
             function_ips: HashMap::default(),
             ir_to_ip: vec![],
             code: vec![],
             string_pool: vec![],
+            string_to_index: HashMap::default(), // 初始化映射表
             bytes_pool: vec![],
+            bytes_to_index: HashMap::default(), // 初始化字节数组映射表
             debug_infos: HashMap::default(),
-        }
+        };
+        translator.alloc_string("this".to_string()); // 预分配
+        translator.alloc_string("arguments".to_string()); // 预分配
+        translator.alloc_string("self".to_string()); // 预分配
+        return translator;
     }
+
+    // 优化后的字符串分配方法 - 确保相同字符串索引唯一
     pub fn alloc_string(&mut self, value: String) -> usize {
+        // 先检查是否已经存在
+        if let Some(&existing_index) = self.string_to_index.get(&value) {
+            return existing_index;
+        }
+
+        // 不存在则创建新的
         let index = self.string_pool.len();
+        self.string_to_index.insert(value.clone(), index);
         self.string_pool.push(value);
         index
     }
+
+    // 同样优化字节数组分配
     pub fn alloc_bytes(&mut self, value: Vec<u8>) -> usize {
+        // 先检查是否已经存在
+        if let Some(&existing_index) = self.bytes_to_index.get(&value) {
+            return existing_index;
+        }
+
+        // 不存在则创建新的
         let index = self.bytes_pool.len();
+        self.bytes_to_index.insert(value.clone(), index);
         self.bytes_pool.push(value);
         index
     }
@@ -470,8 +496,7 @@ impl IRTranslator {
                 }
                 IR::MapTo => {
                     self.code.push(
-                        Opcode32::build_opcode(VMInstruction::MapTo as u8, 0, 0, 0)
-                            .get_opcode(),
+                        Opcode32::build_opcode(VMInstruction::MapTo as u8, 0, 0, 0).get_opcode(),
                     );
                 }
                 _ => {

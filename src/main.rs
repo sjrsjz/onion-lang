@@ -96,8 +96,7 @@ fn main() {
         Commands::Translate { file, output } => cmd_translate(file, output),
         Commands::Repl => cmd_repl(),
         Commands::Lsp { port } => {
-            lsp::start_lsp_server(port)
-                .map_err(|e| format!("Failed to start LSP server: {}", e))
+            lsp::start_lsp_server(port).map_err(|e| format!("Failed to start LSP server: {}", e))
         }
     };
 
@@ -241,7 +240,6 @@ fn cmd_repl() -> Result<(), String> {
     repl::start_repl().map_err(|e| format!("REPL error: {:?}", e))
 }
 
-
 // Helper functions
 
 fn run_source_file(file: &Path) -> Result<(), String> {
@@ -295,6 +293,10 @@ fn execute_ir_package(ir_package: &IRPackage) -> Result<(), String> {
 }
 
 fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> Result<(), String> {
+    match VMInstructionPackage::validate(vm_instructions_package) {
+        Err(e) => return Err(format!("Invalid VM instruction package: {}", e)),
+        Ok(_) => {}
+    }
     // Create standard library object
     let stdlib_pair = OnionNamed::new_static(
         &OnionObject::String("stdlib".to_string()).stabilize(),
@@ -312,22 +314,22 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
         "__main__".to_string(),
     );
 
-    let OnionObject::Lambda(lambda) = lambda.weak() else {
+    let OnionObject::Lambda(lambda_ref) = lambda.weak() else {
         return Err("Failed to create Lambda definition".to_string());
     };
 
     let args = OnionTuple::new_static(vec![]);
 
     // Bind arguments
-    let assigned_argument = lambda
+    let assigned_argument = lambda_ref
         .with_parameter(|param| {
             unwrap_object!(param, OnionObject::Tuple)?
                 .clone_and_named_assignment(unwrap_object!(args.weak(), OnionObject::Tuple)?)
         })
         .map_err(|e| format!("Failed to assign arguments to Lambda: {:?}", e))?;
 
-    let lambda = lambda
-        .create_runnable(assigned_argument, &mut GC::new())
+    let lambda = lambda_ref
+        .create_runnable(assigned_argument, &lambda, &mut GC::new())
         .map_err(|e| format!("Failed to create runnable Lambda: {:?}", e))?;
 
     // Initialize scheduler and GC
@@ -360,9 +362,14 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
                             );
                             return Err("Execution failed".to_string());
                         }
-                        let is_undefined = result.get_value().with_data(|data| {
-                            Ok(unwrap_object!(data, OnionObject::Undefined).is_ok())
-                        }).map_err(|e| format!("Failed to check if result is undefined: {:?}", e))?;
+                        let is_undefined = result
+                            .get_value()
+                            .with_data(|data| {
+                                Ok(unwrap_object!(data, OnionObject::Undefined).is_ok())
+                            })
+                            .map_err(|e| {
+                                format!("Failed to check if result is undefined: {:?}", e)
+                            })?;
                         if is_undefined {
                             return Ok(());
                         }

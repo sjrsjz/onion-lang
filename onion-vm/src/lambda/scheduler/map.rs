@@ -71,7 +71,7 @@ impl Runnable for Mapping {
                                     params.clone_and_named_assignment(&OnionTuple::new(vec![
                                         item_clone,
                                     ]))?;
-                                let runnable = func.create_runnable(argument, gc)?;
+                                let runnable = func.create_runnable(argument, &self.map, gc)?;
                                 Ok(StepResult::NewRunnable(runnable))
                             }
                             OnionObject::Boolean(false) => Ok(StepResult::Continue),

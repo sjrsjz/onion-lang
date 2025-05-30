@@ -2,9 +2,7 @@ use std::collections::HashMap;
 
 use onion_vm::{
     lambda::runnable::RuntimeError,
-    types::{
-        object::{ObjectError, OnionObject, OnionStaticObject},
-    },
+    types::object::{ObjectError, OnionObject, OnionStaticObject},
     GC,
 };
 
@@ -18,14 +16,12 @@ fn abs(
         .weak()
         .with_data(|data| {
             let value = get_attr_direct(data, "value".to_string())?;
-            value.weak().with_data(|value_data| {
-                match value_data {
-                    OnionObject::Integer(n) => Ok(OnionObject::Integer(n.abs()).stabilize()),
-                    OnionObject::Float(f) => Ok(OnionObject::Float(f.abs()).stabilize()),
-                    _ => Err(ObjectError::InvalidOperation(
-                        "abs requires numeric value".to_string(),
-                    )),
-                }
+            value.weak().with_data(|value_data| match value_data {
+                OnionObject::Integer(n) => Ok(OnionObject::Integer(n.abs()).stabilize()),
+                OnionObject::Float(f) => Ok(OnionObject::Float(f.abs()).stabilize()),
+                _ => Err(ObjectError::InvalidOperation(
+                    "abs requires numeric value".to_string(),
+                )),
             })
         })
         .map_err(RuntimeError::ObjectError)
@@ -39,14 +35,12 @@ fn sin(
         .weak()
         .with_data(|data| {
             let value = get_attr_direct(data, "value".to_string())?;
-            value.weak().with_data(|value_data| {
-                match value_data {
-                    OnionObject::Integer(n) => Ok(OnionObject::Float((*n as f64).sin()).stabilize()),
-                    OnionObject::Float(f) => Ok(OnionObject::Float(f.sin()).stabilize()),
-                    _ => Err(ObjectError::InvalidOperation(
-                        "sin requires numeric value".to_string(),
-                    )),
-                }
+            value.weak().with_data(|value_data| match value_data {
+                OnionObject::Integer(n) => Ok(OnionObject::Float((*n as f64).sin()).stabilize()),
+                OnionObject::Float(f) => Ok(OnionObject::Float(f.sin()).stabilize()),
+                _ => Err(ObjectError::InvalidOperation(
+                    "sin requires numeric value".to_string(),
+                )),
             })
         })
         .map_err(RuntimeError::ObjectError)
@@ -60,14 +54,12 @@ fn cos(
         .weak()
         .with_data(|data| {
             let value = get_attr_direct(data, "value".to_string())?;
-            value.weak().with_data(|value_data| {
-                match value_data {
-                    OnionObject::Integer(n) => Ok(OnionObject::Float((*n as f64).cos()).stabilize()),
-                    OnionObject::Float(f) => Ok(OnionObject::Float(f.cos()).stabilize()),
-                    _ => Err(ObjectError::InvalidOperation(
-                        "cos requires numeric value".to_string(),
-                    )),
-                }
+            value.weak().with_data(|value_data| match value_data {
+                OnionObject::Integer(n) => Ok(OnionObject::Float((*n as f64).cos()).stabilize()),
+                OnionObject::Float(f) => Ok(OnionObject::Float(f.cos()).stabilize()),
+                _ => Err(ObjectError::InvalidOperation(
+                    "cos requires numeric value".to_string(),
+                )),
             })
         })
         .map_err(RuntimeError::ObjectError)
@@ -81,14 +73,12 @@ fn tan(
         .weak()
         .with_data(|data| {
             let value = get_attr_direct(data, "value".to_string())?;
-            value.weak().with_data(|value_data| {
-                match value_data {
-                    OnionObject::Integer(n) => Ok(OnionObject::Float((*n as f64).tan()).stabilize()),
-                    OnionObject::Float(f) => Ok(OnionObject::Float(f.tan()).stabilize()),
-                    _ => Err(ObjectError::InvalidOperation(
-                        "tan requires numeric value".to_string(),
-                    )),
-                }
+            value.weak().with_data(|value_data| match value_data {
+                OnionObject::Integer(n) => Ok(OnionObject::Float((*n as f64).tan()).stabilize()),
+                OnionObject::Float(f) => Ok(OnionObject::Float(f.tan()).stabilize()),
+                _ => Err(ObjectError::InvalidOperation(
+                    "tan requires numeric value".to_string(),
+                )),
             })
         })
         .map_err(RuntimeError::ObjectError)
@@ -102,26 +92,28 @@ fn log(
         .weak()
         .with_data(|data| {
             let value = get_attr_direct(data, "value".to_string())?;
-            value.weak().with_data(|value_data| {
-                match value_data {
-                    OnionObject::Integer(n) => {
-                        if *n <= 0 {
-                            Err(ObjectError::InvalidOperation("log requires positive value".to_string()))
-                        } else {
-                            Ok(OnionObject::Float((*n as f64).ln()).stabilize())
-                        }
+            value.weak().with_data(|value_data| match value_data {
+                OnionObject::Integer(n) => {
+                    if *n <= 0 {
+                        Err(ObjectError::InvalidOperation(
+                            "log requires positive value".to_string(),
+                        ))
+                    } else {
+                        Ok(OnionObject::Float((*n as f64).ln()).stabilize())
                     }
-                    OnionObject::Float(f) => {
-                        if *f <= 0.0 {
-                            Err(ObjectError::InvalidOperation("log requires positive value".to_string()))
-                        } else {
-                            Ok(OnionObject::Float(f.ln()).stabilize())
-                        }
-                    }
-                    _ => Err(ObjectError::InvalidOperation(
-                        "log requires numeric value".to_string(),
-                    )),
                 }
+                OnionObject::Float(f) => {
+                    if *f <= 0.0 {
+                        Err(ObjectError::InvalidOperation(
+                            "log requires positive value".to_string(),
+                        ))
+                    } else {
+                        Ok(OnionObject::Float(f.ln()).stabilize())
+                    }
+                }
+                _ => Err(ObjectError::InvalidOperation(
+                    "log requires numeric value".to_string(),
+                )),
             })
         })
         .map_err(RuntimeError::ObjectError)
@@ -135,26 +127,28 @@ fn sqrt(
         .weak()
         .with_data(|data| {
             let value = get_attr_direct(data, "value".to_string())?;
-            value.weak().with_data(|value_data| {
-                match value_data {
-                    OnionObject::Integer(n) => {
-                        if *n < 0 {
-                            Err(ObjectError::InvalidOperation("Cannot take square root of negative number".to_string()))
-                        } else {
-                            Ok(OnionObject::Float((*n as f64).sqrt()).stabilize())
-                        }
+            value.weak().with_data(|value_data| match value_data {
+                OnionObject::Integer(n) => {
+                    if *n < 0 {
+                        Err(ObjectError::InvalidOperation(
+                            "Cannot take square root of negative number".to_string(),
+                        ))
+                    } else {
+                        Ok(OnionObject::Float((*n as f64).sqrt()).stabilize())
                     }
-                    OnionObject::Float(f) => {
-                        if *f < 0.0 {
-                            Err(ObjectError::InvalidOperation("Cannot take square root of negative number".to_string()))
-                        } else {
-                            Ok(OnionObject::Float(f.sqrt()).stabilize())
-                        }
-                    }
-                    _ => Err(ObjectError::InvalidOperation(
-                        "sqrt requires numeric value".to_string(),
-                    )),
                 }
+                OnionObject::Float(f) => {
+                    if *f < 0.0 {
+                        Err(ObjectError::InvalidOperation(
+                            "Cannot take square root of negative number".to_string(),
+                        ))
+                    } else {
+                        Ok(OnionObject::Float(f.sqrt()).stabilize())
+                    }
+                }
+                _ => Err(ObjectError::InvalidOperation(
+                    "sqrt requires numeric value".to_string(),
+                )),
             })
         })
         .map_err(RuntimeError::ObjectError)
@@ -169,15 +163,19 @@ fn pow(
         .with_data(|data| {
             let base = get_attr_direct(data, "base".to_string())?;
             let exponent = get_attr_direct(data, "exponent".to_string())?;
-            
+
             base.weak().with_data(|base_data| {
-                exponent.weak().with_data(|exp_data| {
-                    match (base_data, exp_data) {
+                exponent
+                    .weak()
+                    .with_data(|exp_data| match (base_data, exp_data) {
                         (OnionObject::Integer(base), OnionObject::Integer(exp)) => {
                             if *exp >= 0 {
                                 Ok(OnionObject::Integer(base.pow(*exp as u32)).stabilize())
                             } else {
-                                Ok(OnionObject::Float((*base as f64).powf(*exp as f64)).stabilize())
+                                Ok(
+                                    OnionObject::Float((*base as f64).powf(*exp as f64))
+                                        .stabilize(),
+                                )
                             }
                         }
                         (OnionObject::Float(base), OnionObject::Float(exp)) => {
@@ -192,8 +190,7 @@ fn pow(
                         _ => Err(ObjectError::InvalidOperation(
                             "pow requires numeric values".to_string(),
                         )),
-                    }
-                })
+                    })
             })
         })
         .map_err(RuntimeError::ObjectError)
@@ -207,14 +204,12 @@ fn exp(
         .weak()
         .with_data(|data| {
             let value = get_attr_direct(data, "value".to_string())?;
-            value.weak().with_data(|value_data| {
-                match value_data {
-                    OnionObject::Integer(n) => Ok(OnionObject::Float((*n as f64).exp()).stabilize()),
-                    OnionObject::Float(f) => Ok(OnionObject::Float(f.exp()).stabilize()),
-                    _ => Err(ObjectError::InvalidOperation(
-                        "exp requires numeric value".to_string(),
-                    )),
-                }
+            value.weak().with_data(|value_data| match value_data {
+                OnionObject::Integer(n) => Ok(OnionObject::Float((*n as f64).exp()).stabilize()),
+                OnionObject::Float(f) => Ok(OnionObject::Float(f.exp()).stabilize()),
+                _ => Err(ObjectError::InvalidOperation(
+                    "exp requires numeric value".to_string(),
+                )),
             })
         })
         .map_err(RuntimeError::ObjectError)
@@ -228,14 +223,12 @@ fn floor(
         .weak()
         .with_data(|data| {
             let value = get_attr_direct(data, "value".to_string())?;
-            value.weak().with_data(|value_data| {
-                match value_data {
-                    OnionObject::Integer(n) => Ok(OnionObject::Integer(*n).stabilize()),
-                    OnionObject::Float(f) => Ok(OnionObject::Integer(f.floor() as i64).stabilize()),
-                    _ => Err(ObjectError::InvalidOperation(
-                        "floor requires numeric value".to_string(),
-                    )),
-                }
+            value.weak().with_data(|value_data| match value_data {
+                OnionObject::Integer(n) => Ok(OnionObject::Integer(*n).stabilize()),
+                OnionObject::Float(f) => Ok(OnionObject::Integer(f.floor() as i64).stabilize()),
+                _ => Err(ObjectError::InvalidOperation(
+                    "floor requires numeric value".to_string(),
+                )),
             })
         })
         .map_err(RuntimeError::ObjectError)
@@ -249,14 +242,12 @@ fn ceil(
         .weak()
         .with_data(|data| {
             let value = get_attr_direct(data, "value".to_string())?;
-            value.weak().with_data(|value_data| {
-                match value_data {
-                    OnionObject::Integer(n) => Ok(OnionObject::Integer(*n).stabilize()),
-                    OnionObject::Float(f) => Ok(OnionObject::Integer(f.ceil() as i64).stabilize()),
-                    _ => Err(ObjectError::InvalidOperation(
-                        "ceil requires numeric value".to_string(),
-                    )),
-                }
+            value.weak().with_data(|value_data| match value_data {
+                OnionObject::Integer(n) => Ok(OnionObject::Integer(*n).stabilize()),
+                OnionObject::Float(f) => Ok(OnionObject::Integer(f.ceil() as i64).stabilize()),
+                _ => Err(ObjectError::InvalidOperation(
+                    "ceil requires numeric value".to_string(),
+                )),
             })
         })
         .map_err(RuntimeError::ObjectError)
@@ -270,14 +261,12 @@ fn round(
         .weak()
         .with_data(|data| {
             let value = get_attr_direct(data, "value".to_string())?;
-            value.weak().with_data(|value_data| {
-                match value_data {
-                    OnionObject::Integer(n) => Ok(OnionObject::Integer(*n).stabilize()),
-                    OnionObject::Float(f) => Ok(OnionObject::Integer(f.round() as i64).stabilize()),
-                    _ => Err(ObjectError::InvalidOperation(
-                        "round requires numeric value".to_string(),
-                    )),
-                }
+            value.weak().with_data(|value_data| match value_data {
+                OnionObject::Integer(n) => Ok(OnionObject::Integer(*n).stabilize()),
+                OnionObject::Float(f) => Ok(OnionObject::Integer(f.round() as i64).stabilize()),
+                _ => Err(ObjectError::InvalidOperation(
+                    "round requires numeric value".to_string(),
+                )),
             })
         })
         .map_err(RuntimeError::ObjectError)
@@ -291,27 +280,29 @@ fn asin(
         .weak()
         .with_data(|data| {
             let value = get_attr_direct(data, "value".to_string())?;
-            value.weak().with_data(|value_data| {
-                match value_data {
-                    OnionObject::Integer(n) => {
-                        let val = *n as f64;
-                        if val < -1.0 || val > 1.0 {
-                            Err(ObjectError::InvalidOperation("asin requires value between -1 and 1".to_string()))
-                        } else {
-                            Ok(OnionObject::Float(val.asin()).stabilize())
-                        }
+            value.weak().with_data(|value_data| match value_data {
+                OnionObject::Integer(n) => {
+                    let val = *n as f64;
+                    if val < -1.0 || val > 1.0 {
+                        Err(ObjectError::InvalidOperation(
+                            "asin requires value between -1 and 1".to_string(),
+                        ))
+                    } else {
+                        Ok(OnionObject::Float(val.asin()).stabilize())
                     }
-                    OnionObject::Float(f) => {
-                        if *f < -1.0 || *f > 1.0 {
-                            Err(ObjectError::InvalidOperation("asin requires value between -1 and 1".to_string()))
-                        } else {
-                            Ok(OnionObject::Float(f.asin()).stabilize())
-                        }
-                    }
-                    _ => Err(ObjectError::InvalidOperation(
-                        "asin requires numeric value".to_string(),
-                    )),
                 }
+                OnionObject::Float(f) => {
+                    if *f < -1.0 || *f > 1.0 {
+                        Err(ObjectError::InvalidOperation(
+                            "asin requires value between -1 and 1".to_string(),
+                        ))
+                    } else {
+                        Ok(OnionObject::Float(f.asin()).stabilize())
+                    }
+                }
+                _ => Err(ObjectError::InvalidOperation(
+                    "asin requires numeric value".to_string(),
+                )),
             })
         })
         .map_err(RuntimeError::ObjectError)
@@ -325,27 +316,29 @@ fn acos(
         .weak()
         .with_data(|data| {
             let value = get_attr_direct(data, "value".to_string())?;
-            value.weak().with_data(|value_data| {
-                match value_data {
-                    OnionObject::Integer(n) => {
-                        let val = *n as f64;
-                        if val < -1.0 || val > 1.0 {
-                            Err(ObjectError::InvalidOperation("acos requires value between -1 and 1".to_string()))
-                        } else {
-                            Ok(OnionObject::Float(val.acos()).stabilize())
-                        }
+            value.weak().with_data(|value_data| match value_data {
+                OnionObject::Integer(n) => {
+                    let val = *n as f64;
+                    if val < -1.0 || val > 1.0 {
+                        Err(ObjectError::InvalidOperation(
+                            "acos requires value between -1 and 1".to_string(),
+                        ))
+                    } else {
+                        Ok(OnionObject::Float(val.acos()).stabilize())
                     }
-                    OnionObject::Float(f) => {
-                        if *f < -1.0 || *f > 1.0 {
-                            Err(ObjectError::InvalidOperation("acos requires value between -1 and 1".to_string()))
-                        } else {
-                            Ok(OnionObject::Float(f.acos()).stabilize())
-                        }
-                    }
-                    _ => Err(ObjectError::InvalidOperation(
-                        "acos requires numeric value".to_string(),
-                    )),
                 }
+                OnionObject::Float(f) => {
+                    if *f < -1.0 || *f > 1.0 {
+                        Err(ObjectError::InvalidOperation(
+                            "acos requires value between -1 and 1".to_string(),
+                        ))
+                    } else {
+                        Ok(OnionObject::Float(f.acos()).stabilize())
+                    }
+                }
+                _ => Err(ObjectError::InvalidOperation(
+                    "acos requires numeric value".to_string(),
+                )),
             })
         })
         .map_err(RuntimeError::ObjectError)
@@ -359,14 +352,12 @@ fn atan(
         .weak()
         .with_data(|data| {
             let value = get_attr_direct(data, "value".to_string())?;
-            value.weak().with_data(|value_data| {
-                match value_data {
-                    OnionObject::Integer(n) => Ok(OnionObject::Float((*n as f64).atan()).stabilize()),
-                    OnionObject::Float(f) => Ok(OnionObject::Float(f.atan()).stabilize()),
-                    _ => Err(ObjectError::InvalidOperation(
-                        "atan requires numeric value".to_string(),
-                    )),
-                }
+            value.weak().with_data(|value_data| match value_data {
+                OnionObject::Integer(n) => Ok(OnionObject::Float((*n as f64).atan()).stabilize()),
+                OnionObject::Float(f) => Ok(OnionObject::Float(f.atan()).stabilize()),
+                _ => Err(ObjectError::InvalidOperation(
+                    "atan requires numeric value".to_string(),
+                )),
             })
         })
         .map_err(RuntimeError::ObjectError)
@@ -389,7 +380,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut abs_params = HashMap::new();
     abs_params.insert(
         "value".to_string(),
-        OnionObject::Undefined("Number to get absolute value".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Number to get absolute value".to_string())).stabilize(),
     );
     module.insert(
         "abs".to_string(),
@@ -400,11 +391,11 @@ pub fn build_module() -> OnionStaticObject {
             "math::abs".to_string(),
             abs,
         ),
-    );    // sin 函数
+    ); // sin 函数
     let mut sin_params = HashMap::new();
     sin_params.insert(
         "value".to_string(),
-        OnionObject::Undefined("Angle in radians".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Angle in radians".to_string())).stabilize(),
     );
     module.insert(
         "sin".to_string(),
@@ -421,7 +412,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut cos_params = HashMap::new();
     cos_params.insert(
         "value".to_string(),
-        OnionObject::Undefined("Angle in radians".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Angle in radians".to_string())).stabilize(),
     );
     module.insert(
         "cos".to_string(),
@@ -438,7 +429,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut tan_params = HashMap::new();
     tan_params.insert(
         "value".to_string(),
-        OnionObject::Undefined("Angle in radians".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Angle in radians".to_string())).stabilize(),
     );
     module.insert(
         "tan".to_string(),
@@ -455,7 +446,8 @@ pub fn build_module() -> OnionStaticObject {
     let mut log_params = HashMap::new();
     log_params.insert(
         "value".to_string(),
-        OnionObject::Undefined("Number to calculate natural logarithm".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Number to calculate natural logarithm".to_string()))
+            .stabilize(),
     );
     module.insert(
         "log".to_string(),
@@ -472,7 +464,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut exp_params = HashMap::new();
     exp_params.insert(
         "value".to_string(),
-        OnionObject::Undefined("Exponent for e^x".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Exponent for e^x".to_string())).stabilize(),
     );
     module.insert(
         "exp".to_string(),
@@ -489,7 +481,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut floor_params = HashMap::new();
     floor_params.insert(
         "value".to_string(),
-        OnionObject::Undefined("Number to floor".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Number to floor".to_string())).stabilize(),
     );
     module.insert(
         "floor".to_string(),
@@ -506,7 +498,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut ceil_params = HashMap::new();
     ceil_params.insert(
         "value".to_string(),
-        OnionObject::Undefined("Number to ceil".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Number to ceil".to_string())).stabilize(),
     );
     module.insert(
         "ceil".to_string(),
@@ -523,7 +515,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut round_params = HashMap::new();
     round_params.insert(
         "value".to_string(),
-        OnionObject::Undefined("Number to round".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Number to round".to_string())).stabilize(),
     );
     module.insert(
         "round".to_string(),
@@ -540,7 +532,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut asin_params = HashMap::new();
     asin_params.insert(
         "value".to_string(),
-        OnionObject::Undefined("Value between -1 and 1".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Value between -1 and 1".to_string())).stabilize(),
     );
     module.insert(
         "asin".to_string(),
@@ -557,7 +549,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut acos_params = HashMap::new();
     acos_params.insert(
         "value".to_string(),
-        OnionObject::Undefined("Value between -1 and 1".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Value between -1 and 1".to_string())).stabilize(),
     );
     module.insert(
         "acos".to_string(),
@@ -574,7 +566,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut atan_params = HashMap::new();
     atan_params.insert(
         "value".to_string(),
-        OnionObject::Undefined("Value for arctangent".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Value for arctangent".to_string())).stabilize(),
     );
     module.insert(
         "atan".to_string(),
@@ -591,7 +583,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut sqrt_params = HashMap::new();
     sqrt_params.insert(
         "value".to_string(),
-        OnionObject::Undefined("Number to calculate square root".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Number to calculate square root".to_string())).stabilize(),
     );
     module.insert(
         "sqrt".to_string(),
@@ -608,11 +600,11 @@ pub fn build_module() -> OnionStaticObject {
     let mut pow_params = HashMap::new();
     pow_params.insert(
         "base".to_string(),
-        OnionObject::Undefined("Base number".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Base number".to_string())).stabilize(),
     );
     pow_params.insert(
         "exponent".to_string(),
-        OnionObject::Undefined("Exponent (power)".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Exponent (power)".to_string())).stabilize(),
     );
     module.insert(
         "pow".to_string(),
@@ -629,7 +621,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut exp_params = HashMap::new();
     exp_params.insert(
         "value".to_string(),
-        OnionObject::Undefined("Number to calculate exponent".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Number to calculate exponent".to_string())).stabilize(),
     );
     module.insert(
         "exp".to_string(),
@@ -646,7 +638,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut floor_params = HashMap::new();
     floor_params.insert(
         "value".to_string(),
-        OnionObject::Undefined("Number to round down".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Number to round down".to_string())).stabilize(),
     );
     module.insert(
         "floor".to_string(),
@@ -663,7 +655,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut ceil_params = HashMap::new();
     ceil_params.insert(
         "value".to_string(),
-        OnionObject::Undefined("Number to round up".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Number to round up".to_string())).stabilize(),
     );
     module.insert(
         "ceil".to_string(),
@@ -680,7 +672,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut round_params = HashMap::new();
     round_params.insert(
         "value".to_string(),
-        OnionObject::Undefined("Number to round".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Number to round".to_string())).stabilize(),
     );
     module.insert(
         "round".to_string(),
@@ -697,7 +689,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut asin_params = HashMap::new();
     asin_params.insert(
         "value".to_string(),
-        OnionObject::Undefined("Value in radians".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Value in radians".to_string())).stabilize(),
     );
     module.insert(
         "asin".to_string(),
@@ -714,7 +706,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut acos_params = HashMap::new();
     acos_params.insert(
         "value".to_string(),
-        OnionObject::Undefined("Value in radians".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Value in radians".to_string())).stabilize(),
     );
     module.insert(
         "acos".to_string(),
@@ -731,7 +723,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut atan_params = HashMap::new();
     atan_params.insert(
         "value".to_string(),
-        OnionObject::Undefined("Value in radians".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Value in radians".to_string())).stabilize(),
     );
     module.insert(
         "atan".to_string(),

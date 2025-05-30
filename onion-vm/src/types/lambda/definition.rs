@@ -55,11 +55,11 @@ impl OnionLambdaDefinition {
             body,
             capture: Box::new(match capture {
                 Some(capture) => capture.weak().clone(),
-                None => OnionObject::Undefined("No capture".to_string()),
+                None => OnionObject::Undefined(None),
             }),
             self_object: Box::new(match self_object {
                 Some(self_object) => self_object.weak().clone(),
-                None => OnionObject::Undefined("No self object".to_string()),
+                None => OnionObject::Undefined(None),
             }),
             signature,
         })
@@ -69,6 +69,7 @@ impl OnionLambdaDefinition {
     pub fn create_runnable(
         &self,
         argument: OnionStaticObject,
+        this_lambda: &OnionStaticObject,
         gc: &mut GC<OnionObject>,
     ) -> Result<Box<dyn Runnable>, ObjectError> {
         match &self.body {
@@ -78,7 +79,7 @@ impl OnionLambdaDefinition {
                         argument,
                         self.capture.as_ref().clone().stabilize(),
                         self.self_object.as_ref().clone().stabilize(),
-                        OnionObject::Lambda(self.clone()).stabilize(),
+                        this_lambda.clone(),
                         Arc::new(RefCell::new(package.clone())),
                         match package.get_table().get(&self.signature) {
                             Some(ip) => *ip as isize,

@@ -240,4 +240,22 @@ impl VMInstructionPackage {
         bincode::deserialize(&bytes)
             .map_err(|e| std::io::Error::other(format!("Deserialization error: {}", e)))
     }
+
+    pub fn validate(&self) -> Result<(), String> {
+        // 验证字符串池是否不重复
+        let mut seen_strings = std::collections::HashSet::new();
+        for (index, string) in self.string_pool.iter().enumerate() {
+            if !seen_strings.insert(string) {
+                return Err(format!("Duplicate string found at index {}: {}", index, string));
+            }
+        }
+        // 验证字节池是否不重复
+        let mut seen_bytes = std::collections::HashSet::new();
+        for (index, bytes) in self.bytes_pool.iter().enumerate() {
+            if !seen_bytes.insert(bytes.clone()) {
+                return Err(format!("Duplicate bytes found at index {}: {:?}", index, bytes));
+            }
+        }
+        Ok(())
+    }
 }

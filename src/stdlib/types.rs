@@ -229,7 +229,7 @@ fn find(
                 Ok(value) => Ok(value),
                 Err(ObjectError::InvalidOperation(err)) => {
                     // If the attribute is not found, return undefined
-                    Ok(OnionObject::Undefined(err).stabilize())
+                    Ok(OnionObject::Undefined(Some(err)).stabilize())
                 }
                 Err(e) => {
                     // If any other error occurs, propagate it
@@ -248,7 +248,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut to_string_params = HashMap::new();
     to_string_params.insert(
         "value".to_string(),
-        OnionObject::Undefined("Value to convert to string".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Value to convert to string".to_string())).stabilize(),
     );
     module.insert(
         "to_string".to_string(),
@@ -264,7 +264,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut to_int_params = HashMap::new();
     to_int_params.insert(
         "value".to_string(),
-        OnionObject::Undefined("Value to convert to integer".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Value to convert to integer".to_string())).stabilize(),
     );
     module.insert(
         "to_int".to_string(),
@@ -280,7 +280,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut to_float_params = HashMap::new();
     to_float_params.insert(
         "value".to_string(),
-        OnionObject::Undefined("Value to convert to float".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Value to convert to float".to_string())).stabilize(),
     );
     module.insert(
         "to_float".to_string(),
@@ -296,7 +296,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut to_bool_params = HashMap::new();
     to_bool_params.insert(
         "value".to_string(),
-        OnionObject::Undefined("Value to convert to boolean".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Value to convert to boolean".to_string())).stabilize(),
     );
     module.insert(
         "to_bool".to_string(),
@@ -313,7 +313,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut type_of_params = HashMap::new();
     type_of_params.insert(
         "value".to_string(),
-        OnionObject::Undefined("Value to get type of".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Value to get type of".to_string())).stabilize(),
     );
     module.insert(
         "type_of".to_string(),
@@ -329,7 +329,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut is_int_params = HashMap::new();
     is_int_params.insert(
         "value".to_string(),
-        OnionObject::Undefined("Value to check if is integer".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Value to check if is integer".to_string())).stabilize(),
     );
     module.insert(
         "is_int".to_string(),
@@ -345,7 +345,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut is_float_params = HashMap::new();
     is_float_params.insert(
         "value".to_string(),
-        OnionObject::Undefined("Value to check if is float".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Value to check if is float".to_string())).stabilize(),
     );
     module.insert(
         "is_float".to_string(),
@@ -361,7 +361,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut is_string_params = HashMap::new();
     is_string_params.insert(
         "value".to_string(),
-        OnionObject::Undefined("Value to check if is string".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Value to check if is string".to_string())).stabilize(),
     );
     module.insert(
         "is_string".to_string(),
@@ -377,7 +377,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut is_bool_params = HashMap::new();
     is_bool_params.insert(
         "value".to_string(),
-        OnionObject::Undefined("Value to check if is boolean".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Value to check if is boolean".to_string())).stabilize(),
     );
     module.insert(
         "is_bool".to_string(),
@@ -394,11 +394,11 @@ pub fn build_module() -> OnionStaticObject {
     let mut find_params = HashMap::new();
     find_params.insert(
         "obj".to_string(),
-        OnionObject::Undefined("Object to find attribute in".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Object to find attribute in".to_string())).stabilize(),
     );
     find_params.insert(
         "key".to_string(),
-        OnionObject::Undefined("Key to find in object".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Key to find in object".to_string())).stabilize(),
     );
     module.insert(
         "find".to_string(),

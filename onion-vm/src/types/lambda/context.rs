@@ -6,20 +6,17 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
-pub enum Frame {
-    Normal(HashMap<String, OnionStaticObject>, Vec<OnionStaticObject>), // Normal frame
+pub struct Frame {
+    pub variables: HashMap<usize, OnionStaticObject>,
+    pub stack: Vec<OnionStaticObject>,
 }
 
 impl Frame {
     pub fn get_stack(&self) -> &Vec<OnionStaticObject> {
-        match self {
-            Frame::Normal(_, stack) => stack,
-        }
+        &self.stack
     }
     pub fn get_stack_mut(&mut self) -> &mut Vec<OnionStaticObject> {
-        match self {
-            Frame::Normal(_, stack) => stack,
-        }
+        &mut self.stack
     }
 }
 
@@ -44,22 +41,14 @@ impl Context {
                 "Cannot pop frame from empty context".to_string(),
             )),
         }
-    }
-
-    pub fn concat_last_frame(&mut self) -> Result<(), RuntimeError> {
+    }    pub fn concat_last_frame(&mut self) -> Result<(), RuntimeError> {
         if self.frames.len() < 2 {
             return Ok(());
         }
 
         let last_frame = self.frames.pop().unwrap();
         let second_last_frame = self.frames.last_mut().unwrap();
-        match second_last_frame {
-            Frame::Normal(_, stack) => match last_frame {
-                Frame::Normal(_, last_stack) => {
-                    stack.extend(last_stack);
-                }
-            },
-        }
+        second_last_frame.stack.extend(last_frame.stack);
         Ok(())
     }
     pub fn clear_stack(&mut self) {
@@ -186,9 +175,29 @@ impl Context {
         }
     }
 
+    // pub fn let_variable(
+    //     &mut self,
+    //     name: String,
+    //     value: OnionStaticObject,
+    // ) -> Result<(), ObjectError> {
+    //     if self.frames.len() == 0 {
+    //         return Err(ObjectError::InvalidOperation(
+    //             "Cannot let variable in empty context".to_string(),
+    //         ));
+    //     }
+
+    //     let last_frame = self.frames.last_mut().unwrap();
+
+    //     match last_frame {
+    //         Frame::Normal(vars, _) => {
+    //             vars.insert(name, value);
+    //         }
+    //     }    //     Ok(())
+    // }
+    
     pub fn let_variable(
         &mut self,
-        name: String,
+        name: usize,
         value: OnionStaticObject,
     ) -> Result<(), ObjectError> {
         if self.frames.len() == 0 {
@@ -198,31 +207,44 @@ impl Context {
         }
 
         let last_frame = self.frames.last_mut().unwrap();
-
-        match last_frame {
-            Frame::Normal(vars, _) => {
-                vars.insert(name, value);
-            }
-        }
-
+        last_frame.variables.insert(name, value);
         Ok(())
     }
 
-    pub fn get_variable(&self, name: &String) -> Result<&OnionStaticObject, RuntimeError> {
+
+    // pub fn get_variable(&self, name: &String) -> Result<&OnionStaticObject, RuntimeError> {
+    //     if self.frames.len() == 0 {
+    //         return Err(RuntimeError::DetailedError(
+    //             "Cannot get variable from empty context".to_string(),
+    //         ));
+    //     }
+
+    //     // 反向遍历所有帧，从最新的帧开始查找
+    //     for frame in self.frames.iter().rev() {
+    //         match frame {
+    //             Frame::Normal(vars, _) => {
+    //                 if let Some(value) = vars.get(name) {
+    //                     return Ok(value);
+    //                 }
+    //             }
+    //         }
+    //     }
+
+    //     Err(RuntimeError::DetailedError(format!(
+    //         "Variable `{}` not found",
+    //         name
+    //     )))
+    // }
+
+    pub fn get_variable(&self, name: usize) -> Result<&OnionStaticObject, RuntimeError> {
         if self.frames.len() == 0 {
             return Err(RuntimeError::DetailedError(
                 "Cannot get variable from empty context".to_string(),
             ));
-        }
-
-        // 反向遍历所有帧，从最新的帧开始查找
+        }        // 反向遍历所有帧，从最新的帧开始查找
         for frame in self.frames.iter().rev() {
-            match frame {
-                Frame::Normal(vars, _) => {
-                    if let Some(value) = vars.get(name) {
-                        return Ok(value);
-                    }
-                }
+            if let Some(value) = frame.variables.get(&name) {
+                return Ok(value);
             }
         }
 
@@ -239,24 +261,45 @@ impl Context {
         }
     }
 
+    // pub fn get_variable_mut(
+    //     &mut self,
+    //     name: &String,
+    // ) -> Result<&mut OnionStaticObject, RuntimeError> {
+    //     if self.frames.len() == 0 {
+    //         return Err(RuntimeError::DetailedError(
+    //             "Cannot get variable from empty context".to_string(),
+    //         ));
+    //     }
+
+    //     // 反向遍历所有帧，从最新的帧开始查找
+    //     for frame in self.frames.iter_mut().rev() {
+    //         match frame {
+    //             Frame::Normal(vars, _) => {
+    //                 if let Some(value) = vars.get_mut(name) {
+    //                     return Ok(value);
+    //                 }
+    //             }
+    //         }
+    //     }
+
+    //     Err(RuntimeError::DetailedError(format!(
+    //         "Variable `{}` not found",
+    //         name
+    //     )))
+    // }
+
     pub fn get_variable_mut(
         &mut self,
-        name: &String,
+        name: usize,
     ) -> Result<&mut OnionStaticObject, RuntimeError> {
         if self.frames.len() == 0 {
             return Err(RuntimeError::DetailedError(
                 "Cannot get variable from empty context".to_string(),
             ));
-        }
-
-        // 反向遍历所有帧，从最新的帧开始查找
+        }        // 反向遍历所有帧，从最新的帧开始查找
         for frame in self.frames.iter_mut().rev() {
-            match frame {
-                Frame::Normal(vars, _) => {
-                    if let Some(value) = vars.get_mut(name) {
-                        return Ok(value);
-                    }
-                }
+            if let Some(value) = frame.variables.get_mut(&name) {
+                return Ok(value);
             }
         }
 
@@ -265,6 +308,7 @@ impl Context {
             name
         )))
     }
+
     pub fn swap(&mut self, idx1: usize, idx2: usize) -> Result<(), RuntimeError> {
         if self.frames.len() == 0 {
             return Err(RuntimeError::DetailedError(
@@ -327,38 +371,12 @@ impl Context {
         }
         Ok(&stack[stack.len() - 1 - idx])
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::types::object::OnionObject;
-
-    // 计时
-    use arc_gc::gc::GC;
-    use std::time::Instant;
-
-    #[test]
-    fn benchmark() {
-        let mut context = Context::new();
-        let frame = Frame::Normal(HashMap::default(), Vec::new());
-        context.push_frame(frame);
-        let mut gc = GC::new();
-
-        context
-            .let_variable(
-                "i".to_string(),
-                OnionObject::Integer(0)
-                    .stabilize()
-                    .mutablize(&mut gc)
-                    .unwrap(),
-            )
-            .unwrap();
-        let start = Instant::now();
-        for _ in 0..30_000_000 {
-            let _ = context.get_variable_mut(&"i".to_string()).unwrap().clone();
-        }
-        let duration = start.elapsed();
-        println!("Time taken for 30,000,000 iterations: {:?}", duration);
+    pub fn replace_last_object(
+        stack: &mut Vec<OnionStaticObject>,
+        object: OnionStaticObject,
+    ) {
+        let last_index = stack.len() - 1;
+        stack[last_index] = object;
     }
 }

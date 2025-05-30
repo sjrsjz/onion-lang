@@ -47,7 +47,7 @@ pub enum OnionObject {
     Boolean(bool),
     Range(i64, i64),
     Null,
-    Undefined(String),
+    Undefined(Option<String>),
     Tuple(OnionTuple),
     Pair(OnionPair),
     Named(OnionNamed),
@@ -69,7 +69,7 @@ impl Debug for OnionObject {
             OnionObject::Boolean(b) => write!(f, "Boolean({})", b),
             OnionObject::Range(start, end) => write!(f, "Range({}, {})", start, end),
             OnionObject::Null => write!(f, "Null"),
-            OnionObject::Undefined(s) => write!(f, "Undefined({})", s),
+            OnionObject::Undefined(s) => write!(f, "Undefined({})", s.as_deref().unwrap_or("")),
             OnionObject::Tuple(tuple) => write!(f, "{:?}", tuple),
             OnionObject::Pair(pair) => write!(f, "{:?}", pair),
             OnionObject::Named(named) => write!(f, "{:?}", named),
@@ -294,9 +294,9 @@ impl OnionObject {
                 "false".to_string()
             }),
             OnionObject::Null => Ok("null".to_string()),
-            OnionObject::Undefined(s) => Ok(match s.as_str() {
-                "" => "undefined".to_string(),
-                _ => format!("undefined({})", s),
+            OnionObject::Undefined(s) => Ok(match s {
+                Some(s) => format!("undefined({})", s),
+                None => "undefined".to_string(),
             }),
             OnionObject::Range(start, end) => Ok(format!("{}..{}", start, end)),
             OnionObject::Tuple(tuple) => match tuple.elements.len() {
@@ -899,7 +899,7 @@ pub struct OnionStaticObject {
 impl Default for OnionStaticObject {
     fn default() -> Self {
         OnionStaticObject {
-            obj: OnionObject::Undefined("not initialized".to_string()),
+            obj: OnionObject::Undefined(None),
             arcs: GCArcStorage::None,
         }
     }

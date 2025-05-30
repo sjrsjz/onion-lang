@@ -65,7 +65,7 @@ pub fn load_undefined(
 ) -> Result<StepResult, RuntimeError> {
     runnable
         .context
-        .push_object(OnionObject::Undefined("".to_string()).stabilize())?;
+        .push_object(OnionObject::Undefined(None).stabilize())?;
     Ok(StepResult::Continue)
 }
 
@@ -350,20 +350,20 @@ pub fn let_var(
 
     let value = runnable.context.get_object_rev(0)?;
 
-    let name = {
-        let instruction = runnable.borrow_instruction()?;
-        instruction
-            .get_string_pool()
-            .get(index as usize)
-            .ok_or_else(|| {
-                RuntimeError::DetailedError(format!("Name index out of bounds: {}", index))
-            })?
-            .clone()
-    };
+    // let name = {
+    //     let instruction = runnable.borrow_instruction()?;
+    //     instruction
+    //         .get_string_pool()
+    //         .get(index as usize)
+    //         .ok_or_else(|| {
+    //             RuntimeError::DetailedError(format!("Name index out of bounds: {}", index))
+    //         })?
+    //         .clone()
+    // };
 
     runnable
         .context
-        .let_variable(name, value.clone())
+        .let_variable(index as usize, value.clone())
         .map_err(RuntimeError::ObjectError)?;
     Ok(StepResult::Continue)
 }
@@ -380,16 +380,19 @@ pub fn get_var(
         )));
     };
 
-    let value = {
-        let instruction = runnable.borrow_instruction()?;
-        let name = instruction
-            .get_string_pool()
-            .get(index as usize)
-            .ok_or_else(|| {
-                RuntimeError::DetailedError(format!("Name index out of bounds: {}", index))
-            })?;
-        runnable.context.get_variable(name)?
-    };
+    // let value = {
+    //     let instruction = runnable.borrow_instruction()?;
+    //     let name = instruction
+    //         .get_string_pool()
+    //         .get(index as usize)
+    //         .ok_or_else(|| {
+    //             RuntimeError::DetailedError(format!("Name index out of bounds: {}", index))
+    //         })?;
+    //     runnable.context.get_variable(name)?
+    // };
+
+    let value = runnable.context.get_variable(index as usize)?;
+
     runnable.context.push_object(value.clone())?;
     Ok(StepResult::Continue)
 }
@@ -468,10 +471,10 @@ pub fn key_of(
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let obj = runnable.context.get_object_rev(0)?;
+    let stack = runnable.context.get_current_stack_mut()?;
+    let obj = Context::get_object_from_stack(stack, 0)?;
     let key = obj.weak().key_of().map_err(RuntimeError::ObjectError)?;
-    runnable.context.discard_objects(1)?;
-    runnable.context.push_object(key)?;
+    Context::replace_last_object(stack, key);
     Ok(StepResult::Continue)
 }
 
@@ -480,10 +483,10 @@ pub fn value_of(
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    let obj = runnable.context.get_object_rev(0)?;
+    let stack = runnable.context.get_current_stack_mut()?;
+    let obj = Context::get_object_from_stack(stack, 0)?;
     let value = obj.weak().value_of().map_err(RuntimeError::ObjectError)?;
-    runnable.context.discard_objects(1)?;
-    runnable.context.push_object(value)?;
+    Context::replace_last_object(stack, value);
     Ok(StepResult::Continue)
 }
 
@@ -496,8 +499,7 @@ pub fn type_of(
     let stack = runnable.context.get_current_stack_mut()?;
     let obj = Context::get_object_from_stack(stack, 0)?;
     let type_name = obj.weak().type_of().map_err(RuntimeError::ObjectError)?;
-    Context::discard_from_stack(stack, 1)?;
-    Context::push_to_stack(stack, OnionObject::String(type_name).stabilize());
+    Context::replace_last_object(stack, OnionObject::String(type_name).stabilize());
     Ok(StepResult::Continue)
 }
 
@@ -946,9 +948,10 @@ pub fn new_frame(
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObject>,
 ) -> Result<StepResult, RuntimeError> {
-    runnable
-        .context
-        .push_frame(Frame::Normal(HashMap::default(), vec![]));
+    runnable.context.push_frame(Frame {
+        variables: HashMap::default(),
+        stack: vec![],
+    });
     Ok(StepResult::Continue)
 }
 
@@ -1057,13 +1060,13 @@ pub fn call_lambda(
     let args = runnable.context.get_object_rev(0)?;
     let new_runnable = lambda
         .weak()
-        .with_data(|lambda| {
-            if let OnionObject::Lambda(lambda) = lambda {
-                let assigned = lambda.parameter.as_ref().with_data(|parameter| {
+        .with_data(|lambda_ref| {
+            if let OnionObject::Lambda(lambda_ref) = lambda_ref {
+                let assigned = lambda_ref.parameter.as_ref().with_data(|parameter| {
                     let OnionObject::Tuple(parameters) = parameter else {
                         return Err(ObjectError::InvalidType(format!(
                             "Lambda parameters are not a Tuple: {:?}",
-                            lambda
+                            lambda_ref
                         )));
                     };
 
@@ -1075,16 +1078,18 @@ pub fn call_lambda(
                     };
                     parameters.clone_and_named_assignment(args_tuple)
                 })?;
-                lambda.create_runnable(assigned, gc).map_err(|e| {
-                    ObjectError::InvalidType(format!(
-                        "Failed to create runnable from lambda: {}",
-                        e
-                    ))
-                })
+                lambda_ref
+                    .create_runnable(assigned, lambda, gc)
+                    .map_err(|e| {
+                        ObjectError::InvalidType(format!(
+                            "Failed to create runnable from lambda: {}",
+                            e
+                        ))
+                    })
             } else {
                 Err(ObjectError::InvalidType(format!(
                     "Object is not a Lambda: {:?}",
-                    lambda
+                    lambda_ref
                 )))
             }
         })
@@ -1162,6 +1167,15 @@ pub fn import(
             e
         ))
     })?;
+    match VMInstructionPackage::validate(&package) {
+        Err(e) => {
+            return Err(RuntimeError::DetailedError(format!(
+                "Invalid VM instruction package: {}",
+                e
+            )))
+        }
+        Ok(_) => {}
+    }
     runnable.context.discard_objects(1)?;
     runnable
         .context
@@ -1178,13 +1192,13 @@ pub fn sync_call(
     let args = runnable.context.get_object_rev(0)?;
     let new_runnable = lambda
         .weak()
-        .with_data(|lambda| {
-            if let OnionObject::Lambda(lambda) = lambda {
-                let assigned = lambda.parameter.as_ref().with_data(|parameter| {
+        .with_data(|lambda_ref| {
+            if let OnionObject::Lambda(lambda_ref) = lambda_ref {
+                let assigned = lambda_ref.parameter.as_ref().with_data(|parameter| {
                     let OnionObject::Tuple(parameters) = parameter else {
                         return Err(ObjectError::InvalidType(format!(
                             "Lambda parameters are not a Tuple: {:?}",
-                            lambda
+                            lambda_ref
                         )));
                     };
 
@@ -1196,16 +1210,18 @@ pub fn sync_call(
                     };
                     parameters.clone_and_named_assignment(args_tuple)
                 })?;
-                lambda.create_runnable(assigned, gc).map_err(|e| {
-                    ObjectError::InvalidType(format!(
-                        "Failed to create runnable from lambda: {}",
-                        e
-                    ))
-                })
+                lambda_ref
+                    .create_runnable(assigned, lambda, gc)
+                    .map_err(|e| {
+                        ObjectError::InvalidType(format!(
+                            "Failed to create runnable from lambda: {}",
+                            e
+                        ))
+                    })
             } else {
                 Err(ObjectError::InvalidType(format!(
                     "Object is not a Lambda: {:?}",
-                    lambda
+                    lambda_ref
                 )))
             }
         })
@@ -1242,13 +1258,13 @@ pub fn async_call(
     let args = runnable.context.get_object_rev(0)?;
     let new_runnable = lambda
         .weak()
-        .with_data(|lambda| {
-            if let OnionObject::Lambda(lambda) = lambda {
-                let assigned = lambda.parameter.as_ref().with_data(|parameter| {
+        .with_data(|lambda_ref| {
+            if let OnionObject::Lambda(lambda_ref) = lambda_ref {
+                let assigned = lambda_ref.parameter.as_ref().with_data(|parameter| {
                     let OnionObject::Tuple(parameters) = parameter else {
                         return Err(ObjectError::InvalidType(format!(
                             "Lambda parameters are not a Tuple: {:?}",
-                            lambda
+                            lambda_ref
                         )));
                     };
 
@@ -1260,16 +1276,18 @@ pub fn async_call(
                     };
                     parameters.clone_and_named_assignment(args_tuple)
                 })?;
-                lambda.create_runnable(assigned, gc).map_err(|e| {
-                    ObjectError::InvalidType(format!(
-                        "Failed to create runnable from lambda: {}",
-                        e
-                    ))
-                })
+                lambda_ref
+                    .create_runnable(assigned, lambda, gc)
+                    .map_err(|e| {
+                        ObjectError::InvalidType(format!(
+                            "Failed to create runnable from lambda: {}",
+                            e
+                        ))
+                    })
             } else {
                 Err(ObjectError::InvalidType(format!(
                     "Object is not a Lambda: {:?}",
-                    lambda
+                    lambda_ref
                 )))
             }
         })

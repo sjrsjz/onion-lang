@@ -128,7 +128,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut parse_params = HashMap::new();
     parse_params.insert(
         "json_string".to_string(),
-        OnionObject::Undefined("JSON string to parse".to_string()).stabilize(),
+        OnionObject::Undefined(Some("JSON string to parse".to_string())).stabilize(),
     );
     
     // JSON.parse 函数
@@ -154,7 +154,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut stringify_params = HashMap::new();
     stringify_params.insert(
         "object".to_string(),
-        OnionObject::Undefined("Object to stringify".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Object to stringify".to_string())).stabilize(),
     );
     
     // JSON.stringify 函数
@@ -176,7 +176,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut stringify_pretty_params = HashMap::new();
     stringify_pretty_params.insert(
         "object".to_string(),
-        OnionObject::Undefined("Object to stringify with pretty formatting".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Object to stringify with pretty formatting".to_string())).stabilize(),
     );
     
     // JSON.stringify_pretty 函数

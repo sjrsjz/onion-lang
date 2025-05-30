@@ -2,9 +2,7 @@ use std::collections::HashMap;
 
 use onion_vm::{
     lambda::runnable::RuntimeError,
-    types::{
-        object::{ObjectError, OnionObject, OnionStaticObject},
-    },
+    types::object::{ObjectError, OnionObject, OnionStaticObject},
     GC,
 };
 
@@ -18,13 +16,11 @@ fn length(
         .weak()
         .with_data(|data| {
             let string = get_attr_direct(data, "string".to_string())?;
-            string.weak().with_data(|string_data| {
-                match string_data {
-                    OnionObject::String(s) => Ok(OnionObject::Integer(s.len() as i64).stabilize()),
-                    _ => Err(ObjectError::InvalidOperation(
-                        "length requires string".to_string(),
-                    )),
-                }
+            string.weak().with_data(|string_data| match string_data {
+                OnionObject::String(s) => Ok(OnionObject::Integer(s.len() as i64).stabilize()),
+                _ => Err(ObjectError::InvalidOperation(
+                    "length requires string".to_string(),
+                )),
             })
         })
         .map_err(RuntimeError::ObjectError)
@@ -38,13 +34,11 @@ fn trim(
         .weak()
         .with_data(|data| {
             let string = get_attr_direct(data, "string".to_string())?;
-            string.weak().with_data(|string_data| {
-                match string_data {
-                    OnionObject::String(s) => Ok(OnionObject::String(s.trim().to_string()).stabilize()),
-                    _ => Err(ObjectError::InvalidOperation(
-                        "trim requires string".to_string(),
-                    )),
-                }
+            string.weak().with_data(|string_data| match string_data {
+                OnionObject::String(s) => Ok(OnionObject::String(s.trim().to_string()).stabilize()),
+                _ => Err(ObjectError::InvalidOperation(
+                    "trim requires string".to_string(),
+                )),
             })
         })
         .map_err(RuntimeError::ObjectError)
@@ -58,13 +52,11 @@ fn uppercase(
         .weak()
         .with_data(|data| {
             let string = get_attr_direct(data, "string".to_string())?;
-            string.weak().with_data(|string_data| {
-                match string_data {
-                    OnionObject::String(s) => Ok(OnionObject::String(s.to_uppercase()).stabilize()),
-                    _ => Err(ObjectError::InvalidOperation(
-                        "uppercase requires string".to_string(),
-                    )),
-                }
+            string.weak().with_data(|string_data| match string_data {
+                OnionObject::String(s) => Ok(OnionObject::String(s.to_uppercase()).stabilize()),
+                _ => Err(ObjectError::InvalidOperation(
+                    "uppercase requires string".to_string(),
+                )),
             })
         })
         .map_err(RuntimeError::ObjectError)
@@ -78,13 +70,11 @@ fn lowercase(
         .weak()
         .with_data(|data| {
             let string = get_attr_direct(data, "string".to_string())?;
-            string.weak().with_data(|string_data| {
-                match string_data {
-                    OnionObject::String(s) => Ok(OnionObject::String(s.to_lowercase()).stabilize()),
-                    _ => Err(ObjectError::InvalidOperation(
-                        "lowercase requires string".to_string(),
-                    )),
-                }
+            string.weak().with_data(|string_data| match string_data {
+                OnionObject::String(s) => Ok(OnionObject::String(s.to_lowercase()).stabilize()),
+                _ => Err(ObjectError::InvalidOperation(
+                    "lowercase requires string".to_string(),
+                )),
             })
         })
         .map_err(RuntimeError::ObjectError)
@@ -99,18 +89,18 @@ fn contains(
         .with_data(|data| {
             let string = get_attr_direct(data, "string".to_string())?;
             let substring = get_attr_direct(data, "substring".to_string())?;
-            
+
             string.weak().with_data(|string_data| {
-                substring.weak().with_data(|substring_data| {
-                    match (string_data, substring_data) {
+                substring
+                    .weak()
+                    .with_data(|substring_data| match (string_data, substring_data) {
                         (OnionObject::String(s), OnionObject::String(sub)) => {
                             Ok(OnionObject::Boolean(s.contains(sub)).stabilize())
                         }
                         _ => Err(ObjectError::InvalidOperation(
                             "contains requires string arguments".to_string(),
                         )),
-                    }
-                })
+                    })
             })
         })
         .map_err(RuntimeError::ObjectError)
@@ -125,19 +115,17 @@ fn concat(
         .with_data(|data| {
             let a = get_attr_direct(data, "a".to_string())?;
             let b = get_attr_direct(data, "b".to_string())?;
-            
+
             a.weak().with_data(|a_data| {
-                b.weak().with_data(|b_data| {
-                    match (a_data, b_data) {
-                        (OnionObject::String(s1), OnionObject::String(s2)) => {
-                            let mut result = s1.clone();
-                            result.push_str(s2);
-                            Ok(OnionObject::String(result).stabilize())
-                        }
-                        _ => Err(ObjectError::InvalidOperation(
-                            "concat requires string arguments".to_string(),
-                        )),
+                b.weak().with_data(|b_data| match (a_data, b_data) {
+                    (OnionObject::String(s1), OnionObject::String(s2)) => {
+                        let mut result = s1.clone();
+                        result.push_str(s2);
+                        Ok(OnionObject::String(result).stabilize())
                     }
+                    _ => Err(ObjectError::InvalidOperation(
+                        "concat requires string arguments".to_string(),
+                    )),
                 })
             })
         })
@@ -151,7 +139,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut length_params = HashMap::new();
     length_params.insert(
         "string".to_string(),
-        OnionObject::Undefined("String to get length".to_string()).stabilize(),
+        OnionObject::Undefined(Some("String to get length".to_string())).stabilize(),
     );
     module.insert(
         "length".to_string(),
@@ -168,7 +156,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut trim_params = HashMap::new();
     trim_params.insert(
         "string".to_string(),
-        OnionObject::Undefined("String to trim".to_string()).stabilize(),
+        OnionObject::Undefined(Some("String to trim".to_string())).stabilize(),
     );
     module.insert(
         "trim".to_string(),
@@ -185,7 +173,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut uppercase_params = HashMap::new();
     uppercase_params.insert(
         "string".to_string(),
-        OnionObject::Undefined("String to convert to uppercase".to_string()).stabilize(),
+        OnionObject::Undefined(Some("String to convert to uppercase".to_string())).stabilize(),
     );
     module.insert(
         "uppercase".to_string(),
@@ -202,7 +190,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut lowercase_params = HashMap::new();
     lowercase_params.insert(
         "string".to_string(),
-        OnionObject::Undefined("String to convert to lowercase".to_string()).stabilize(),
+        OnionObject::Undefined(Some("String to convert to lowercase".to_string())).stabilize(),
     );
     module.insert(
         "lowercase".to_string(),
@@ -219,11 +207,11 @@ pub fn build_module() -> OnionStaticObject {
     let mut contains_params = HashMap::new();
     contains_params.insert(
         "string".to_string(),
-        OnionObject::Undefined("String to search within".to_string()).stabilize(),
+        OnionObject::Undefined(Some("String to search within".to_string())).stabilize(),
     );
     contains_params.insert(
         "substring".to_string(),
-        OnionObject::Undefined("Substring to search for".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Substring to search for".to_string())).stabilize(),
     );
     module.insert(
         "contains".to_string(),
@@ -240,11 +228,11 @@ pub fn build_module() -> OnionStaticObject {
     let mut concat_params = HashMap::new();
     concat_params.insert(
         "a".to_string(),
-        OnionObject::Undefined("First string to concatenate".to_string()).stabilize(),
+        OnionObject::Undefined(Some("First string to concatenate".to_string())).stabilize(),
     );
     concat_params.insert(
         "b".to_string(),
-        OnionObject::Undefined("Second string to concatenate".to_string()).stabilize(),
+        OnionObject::Undefined(Some("Second string to concatenate".to_string())).stabilize(),
     );
     module.insert(
         "concat".to_string(),
