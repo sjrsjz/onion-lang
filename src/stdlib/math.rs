@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use onion_vm::{
     lambda::runnable::RuntimeError,
-    types::object::{ObjectError, OnionObject, OnionStaticObject},
+    types::object::{ObjectError, OnionObject, OnionObjectCell, OnionStaticObject},
     GC,
 };
 
@@ -10,7 +10,7 @@ use super::{build_named_dict, get_attr_direct, wrap_native_function};
 
 fn abs(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
@@ -29,7 +29,7 @@ fn abs(
 
 fn sin(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
@@ -48,7 +48,7 @@ fn sin(
 
 fn cos(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
@@ -67,7 +67,7 @@ fn cos(
 
 fn tan(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
@@ -86,7 +86,7 @@ fn tan(
 
 fn log(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
@@ -121,7 +121,7 @@ fn log(
 
 fn sqrt(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
@@ -156,7 +156,7 @@ fn sqrt(
 
 fn pow(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
@@ -198,7 +198,7 @@ fn pow(
 
 fn exp(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
@@ -217,7 +217,7 @@ fn exp(
 
 fn floor(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
@@ -236,7 +236,7 @@ fn floor(
 
 fn ceil(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
@@ -255,7 +255,7 @@ fn ceil(
 
 fn round(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
@@ -274,7 +274,7 @@ fn round(
 
 fn asin(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
@@ -310,7 +310,7 @@ fn asin(
 
 fn acos(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
@@ -346,7 +346,7 @@ fn acos(
 
 fn atan(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()

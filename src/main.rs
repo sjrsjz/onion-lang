@@ -314,7 +314,11 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
         "__main__".to_string(),
     );
 
-    let OnionObject::Lambda(lambda_ref) = lambda.weak() else {
+    let OnionObject::Lambda(lambda_ref) = &*lambda
+        .weak()
+        .try_borrow()
+        .map_err(|e| format!("Failed to borrow Lambda definition: {:?}", e))?
+    else {
         return Err("Failed to create Lambda definition".to_string());
     };
 
@@ -323,8 +327,10 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
     // Bind arguments
     let assigned_argument = lambda_ref
         .with_parameter(|param| {
-            unwrap_object!(param, OnionObject::Tuple)?
-                .clone_and_named_assignment(unwrap_object!(args.weak(), OnionObject::Tuple)?)
+            unwrap_object!(param, OnionObject::Tuple)?.clone_and_named_assignment(unwrap_object!(
+                &*args.weak().try_borrow()?,
+                OnionObject::Tuple
+            )?)
         })
         .map_err(|e| format!("Failed to assign arguments to Lambda: {:?}", e))?;
 
@@ -349,16 +355,37 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
                         unreachable!()
                     }
                     StepResult::Return(result) => {
-                        let result = unwrap_object!(result.weak(), OnionObject::Pair)
-                            .map_err(|e| format!("Failed to unwrap result: {:?}", e))?;
-                        let success = unwrap_object!(result.get_key(), OnionObject::Boolean)
-                            .map_err(|e| format!("Failed to get success key: {:?}", e))?;
+                        let result_borrowed = result
+                            .weak()
+                            .try_borrow()
+                            .map_err(|e| format!("Failed to borrow result: {:?}", e))?;
+                        let result = unwrap_object!(
+                            &*result_borrowed,
+                            OnionObject::Pair
+                        )
+                        .map_err(|e| format!("Failed to unwrap result: {:?}", e))?;
+                        let key_borrowed = result
+                            .get_key()
+                            .try_borrow()
+                            .map_err(|e| format!("Failed to borrow result: {:?}", e))?;
+                        let success = *unwrap_object!(
+                            &*key_borrowed,
+                            OnionObject::Boolean
+                        )
+                        .map_err(|e| format!("Failed to get success key: {:?}", e))?;
                         if !success {
+                            let value_borrowed = result
+                                .get_value()
+                                .try_borrow()
+                                .map_err(|e| format!("Failed to borrow result: {:?}", e))?;
                             println!(
                                 "{} {}",
                                 "Error:".red().bold(),
-                                unwrap_object!(result.get_value(), OnionObject::String)
-                                    .map_err(|e| format!("Failed to get error message: {:?}", e))?
+                                unwrap_object!(
+                                    &*value_borrowed,
+                                    OnionObject::String
+                                )
+                                .map_err(|e| format!("Failed to get error message: {:?}", e))?
                             );
                             return Err("Execution failed".to_string());
                         }
@@ -374,10 +401,13 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
                             return Ok(());
                         }
                         // Print result and exit
+                        let result_value_borrowed = result
+                            .get_value()
+                            .try_borrow()
+                            .map_err(|e| format!("Failed to borrow result value: {:?}", e))?;
                         println!(
                             "{}",
-                            result
-                                .get_value()
+                            result_value_borrowed
                                 .to_string()
                                 .map_err(|e| format!("Failed to get result value: {:?}", e))?
                         );

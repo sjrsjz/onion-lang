@@ -11,7 +11,7 @@ use onion_vm::{
     onion_tuple,
     types::{
         lambda::definition::{LambdaBody, OnionLambdaDefinition},
-        object::{ObjectError, OnionObject, OnionStaticObject},
+        object::{ObjectError, OnionObject, OnionObjectCell, OnionStaticObject},
         tuple::OnionTuple,
     },
     unwrap_object, GC,
@@ -75,7 +75,8 @@ impl AsyncHttpRequest {
                 *state_guard = RequestState::Completed(result);
             }
         });
-    }    fn perform_http_request(
+    }
+    fn perform_http_request(
         url: &str,
         method: &str,
         headers: &HashMap<String, String>,
@@ -90,7 +91,7 @@ impl AsyncHttpRequest {
         // 在异步runtime中执行HTTP请求
         rt.block_on(async {
             let client = reqwest::Client::new();
-            
+
             // 构建请求
             let request_builder = match method.to_uppercase().as_str() {
                 "GET" => client.get(url),
@@ -134,7 +135,7 @@ impl AsyncHttpRequest {
                 Ok(response) => {
                     let status = response.status();
                     let status_code = status.as_u16();
-                    
+
                     match response.text().await {
                         Ok(text) => {
                             // 构建包含状态码和响应体的JSON响应
@@ -148,7 +149,7 @@ impl AsyncHttpRequest {
                             });
                             Ok(response_json.to_string())
                         }
-                        Err(e) => Err(format!("Failed to read response body: {}", e))
+                        Err(e) => Err(format!("Failed to read response body: {}", e)),
                     }
                 }
                 Err(e) => {
@@ -172,12 +173,12 @@ impl Runnable for AsyncHttpRequest {
     fn set_argument(
         &mut self,
         _argument: OnionStaticObject,
-        _gc: &mut GC<OnionObject>,
+        _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), ObjectError> {
         Ok(())
     }
 
-    fn step(&mut self, _gc: &mut GC<OnionObject>) -> Result<StepResult, RuntimeError> {
+    fn step(&mut self, _gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
         let state = {
             let state_guard = self.state.lock().unwrap();
             state_guard.clone()
@@ -213,14 +214,14 @@ impl Runnable for AsyncHttpRequest {
     fn receive(
         &mut self,
         _step_result: StepResult,
-        _gc: &mut GC<OnionObject>,
+        _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         Err(RuntimeError::DetailedError(
             "AsyncHttpRequest does not support receive".to_string(),
         ))
     }
 
-    fn copy(&self, _gc: &mut GC<OnionObject>) -> Box<dyn Runnable> {
+    fn copy(&self, _gc: &mut GC<OnionObjectCell>) -> Box<dyn Runnable> {
         Box::new(AsyncHttpRequest {
             url: self.url.clone(),
             method: self.method.clone(),
@@ -241,6 +242,7 @@ fn parse_request_params(
         // 获取URL
         let url = get_attr_direct(data, "url".to_string())?
             .weak()
+            .try_borrow()?
             .to_string()
             .map_err(|e| ObjectError::InvalidType(format!("Invalid URL: {}", e)))?;
 
@@ -248,17 +250,26 @@ fn parse_request_params(
         let method = get_attr_direct(data, "method".to_string())
             .unwrap_or_else(|_| OnionObject::String("GET".to_string()).stabilize())
             .weak()
+            .try_borrow()?
             .to_string()
             .unwrap_or_else(|_| "GET".to_string());
 
         // 获取headers，如果有的话
         let mut headers = HashMap::new();
         if let Ok(headers_obj) = get_attr_direct(data, "headers".to_string()) {
-            if let OnionObject::Tuple(headers_tuple) = headers_obj.weak() {
+            if let OnionObject::Tuple(headers_tuple) = &*headers_obj.weak().try_borrow()? {
                 for element in &headers_tuple.elements {
-                    if let OnionObject::Named(named) = element {
-                        let key = named.get_key().to_string().unwrap_or_default();
-                        let value = named.get_value().to_string().unwrap_or_default();
+                    if let OnionObject::Named(named) = &*element.try_borrow()? {
+                        let key = named
+                            .get_key()
+                            .try_borrow()?
+                            .to_string()
+                            .unwrap_or_default();
+                        let value = named
+                            .get_value()
+                            .try_borrow()?
+                            .to_string()
+                            .unwrap_or_default();
                         headers.insert(key, value);
                     }
                 }
@@ -268,7 +279,7 @@ fn parse_request_params(
         // 获取body，如果有的话
         let body = get_attr_direct(data, "body".to_string())
             .ok()
-            .and_then(|body_obj| body_obj.weak().to_string().ok());
+            .and_then(|body_obj| body_obj.weak().try_borrow().ok()?.to_string().ok());
 
         Ok((url, method, headers, body))
     })
@@ -277,13 +288,14 @@ fn parse_request_params(
 /// 创建异步HTTP GET请求
 fn http_get(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let url = argument
         .weak()
         .with_data(|data| {
             get_attr_direct(data, "url".to_string())?
                 .weak()
+                .try_borrow()?
                 .to_string()
                 .map_err(|e| ObjectError::InvalidType(format!("Invalid URL: {}", e)))
         })
@@ -308,19 +320,20 @@ fn http_get(
 /// 创建异步HTTP POST请求
 fn http_post(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let (url, body) = argument
         .weak()
         .with_data(|data| {
             let url = get_attr_direct(data, "url".to_string())?
                 .weak()
+                .try_borrow()?
                 .to_string()
                 .map_err(|e| ObjectError::InvalidType(format!("Invalid URL: {}", e)))?;
 
             let body = get_attr_direct(data, "body".to_string())
                 .ok()
-                .and_then(|body_obj| body_obj.weak().to_string().ok());
+                .and_then(|body_obj| body_obj.weak().try_borrow().ok()?.to_string().ok());
 
             Ok((url, body))
         })
@@ -344,19 +357,20 @@ fn http_post(
 /// 创建异步HTTP PUT请求
 fn http_put(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let (url, body) = argument
         .weak()
         .with_data(|data| {
             let url = get_attr_direct(data, "url".to_string())?
                 .weak()
+                .try_borrow()?
                 .to_string()
                 .map_err(|e| ObjectError::InvalidType(format!("Invalid URL: {}", e)))?;
 
             let body = get_attr_direct(data, "body".to_string())
                 .ok()
-                .and_then(|body_obj| body_obj.weak().to_string().ok());
+                .and_then(|body_obj| body_obj.weak().try_borrow().ok()?.to_string().ok());
 
             Ok((url, body))
         })
@@ -364,7 +378,7 @@ fn http_put(
 
     let headers = HashMap::new();
     let request = AsyncHttpRequest::new(url, "PUT".to_string(), headers, body);
-    
+
     let lambda_body = LambdaBody::NativeFunction(Arc::new(RefCell::new(request)));
     let lambda_def = OnionLambdaDefinition::new_static(
         &onion_tuple!(),
@@ -380,13 +394,14 @@ fn http_put(
 /// 创建异步HTTP DELETE请求
 fn http_delete(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let url = argument
         .weak()
         .with_data(|data| {
             get_attr_direct(data, "url".to_string())?
                 .weak()
+                .try_borrow()?
                 .to_string()
                 .map_err(|e| ObjectError::InvalidType(format!("Invalid URL: {}", e)))
         })
@@ -394,7 +409,7 @@ fn http_delete(
 
     let headers = HashMap::new();
     let request = AsyncHttpRequest::new(url, "DELETE".to_string(), headers, None);
-    
+
     let lambda_body = LambdaBody::NativeFunction(Arc::new(RefCell::new(request)));
     let lambda_def = OnionLambdaDefinition::new_static(
         &onion_tuple!(),
@@ -410,19 +425,20 @@ fn http_delete(
 /// 创建异步HTTP PATCH请求
 fn http_patch(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let (url, body) = argument
         .weak()
         .with_data(|data| {
             let url = get_attr_direct(data, "url".to_string())?
                 .weak()
+                .try_borrow()?
                 .to_string()
                 .map_err(|e| ObjectError::InvalidType(format!("Invalid URL: {}", e)))?;
 
             let body = get_attr_direct(data, "body".to_string())
                 .ok()
-                .and_then(|body_obj| body_obj.weak().to_string().ok());
+                .and_then(|body_obj| body_obj.weak().try_borrow().ok()?.to_string().ok());
 
             Ok((url, body))
         })
@@ -430,7 +446,7 @@ fn http_patch(
 
     let headers = HashMap::new();
     let request = AsyncHttpRequest::new(url, "PATCH".to_string(), headers, body);
-    
+
     let lambda_body = LambdaBody::NativeFunction(Arc::new(RefCell::new(request)));
     let lambda_def = OnionLambdaDefinition::new_static(
         &onion_tuple!(),
@@ -444,7 +460,7 @@ fn http_patch(
 }
 fn http_request(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let (url, method, headers, body) =
         parse_request_params(&argument).map_err(RuntimeError::ObjectError)?;
@@ -467,13 +483,14 @@ fn http_request(
 /// 创建同步HTTP GET请求（用于简单测试）
 fn http_get_sync(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let url = argument
         .weak()
         .with_data(|data| {
             get_attr_direct(data, "url".to_string())?
                 .weak()
+                .try_borrow()?
                 .to_string()
                 .map_err(|e| ObjectError::InvalidType(format!("Invalid URL: {}", e)))
         })
@@ -490,19 +507,20 @@ fn http_get_sync(
 /// 创建同步HTTP POST请求（用于简单测试）
 fn http_post_sync(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let (url, body) = argument
         .weak()
         .with_data(|data| {
             let url = get_attr_direct(data, "url".to_string())?
                 .weak()
+                .try_borrow()?
                 .to_string()
                 .map_err(|e| ObjectError::InvalidType(format!("Invalid URL: {}", e)))?;
 
             let body = get_attr_direct(data, "body".to_string())
                 .ok()
-                .and_then(|body_obj| body_obj.weak().to_string().ok());
+                .and_then(|body_obj| body_obj.weak().try_borrow().ok()?.to_string().ok());
 
             Ok((url, body))
         })
@@ -597,7 +615,7 @@ pub fn build_module() -> OnionStaticObject {
             "http::delete".to_string(),
             http_delete,
         ),
-    );    // PATCH请求参数
+    ); // PATCH请求参数
     let mut patch_params = HashMap::new();
     patch_params.insert(
         "url".to_string(),

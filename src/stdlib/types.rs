@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use onion_vm::{
     lambda::runnable::RuntimeError,
-    types::object::{ObjectError, OnionObject, OnionStaticObject},
+    types::object::{ObjectError, OnionObject, OnionObjectCell, OnionStaticObject},
     GC,
 };
 
@@ -11,13 +11,13 @@ use super::{build_named_dict, get_attr_direct, wrap_native_function};
 /// Convert object to string
 fn to_string(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
         .with_data(|data| {
             let value = get_attr_direct(data, "value".to_string())?;
-            let string_representation = value.weak().to_string()?;
+            let string_representation = value.weak().try_borrow()?.to_string()?;
             Ok(OnionObject::String(string_representation).stabilize())
         })
         .map_err(RuntimeError::ObjectError)
@@ -26,7 +26,7 @@ fn to_string(
 /// Convert object to integer
 fn to_int(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
@@ -58,7 +58,7 @@ fn to_int(
 /// Convert object to float
 fn to_float(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
@@ -90,7 +90,7 @@ fn to_float(
 /// Convert object to boolean
 fn to_bool(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
@@ -125,7 +125,7 @@ fn to_bool(
 /// Get object type name
 fn type_of(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
@@ -143,7 +143,7 @@ fn type_of(
 /// Check if object is an integer
 fn is_int(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
@@ -161,7 +161,7 @@ fn is_int(
 /// Check if object is a float
 fn is_float(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
@@ -179,7 +179,7 @@ fn is_float(
 /// Check if object is a string
 fn is_string(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
@@ -197,7 +197,7 @@ fn is_string(
 /// Check if object is a boolean
 fn is_bool(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
@@ -215,17 +215,19 @@ fn is_bool(
 // get attr or undefined
 fn find(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
         .with_data(|data| {
             let obj = get_attr_direct(data, "obj".to_string())?;
             let key = get_attr_direct(data, "key".to_string())?;
+            let key_borrowed = key.weak().try_borrow()?;
             match obj
                 .weak()
-                .with_attribute(key.weak(), &|obj| Ok(obj.clone().stabilize()))
-            {
+                .with_attribute(&*key_borrowed, &|obj| {
+                    Ok(obj.clone().stabilize())
+                }) {
                 Ok(value) => Ok(value),
                 Err(ObjectError::InvalidOperation(err)) => {
                     // If the attribute is not found, return undefined

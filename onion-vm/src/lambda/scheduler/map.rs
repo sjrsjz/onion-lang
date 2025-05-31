@@ -3,7 +3,7 @@ use arc_gc::gc::GC;
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
     types::{
-        object::{ObjectError, OnionObject, OnionStaticObject},
+        object::{ObjectError, OnionObject, OnionObjectCell, OnionStaticObject},
         tuple::OnionTuple,
     },
 };
@@ -20,11 +20,11 @@ impl Runnable for Mapping {
     fn set_argument(
         &mut self,
         _argument: OnionStaticObject,
-        _gc: &mut GC<OnionObject>,
+        _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), ObjectError> {
         Ok(()) // This collector does not use an argument, so we can ignore it.
     }
-    fn copy(&self, _gc: &mut GC<OnionObject>) -> Box<dyn Runnable> {
+    fn copy(&self, _gc: &mut GC<OnionObjectCell>) -> Box<dyn Runnable> {
         Box::new(Mapping {
             container: self.container.clone(),
             map: self.map.clone(),
@@ -36,7 +36,7 @@ impl Runnable for Mapping {
     fn receive(
         &mut self,
         step_result: StepResult,
-        _gc: &mut GC<OnionObject>,
+        _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         match step_result {
             StepResult::Return(result) => {
@@ -51,7 +51,7 @@ impl Runnable for Mapping {
         }
     }
 
-    fn step(&mut self, gc: &mut GC<OnionObject>) -> Result<StepResult, RuntimeError> {
+    fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
         self.container
             .weak()
             .with_data(|container| match container {
@@ -61,7 +61,8 @@ impl Runnable for Mapping {
                         let item_clone = item.clone();
                         self.map.weak().with_data(|filter| match filter {
                             OnionObject::Lambda(func) => {
-                                let OnionObject::Tuple(params) = func.parameter.as_ref() else {
+                                let OnionObject::Tuple(params) = &*func.parameter.try_borrow()?
+                                else {
                                     return Err(ObjectError::InvalidType(format!(
                                         "Map's parameter must be a tuple, got {:?}",
                                         func.parameter

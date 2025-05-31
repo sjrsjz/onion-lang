@@ -4,7 +4,7 @@ use onion_vm::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
     onion_tuple,
     types::{
-        lambda::definition::{LambdaBody, OnionLambdaDefinition}, named::OnionNamed, object::{ObjectError, OnionObject, OnionStaticObject}, tuple::OnionTuple
+        lambda::definition::{LambdaBody, OnionLambdaDefinition}, named::OnionNamed, object::{ObjectError, OnionObject, OnionObjectCell, OnionStaticObject}, tuple::OnionTuple
     },
     GC,
 };
@@ -36,7 +36,7 @@ pub fn get_attr_direct(obj: &OnionObject, key: String) -> Result<OnionStaticObje
 
 pub struct NativeFunctionGenerator<F>
 where
-    F: Fn(OnionStaticObject, &mut GC<OnionObject>) -> Result<OnionStaticObject, RuntimeError>
+    F: Fn(OnionStaticObject, &mut GC<OnionObjectCell>) -> Result<OnionStaticObject, RuntimeError>
         + 'static,
 {
     argument: OnionStaticObject,
@@ -45,19 +45,19 @@ where
 
 impl<F> Runnable for NativeFunctionGenerator<F>
 where
-    F: Fn(OnionStaticObject, &mut GC<OnionObject>) -> Result<OnionStaticObject, RuntimeError>
+    F: Fn(OnionStaticObject, &mut GC<OnionObjectCell>) -> Result<OnionStaticObject, RuntimeError>
         + 'static,
 {
     fn set_argument(
         &mut self,
         argument: OnionStaticObject,
-        _gc: &mut GC<OnionObject>,
+        _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), ObjectError> {
         self.argument = argument;
         Ok(())
     }
 
-    fn step(&mut self, gc: &mut GC<OnionObject>) -> Result<StepResult, RuntimeError> {
+    fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
         let argument = self.argument.clone();
         match &self.function.borrow_mut()(argument, gc) {
             Ok(result) => Ok(StepResult::Return(result.clone())),
@@ -68,14 +68,14 @@ where
     fn receive(
         &mut self,
         _step_result: StepResult,
-        _gc: &mut GC<OnionObject>,
+        _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         Err(RuntimeError::DetailedError(
             "receive not implemented".to_string(),
         ))
     }
 
-    fn copy(&self, _gc: &mut onion_vm::GC<OnionObject>) -> Box<dyn Runnable> {
+    fn copy(&self, _gc: &mut onion_vm::GC<OnionObjectCell>) -> Box<dyn Runnable> {
         Box::new(NativeFunctionGenerator {
             argument: self.argument.clone(),
             function: Arc::clone(&self.function),
@@ -91,7 +91,7 @@ pub fn wrap_native_function<F>(
     function: F,
 ) -> OnionStaticObject
 where
-    F: Fn(OnionStaticObject, &mut GC<OnionObject>) -> Result<OnionStaticObject, RuntimeError>
+    F: Fn(OnionStaticObject, &mut GC<OnionObjectCell>) -> Result<OnionStaticObject, RuntimeError>
         + 'static,
 {
     OnionLambdaDefinition::new_static(

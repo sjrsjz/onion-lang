@@ -2,12 +2,12 @@ use std::fmt::Debug;
 
 use arc_gc::{arc::GCArc, traceable::GCTraceable};
 
-use super::object::{ObjectError, OnionObject, OnionStaticObject};
+use super::object::{ObjectError, OnionObject, OnionObjectCell, OnionStaticObject};
 
 #[derive(Clone)]
 pub struct OnionPair {
-    pub key: Box<OnionObject>,   // 使用 Box 避免递归
-    pub value: Box<OnionObject>, // 使用 Box 避免递归
+    pub key: Box<OnionObjectCell>,   // 使用 Box 避免递归
+    pub value: Box<OnionObjectCell>, // 使用 Box 避免递归
 }
 
 impl GCTraceable for OnionPair {
@@ -24,7 +24,7 @@ impl Debug for OnionPair {
 }
 
 impl OnionPair {
-    pub fn new(key: OnionObject, value: OnionObject) -> Self {
+    pub fn new(key: OnionObjectCell, value: OnionObjectCell) -> Self {
         OnionPair {
             key: Box::new(key),
             value: Box::new(value),
@@ -35,26 +35,27 @@ impl OnionPair {
         OnionObject::Pair(OnionPair {
             key: Box::new(key.weak().clone()),
             value: Box::new(value.weak().clone()),
-        }).stabilize()
+        })
+        .stabilize()
     }
 
-    pub fn get_key(&self) -> &OnionObject {
+    pub fn get_key(&self) -> &OnionObjectCell {
         &self.key
     }
 
-    pub fn get_key_mut(&mut self) -> &mut OnionObject {
+    pub fn get_key_mut(&mut self) -> &mut OnionObjectCell {
         &mut self.key
     }
 
-    pub fn get_value(&self) -> &OnionObject {
+    pub fn get_value(&self) -> &OnionObjectCell {
         &self.value
     }
 
-    pub fn get_value_mut(&mut self) -> &mut OnionObject {
+    pub fn get_value_mut(&mut self) -> &mut OnionObjectCell {
         &mut self.value
     }
 
-    pub fn upgrade(&self) -> Option<Vec<GCArc<OnionObject>>> {
+    pub fn upgrade(&self) -> Option<Vec<GCArc<OnionObjectCell>>> {
         match (self.key.upgrade(), self.value.upgrade()) {
             (Some(mut key_arcs), Some(value_arcs)) => {
                 key_arcs.extend(value_arcs);

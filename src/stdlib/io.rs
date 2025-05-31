@@ -7,7 +7,7 @@ use onion_vm::{
     lambda::runnable::RuntimeError,
     onion_tuple,
     types::{
-        object::{ObjectError, OnionObject, OnionStaticObject},
+        object::{ObjectError, OnionObject, OnionObjectCell, OnionStaticObject},
         tuple::OnionTuple,
     },
     unwrap_object, GC,
@@ -17,7 +17,7 @@ use super::{build_named_dict, get_attr_direct, wrap_native_function};
 
 fn println(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
@@ -28,7 +28,10 @@ fn println(
                     tuple
                         .elements
                         .iter()
-                        .map(|element| element.to_string().unwrap_or("<unknown>".to_string()))
+                        .map(|element| match element.try_borrow() {
+                            Ok(obj) => obj.to_string().unwrap_or("<unknown>".to_string()),
+                            Err(_) => "<borrow error>".to_string(),
+                        })
                         .collect::<Vec<_>>()
                         .join(" ")
                 );
@@ -40,7 +43,7 @@ fn println(
 
 fn print(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
@@ -51,7 +54,10 @@ fn print(
                     tuple
                         .elements
                         .iter()
-                        .map(|element| element.to_string().unwrap_or("<unknown>".to_string()))
+                        .map(|element| match element.try_borrow() {
+                            Ok(obj) => obj.to_string().unwrap_or("<unknown>".to_string()),
+                            Err(_) => "<borrow error>".to_string(),
+                        })
                         .collect::<Vec<_>>()
                         .join(" ")
                 );
@@ -63,13 +69,14 @@ fn print(
 
 fn input(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
         .with_data(|data| {
             let hint = get_attr_direct(data, "hint".to_string())?
                 .weak()
+                .try_borrow()?
                 .to_string()?;
             print!("{}", hint);
             stdout()

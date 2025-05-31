@@ -55,25 +55,6 @@ pub fn start_repl() -> Result<()> {
                     continue;
                 }
 
-                if trimmed == "last" {
-                    // 显示最后一次执行的结果
-                    match repl_executor.get_last_result() {
-                        Some(result) => {
-                            match result.weak().to_string() {
-                                Ok(result_str) => {
-                                    println!("{} {}", "Last result:".cyan().bold(), result_str);
-                                }
-                                Err(_) => {
-                                    println!("{} Failed to convert result to string", "Error:".red().bold());
-                                }
-                            }
-                        }
-                        None => {
-                            println!("{}", "No results available".dimmed());
-                        }
-                    }
-                    continue;
-                }
 
                 if trimmed == "clear_history" {
                     // 清空历史记录

@@ -7,7 +7,7 @@ use arc_gc::gc::GC;
 
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
-    types::object::{ObjectError, OnionObject, OnionStaticObject},
+    types::object::{ObjectError, OnionObject, OnionObjectCell, OnionStaticObject},
 };
 
 use super::{
@@ -22,7 +22,7 @@ use super::{
 type InstructionHandler = fn(
     &mut OnionLambdaRunnable,
     &ProcessedOpcode,
-    &mut GC<OnionObject>,
+    &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError>;
 
 pub struct OnionLambdaRunnable {
@@ -47,7 +47,8 @@ impl OnionLambdaRunnable {
         this_lambda: OnionStaticObject,
         instruction: Arc<RefCell<VMInstructionPackage>>,
         ip: isize,
-    ) -> Result<Self, ObjectError> {        let mut new_context = Context::new();
+    ) -> Result<Self, ObjectError> {
+        let mut new_context = Context::new();
         Context::push_frame(
             &mut new_context,
             Frame {
@@ -56,7 +57,7 @@ impl OnionLambdaRunnable {
             },
         );
 
-        let OnionObject::Tuple(tuple) = argument.weak() else {
+        let OnionObject::Tuple(tuple) = &*argument.weak().try_borrow()? else {
             return Err(ObjectError::InvalidOperation(
                 "Argument must be a tuple".to_string(),
             ));
@@ -130,7 +131,7 @@ impl OnionLambdaRunnable {
             })?;
 
         for (_, item) in tuple.elements.iter().enumerate() {
-            match item {
+            match &*item.try_borrow()? {
                 OnionObject::Named(named) => {
                     named.get_key().with_data(|key| match key {
                         OnionObject::String(key_str) => {
@@ -255,7 +256,7 @@ impl OnionLambdaRunnable {
         instruction_table[VMInstruction::Assert as usize] = vm_instructions::assert;
 
         Ok(OnionLambdaRunnable {
-            argument,
+            argument: argument.clone(),
             capture,
             self_object,
             this_lambda,
@@ -278,7 +279,7 @@ impl Runnable for OnionLambdaRunnable {
     fn receive(
         &mut self,
         step_result: StepResult,
-        _gc: &mut GC<OnionObject>,
+        _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         if let StepResult::Return(result) = step_result {
             self.context.push_object(result)?;
@@ -289,7 +290,7 @@ impl Runnable for OnionLambdaRunnable {
             ))
         }
     }
-    fn step(&mut self, gc: &mut GC<OnionObject>) -> Result<StepResult, RuntimeError> {
+    fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
         if let Some(error) = &self.error {
             return Ok(StepResult::Error(error.clone()));
         }
@@ -333,7 +334,7 @@ impl Runnable for OnionLambdaRunnable {
         }
     }
 
-    fn copy(&self, _gc: &mut GC<OnionObject>) -> Box<dyn Runnable> {
+    fn copy(&self, _gc: &mut GC<OnionObjectCell>) -> Box<dyn Runnable> {
         Box::new(OnionLambdaRunnable {
             argument: self.argument.clone(),
             capture: self.capture.clone(),

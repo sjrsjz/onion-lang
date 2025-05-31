@@ -37,7 +37,7 @@ impl ReplExecutor {
 
     /// 获取历史执行结果数量
     pub fn history_count(&self) -> usize {
-        if let OnionObject::Tuple(tuple) = self.out_tuple.weak() {
+        if let OnionObject::Tuple(tuple) = &*self.out_tuple.weak().borrow() {
             tuple.elements.len()
         } else {
             0
@@ -46,11 +46,11 @@ impl ReplExecutor {
 
     /// 获取最后一次执行的结果
     pub fn get_last_result(&self) -> Option<OnionStaticObject> {
-        if let OnionObject::Tuple(tuple) = self.out_tuple.weak() {
+        if let OnionObject::Tuple(tuple) = &*self.out_tuple.weak().borrow() {
             tuple
                 .elements
                 .last()
-                .map(|obj| OnionStaticObject::new(obj.clone()))
+                .map(|obj| OnionStaticObject::new(obj.borrow().clone()))
         } else {
             None
         }
@@ -111,7 +111,11 @@ impl ReplExecutor {
             "__main__".to_string(),
         );
 
-        let OnionObject::Lambda(lambda_ref) = lambda.weak() else {
+        let OnionObject::Lambda(lambda_ref) = &*lambda
+            .weak()
+            .try_borrow()
+            .map_err(|e| format!("Failed to borrow Lambda definition: {:?}", e))?
+        else {
             return Err("Failed to create Lambda definition".to_string());
         };
 
@@ -120,8 +124,9 @@ impl ReplExecutor {
         // 绑定参数
         let assigned_argument = lambda_ref
             .with_parameter(|param| {
-                unwrap_object!(param, OnionObject::Tuple)?
-                    .clone_and_named_assignment(unwrap_object!(args.weak(), OnionObject::Tuple)?)
+                unwrap_object!(param, OnionObject::Tuple)?.clone_and_named_assignment(
+                    unwrap_object!(&*args.weak().try_borrow()?, OnionObject::Tuple)?,
+                )
             })
             .map_err(|e| format!("Failed to assign arguments to Lambda: {:?}", e))?;
 
@@ -145,14 +150,35 @@ impl ReplExecutor {
                         unreachable!()
                     }
                     StepResult::Return(result) => {
-                        let result = unwrap_object!(result.weak(), OnionObject::Pair)
-                            .map_err(|e| format!("Failed to unwrap result: {:?}", e))?;
-                        let success = unwrap_object!(result.get_key(), OnionObject::Boolean)
-                            .map_err(|e| format!("Failed to get success key: {:?}", e))?;
+                        let result_borrowed = result
+                            .weak()
+                            .try_borrow()
+                            .map_err(|e| format!("Failed to borrow result: {:?}", e))?;
+                        let result = unwrap_object!(
+                            &*result_borrowed,
+                            OnionObject::Pair
+                        )
+                        .map_err(|e| format!("Failed to unwrap result: {:?}", e))?;
+                        let key = result.get_key();
+                        let key_borrowed = key
+                            .try_borrow()
+                            .map_err(|e| format!("Failed to borrow key: {:?}", e))?;
+                        let success = *unwrap_object!(
+                            &*key_borrowed,
+                            OnionObject::Boolean
+                        )
+                        .map_err(|e| format!("Failed to get success key: {:?}", e))?;
 
                         if !success {
-                            let error_msg = unwrap_object!(result.get_value(), OnionObject::String)
-                                .map_err(|e| format!("Failed to get error message: {:?}", e))?;
+                            let value_borrowed = result
+                                .get_value()
+                                .try_borrow()
+                                .map_err(|e| format!("Failed to borrow value: {:?}", e))?;
+                            let error_msg = unwrap_object!(
+                                &*value_borrowed,
+                                OnionObject::String
+                            )
+                            .map_err(|e| format!("Failed to get error message: {:?}", e))?;
                             println!("{} {}", "Error:".red().bold(), error_msg);
                             return Err("Execution failed".to_string());
                         }
@@ -161,7 +187,12 @@ impl ReplExecutor {
                         let result_value = result.get_value();
 
                         // 将结果添加到Out元组中
-                        self.add_result_to_out(result_value.clone());
+                        self.add_result_to_out(
+                            result_value
+                                .try_borrow()
+                                .map_err(|e| format!("Failed to borrow result value: {:?}", e))?
+                                .clone(),
+                        );
                         let is_undefined = result_value
                             .with_data(|data| {
                                 Ok(unwrap_object!(data, OnionObject::Undefined).is_ok())
@@ -174,6 +205,8 @@ impl ReplExecutor {
                         }
                         // 打印结果
                         let result_str = result_value
+                            .try_borrow()
+                            .map_err(|e| format!("Failed to borrow result value: {:?}", e))?
                             .to_string()
                             .map_err(|e| format!("Failed to get result value: {:?}", e))?;
                         println!("{} {}", "Result:".cyan(), result_str);
@@ -194,16 +227,22 @@ impl ReplExecutor {
 
     /// 将结果添加到Out元组中
     fn add_result_to_out(&mut self, result: OnionObject) {
-        if let OnionObject::Tuple(tuple) = self.out_tuple.weak() {
-            let mut new_elements = tuple.elements.clone();
-            new_elements.push(result);
-            self.out_tuple = OnionTuple::new_static_no_ref(
-                new_elements
-                    .into_iter()
-                    .map(|obj| OnionStaticObject::new(obj))
-                    .collect(),
-            );
-        }
+        let new_elements = {
+            if let OnionObject::Tuple(tuple) = &*self.out_tuple.weak().borrow() {
+                let mut elements = tuple.elements.clone();
+                elements.push(result.to_cell());
+                elements
+            } else {
+                vec![result.to_cell()]
+            }
+        };
+
+        self.out_tuple = OnionTuple::new_static_no_ref(
+            new_elements
+                .into_iter()
+                .map(|obj| OnionStaticObject::new(obj.borrow().clone()))
+                .collect(),
+        );
     }
 }
 

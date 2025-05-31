@@ -2,7 +2,7 @@ use arc_gc::gc::GC;
 
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
-    types::{object::OnionObject, pair::OnionPair},
+    types::{object::{OnionObject, OnionObjectCell}, pair::OnionPair},
 };
 
 pub struct AsyncScheduler {
@@ -16,7 +16,7 @@ impl AsyncScheduler {
 }
 
 impl Runnable for AsyncScheduler {
-    fn step(&mut self, gc: &mut GC<OnionObject>) -> Result<StepResult, RuntimeError> {
+    fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
         if self.runnables.is_empty() {
             return Ok(StepResult::Return(OnionPair::new_static(
                 &OnionObject::Boolean(true).stabilize(),
@@ -63,7 +63,7 @@ impl Runnable for AsyncScheduler {
     fn receive(
         &mut self,
         step_result: StepResult,
-        _gc: &mut GC<OnionObject>,
+        _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         match step_result {
             StepResult::Error(err) => Err(err),
@@ -73,7 +73,7 @@ impl Runnable for AsyncScheduler {
         }
     }
 
-    fn copy(&self, gc: &mut GC<OnionObject>) -> Box<dyn Runnable> {
+    fn copy(&self, gc: &mut GC<OnionObjectCell>) -> Box<dyn Runnable> {
         Box::new(AsyncScheduler {
             runnables: self.runnables.iter().map(|r| r.copy(gc)).collect(),
         })

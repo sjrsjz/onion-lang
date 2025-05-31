@@ -9,14 +9,14 @@ use crate::{
 
 use super::{
     lambda::definition::{LambdaBody, OnionLambdaDefinition},
-    object::{ObjectError, OnionObject, OnionStaticObject},
+    object::{ObjectError, OnionObject, OnionObjectCell, OnionStaticObject},
     tuple::OnionTuple,
 };
 
 #[derive(Clone)]
 pub struct OnionLazySet {
-    pub container: Box<OnionObject>,
-    pub filter: Box<OnionObject>,
+    pub container: Box<OnionObjectCell>,
+    pub filter: Box<OnionObjectCell>,
 }
 
 impl GCTraceable for OnionLazySet {
@@ -33,7 +33,7 @@ impl Debug for OnionLazySet {
 }
 
 impl OnionLazySet {
-    pub fn new(container: OnionObject, filter: OnionObject) -> Self {
+    pub fn new(container: OnionObjectCell, filter: OnionObjectCell) -> Self {
         OnionLazySet {
             container: Box::new(container),
             filter: Box::new(filter),
@@ -51,15 +51,15 @@ impl OnionLazySet {
         .stabilize()
     }
 
-    pub fn get_container(&self) -> &OnionObject {
+    pub fn get_container(&self) -> &OnionObjectCell {
         &self.container
     }
 
-    pub fn get_filter(&self) -> &OnionObject {
+    pub fn get_filter(&self) -> &OnionObjectCell {
         &self.filter
     }
 
-    pub fn upgrade(&self) -> Option<Vec<GCArc<OnionObject>>> {
+    pub fn upgrade(&self) -> Option<Vec<GCArc<OnionObjectCell>>> {
         match (self.container.upgrade(), self.filter.upgrade()) {
             (Some(mut container_arcs), Some(filter_arcs)) => {
                 container_arcs.extend(filter_arcs);
@@ -74,8 +74,10 @@ impl OnionLazySet {
         F: Fn(&OnionObject) -> Result<R, ObjectError>,
     {
         match key {
-            OnionObject::String(s) if s.as_str() == "container" => f(&self.container),
-            OnionObject::String(s) if s.as_str() == "filter" => f(&self.filter),
+            OnionObject::String(s) if s.as_str() == "container" => {
+                f(&*self.container.try_borrow()?)
+            }
+            OnionObject::String(s) if s.as_str() == "filter" => f(&*self.filter.try_borrow()?),
             OnionObject::String(s) if s.as_str() == "collect" => {
                 let collector = OnionLazySetCollector {
                     container: self.container.clone().stabilize(),
@@ -90,7 +92,12 @@ impl OnionLazySet {
                     None,
                     "collector".to_string(),
                 );
-                f(&collector.weak())
+                // Keep the collector alive until after we use its weak reference
+                let result = {
+                    let collector_weak = collector.weak();
+                    f(&*collector_weak.try_borrow()?)
+                };
+                result
             }
             _ => Err(ObjectError::InvalidOperation(format!(
                 "Attribute '{:?}' not found in lazy set",
@@ -104,8 +111,12 @@ impl OnionLazySet {
         F: Fn(&mut OnionObject) -> Result<R, ObjectError>,
     {
         match key {
-            OnionObject::String(s) if s.as_str() == "container" => f(&mut self.container),
-            OnionObject::String(s) if s.as_str() == "filter" => f(&mut self.filter),
+            OnionObject::String(s) if s.as_str() == "container" => {
+                f(&mut *self.container.try_borrow_mut()?)
+            }
+            OnionObject::String(s) if s.as_str() == "filter" => {
+                f(&mut *self.filter.try_borrow_mut()?)
+            }
             _ => Err(ObjectError::InvalidOperation(format!(
                 "Attribute '{:?}' not found in lazy set",
                 key
@@ -126,11 +137,11 @@ impl Runnable for OnionLazySetCollector {
     fn set_argument(
         &mut self,
         _argument: OnionStaticObject,
-        _gc: &mut GC<OnionObject>,
+        _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), ObjectError> {
         Ok(()) // This collector does not use an argument, so we can ignore it.
     }
-    fn copy(&self, _gc: &mut GC<OnionObject>) -> Box<dyn Runnable> {
+    fn copy(&self, _gc: &mut GC<OnionObjectCell>) -> Box<dyn Runnable> {
         Box::new(OnionLazySetCollector {
             container: self.container.clone(),
             filter: self.filter.clone(),
@@ -142,13 +153,22 @@ impl Runnable for OnionLazySetCollector {
     fn receive(
         &mut self,
         step_result: StepResult,
-        _gc: &mut GC<OnionObject>,
+        _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         match step_result {
             StepResult::Return(result) => {
-                match result.weak() {
+                match &*result
+                    .weak()
+                    .try_borrow()
+                    .map_err(RuntimeError::ObjectError)?
+                {
                     OnionObject::Boolean(true) => {
-                        match self.container.weak() {
+                        match &*self
+                            .container
+                            .weak()
+                            .try_borrow()
+                            .map_err(RuntimeError::ObjectError)?
+                        {
                             OnionObject::Tuple(tuple) => {
                                 // 如果是布尔值 true，表示需要收集当前元素
                                 if let Some(item) = tuple.elements.get(self.current_index - 1) {
@@ -177,7 +197,7 @@ impl Runnable for OnionLazySetCollector {
         }
     }
 
-    fn step(&mut self, gc: &mut GC<OnionObject>) -> Result<StepResult, RuntimeError> {
+    fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
         self.container
             .weak()
             .with_data(|container| match container {
@@ -189,7 +209,8 @@ impl Runnable for OnionLazySetCollector {
 
                         self.filter.weak().with_data(|filter| match filter {
                             OnionObject::Lambda(func) => {
-                                let OnionObject::Tuple(params) = func.parameter.as_ref() else {
+                                let OnionObject::Tuple(params) = &*func.parameter.try_borrow()?
+                                else {
                                     return Err(ObjectError::InvalidType(format!(
                                         "Filter's parameter must be a tuple, got {:?}",
                                         func.parameter

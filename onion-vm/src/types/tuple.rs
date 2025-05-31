@@ -2,11 +2,11 @@ use std::fmt::Debug;
 
 use arc_gc::{arc::GCArc, traceable::GCTraceable};
 
-use super::object::{ObjectError, OnionObject, OnionStaticObject};
+use super::object::{ObjectError, OnionObject, OnionObjectCell, OnionStaticObject};
 
 #[derive(Clone)]
 pub struct OnionTuple {
-    pub elements: Vec<OnionObject>,
+    pub elements: Vec<OnionObjectCell>,
 }
 
 impl GCTraceable for OnionTuple {
@@ -42,7 +42,7 @@ macro_rules! onion_tuple {
 }
 
 impl OnionTuple {
-    pub fn new(elements: Vec<OnionObject>) -> Self {
+    pub fn new(elements: Vec<OnionObjectCell>) -> Self {
         OnionTuple { elements }
     }
 
@@ -57,7 +57,7 @@ impl OnionTuple {
             elements: elements.into_iter().map(|e| e.weak().clone()).collect(),
         }))
     }
-    pub fn upgrade(&self) -> Option<Vec<GCArc<OnionObject>>> {
+    pub fn upgrade(&self) -> Option<Vec<GCArc<OnionObjectCell>>> {
         if self.elements.is_empty() {
             return None;
         }
@@ -79,12 +79,12 @@ impl OnionTuple {
 
     pub fn at(&self, index: i64) -> Result<OnionStaticObject, ObjectError> {
         if index < 0 || index >= self.elements.len() as i64 {
-            return Ok(OnionStaticObject::new(OnionObject::Undefined(
-                Some("Index out of bounds".to_string()),
-            )));
+            return Ok(OnionStaticObject::new(OnionObject::Undefined(Some(
+                "Index out of bounds".to_string(),
+            ))));
         }
         Ok(OnionStaticObject::new(
-            self.elements[index as usize].clone(),
+            self.elements[index as usize].try_borrow()?.clone(),
         ))
     }
 
@@ -98,7 +98,8 @@ impl OnionTuple {
                 index
             )));
         }
-        f(&self.elements[index as usize])
+        let borrowed = self.elements[index as usize].try_borrow()?;
+        f(&*borrowed)
     }
 
     pub fn with_attribute<F, R>(&self, key: &OnionObject, f: &F) -> Result<R, ObjectError>
@@ -106,15 +107,15 @@ impl OnionTuple {
         F: Fn(&OnionObject) -> Result<R, ObjectError>,
     {
         for element in &self.elements {
-            match element {
+            match &*element.try_borrow()? {
                 OnionObject::Named(named) => {
-                    if named.key.as_ref().equals(key)? {
-                        return f(named.value.as_ref());
+                    if named.key.try_borrow()?.equals(key)? {
+                        return f(&*named.value.as_ref().try_borrow()?);
                     }
                 }
                 OnionObject::Pair(pair) => {
-                    if pair.key.as_ref().equals(key)? {
-                        return f(pair.value.as_ref());
+                    if pair.key.try_borrow()?.equals(key)? {
+                        return f(&*pair.value.as_ref().try_borrow()?);
                     }
                 }
                 _ => {}
@@ -131,15 +132,25 @@ impl OnionTuple {
         F: Fn(&mut OnionObject) -> Result<R, ObjectError>,
     {
         for element in &mut self.elements {
-            match element {
+            match &*element.try_borrow()? {
                 OnionObject::Named(named) => {
-                    if named.key.as_ref().equals(key)? {
-                        return f(named.value.as_mut());
+                    if named.key.try_borrow()?.equals(key)? {
+                        return f(&mut *named.value.try_borrow_mut().map_err(|_| {
+                            ObjectError::InvalidOperation(format!(
+                                "Failed to borrow value for key {:?}",
+                                key
+                            ))
+                        })?);
                     }
                 }
                 OnionObject::Pair(pair) => {
-                    if pair.key.as_ref().equals(key)? {
-                        return f(pair.value.as_mut());
+                    if pair.key.try_borrow()?.equals(key)? {
+                        return f(&mut *pair.value.try_borrow_mut().map_err(|_| {
+                            ObjectError::InvalidOperation(format!(
+                                "Failed to borrow value for key {:?}",
+                                key
+                            ))
+                        })?);
                     }
                 }
                 _ => {}
@@ -160,18 +171,15 @@ impl OnionTuple {
                     elements: new_elements,
                 })))
             }
-            _ => Ok(OnionStaticObject::new(OnionObject::Undefined(
-                Some(format!(
-                    "Cannot add tuple with {:?}",
-                    other
-                ))
-            ))),
+            _ => Ok(OnionStaticObject::new(OnionObject::Undefined(Some(
+                format!("Cannot add tuple with {:?}", other),
+            )))),
         }
     }
 
     pub fn contains(&self, other: &OnionObject) -> Result<bool, ObjectError> {
         for element in &self.elements {
-            if element.equals(other)? {
+            if element.try_borrow()?.equals(other)? {
                 return Ok(true);
             }
         }
@@ -207,24 +215,28 @@ impl OnionTuple {
         let mut assigned = vec![false; new_elements.len()];
 
         for other_element in &other.elements {
-            match other_element {
+            match &*other_element.try_borrow()? {
                 OnionObject::Named(named) => {
                     let key = named.key.as_ref();
                     let mut found = false;
 
                     // 查找是否有相同的key
                     for (i, element) in new_elements.iter_mut().enumerate() {
-                        match element {
-                            OnionObject::Named(existing_named) => {
-                                if existing_named.key.as_ref().equals(key)? {
-                                    // 如果有相同的key，则赋值
-                                    *element = other_element.clone();
-                                    assigned[i] = true;
-                                    found = true;
-                                    break;
+                        let should_replace = {
+                            match &*element.try_borrow()? {
+                                OnionObject::Named(existing_named) => {
+                                    existing_named.key.as_ref().equals(key)?
                                 }
+                                _ => false,
                             }
-                            _ => {}
+                        };
+
+                        if should_replace {
+                            // Now we can replace it since the borrow is dropped
+                            *element = other_element.clone();
+                            assigned[i] = true;
+                            found = true;
+                            break;
                         }
                     }
 
@@ -240,21 +252,28 @@ impl OnionTuple {
 
         // 处理未赋值的元素
         for other_element in &other.elements {
-            match other_element {
+            match &*other_element.try_borrow()? {
                 OnionObject::Named(_) => {}
                 _ => {
                     // 找到第一个未赋值的元素，并赋值
                     let mut found = false;
                     for (i, assigned_flag) in assigned.iter_mut().enumerate() {
                         if !*assigned_flag {
-                            match &mut new_elements[i] {
-                                OnionObject::Named(v) => {
-                                    *v.get_value_mut() = other_element.clone();
+                            let should_replace_with_clone = {
+                                match &mut *new_elements[i].try_borrow_mut()? {
+                                    OnionObject::Named(v) => {
+                                        *v.get_value_mut() = other_element.clone();
+                                        false
+                                    }
+                                    _ => {
+                                        // 如果是其他类型的元素，需要直接赋值
+                                        true
+                                    }
                                 }
-                                _ => {
-                                    // 如果是其他类型的元素，直接赋值
-                                    new_elements[i] = other_element.clone();
-                                }
+                            };
+
+                            if should_replace_with_clone {
+                                new_elements[i] = other_element.clone();
                             }
                             *assigned_flag = true;
                             found = true;

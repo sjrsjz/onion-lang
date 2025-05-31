@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use onion_vm::{
     lambda::runnable::RuntimeError,
-    types::object::{ObjectError, OnionObject, OnionStaticObject},
+    types::object::{ObjectError, OnionObject, OnionObjectCell, OnionStaticObject},
     GC,
 };
 
@@ -10,7 +10,7 @@ use super::{build_named_dict, get_attr_direct, wrap_native_function};
 
 fn length(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
@@ -28,7 +28,7 @@ fn length(
 
 fn trim(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
@@ -46,7 +46,7 @@ fn trim(
 
 fn uppercase(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
@@ -64,7 +64,7 @@ fn uppercase(
 
 fn lowercase(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
@@ -82,7 +82,7 @@ fn lowercase(
 
 fn contains(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()
@@ -108,7 +108,7 @@ fn contains(
 
 fn concat(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
         .weak()

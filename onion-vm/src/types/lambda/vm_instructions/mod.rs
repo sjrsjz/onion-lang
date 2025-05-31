@@ -12,7 +12,7 @@ use crate::{
     types::{
         lazy_set::OnionLazySet,
         named::OnionNamed,
-        object::{ObjectError, OnionObject},
+        object::{ObjectError, OnionObject, OnionObjectCell},
         pair::OnionPair,
         tuple::OnionTuple,
     },
@@ -32,7 +32,7 @@ pub mod opcode;
 pub fn load_int(
     runnable: &mut LambdaRunnable,
     opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     if let OpcodeArgument::Int64(value) = opcode.operand1 {
         runnable
@@ -50,7 +50,7 @@ pub fn load_int(
 pub fn load_null(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     runnable
         .context
@@ -61,7 +61,7 @@ pub fn load_null(
 pub fn load_undefined(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     runnable
         .context
@@ -72,7 +72,7 @@ pub fn load_undefined(
 pub fn load_float(
     runnable: &mut LambdaRunnable,
     opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     if let OpcodeArgument::Float64(value) = opcode.operand1 {
         runnable
@@ -90,7 +90,7 @@ pub fn load_float(
 pub fn load_string(
     runnable: &mut LambdaRunnable,
     opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     if let OpcodeArgument::String(value) = opcode.operand1 {
         let string = OnionObject::String(
@@ -110,7 +110,7 @@ pub fn load_string(
 pub fn load_bytes(
     runnable: &mut LambdaRunnable,
     opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     if let OpcodeArgument::ByteArray(value) = opcode.operand1 {
         let bytes = OnionObject::Bytes(
@@ -130,7 +130,7 @@ pub fn load_bytes(
 pub fn load_bool(
     runnable: &mut LambdaRunnable,
     opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     if let OpcodeArgument::Int32(value) = opcode.operand1 {
         runnable
@@ -148,7 +148,7 @@ pub fn load_bool(
 pub fn discard_top(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：直接获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
@@ -159,7 +159,7 @@ pub fn discard_top(
 pub fn build_tuple(
     runnable: &mut LambdaRunnable,
     opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     if let OpcodeArgument::Int64(size) = opcode.operand1 {
         // 快速路径：一次获取栈的可变引用，避免重复查找
@@ -183,7 +183,7 @@ pub fn build_tuple(
 pub fn build_keyval(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
@@ -198,7 +198,7 @@ pub fn build_keyval(
 pub fn build_named(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
@@ -213,7 +213,7 @@ pub fn build_named(
 pub fn build_range(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
@@ -221,10 +221,14 @@ pub fn build_range(
     let right = Context::get_object_from_stack(stack, 0)?;
     let range = OnionObject::Range(
         left.weak()
+            .try_borrow()
+            .map_err(RuntimeError::ObjectError)?
             .to_integer()
             .map_err(|e| RuntimeError::DetailedError(format!("Failed to build range: {}", e)))?,
         right
             .weak()
+            .try_borrow()
+            .map_err(RuntimeError::ObjectError)?
             .to_integer()
             .map_err(|e| RuntimeError::DetailedError(format!("Failed to build range: {}", e)))?,
     )
@@ -238,7 +242,7 @@ pub fn build_range(
 pub fn build_set(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
@@ -253,7 +257,7 @@ pub fn build_set(
 pub fn load_lambda(
     runnable: &mut LambdaRunnable,
     opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let OpcodeArgument::String(signature_index) = opcode.operand1 else {
         return Err(RuntimeError::DetailedError(format!(
@@ -298,10 +302,16 @@ pub fn load_lambda(
         .context
         .get_object_rev(if should_capture { 2 } else { 1 })?
         .weak()
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
         .clone_value()
         .map_err(RuntimeError::ObjectError)?;
 
-    let OnionObject::Tuple(_) = default_parameters.weak() else {
+    let OnionObject::Tuple(_) = &*default_parameters
+        .weak()
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+    else {
         return Err(RuntimeError::DetailedError(format!(
             "Invalid object type for default parameters: {}",
             default_parameters
@@ -312,9 +322,15 @@ pub fn load_lambda(
         .context
         .get_object_rev(0)?
         .weak()
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
         .clone_value()
         .map_err(RuntimeError::ObjectError)?;
-    let OnionObject::InstructionPackage(_) = instruction_package.weak() else {
+    let OnionObject::InstructionPackage(_) = &*instruction_package
+        .weak()
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+    else {
         return Err(RuntimeError::DetailedError(format!(
             "Invalid object type for instruction package: {}",
             instruction_package
@@ -323,7 +339,13 @@ pub fn load_lambda(
 
     let lambda = OnionLambdaDefinition::new_static(
         &default_parameters,
-        LambdaBody::Instruction(Box::new(instruction_package.weak().clone())),
+        LambdaBody::Instruction(Box::new(
+            instruction_package
+                .weak()
+                .try_borrow()
+                .map_err(RuntimeError::ObjectError)?
+                .clone(),
+        )),
         captured_value,
         None,
         signature,
@@ -339,7 +361,7 @@ pub fn load_lambda(
 pub fn let_var(
     runnable: &mut LambdaRunnable,
     opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let OpcodeArgument::String(index) = opcode.operand1 else {
         return Err(RuntimeError::DetailedError(format!(
@@ -371,7 +393,7 @@ pub fn let_var(
 pub fn get_var(
     runnable: &mut LambdaRunnable,
     opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let OpcodeArgument::String(index) = opcode.operand1 else {
         return Err(RuntimeError::DetailedError(format!(
@@ -400,12 +422,19 @@ pub fn get_var(
 pub fn set_var(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
     left.weak()
-        .assign(right.weak())
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+        .assign(
+            &*right
+                .weak()
+                .try_borrow()
+                .map_err(RuntimeError::ObjectError)?,
+        )
         .map_err(RuntimeError::ObjectError)?;
     // 保留左侧对象的引用，由于其是不可变的可变对象的引用，assign不会导致GC错误回收
     runnable.context.discard_objects(1)?;
@@ -415,7 +444,7 @@ pub fn set_var(
 pub fn get_attr(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let attr = runnable.context.get_object_rev(0)?.weak();
     let obj = runnable.context.get_object_rev(1)?;
@@ -450,17 +479,38 @@ pub fn get_attr(
 pub fn index_of(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
-    let index = runnable.context.get_object_rev(0)?;
-    let OnionObject::Integer(index) = index.weak() else {
-        return Err(RuntimeError::DetailedError(format!(
-            "Invalid index type for IndexOf: {}",
-            index
-        )));
+    // Get both objects first
+    let index_obj = runnable.context.get_object_rev(0)?;
+    let container_obj = runnable.context.get_object_rev(1)?;
+
+    // Extract the integer index value
+    let index_value = {
+        let index_ref = index_obj
+            .weak()
+            .try_borrow()
+            .map_err(RuntimeError::ObjectError)?;
+        if let OnionObject::Integer(index) = &*index_ref {
+            *index
+        } else {
+            return Err(RuntimeError::DetailedError(format!(
+                "Invalid index type for IndexOf: {}",
+                index_obj
+            )));
+        }
     };
-    let obj = runnable.context.get_object_rev(1)?.weak();
-    let element = obj.at(*index).map_err(RuntimeError::ObjectError)?;
+
+    // Get the element at the index
+    let element = {
+        let obj_ref = container_obj
+            .weak()
+            .try_borrow()
+            .map_err(RuntimeError::ObjectError)?;
+        obj_ref.at(index_value).map_err(RuntimeError::ObjectError)?
+    };
+
+    // Now modify the context after all borrows are dropped
     runnable.context.discard_objects(2)?;
     runnable.context.push_object(element)?;
     Ok(StepResult::Continue)
@@ -469,11 +519,16 @@ pub fn index_of(
 pub fn key_of(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let stack = runnable.context.get_current_stack_mut()?;
     let obj = Context::get_object_from_stack(stack, 0)?;
-    let key = obj.weak().key_of().map_err(RuntimeError::ObjectError)?;
+    let key = obj
+        .weak()
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+        .key_of()
+        .map_err(RuntimeError::ObjectError)?;
     Context::replace_last_object(stack, key);
     Ok(StepResult::Continue)
 }
@@ -481,11 +536,16 @@ pub fn key_of(
 pub fn value_of(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let stack = runnable.context.get_current_stack_mut()?;
     let obj = Context::get_object_from_stack(stack, 0)?;
-    let value = obj.weak().value_of().map_err(RuntimeError::ObjectError)?;
+    let value = obj
+        .weak()
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+        .value_of()
+        .map_err(RuntimeError::ObjectError)?;
     Context::replace_last_object(stack, value);
     Ok(StepResult::Continue)
 }
@@ -493,12 +553,17 @@ pub fn value_of(
 pub fn type_of(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
     let obj = Context::get_object_from_stack(stack, 0)?;
-    let type_name = obj.weak().type_of().map_err(RuntimeError::ObjectError)?;
+    let type_name = obj
+        .weak()
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+        .type_of()
+        .map_err(RuntimeError::ObjectError)?;
     Context::replace_last_object(stack, OnionObject::String(type_name).stabilize());
     Ok(StepResult::Continue)
 }
@@ -506,12 +571,17 @@ pub fn type_of(
 pub fn copy(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
     let obj = Context::get_object_from_stack(stack, 0)?;
-    let copied_obj = obj.weak().copy().map_err(RuntimeError::ObjectError)?;
+    let copied_obj = obj
+        .weak()
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+        .copy()
+        .map_err(RuntimeError::ObjectError)?;
     Context::discard_from_stack(stack, 1)?;
     Context::push_to_stack(stack, copied_obj);
     Ok(StepResult::Continue)
@@ -520,13 +590,20 @@ pub fn copy(
 pub fn check_is_same_object(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let obj1 = runnable.context.get_object_rev(0)?;
     let obj2 = runnable.context.get_object_rev(1)?;
     let is_same = obj1
         .weak()
-        .is_same(obj2.weak())
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+        .is_same(
+            &*obj2
+                .weak()
+                .try_borrow()
+                .map_err(RuntimeError::ObjectError)?,
+        )
         .map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(2)?;
     runnable
@@ -538,7 +615,7 @@ pub fn check_is_same_object(
 pub fn binary_add(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
@@ -546,7 +623,14 @@ pub fn binary_add(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .binary_add(right.weak())
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+        .binary_add(
+            &*right
+                .weak()
+                .try_borrow()
+                .map_err(RuntimeError::ObjectError)?,
+        )
         .map_err(RuntimeError::ObjectError)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
@@ -556,7 +640,7 @@ pub fn binary_add(
 pub fn binary_subtract(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
@@ -564,7 +648,14 @@ pub fn binary_subtract(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .binary_sub(right.weak())
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+        .binary_sub(
+            &*right
+                .weak()
+                .try_borrow()
+                .map_err(RuntimeError::ObjectError)?,
+        )
         .map_err(RuntimeError::ObjectError)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
@@ -574,7 +665,7 @@ pub fn binary_subtract(
 pub fn binary_multiply(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
@@ -582,7 +673,14 @@ pub fn binary_multiply(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .binary_mul(right.weak())
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+        .binary_mul(
+            &*right
+                .weak()
+                .try_borrow()
+                .map_err(RuntimeError::ObjectError)?,
+        )
         .map_err(RuntimeError::ObjectError)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
@@ -592,7 +690,7 @@ pub fn binary_multiply(
 pub fn binary_divide(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
@@ -600,7 +698,14 @@ pub fn binary_divide(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .binary_div(right.weak())
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+        .binary_div(
+            &*right
+                .weak()
+                .try_borrow()
+                .map_err(RuntimeError::ObjectError)?,
+        )
         .map_err(RuntimeError::ObjectError)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
@@ -610,7 +715,7 @@ pub fn binary_divide(
 pub fn binary_modulus(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
@@ -618,7 +723,14 @@ pub fn binary_modulus(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .binary_mod(right.weak())
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+        .binary_mod(
+            &*right
+                .weak()
+                .try_borrow()
+                .map_err(RuntimeError::ObjectError)?,
+        )
         .map_err(RuntimeError::ObjectError)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
@@ -628,7 +740,7 @@ pub fn binary_modulus(
 pub fn binary_power(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
@@ -636,7 +748,14 @@ pub fn binary_power(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .binary_pow(right.weak())
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+        .binary_pow(
+            &*right
+                .weak()
+                .try_borrow()
+                .map_err(RuntimeError::ObjectError)?,
+        )
         .map_err(RuntimeError::ObjectError)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
@@ -646,7 +765,7 @@ pub fn binary_power(
 pub fn binary_bitwise_or(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
@@ -654,7 +773,14 @@ pub fn binary_bitwise_or(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .binary_or(right.weak())
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+        .binary_or(
+            &*right
+                .weak()
+                .try_borrow()
+                .map_err(RuntimeError::ObjectError)?,
+        )
         .map_err(RuntimeError::ObjectError)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
@@ -664,7 +790,7 @@ pub fn binary_bitwise_or(
 pub fn binary_bitwise_and(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
@@ -672,7 +798,14 @@ pub fn binary_bitwise_and(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .binary_and(right.weak())
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+        .binary_and(
+            &*right
+                .weak()
+                .try_borrow()
+                .map_err(RuntimeError::ObjectError)?,
+        )
         .map_err(RuntimeError::ObjectError)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
@@ -682,7 +815,7 @@ pub fn binary_bitwise_and(
 pub fn binary_bitwise_xor(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
@@ -690,7 +823,14 @@ pub fn binary_bitwise_xor(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .binary_xor(right.weak())
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+        .binary_xor(
+            &*right
+                .weak()
+                .try_borrow()
+                .map_err(RuntimeError::ObjectError)?,
+        )
         .map_err(RuntimeError::ObjectError)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
@@ -700,7 +840,7 @@ pub fn binary_bitwise_xor(
 pub fn binary_shift_left(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
@@ -708,7 +848,14 @@ pub fn binary_shift_left(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .binary_shl(right.weak())
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+        .binary_shl(
+            &*right
+                .weak()
+                .try_borrow()
+                .map_err(RuntimeError::ObjectError)?,
+        )
         .map_err(RuntimeError::ObjectError)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
@@ -718,7 +865,7 @@ pub fn binary_shift_left(
 pub fn binary_shift_right(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
@@ -726,7 +873,14 @@ pub fn binary_shift_right(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .binary_shr(right.weak())
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+        .binary_shr(
+            &*right
+                .weak()
+                .try_borrow()
+                .map_err(RuntimeError::ObjectError)?,
+        )
         .map_err(RuntimeError::ObjectError)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
@@ -736,7 +890,7 @@ pub fn binary_shift_right(
 pub fn binary_equal(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
@@ -744,7 +898,14 @@ pub fn binary_equal(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .binary_eq(right.weak())
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+        .binary_eq(
+            &*right
+                .weak()
+                .try_borrow()
+                .map_err(RuntimeError::ObjectError)?,
+        )
         .map_err(RuntimeError::ObjectError)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, OnionObject::Boolean(result).stabilize());
@@ -754,7 +915,7 @@ pub fn binary_equal(
 pub fn binary_not_equal(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
@@ -762,7 +923,14 @@ pub fn binary_not_equal(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .binary_eq(right.weak())
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+        .binary_eq(
+            &*right
+                .weak()
+                .try_borrow()
+                .map_err(RuntimeError::ObjectError)?,
+        )
         .map_err(RuntimeError::ObjectError)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, OnionObject::Boolean(!result).stabilize());
@@ -772,7 +940,7 @@ pub fn binary_not_equal(
 pub fn binary_greater(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
@@ -780,7 +948,14 @@ pub fn binary_greater(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .binary_gt(right.weak())
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+        .binary_gt(
+            &*right
+                .weak()
+                .try_borrow()
+                .map_err(RuntimeError::ObjectError)?,
+        )
         .map_err(RuntimeError::ObjectError)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, OnionObject::Boolean(result).stabilize());
@@ -790,7 +965,7 @@ pub fn binary_greater(
 pub fn binary_greater_equal(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
@@ -798,7 +973,14 @@ pub fn binary_greater_equal(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .binary_lt(right.weak())
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+        .binary_lt(
+            &*right
+                .weak()
+                .try_borrow()
+                .map_err(RuntimeError::ObjectError)?,
+        )
         .map_err(RuntimeError::ObjectError)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, OnionObject::Boolean(!result).stabilize());
@@ -808,7 +990,7 @@ pub fn binary_greater_equal(
 pub fn binary_less(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
@@ -816,7 +998,14 @@ pub fn binary_less(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .binary_lt(right.weak())
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+        .binary_lt(
+            &*right
+                .weak()
+                .try_borrow()
+                .map_err(RuntimeError::ObjectError)?,
+        )
         .map_err(RuntimeError::ObjectError)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, OnionObject::Boolean(result).stabilize());
@@ -826,7 +1015,7 @@ pub fn binary_less(
 pub fn binary_less_equal(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
@@ -834,7 +1023,14 @@ pub fn binary_less_equal(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .binary_gt(right.weak())
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+        .binary_gt(
+            &*right
+                .weak()
+                .try_borrow()
+                .map_err(RuntimeError::ObjectError)?,
+        )
         .map_err(RuntimeError::ObjectError)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, OnionObject::Boolean(!result).stabilize());
@@ -844,12 +1040,17 @@ pub fn binary_less_equal(
 pub fn unary_bitwise_not(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
     let obj = Context::get_object_from_stack(stack, 0)?;
-    let result = obj.weak().unary_not().map_err(RuntimeError::ObjectError)?;
+    let result = obj
+        .weak()
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+        .unary_not()
+        .map_err(RuntimeError::ObjectError)?;
     Context::discard_from_stack(stack, 1)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -857,12 +1058,17 @@ pub fn unary_bitwise_not(
 pub fn unary_plus(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
     let obj = Context::get_object_from_stack(stack, 0)?;
-    let result = obj.weak().unary_plus().map_err(RuntimeError::ObjectError)?;
+    let result = obj
+        .weak()
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+        .unary_plus()
+        .map_err(RuntimeError::ObjectError)?;
     Context::discard_from_stack(stack, 1)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -870,12 +1076,17 @@ pub fn unary_plus(
 pub fn unary_minus(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
     let obj = Context::get_object_from_stack(stack, 0)?;
-    let result = obj.weak().unary_neg().map_err(RuntimeError::ObjectError)?;
+    let result = obj
+        .weak()
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+        .unary_neg()
+        .map_err(RuntimeError::ObjectError)?;
     Context::discard_from_stack(stack, 1)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -883,7 +1094,7 @@ pub fn unary_minus(
 pub fn swap(
     runnable: &mut LambdaRunnable,
     opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let OpcodeArgument::Int64(index) = opcode.operand1 else {
         return Err(RuntimeError::DetailedError(format!(
@@ -897,7 +1108,7 @@ pub fn swap(
 pub fn jump(
     runnable: &mut LambdaRunnable,
     opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let OpcodeArgument::Int64(offset) = opcode.operand1 else {
         return Err(RuntimeError::DetailedError(format!(
@@ -912,7 +1123,7 @@ pub fn jump(
 pub fn jump_if_false(
     runnable: &mut LambdaRunnable,
     opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let OpcodeArgument::Int64(offset) = opcode.operand1 else {
         return Err(RuntimeError::DetailedError(format!(
@@ -923,6 +1134,8 @@ pub fn jump_if_false(
     let condition = runnable.context.get_object_rev(0)?;
     if !condition
         .weak()
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
         .to_boolean()
         .map_err(RuntimeError::ObjectError)?
     {
@@ -934,10 +1147,15 @@ pub fn jump_if_false(
 pub fn get_length(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let obj = runnable.context.get_object_rev(0)?;
-    let length = obj.weak().len().map_err(RuntimeError::ObjectError)?;
+    let length = obj
+        .weak()
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+        .len()
+        .map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(1)?;
     runnable.context.push_object(length)?;
     Ok(StepResult::Continue)
@@ -946,7 +1164,7 @@ pub fn get_length(
 pub fn new_frame(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     runnable.context.push_frame(Frame {
         variables: HashMap::default(),
@@ -958,7 +1176,7 @@ pub fn new_frame(
 pub fn pop_frame(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     runnable.context.concat_last_frame()?;
     Ok(StepResult::Continue)
@@ -967,7 +1185,7 @@ pub fn pop_frame(
 pub fn clear_stack(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     runnable.context.clear_stack();
     Ok(StepResult::Continue)
@@ -976,11 +1194,13 @@ pub fn clear_stack(
 pub fn assert(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let condition = runnable.context.get_object_rev(0)?;
     if !condition
         .weak()
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
         .to_boolean()
         .map_err(RuntimeError::ObjectError)?
     {
@@ -996,23 +1216,39 @@ pub fn assert(
 pub fn is_in(
     runnable: &mut LambdaRunnable,
     opcode: &ProcessedOpcode,
-    gc: &mut GC<OnionObject>,
+    gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let element = runnable.context.get_object_rev(1)?;
     let container = runnable.context.get_object_rev(0)?;
 
-    let OnionObject::LazySet(lazy_set) = container.weak() else {
-        return Err(RuntimeError::DetailedError(format!(
-            "Container is not a LazySet: {}",
-            container
-        )));
-    };
-
     // 先检查元素是否在惰性集合的容器中
-    let is_in = lazy_set
-        .get_container()
-        .contains(element.weak())
-        .map_err(|e| RuntimeError::DetailedError(format!("Failed to check containment: {}", e)))?;
+    let is_in = {
+        match &*container
+            .weak()
+            .try_borrow()
+            .map_err(RuntimeError::ObjectError)?
+        {
+            OnionObject::LazySet(lazy_set) => lazy_set
+                .get_container()
+                .try_borrow()
+                .map_err(RuntimeError::ObjectError)?
+                .contains(
+                    &*element
+                        .weak()
+                        .try_borrow()
+                        .map_err(RuntimeError::ObjectError)?,
+                )
+                .map_err(|e| {
+                    RuntimeError::DetailedError(format!("Failed to check containment: {}", e))
+                })?,
+            _ => {
+                return Err(RuntimeError::DetailedError(format!(
+                    "Container is not a LazySet: {}",
+                    container
+                )));
+            }
+        }
+    };
 
     if !is_in {
         // 元素不在容器中，直接返回 false
@@ -1024,19 +1260,31 @@ pub fn is_in(
     }
 
     // 如果在容器中，则调用惰性集合的过滤器
-    let (args, filter) = lazy_set
-        .get_filter()
-        .with_data(|filter| {
-            let OnionObject::Lambda(_) = filter else {
-                // 过滤器不是 Lambda 对象，认定为惰性求值结果为 filter
+    let (args, filter) = match &*container
+        .weak()
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
+    {
+        OnionObject::LazySet(lazy_set) => lazy_set
+            .get_filter()
+            .with_data(|filter| {
+                let OnionObject::Lambda(_) = filter else {
+                    // 过滤器不是 Lambda 对象，认定为惰性求值结果为 filter
+                    let filter = filter.clone().stabilize();
+                    return Ok((None, filter));
+                };
+                let args = OnionTuple::new_static(vec![element]);
                 let filter = filter.clone().stabilize();
-                return Ok((None, filter));
-            };
-            let args = OnionTuple::new_static(vec![element]);
-            let filter = filter.clone().stabilize();
-            return Ok((Some(args), filter));
-        })
-        .map_err(RuntimeError::ObjectError)?;
+                return Ok((Some(args), filter));
+            })
+            .map_err(RuntimeError::ObjectError)?,
+        _ => {
+            return Err(RuntimeError::DetailedError(format!(
+                "Container is not a LazySet: {}",
+                container
+            )));
+        }
+    };
 
     runnable.context.discard_objects(2)?;
 
@@ -1054,7 +1302,7 @@ pub fn is_in(
 pub fn call_lambda(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    gc: &mut GC<OnionObject>,
+    gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let lambda = runnable.context.get_object_rev(1)?;
     let args = runnable.context.get_object_rev(0)?;
@@ -1070,7 +1318,7 @@ pub fn call_lambda(
                         )));
                     };
 
-                    let OnionObject::Tuple(args_tuple) = args.weak() else {
+                    let OnionObject::Tuple(args_tuple) = &*args.weak().try_borrow()? else {
                         return Err(ObjectError::InvalidType(format!(
                             "Arguments are not a Tuple: {}",
                             args
@@ -1102,7 +1350,7 @@ pub fn call_lambda(
 pub fn mutablize(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    gc: &mut GC<OnionObject>,
+    gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let heap = runnable
         .context
@@ -1117,11 +1365,13 @@ pub fn mutablize(
 pub fn immutablize(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let obj = runnable.context.get_object_rev(0)?;
     let immutable_obj = obj
         .weak()
+        .try_borrow()
+        .map_err(RuntimeError::ObjectError)?
         .clone_value()
         .map_err(RuntimeError::ObjectError)?;
     runnable.context.discard_objects(1)?;
@@ -1132,7 +1382,7 @@ pub fn immutablize(
 pub fn return_value(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let return_value = runnable.context.get_object_rev(0)?;
     Ok(StepResult::Return(return_value.clone()))
@@ -1141,7 +1391,7 @@ pub fn return_value(
 pub fn fork_instruction(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let forked =
         OnionObject::InstructionPackage(runnable.borrow_instruction()?.clone()).stabilize();
@@ -1152,21 +1402,28 @@ pub fn fork_instruction(
 pub fn import(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let path = runnable.context.get_object_rev(0)?;
-    let OnionObject::String(path) = path.weak() else {
-        return Err(RuntimeError::DetailedError(format!(
-            "Invalid path type for `import`: {}",
-            path
-        )));
+
+    let package = {
+        let OnionObject::String(path) = &*path
+            .weak()
+            .try_borrow()
+            .map_err(RuntimeError::ObjectError)?
+        else {
+            return Err(RuntimeError::DetailedError(format!(
+                "Invalid path type for `import`: {}",
+                path
+            )));
+        };
+        VMInstructionPackage::read_from_file(path).map_err(|e| {
+            RuntimeError::DetailedError(format!(
+                "Failed to read instruction package from file: {}",
+                e
+            ))
+        })?
     };
-    let package = VMInstructionPackage::read_from_file(path).map_err(|e| {
-        RuntimeError::DetailedError(format!(
-            "Failed to read instruction package from file: {}",
-            e
-        ))
-    })?;
     match VMInstructionPackage::validate(&package) {
         Err(e) => {
             return Err(RuntimeError::DetailedError(format!(
@@ -1186,7 +1443,7 @@ pub fn import(
 pub fn sync_call(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    gc: &mut GC<OnionObject>,
+    gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let lambda = runnable.context.get_object_rev(1)?;
     let args = runnable.context.get_object_rev(0)?;
@@ -1202,7 +1459,7 @@ pub fn sync_call(
                         )));
                     };
 
-                    let OnionObject::Tuple(args_tuple) = args.weak() else {
+                    let OnionObject::Tuple(args_tuple) = &*args.weak().try_borrow()? else {
                         return Err(ObjectError::InvalidType(format!(
                             "Arguments are not a Tuple: {}",
                             args
@@ -1235,7 +1492,7 @@ pub fn sync_call(
 pub fn map_to(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let container = runnable.context.get_object_rev(1)?;
     let map = runnable.context.get_object_rev(0)?;
@@ -1252,7 +1509,7 @@ pub fn map_to(
 pub fn async_call(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    gc: &mut GC<OnionObject>,
+    gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let lambda = runnable.context.get_object_rev(1)?;
     let args = runnable.context.get_object_rev(0)?;
@@ -1268,7 +1525,7 @@ pub fn async_call(
                         )));
                     };
 
-                    let OnionObject::Tuple(args_tuple) = args.weak() else {
+                    let OnionObject::Tuple(args_tuple) = &*args.weak().try_borrow()? else {
                         return Err(ObjectError::InvalidType(format!(
                             "Arguments are not a Tuple: {}",
                             args

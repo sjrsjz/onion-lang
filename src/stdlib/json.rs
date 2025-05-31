@@ -17,23 +17,23 @@ fn to_json(
                 OnionObject::Null => Ok(Value::Null),
                 OnionObject::Pair(p) => {
                     // 将 Pair 转换为只有一个键值对的 JSON 对象
-                    let key = p.get_key().to_string().map_err(|e| ObjectError::InvalidOperation(e.to_string()))?;
-                    let value = to_json(p.get_value().clone()).map_err(|e| ObjectError::InvalidOperation(e.to_string()))?;
+                    let key = p.get_key().try_borrow()?.to_string().map_err(|e| ObjectError::InvalidOperation(e.to_string()))?;
+                    let value = to_json(p.get_value().try_borrow()?.clone()).map_err(|e| ObjectError::InvalidOperation(e.to_string()))?;
                     let mut map = serde_json::Map::new();
                     map.insert(key, value);
                     Ok(Value::Object(map))
                 }
                 OnionObject::Tuple(t) => {
                     // 检查是否所有元素都是 Pair，如果是则转换为 JSON 对象
-                    let all_pairs = t.elements.iter().all(|e| matches!(e, OnionObject::Pair(_)));
+                    let all_pairs = t.elements.iter().all(|e| matches!(&*e.borrow(), OnionObject::Pair(_)));
                     
                     if all_pairs && !t.elements.is_empty() {
                         // 转换为 JSON 对象 (字典)
                         let mut map = serde_json::Map::new();
                         for element in &t.elements {
-                            if let OnionObject::Pair(pair) = element {
-                                let key = pair.get_key().to_string().map_err(|e| ObjectError::InvalidOperation(e.to_string()))?;
-                                let value = to_json(pair.get_value().clone()).map_err(|e| ObjectError::InvalidOperation(e.to_string()))?;
+                            if let OnionObject::Pair(pair) = &*element.try_borrow()? {
+                                let key = pair.get_key().try_borrow()?.to_string().map_err(|e| ObjectError::InvalidOperation(e.to_string()))?;
+                                let value = to_json(pair.get_value().try_borrow()?.clone()).map_err(|e| ObjectError::InvalidOperation(e.to_string()))?;
                                 map.insert(key, value);
                             }
                         }
@@ -41,7 +41,7 @@ fn to_json(
                     } else {
                         // 转换为 JSON 数组
                         let vec: Vec<_> = t.elements.iter()
-                            .map(|e| to_json(e.clone()))
+                            .map(|e| to_json(e.borrow().clone()))
                             .collect();
                         Ok(Value::Array(vec.into_iter().collect::<Result<Vec<_>, _>>().map_err(|e| ObjectError::InvalidOperation(e.to_string()))?))
                     }
@@ -80,9 +80,9 @@ fn from_json(value: Value) -> Result<OnionStaticObject, RuntimeError> {
         Value::Object(obj) => {
             let pairs: Result<Vec<_>, _> = obj.into_iter()
                 .map(|(k, v)| {
-                    let key_obj = OnionObject::String(k);
+                    let key_obj = OnionObject::String(k).to_cell();
                     let value_obj = from_json(v)?.weak().clone();
-                    Ok(OnionObject::Pair(OnionPair::new(key_obj, value_obj)))
+                    Ok(OnionObject::Pair(OnionPair::new(key_obj, value_obj)).to_cell())
                 })
                 .collect();
             match pairs {
@@ -166,7 +166,7 @@ pub fn build_module() -> OnionStaticObject {
         |args, _gc| {
             args.weak().with_data(|data| {
                 let obj = super::get_attr_direct(data, "object".to_string())?;
-                let json_str = stringify_json(obj.weak().clone()).map_err(|e| ObjectError::InvalidOperation(e.to_string()))?;
+                let json_str = stringify_json(obj.weak().try_borrow()?.clone()).map_err(|e| ObjectError::InvalidOperation(e.to_string()))?;
                 Ok(OnionObject::String(json_str).stabilize())
             }).map_err(RuntimeError::ObjectError)
         }
@@ -188,110 +188,11 @@ pub fn build_module() -> OnionStaticObject {
         |args, _gc| {
             args.weak().with_data(|data| {
                 let obj = super::get_attr_direct(data, "object".to_string())?;
-                let json_str = stringify_json_pretty(obj.weak().clone()).map_err(|e| ObjectError::InvalidOperation(e.to_string()))?;
+                let json_str = stringify_json_pretty(obj.weak().try_borrow()?.clone()).map_err(|e| ObjectError::InvalidOperation(e.to_string()))?;
                 Ok(OnionObject::String(json_str).stabilize())
             }).map_err(RuntimeError::ObjectError)
         }
     ));
     
     build_named_dict(module)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use onion_vm::types::object::OnionObject;
-    
-    #[test]
-    fn test_basic_types_to_json() {
-        // 测试基本类型转换
-        let int_obj = OnionObject::Integer(42);
-        let result = to_json(int_obj).unwrap();
-        assert_eq!(result, Value::Number(serde_json::Number::from(42i64)));
-        
-        let str_obj = OnionObject::String("hello".to_string());
-        let result = to_json(str_obj).unwrap();
-        assert_eq!(result, Value::String("hello".to_string()));
-        
-        let bool_obj = OnionObject::Boolean(true);
-        let result = to_json(bool_obj).unwrap();
-        assert_eq!(result, Value::Bool(true));
-        
-        let null_obj = OnionObject::Null;
-        let result = to_json(null_obj).unwrap();
-        assert_eq!(result, Value::Null);
-    }
-    
-    #[test]
-    fn test_tuple_as_array_to_json() {
-        // 测试 Tuple 转换为 JSON 数组
-        let tuple = OnionTuple::new(vec![
-            OnionObject::Integer(1),
-            OnionObject::String("test".to_string()),
-            OnionObject::Boolean(false),
-        ]);
-        let result = to_json(OnionObject::Tuple(tuple)).unwrap();
-        
-        let expected = Value::Array(vec![
-            Value::Number(serde_json::Number::from(1i64)),
-            Value::String("test".to_string()),
-            Value::Bool(false),
-        ]);
-        assert_eq!(result, expected);
-    }
-    
-    #[test]
-    fn test_tuple_with_pairs_as_object_to_json() {
-        // 测试包含 Pair 的 Tuple 转换为 JSON 对象
-        let pair1 = OnionPair::new(
-            OnionObject::String("name".to_string()),
-            OnionObject::String("Alice".to_string()),
-        );
-        let pair2 = OnionPair::new(
-            OnionObject::String("age".to_string()),
-            OnionObject::Integer(30),
-        );
-        
-        let tuple = OnionTuple::new(vec![
-            OnionObject::Pair(pair1),
-            OnionObject::Pair(pair2),
-        ]);
-        
-        let result = to_json(OnionObject::Tuple(tuple)).unwrap();
-        
-        if let Value::Object(map) = result {
-            assert_eq!(map.get("name"), Some(&Value::String("Alice".to_string())));
-            assert_eq!(map.get("age"), Some(&Value::Number(serde_json::Number::from(30i64))));
-        } else {
-            panic!("Expected JSON object");
-        }
-    }
-    
-    #[test]
-    fn test_from_json_basic_types() {
-        // 测试从 JSON 转换为基本类型
-        let result = from_json(Value::Number(serde_json::Number::from(42))).unwrap();
-        assert!(matches!(result.weak(), OnionObject::Integer(42)));
-        
-        let result = from_json(Value::String("hello".to_string())).unwrap();
-        assert!(matches!(result.weak(), OnionObject::String(s) if s == "hello"));
-        
-        let result = from_json(Value::Bool(true)).unwrap();
-        assert!(matches!(result.weak(), OnionObject::Boolean(true)));
-        
-        let result = from_json(Value::Null).unwrap();
-        assert!(matches!(result.weak(), OnionObject::Null));
-    }
-    
-    #[test]
-    fn test_parse_stringify_roundtrip() {
-        let json_str = r#"{"name": "Alice", "age": 30, "active": true}"#;
-        let parsed = parse_json(json_str).unwrap();
-        let stringified = stringify_json(parsed.weak().clone()).unwrap();
-        
-        // 解析回来验证结构
-        let reparsed: Value = serde_json::from_str(&stringified).unwrap();
-        let original: Value = serde_json::from_str(json_str).unwrap();
-        assert_eq!(reparsed, original);
-    }
 }

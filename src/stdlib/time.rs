@@ -11,7 +11,7 @@ use onion_vm::{
     onion_tuple,
     types::{
         lambda::definition::{LambdaBody, OnionLambdaDefinition},
-        object::{ObjectError, OnionObject, OnionStaticObject},
+        object::{ObjectError, OnionObject, OnionObjectCell, OnionStaticObject},
         tuple::OnionTuple,
     },
     GC,
@@ -22,7 +22,7 @@ use super::{build_named_dict, get_attr_direct, wrap_native_function};
 /// 获取当前时间戳（秒）
 fn timestamp(
     _argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     match SystemTime::now().duration_since(UNIX_EPOCH) {
         Ok(duration) => Ok(OnionObject::Integer(duration.as_secs() as i64).stabilize()),
@@ -36,7 +36,7 @@ fn timestamp(
 /// 获取当前时间戳（毫秒）
 fn timestamp_millis(
     _argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     match SystemTime::now().duration_since(UNIX_EPOCH) {
         Ok(duration) => Ok(OnionObject::Integer(duration.as_millis() as i64).stabilize()),
@@ -50,7 +50,7 @@ fn timestamp_millis(
 /// 获取当前时间戳（纳秒）
 fn timestamp_nanos(
     _argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     match SystemTime::now().duration_since(UNIX_EPOCH) {
         Ok(duration) => Ok(OnionObject::Integer(duration.as_nanos() as i64).stabilize()),
@@ -64,13 +64,14 @@ fn timestamp_nanos(
 /// 睡眠指定的秒数
 fn sleep_seconds(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let seconds = argument
         .weak()
         .with_data(|data| {
             get_attr_direct(data, "seconds".to_string())?
                 .weak()
+                .try_borrow()?
                 .to_integer()
                 .map_err(|e| ObjectError::InvalidType(format!("Invalid seconds: {}", e)))
         })
@@ -89,13 +90,14 @@ fn sleep_seconds(
 /// 睡眠指定的毫秒数
 fn sleep_millis(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let millis = argument
         .weak()
         .with_data(|data| {
             get_attr_direct(data, "millis".to_string())?
                 .weak()
+                .try_borrow()?
                 .to_integer()
                 .map_err(|e| ObjectError::InvalidType(format!("Invalid milliseconds: {}", e)))
         })
@@ -114,13 +116,14 @@ fn sleep_millis(
 /// 睡眠指定的微秒数
 fn sleep_micros(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let micros = argument
         .weak()
         .with_data(|data| {
             get_attr_direct(data, "micros".to_string())?
                 .weak()
+                .try_borrow()?
                 .to_integer()
                 .map_err(|e| ObjectError::InvalidType(format!("Invalid microseconds: {}", e)))
         })
@@ -139,7 +142,7 @@ fn sleep_micros(
 /// 获取格式化的当前时间字符串（UTC）
 fn now_utc(
     _argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     match SystemTime::now().duration_since(UNIX_EPOCH) {
         Ok(duration) => {
@@ -184,13 +187,14 @@ fn format_timestamp(timestamp: u64) -> String {
 /// 从时间戳格式化时间字符串
 fn format_time(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let timestamp = argument
         .weak()
         .with_data(|data| {
             get_attr_direct(data, "timestamp".to_string())?
                 .weak()
+                .try_borrow()?
                 .to_integer()
                 .map_err(|e| ObjectError::InvalidType(format!("Invalid timestamp: {}", e)))
         })
@@ -209,18 +213,20 @@ fn format_time(
 /// 计算两个时间戳之间的差值（秒）
 fn time_diff(
     argument: OnionStaticObject,
-    _gc: &mut GC<OnionObject>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let (start, end) = argument
         .weak()
         .with_data(|data| {
             let start = get_attr_direct(data, "start".to_string())?
                 .weak()
+                .try_borrow()?
                 .to_integer()
                 .map_err(|e| ObjectError::InvalidType(format!("Invalid start timestamp: {}", e)))?;
 
             let end = get_attr_direct(data, "end".to_string())?
                 .weak()
+                .try_borrow()?
                 .to_integer()
                 .map_err(|e| ObjectError::InvalidType(format!("Invalid end timestamp: {}", e)))?;
 
@@ -266,11 +272,12 @@ impl Runnable for AsyncSleep {
     fn set_argument(
         &mut self,
         argument: OnionStaticObject,
-        _gc: &mut GC<OnionObject>,
+        _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), ObjectError> {
         self.millis = argument.weak().with_data(|data| {
             get_attr_direct(data, "millis".to_string())?
                 .weak()
+                .try_borrow()?
                 .to_integer()
                 .map_err(|e| ObjectError::InvalidType(format!("Invalid millis: {}", e)))
         })?;
@@ -278,7 +285,7 @@ impl Runnable for AsyncSleep {
         Ok(())
     }
 
-    fn step(&mut self, _gc: &mut GC<OnionObject>) -> Result<StepResult, RuntimeError> {
+    fn step(&mut self, _gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
         let elapsed = self.start_time.elapsed().map_err(|e| {
             RuntimeError::DetailedError(format!("Failed to get elapsed time: {}", e))
         })?;
@@ -292,14 +299,14 @@ impl Runnable for AsyncSleep {
     fn receive(
         &mut self,
         _step_result: StepResult,
-        _gc: &mut GC<OnionObject>,
+        _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         Err(RuntimeError::DetailedError(
             "receive not implemented".to_string(),
         ))
     }
 
-    fn copy(&self, _gc: &mut onion_vm::GC<OnionObject>) -> Box<dyn Runnable> {
+    fn copy(&self, _gc: &mut onion_vm::GC<OnionObjectCell>) -> Box<dyn Runnable> {
         Box::new(AsyncSleep {
             millis: self.millis,
             start_time: self.start_time,
@@ -429,10 +436,7 @@ pub fn build_module() -> OnionStaticObject {
         ),
     );
 
-    module.insert(
-        "async_sleep".to_string(),
-        AsyncSleep::get(),
-    );
+    module.insert("async_sleep".to_string(), AsyncSleep::get());
 
     build_named_dict(module)
 }

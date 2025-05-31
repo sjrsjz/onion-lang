@@ -4,7 +4,7 @@ use arc_gc::{arc::GCArc, gc::GC, traceable::GCTraceable};
 
 use crate::{
     lambda::runnable::Runnable,
-    types::object::{ObjectError, OnionObject, OnionStaticObject},
+    types::object::{ObjectError, OnionObject, OnionObjectCell, OnionStaticObject},
 };
 
 use super::runnable::OnionLambdaRunnable;
@@ -35,10 +35,10 @@ impl Display for LambdaBody {
 
 #[derive(Clone)]
 pub struct OnionLambdaDefinition {
-    pub(crate) parameter: Box<OnionObject>,
+    pub(crate) parameter: Box<OnionObjectCell>,
     pub(crate) body: LambdaBody,
-    pub(crate) capture: Box<OnionObject>,
-    pub(crate) self_object: Box<OnionObject>,
+    pub(crate) capture: Box<OnionObjectCell>,
+    pub(crate) self_object: Box<OnionObjectCell>,
     pub(crate) signature: String,
 }
 
@@ -55,11 +55,11 @@ impl OnionLambdaDefinition {
             body,
             capture: Box::new(match capture {
                 Some(capture) => capture.weak().clone(),
-                None => OnionObject::Undefined(None),
+                None => OnionObject::Undefined(None).to_cell(),
             }),
             self_object: Box::new(match self_object {
                 Some(self_object) => self_object.weak().clone(),
-                None => OnionObject::Undefined(None),
+                None => OnionObject::Undefined(None).to_cell(),
             }),
             signature,
         })
@@ -70,7 +70,7 @@ impl OnionLambdaDefinition {
         &self,
         argument: OnionStaticObject,
         this_lambda: &OnionStaticObject,
-        gc: &mut GC<OnionObject>,
+        gc: &mut GC<OnionObjectCell>,
     ) -> Result<Box<dyn Runnable>, ObjectError> {
         match &self.body {
             LambdaBody::Instruction(instruction) => {
@@ -107,7 +107,7 @@ impl OnionLambdaDefinition {
         }
     }
 
-    pub fn upgrade(&self) -> Option<Vec<GCArc<OnionObject>>> {
+    pub fn upgrade(&self) -> Option<Vec<GCArc<OnionObjectCell>>> {
         let mut arcs = Vec::new();
         if let Some(param_arcs) = self.parameter.upgrade() {
             arcs.extend(param_arcs);
@@ -138,9 +138,9 @@ impl OnionLambdaDefinition {
         F: Fn(&OnionObject) -> Result<R, ObjectError>,
     {
         match key {
-            OnionObject::String(s) if s.as_str() == "parameter" => f(&self.parameter),
-            OnionObject::String(s) if s.as_str() == "capture" => f(&self.capture),
-            OnionObject::String(s) if s.as_str() == "self" => f(&self.self_object),
+            OnionObject::String(s) if s.as_str() == "parameter" => f(&*self.parameter.try_borrow()?),
+            OnionObject::String(s) if s.as_str() == "capture" => f(&*self.capture.try_borrow()?),
+            OnionObject::String(s) if s.as_str() == "self" => f(&*self.self_object.try_borrow()?),
             OnionObject::String(s) if s.as_str() == "signature" => {
                 f(&OnionObject::String(self.signature.clone()))
             }
@@ -156,9 +156,9 @@ impl OnionLambdaDefinition {
         F: Fn(&mut OnionObject) -> Result<R, ObjectError>,
     {
         match key {
-            OnionObject::String(s) if s.as_str() == "parameter" => f(&mut self.parameter),
-            OnionObject::String(s) if s.as_str() == "capture" => f(&mut self.capture),
-            OnionObject::String(s) if s.as_str() == "self" => f(&mut self.self_object),
+            OnionObject::String(s) if s.as_str() == "parameter" => f(&mut *self.parameter.try_borrow_mut()?),
+            OnionObject::String(s) if s.as_str() == "capture" => f(&mut *self.capture.try_borrow_mut()?),
+            OnionObject::String(s) if s.as_str() == "self" => f(&mut *self.self_object.try_borrow_mut()?),
             _ => Err(ObjectError::InvalidOperation(format!(
                 "Attribute '{:?}' not found in lambda definition",
                 key
@@ -170,7 +170,7 @@ impl OnionLambdaDefinition {
     where
         F: Fn(&OnionObject) -> Result<R, ObjectError>,
     {
-        f(&self.parameter)
+        f(&*self.parameter.try_borrow()?)
     }
 }
 
