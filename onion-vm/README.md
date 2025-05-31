@@ -95,7 +95,7 @@ let result = scheduler.execute(bytecode)?;
 ### Custom Type Integration
 
 ```rust
-use onion_vm::types::object::{OnionObject, ObjectError};
+use onion_vm::types::object::{OnionObject, RuntimeError};
 
 // Implement custom type
 impl CustomType {
@@ -103,7 +103,7 @@ impl CustomType {
         // Convert to VM representation
     }
     
-    fn from_onion_object(obj: &OnionObject) -> Result<Self, ObjectError> {
+    fn from_onion_object(obj: &OnionObject) -> Result<Self, RuntimeError> {
         // Convert from VM representation
     }
 }

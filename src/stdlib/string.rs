@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use onion_vm::{
     lambda::runnable::RuntimeError,
-    types::object::{ObjectError, OnionObject, OnionObjectCell, OnionStaticObject},
+    types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
     GC,
 };
 
@@ -12,124 +12,106 @@ fn length(
     argument: OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument
-        .weak()
-        .with_data(|data| {
-            let string = get_attr_direct(data, "string".to_string())?;
-            string.weak().with_data(|string_data| match string_data {
-                OnionObject::String(s) => Ok(OnionObject::Integer(s.len() as i64).stabilize()),
-                _ => Err(ObjectError::InvalidOperation(
-                    "length requires string".to_string(),
-                )),
-            })
+    argument.weak().with_data(|data| {
+        let string = get_attr_direct(data, "string".to_string())?;
+        string.weak().with_data(|string_data| match string_data {
+            OnionObject::String(s) => Ok(OnionObject::Integer(s.len() as i64).stabilize()),
+            _ => Err(RuntimeError::InvalidOperation(
+                "length requires string".to_string(),
+            )),
         })
-        .map_err(RuntimeError::ObjectError)
+    })
 }
 
 fn trim(
     argument: OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument
-        .weak()
-        .with_data(|data| {
-            let string = get_attr_direct(data, "string".to_string())?;
-            string.weak().with_data(|string_data| match string_data {
-                OnionObject::String(s) => Ok(OnionObject::String(s.trim().to_string()).stabilize()),
-                _ => Err(ObjectError::InvalidOperation(
-                    "trim requires string".to_string(),
-                )),
-            })
+    argument.weak().with_data(|data| {
+        let string = get_attr_direct(data, "string".to_string())?;
+        string.weak().with_data(|string_data| match string_data {
+            OnionObject::String(s) => Ok(OnionObject::String(s.trim().to_string()).stabilize()),
+            _ => Err(RuntimeError::InvalidOperation(
+                "trim requires string".to_string(),
+            )),
         })
-        .map_err(RuntimeError::ObjectError)
+    })
 }
 
 fn uppercase(
     argument: OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument
-        .weak()
-        .with_data(|data| {
-            let string = get_attr_direct(data, "string".to_string())?;
-            string.weak().with_data(|string_data| match string_data {
-                OnionObject::String(s) => Ok(OnionObject::String(s.to_uppercase()).stabilize()),
-                _ => Err(ObjectError::InvalidOperation(
-                    "uppercase requires string".to_string(),
-                )),
-            })
+    argument.weak().with_data(|data| {
+        let string = get_attr_direct(data, "string".to_string())?;
+        string.weak().with_data(|string_data| match string_data {
+            OnionObject::String(s) => Ok(OnionObject::String(s.to_uppercase()).stabilize()),
+            _ => Err(RuntimeError::InvalidOperation(
+                "uppercase requires string".to_string(),
+            )),
         })
-        .map_err(RuntimeError::ObjectError)
+    })
 }
 
 fn lowercase(
     argument: OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument
-        .weak()
-        .with_data(|data| {
-            let string = get_attr_direct(data, "string".to_string())?;
-            string.weak().with_data(|string_data| match string_data {
-                OnionObject::String(s) => Ok(OnionObject::String(s.to_lowercase()).stabilize()),
-                _ => Err(ObjectError::InvalidOperation(
-                    "lowercase requires string".to_string(),
-                )),
-            })
+    argument.weak().with_data(|data| {
+        let string = get_attr_direct(data, "string".to_string())?;
+        string.weak().with_data(|string_data| match string_data {
+            OnionObject::String(s) => Ok(OnionObject::String(s.to_lowercase()).stabilize()),
+            _ => Err(RuntimeError::InvalidOperation(
+                "lowercase requires string".to_string(),
+            )),
         })
-        .map_err(RuntimeError::ObjectError)
+    })
 }
 
 fn contains(
     argument: OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument
-        .weak()
-        .with_data(|data| {
-            let string = get_attr_direct(data, "string".to_string())?;
-            let substring = get_attr_direct(data, "substring".to_string())?;
+    argument.weak().with_data(|data| {
+        let string = get_attr_direct(data, "string".to_string())?;
+        let substring = get_attr_direct(data, "substring".to_string())?;
 
-            string.weak().with_data(|string_data| {
-                substring
-                    .weak()
-                    .with_data(|substring_data| match (string_data, substring_data) {
-                        (OnionObject::String(s), OnionObject::String(sub)) => {
-                            Ok(OnionObject::Boolean(s.contains(sub)).stabilize())
-                        }
-                        _ => Err(ObjectError::InvalidOperation(
-                            "contains requires string arguments".to_string(),
-                        )),
-                    })
-            })
+        string.weak().with_data(|string_data| {
+            substring
+                .weak()
+                .with_data(|substring_data| match (string_data, substring_data) {
+                    (OnionObject::String(s), OnionObject::String(sub)) => {
+                        Ok(OnionObject::Boolean(s.contains(sub)).stabilize())
+                    }
+                    _ => Err(RuntimeError::InvalidOperation(
+                        "contains requires string arguments".to_string(),
+                    )),
+                })
         })
-        .map_err(RuntimeError::ObjectError)
+    })
 }
 
 fn concat(
     argument: OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument
-        .weak()
-        .with_data(|data| {
-            let a = get_attr_direct(data, "a".to_string())?;
-            let b = get_attr_direct(data, "b".to_string())?;
+    argument.weak().with_data(|data| {
+        let a = get_attr_direct(data, "a".to_string())?;
+        let b = get_attr_direct(data, "b".to_string())?;
 
-            a.weak().with_data(|a_data| {
-                b.weak().with_data(|b_data| match (a_data, b_data) {
-                    (OnionObject::String(s1), OnionObject::String(s2)) => {
-                        let mut result = s1.clone();
-                        result.push_str(s2);
-                        Ok(OnionObject::String(result).stabilize())
-                    }
-                    _ => Err(ObjectError::InvalidOperation(
-                        "concat requires string arguments".to_string(),
-                    )),
-                })
+        a.weak().with_data(|a_data| {
+            b.weak().with_data(|b_data| match (a_data, b_data) {
+                (OnionObject::String(s1), OnionObject::String(s2)) => {
+                    let mut result = s1.clone();
+                    result.push_str(s2);
+                    Ok(OnionObject::String(result).stabilize())
+                }
+                _ => Err(RuntimeError::InvalidOperation(
+                    "concat requires string arguments".to_string(),
+                )),
             })
         })
-        .map_err(RuntimeError::ObjectError)
+    })
 }
 
 pub fn build_module() -> OnionStaticObject {

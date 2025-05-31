@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use onion_vm::{
     lambda::runnable::RuntimeError,
-    types::object::{ObjectError, OnionObject, OnionObjectCell, OnionStaticObject},
+    types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
     GC,
 };
 
@@ -13,14 +13,11 @@ fn to_string(
     argument: OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument
-        .weak()
-        .with_data(|data| {
-            let value = get_attr_direct(data, "value".to_string())?;
-            let string_representation = value.weak().try_borrow()?.to_string()?;
-            Ok(OnionObject::String(string_representation).stabilize())
-        })
-        .map_err(RuntimeError::ObjectError)
+    argument.weak().with_data(|data| {
+        let value = get_attr_direct(data, "value".to_string())?;
+        let string_representation = value.weak().try_borrow()?.to_string()?;
+        Ok(OnionObject::String(string_representation).stabilize())
+    })
 }
 
 /// Convert object to integer
@@ -28,31 +25,26 @@ fn to_int(
     argument: OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument
-        .weak()
-        .with_data(|data| {
-            let value = get_attr_direct(data, "value".to_string())?;
+    argument.weak().with_data(|data| {
+        let value = get_attr_direct(data, "value".to_string())?;
 
-            value.weak().with_data(|data| match data {
-                OnionObject::String(s) => match s.trim().parse::<i64>() {
-                    Ok(i) => Ok(OnionObject::Integer(i).stabilize()),
-                    Err(e) => Err(ObjectError::InvalidOperation(format!(
-                        "Cannot convert string '{}' to integer: {}",
-                        s, e
-                    ))),
-                },
-                OnionObject::Float(f) => Ok(OnionObject::Integer(*f as i64).stabilize()),
-                OnionObject::Integer(i) => Ok(OnionObject::Integer(*i).stabilize()),
-                OnionObject::Boolean(b) => {
-                    Ok(OnionObject::Integer(if *b { 1 } else { 0 }).stabilize())
-                }
-                _ => Err(ObjectError::InvalidOperation(format!(
-                    "Cannot convert {:?} to integer",
-                    data
+        value.weak().with_data(|data| match data {
+            OnionObject::String(s) => match s.trim().parse::<i64>() {
+                Ok(i) => Ok(OnionObject::Integer(i).stabilize()),
+                Err(e) => Err(RuntimeError::InvalidOperation(format!(
+                    "Cannot convert string '{}' to integer: {}",
+                    s, e
                 ))),
-            })
+            },
+            OnionObject::Float(f) => Ok(OnionObject::Integer(*f as i64).stabilize()),
+            OnionObject::Integer(i) => Ok(OnionObject::Integer(*i).stabilize()),
+            OnionObject::Boolean(b) => Ok(OnionObject::Integer(if *b { 1 } else { 0 }).stabilize()),
+            _ => Err(RuntimeError::InvalidOperation(format!(
+                "Cannot convert {:?} to integer",
+                data
+            ))),
         })
-        .map_err(RuntimeError::ObjectError)
+    })
 }
 
 /// Convert object to float
@@ -60,31 +52,28 @@ fn to_float(
     argument: OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument
-        .weak()
-        .with_data(|data| {
-            let value = get_attr_direct(data, "value".to_string())?;
+    argument.weak().with_data(|data| {
+        let value = get_attr_direct(data, "value".to_string())?;
 
-            value.weak().with_data(|data| match data {
-                OnionObject::String(s) => match s.trim().parse::<f64>() {
-                    Ok(f) => Ok(OnionObject::Float(f).stabilize()),
-                    Err(e) => Err(ObjectError::InvalidOperation(format!(
-                        "Cannot convert string '{}' to float: {}",
-                        s, e
-                    ))),
-                },
-                OnionObject::Integer(i) => Ok(OnionObject::Float(*i as f64).stabilize()),
-                OnionObject::Float(f) => Ok(OnionObject::Float(*f).stabilize()),
-                OnionObject::Boolean(b) => {
-                    Ok(OnionObject::Float(if *b { 1.0 } else { 0.0 }).stabilize())
-                }
-                _ => Err(ObjectError::InvalidOperation(format!(
-                    "Cannot convert {:?} to float",
-                    data
+        value.weak().with_data(|data| match data {
+            OnionObject::String(s) => match s.trim().parse::<f64>() {
+                Ok(f) => Ok(OnionObject::Float(f).stabilize()),
+                Err(e) => Err(RuntimeError::InvalidOperation(format!(
+                    "Cannot convert string '{}' to float: {}",
+                    s, e
                 ))),
-            })
+            },
+            OnionObject::Integer(i) => Ok(OnionObject::Float(*i as f64).stabilize()),
+            OnionObject::Float(f) => Ok(OnionObject::Float(*f).stabilize()),
+            OnionObject::Boolean(b) => {
+                Ok(OnionObject::Float(if *b { 1.0 } else { 0.0 }).stabilize())
+            }
+            _ => Err(RuntimeError::InvalidOperation(format!(
+                "Cannot convert {:?} to float",
+                data
+            ))),
         })
-        .map_err(RuntimeError::ObjectError)
+    })
 }
 
 /// Convert object to boolean
@@ -92,34 +81,31 @@ fn to_bool(
     argument: OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument
-        .weak()
-        .with_data(|data| {
-            let value = get_attr_direct(data, "value".to_string())?;
+    argument.weak().with_data(|data| {
+        let value = get_attr_direct(data, "value".to_string())?;
 
-            value.weak().with_data(|data| match data {
-                OnionObject::String(s) => {
-                    let s = s.trim().to_lowercase();
-                    if s == "true" || s == "1" || s == "yes" || s == "y" {
-                        Ok(OnionObject::Boolean(true).stabilize())
-                    } else if s == "false" || s == "0" || s == "no" || s == "n" || s.is_empty() {
-                        Ok(OnionObject::Boolean(false).stabilize())
-                    } else {
-                        Err(ObjectError::InvalidOperation(format!(
-                            "Cannot convert string '{}' to boolean",
-                            s
-                        )))
-                    }
+        value.weak().with_data(|data| match data {
+            OnionObject::String(s) => {
+                let s = s.trim().to_lowercase();
+                if s == "true" || s == "1" || s == "yes" || s == "y" {
+                    Ok(OnionObject::Boolean(true).stabilize())
+                } else if s == "false" || s == "0" || s == "no" || s == "n" || s.is_empty() {
+                    Ok(OnionObject::Boolean(false).stabilize())
+                } else {
+                    Err(RuntimeError::InvalidOperation(format!(
+                        "Cannot convert string '{}' to boolean",
+                        s
+                    )))
                 }
-                OnionObject::Integer(i) => Ok(OnionObject::Boolean(*i != 0).stabilize()),
-                OnionObject::Float(f) => Ok(OnionObject::Boolean(*f != 0.0).stabilize()),
-                OnionObject::Boolean(b) => Ok(OnionObject::Boolean(*b).stabilize()),
-                OnionObject::Undefined(_) => Ok(OnionObject::Boolean(false).stabilize()),
-                OnionObject::Null => Ok(OnionObject::Boolean(false).stabilize()),
-                _ => Ok(OnionObject::Boolean(true).stabilize()), // Other object types default to true
-            })
+            }
+            OnionObject::Integer(i) => Ok(OnionObject::Boolean(*i != 0).stabilize()),
+            OnionObject::Float(f) => Ok(OnionObject::Boolean(*f != 0.0).stabilize()),
+            OnionObject::Boolean(b) => Ok(OnionObject::Boolean(*b).stabilize()),
+            OnionObject::Undefined(_) => Ok(OnionObject::Boolean(false).stabilize()),
+            OnionObject::Null => Ok(OnionObject::Boolean(false).stabilize()),
+            _ => Ok(OnionObject::Boolean(true).stabilize()), // Other object types default to true
         })
-        .map_err(RuntimeError::ObjectError)
+    })
 }
 
 /// Get object type name
@@ -127,17 +113,14 @@ fn type_of(
     argument: OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument
-        .weak()
-        .with_data(|data| {
-            let value = get_attr_direct(data, "value".to_string())?;
+    argument.weak().with_data(|data| {
+        let value = get_attr_direct(data, "value".to_string())?;
 
-            value.weak().with_data(|data| {
-                let type_name = data.type_of()?;
-                Ok(OnionObject::String(type_name).stabilize())
-            })
+        value.weak().with_data(|data| {
+            let type_name = data.type_of()?;
+            Ok(OnionObject::String(type_name).stabilize())
         })
-        .map_err(RuntimeError::ObjectError)
+    })
 }
 
 /// Check if object is an integer
@@ -145,17 +128,14 @@ fn is_int(
     argument: OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument
-        .weak()
-        .with_data(|data| {
-            let value = get_attr_direct(data, "value".to_string())?;
+    argument.weak().with_data(|data| {
+        let value = get_attr_direct(data, "value".to_string())?;
 
-            value.weak().with_data(|data| match data {
-                OnionObject::Integer(_) => Ok(OnionObject::Boolean(true).stabilize()),
-                _ => Ok(OnionObject::Boolean(false).stabilize()),
-            })
+        value.weak().with_data(|data| match data {
+            OnionObject::Integer(_) => Ok(OnionObject::Boolean(true).stabilize()),
+            _ => Ok(OnionObject::Boolean(false).stabilize()),
         })
-        .map_err(RuntimeError::ObjectError)
+    })
 }
 
 /// Check if object is a float
@@ -163,17 +143,14 @@ fn is_float(
     argument: OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument
-        .weak()
-        .with_data(|data| {
-            let value = get_attr_direct(data, "value".to_string())?;
+    argument.weak().with_data(|data| {
+        let value = get_attr_direct(data, "value".to_string())?;
 
-            value.weak().with_data(|data| match data {
-                OnionObject::Float(_) => Ok(OnionObject::Boolean(true).stabilize()),
-                _ => Ok(OnionObject::Boolean(false).stabilize()),
-            })
+        value.weak().with_data(|data| match data {
+            OnionObject::Float(_) => Ok(OnionObject::Boolean(true).stabilize()),
+            _ => Ok(OnionObject::Boolean(false).stabilize()),
         })
-        .map_err(RuntimeError::ObjectError)
+    })
 }
 
 /// Check if object is a string
@@ -181,17 +158,14 @@ fn is_string(
     argument: OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument
-        .weak()
-        .with_data(|data| {
-            let value = get_attr_direct(data, "value".to_string())?;
+    argument.weak().with_data(|data| {
+        let value = get_attr_direct(data, "value".to_string())?;
 
-            value.weak().with_data(|data| match data {
-                OnionObject::String(_) => Ok(OnionObject::Boolean(true).stabilize()),
-                _ => Ok(OnionObject::Boolean(false).stabilize()),
-            })
+        value.weak().with_data(|data| match data {
+            OnionObject::String(_) => Ok(OnionObject::Boolean(true).stabilize()),
+            _ => Ok(OnionObject::Boolean(false).stabilize()),
         })
-        .map_err(RuntimeError::ObjectError)
+    })
 }
 
 /// Check if object is a boolean
@@ -199,17 +173,14 @@ fn is_bool(
     argument: OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument
-        .weak()
-        .with_data(|data| {
-            let value = get_attr_direct(data, "value".to_string())?;
+    argument.weak().with_data(|data| {
+        let value = get_attr_direct(data, "value".to_string())?;
 
-            value.weak().with_data(|data| match data {
-                OnionObject::Boolean(_) => Ok(OnionObject::Boolean(true).stabilize()),
-                _ => Ok(OnionObject::Boolean(false).stabilize()),
-            })
+        value.weak().with_data(|data| match data {
+            OnionObject::Boolean(_) => Ok(OnionObject::Boolean(true).stabilize()),
+            _ => Ok(OnionObject::Boolean(false).stabilize()),
         })
-        .map_err(RuntimeError::ObjectError)
+    })
 }
 
 // get attr or undefined
@@ -217,29 +188,25 @@ fn find(
     argument: OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument
-        .weak()
-        .with_data(|data| {
-            let obj = get_attr_direct(data, "obj".to_string())?;
-            let key = get_attr_direct(data, "key".to_string())?;
-            let key_borrowed = key.weak().try_borrow()?;
-            match obj
-                .weak()
-                .with_attribute(&*key_borrowed, &|obj| {
-                    Ok(obj.clone().stabilize())
-                }) {
-                Ok(value) => Ok(value),
-                Err(ObjectError::InvalidOperation(err)) => {
-                    // If the attribute is not found, return undefined
-                    Ok(OnionObject::Undefined(Some(err)).stabilize())
-                }
-                Err(e) => {
-                    // If any other error occurs, propagate it
-                    Err(e)
-                }
+    argument.weak().with_data(|data| {
+        let obj = get_attr_direct(data, "obj".to_string())?;
+        let key = get_attr_direct(data, "key".to_string())?;
+        let key_borrowed = key.weak().try_borrow()?;
+        match obj
+            .weak()
+            .with_attribute(&*key_borrowed, &|obj| Ok(obj.clone().stabilize()))
+        {
+            Ok(value) => Ok(value),
+            Err(RuntimeError::InvalidOperation(err)) => {
+                // If the attribute is not found, return undefined
+                Ok(OnionObject::Undefined(Some(err)).stabilize())
             }
-        })
-        .map_err(RuntimeError::ObjectError)
+            Err(e) => {
+                // If any other error occurs, propagate it
+                Err(e)
+            }
+        }
+    })
 }
 
 /// Build the type conversion module

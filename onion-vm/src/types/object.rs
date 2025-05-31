@@ -10,6 +10,8 @@ use arc_gc::{
     traceable::GCTraceable,
 };
 
+use crate::lambda::runnable::RuntimeError;
+
 use super::{
     lambda::{
         definition::OnionLambdaDefinition, vm_instructions::instruction_set::VMInstructionPackage,
@@ -25,34 +27,34 @@ use super::{
 pub struct OnionObjectCell(pub RefCell<OnionObject>);
 
 impl OnionObjectCell {
-    pub fn with_data<T, F>(&self, f: F) -> Result<T, ObjectError>
+    pub fn with_data<T, F>(&self, f: F) -> Result<T, RuntimeError>
     where
-        F: FnOnce(&OnionObject) -> Result<T, ObjectError>,
+        F: FnOnce(&OnionObject) -> Result<T, RuntimeError>,
     {
         match self.0.try_borrow() {
             Ok(obj) => obj.with_data(f),
-            Err(_) => Err(ObjectError::BrokenReference),
+            Err(_) => Err(RuntimeError::BrokenReference),
         }
     }
-    pub fn with_data_mut<T, F>(&self, f: F) -> Result<T, ObjectError>
+    pub fn with_data_mut<T, F>(&self, f: F) -> Result<T, RuntimeError>
     where
-        F: FnOnce(&mut OnionObject) -> Result<T, ObjectError>,
+        F: FnOnce(&mut OnionObject) -> Result<T, RuntimeError>,
     {
         match self.0.try_borrow_mut() {
             Ok(mut obj) => obj.with_data_mut(f),
-            Err(_) => Err(ObjectError::BrokenReference),
+            Err(_) => Err(RuntimeError::BrokenReference),
         }
     }
 
-    pub fn with_attribute<T, F>(&self, key: &OnionObject, f: &F) -> Result<T, ObjectError>
+    pub fn with_attribute<T, F>(&self, key: &OnionObject, f: &F) -> Result<T, RuntimeError>
     where
-        F: Fn(&OnionObject) -> Result<T, ObjectError>,
+        F: Fn(&OnionObject) -> Result<T, RuntimeError>,
     {
         match self.0.try_borrow() {
             Ok(obj) => {
                 obj.with_attribute(key, f)
             }
-            Err(_) => Err(ObjectError::BrokenReference),
+            Err(_) => Err(RuntimeError::BrokenReference),
             
         }
     }
@@ -61,15 +63,15 @@ impl OnionObjectCell {
         &self,
         key: &OnionObject,
         f: &F,
-    ) -> Result<T, ObjectError>
+    ) -> Result<T, RuntimeError>
     where
-        F: Fn(&mut OnionObject) -> Result<T, ObjectError>,
+        F: Fn(&mut OnionObject) -> Result<T, RuntimeError>,
     {
         match self.0.try_borrow_mut() {
             Ok(mut obj) => {
                 obj.with_attribute_mut(key, f)
             }
-            Err(_) => Err(ObjectError::BrokenReference),
+            Err(_) => Err(RuntimeError::BrokenReference),
         }
     }
 
@@ -86,15 +88,15 @@ impl OnionObjectCell {
         OnionStaticObject::new(self.borrow().clone())
     }
 
-    pub fn equals(&self, other: &Self) -> Result<bool, ObjectError> {
+    pub fn equals(&self, other: &Self) -> Result<bool, RuntimeError> {
         self.with_data(|obj| other.with_data(|other_obj| obj.equals(other_obj)))
     }
 
-    pub fn try_borrow(&self) -> Result<std::cell::Ref<OnionObject>, ObjectError> {
-        self.0.try_borrow().map_err(|_| ObjectError::BrokenReference)
+    pub fn try_borrow(&self) -> Result<std::cell::Ref<OnionObject>, RuntimeError> {
+        self.0.try_borrow().map_err(|_| RuntimeError::BrokenReference)
     }
-    pub fn try_borrow_mut(&self) -> Result<std::cell::RefMut<OnionObject>, ObjectError> {
-        self.0.try_borrow_mut().map_err(|_| ObjectError::BrokenReference)
+    pub fn try_borrow_mut(&self) -> Result<std::cell::RefMut<OnionObject>, RuntimeError> {
+        self.0.try_borrow_mut().map_err(|_| RuntimeError::BrokenReference)
     }
 }
 
@@ -144,23 +146,6 @@ impl Display for OnionObjectCell {
     }    
 }
 
-#[allow(dead_code)]
-#[derive(Debug, Clone)]
-pub enum ObjectError {
-    InvalidType(String),
-    InvalidOperation(String),
-    BrokenReference,
-}
-
-impl Display for ObjectError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ObjectError::InvalidType(msg) => write!(f, "Invalid type: {}", msg),
-            ObjectError::InvalidOperation(msg) => write!(f, "Invalid operation: {}", msg),
-            ObjectError::BrokenReference => write!(f, "Broken reference"),
-        }
-    }
-}
 
 #[derive(Clone)]
 pub enum OnionObject {
@@ -261,7 +246,7 @@ impl OnionObject {
         OnionStaticObject::new(self)
     }
 
-    pub fn len(&self) -> Result<OnionStaticObject, ObjectError> {
+    pub fn len(&self) -> Result<OnionStaticObject, RuntimeError> {
         match self {
             OnionObject::Tuple(tuple) => tuple.len(),
             OnionObject::String(s) => {
@@ -273,14 +258,14 @@ impl OnionObject {
             OnionObject::Range(start, end) => Ok(OnionStaticObject::new(OnionObject::Integer(
                 (end - start) as i64,
             ))),
-            _ => Err(ObjectError::InvalidOperation(format!(
+            _ => Err(RuntimeError::InvalidOperation(format!(
                 "len() not supported for {:?}",
                 self
             ))),
         }
     }
 
-    pub fn contains(&self, other: &OnionObject) -> Result<bool, ObjectError> {
+    pub fn contains(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
         self.with_data(|obj| {
             other.with_data(|other_obj| match (obj, other_obj) {
                 (OnionObject::Tuple(tuple), _) => tuple.contains(other_obj),
@@ -295,7 +280,7 @@ impl OnionObject {
                 (OnionObject::Range(start, end), OnionObject::Range(other_start, other_end)) => {
                     Ok(*other_start >= *start && *other_end <= *end)
                 }
-                _ => Err(ObjectError::InvalidOperation(format!(
+                _ => Err(RuntimeError::InvalidOperation(format!(
                     "contains() not supported for {:?}",
                     obj
                 ))),
@@ -306,16 +291,16 @@ impl OnionObject {
     /// Warning: This method can cause stack overflow if there are nested Mut references.
     ///
     /// TODO: Add recursion depth limit after VM core is complete.
-    pub fn clone_value(&self) -> Result<OnionStaticObject, ObjectError> {
+    pub fn clone_value(&self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| Ok(obj.clone().stabilize()))
     }
 
     /// Warning: This method can cause stack overflow if there are nested Mut references.
     ///
     /// TODO: Add recursion depth limit after VM core is complete.
-    pub fn with_data<T, F>(&self, f: F) -> Result<T, ObjectError>
+    pub fn with_data<T, F>(&self, f: F) -> Result<T, RuntimeError>
     where
-        F: FnOnce(&OnionObject) -> Result<T, ObjectError>,
+        F: FnOnce(&OnionObject) -> Result<T, RuntimeError>,
     {
         match self {
             OnionObject::Mut(weak) => {
@@ -323,7 +308,7 @@ impl OnionObject {
                     // FIXME: Potential infinite recursion if Mut contains another Mut
                     strong.as_ref().with_data(f)
                 } else {
-                    Err(ObjectError::BrokenReference)
+                    Err(RuntimeError::BrokenReference)
                 }
             }
             _ => f(self),
@@ -333,9 +318,9 @@ impl OnionObject {
     /// Warning: This method can cause stack overflow if there are nested Mut references.
     ///
     /// TODO: Add recursion depth limit after VM core is complete.
-    pub fn with_data_mut<T, F>(&mut self, f: F) -> Result<T, ObjectError>
+    pub fn with_data_mut<T, F>(&mut self, f: F) -> Result<T, RuntimeError>
     where
-        F: FnOnce(&mut OnionObject) -> Result<T, ObjectError>,
+        F: FnOnce(&mut OnionObject) -> Result<T, RuntimeError>,
     {
         match self {
             OnionObject::Mut(weak) => {
@@ -343,18 +328,18 @@ impl OnionObject {
                     // FIXME: Potential infinite recursion if Mut contains another Mut
                     strong.as_ref().with_data_mut(f)
                 } else {
-                    Err(ObjectError::BrokenReference)
+                    Err(RuntimeError::BrokenReference)
                 }
             }
             _ => f(self),
         }
     }
     /// Assign a new value to a mutable object.
-    pub fn assign(&self, other: &OnionObject) -> Result<(), ObjectError> {
+    pub fn assign(&self, other: &OnionObject) -> Result<(), RuntimeError> {
         // 由于我们无法保证赋值后GCArcWeak指向对象的稳定性，对不可变对象进行赋值操作会导致潜在的内存安全问题。
         // Mut类型由于是被GC管理的，因此可以安全地进行赋值操作（前提是GCArcWeak指向的对象仍然存在）。
         let OnionObject::Mut(weak) = self else {
-            return Err(ObjectError::InvalidOperation(format!(
+            return Err(RuntimeError::InvalidOperation(format!(
                 "Cannot assign to non-mutable object: {:?}",
                 self
             )));
@@ -364,54 +349,54 @@ impl OnionObject {
                 *obj = other.clone();
                 Ok(())
             }),
-            None => Err(ObjectError::BrokenReference),
+            None => Err(RuntimeError::BrokenReference),
         }
     }
 
     /// Replace the value of a mutable object with another mutable object.
-    pub fn replace_mut(&mut self, other: &OnionObject) -> Result<(), ObjectError> {
+    pub fn replace_mut(&mut self, other: &OnionObject) -> Result<(), RuntimeError> {
         match (self, other) {
             (OnionObject::Mut(to), OnionObject::Mut(from)) => {
                 *to = from.clone();
                 Ok(())
             }
-            _ => Err(ObjectError::InvalidOperation(format!(
+            _ => Err(RuntimeError::InvalidOperation(format!(
                 "Invalid replace_mut() operation"
             ))),
         }
     }
 
-    pub fn to_integer(&self) -> Result<i64, ObjectError> {
+    pub fn to_integer(&self) -> Result<i64, RuntimeError> {
         self.with_data(|obj| match obj {
             OnionObject::Integer(i) => Ok(*i),
             OnionObject::Float(f) => Ok(*f as i64),
             OnionObject::String(s) => s
                 .parse::<i64>()
-                .map_err(|e| ObjectError::InvalidType(e.to_string())),
+                .map_err(|e| RuntimeError::InvalidType(e.to_string())),
             OnionObject::Boolean(b) => Ok(if *b { 1 } else { 0 }),
-            _ => Err(ObjectError::InvalidType(format!(
+            _ => Err(RuntimeError::InvalidType(format!(
                 "Cannot convert {:?} to Integer",
                 obj
             ))),
         })
     }
 
-    pub fn to_float(&self) -> Result<f64, ObjectError> {
+    pub fn to_float(&self) -> Result<f64, RuntimeError> {
         self.with_data(|obj| match obj {
             OnionObject::Integer(i) => Ok(*i as f64),
             OnionObject::Float(f) => Ok(*f),
             OnionObject::String(s) => s
                 .parse::<f64>()
-                .map_err(|e| ObjectError::InvalidType(e.to_string())),
+                .map_err(|e| RuntimeError::InvalidType(e.to_string())),
             OnionObject::Boolean(b) => Ok(if *b { 1.0 } else { 0.0 }),
-            _ => Err(ObjectError::InvalidType(format!(
+            _ => Err(RuntimeError::InvalidType(format!(
                 "Cannot convert {:?} to Float",
                 obj
             ))),
         })
     }
 
-    pub fn to_string(&self) -> Result<String, ObjectError> {
+    pub fn to_string(&self) -> Result<String, RuntimeError> {
         self.with_data(|obj| match obj {
             OnionObject::Integer(i) => Ok(i.to_string()),
             OnionObject::Float(f) => Ok(f.to_string()),
@@ -436,17 +421,17 @@ impl OnionObject {
                         "({},)",
                         first
                             .try_borrow()
-                            .map_err(|_| ObjectError::BrokenReference)?
+                            .map_err(|_| RuntimeError::BrokenReference)?
                             .to_string()?
                     ))
                 }
                 _ => {
-                    let elements: Result<Vec<String>, ObjectError> = tuple
+                    let elements: Result<Vec<String>, RuntimeError> = tuple
                         .elements
                         .iter()
                         .map(|e| {
                             e.try_borrow()
-                                .map_err(|_| ObjectError::BrokenReference)?
+                                .map_err(|_| RuntimeError::BrokenReference)?
                                 .to_string()
                         })
                         .collect();
@@ -454,8 +439,8 @@ impl OnionObject {
                 }
             },
             OnionObject::Pair(pair) => {
-                let left = pair.key.as_ref().borrow().to_string()?;
-                let right = pair.value.as_ref().borrow().to_string()?;
+                let left = pair.key.borrow().to_string()?;
+                let right = pair.value.borrow().to_string()?;
                 Ok(format!("{} : {}", left, right))
             }
             OnionObject::Named(named) => {
@@ -481,7 +466,7 @@ impl OnionObject {
         })
     }
 
-    pub fn to_bytes(&self) -> Result<Vec<u8>, ObjectError> {
+    pub fn to_bytes(&self) -> Result<Vec<u8>, RuntimeError> {
         self.with_data(|obj| match obj {
             OnionObject::Integer(i) => Ok(i.to_string().into_bytes()),
             OnionObject::Float(f) => Ok(f.to_string().into_bytes()),
@@ -492,14 +477,14 @@ impl OnionObject {
             } else {
                 b"false".to_vec()
             }),
-            _ => Err(ObjectError::InvalidType(format!(
+            _ => Err(RuntimeError::InvalidType(format!(
                 "Cannot convert {:?} to Bytes",
                 obj
             ))),
         })
     }
 
-    pub fn to_boolean(&self) -> Result<bool, ObjectError> {
+    pub fn to_boolean(&self) -> Result<bool, RuntimeError> {
         self.with_data(|obj| match obj {
             OnionObject::Integer(i) => Ok(*i != 0),
             OnionObject::Float(f) => Ok(*f != 0.0),
@@ -508,7 +493,7 @@ impl OnionObject {
             OnionObject::Boolean(b) => Ok(*b),
             OnionObject::Null => Ok(false),
             OnionObject::Undefined(_) => Ok(false),
-            _ => Err(ObjectError::InvalidType(format!(
+            _ => Err(RuntimeError::InvalidType(format!(
                 "Cannot convert {:?} to Boolean",
                 obj
             ))),
@@ -524,7 +509,7 @@ impl OnionObject {
 }
 
 impl OnionObject {
-    pub fn equals(&self, other: &Self) -> Result<bool, ObjectError> {
+    pub fn equals(&self, other: &Self) -> Result<bool, RuntimeError> {
         self.with_data(|left| {
             other.with_data(|right| {
                 match (left, right) {
@@ -551,7 +536,7 @@ impl OnionObject {
         })
     }
 
-    pub fn is_same(&self, other: &Self) -> Result<bool, ObjectError> {
+    pub fn is_same(&self, other: &Self) -> Result<bool, RuntimeError> {
         match (self, other) {
             (OnionObject::Mut(weak1), OnionObject::Mut(weak2)) => {
                 if let (Some(strong1), Some(strong2)) = (weak1.upgrade(), weak2.upgrade()) {
@@ -564,7 +549,7 @@ impl OnionObject {
         }
     }
 
-    pub fn binary_add(&self, other: &Self) -> Result<OnionStaticObject, ObjectError> {
+    pub fn binary_add(&self, other: &Self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| {
             other.with_data(|other_obj| match (obj, other_obj) {
                 (OnionObject::Integer(i1), OnionObject::Integer(i2)) => {
@@ -591,7 +576,7 @@ impl OnionObject {
                     OnionStaticObject::new(OnionObject::Range(start1 + start2, end1 + end2)),
                 ),
                 (OnionObject::Tuple(t1), _) => t1.binary_add(other_obj),
-                _ => Err(ObjectError::InvalidOperation(format!(
+                _ => Err(RuntimeError::InvalidOperation(format!(
                     "Invalid binary add operation for {:?} and {:?}",
                     obj, other_obj
                 ))),
@@ -599,7 +584,7 @@ impl OnionObject {
         })
     }
 
-    pub fn binary_sub(&self, other: &Self) -> Result<OnionStaticObject, ObjectError> {
+    pub fn binary_sub(&self, other: &Self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| {
             other.with_data(|other_obj| match (obj, other_obj) {
                 (OnionObject::Integer(i1), OnionObject::Integer(i2)) => {
@@ -614,7 +599,7 @@ impl OnionObject {
                 (OnionObject::Float(f1), OnionObject::Integer(i2)) => {
                     Ok(OnionStaticObject::new(OnionObject::Float(f1 - *i2 as f64)))
                 }
-                _ => Err(ObjectError::InvalidOperation(format!(
+                _ => Err(RuntimeError::InvalidOperation(format!(
                     "Invalid binary sub operation for {:?} and {:?}",
                     obj, other_obj
                 ))),
@@ -622,7 +607,7 @@ impl OnionObject {
         })
     }
 
-    pub fn binary_mul(&self, other: &Self) -> Result<OnionStaticObject, ObjectError> {
+    pub fn binary_mul(&self, other: &Self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| {
             other.with_data(|other_obj| match (obj, other_obj) {
                 (OnionObject::Integer(i1), OnionObject::Integer(i2)) => {
@@ -637,7 +622,7 @@ impl OnionObject {
                 (OnionObject::Float(f1), OnionObject::Integer(i2)) => {
                     Ok(OnionStaticObject::new(OnionObject::Float(f1 * *i2 as f64)))
                 }
-                _ => Err(ObjectError::InvalidOperation(format!(
+                _ => Err(RuntimeError::InvalidOperation(format!(
                     "Invalid binary mul operation for {:?} and {:?}",
                     obj, other_obj
                 ))),
@@ -645,12 +630,12 @@ impl OnionObject {
         })
     }
 
-    pub fn binary_div(&self, other: &Self) -> Result<OnionStaticObject, ObjectError> {
+    pub fn binary_div(&self, other: &Self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| {
             other.with_data(|other_obj| match (obj, other_obj) {
                 (OnionObject::Integer(i1), OnionObject::Integer(i2)) => {
                     if *i2 == 0 {
-                        return Err(ObjectError::InvalidOperation(
+                        return Err(RuntimeError::InvalidOperation(
                             "Division by zero".to_string(),
                         ));
                     }
@@ -665,7 +650,7 @@ impl OnionObject {
                 (OnionObject::Float(f1), OnionObject::Integer(i2)) => {
                     Ok(OnionStaticObject::new(OnionObject::Float(f1 / *i2 as f64)))
                 }
-                _ => Err(ObjectError::InvalidOperation(format!(
+                _ => Err(RuntimeError::InvalidOperation(format!(
                     "Invalid binary div operation for {:?} and {:?}",
                     obj, other_obj
                 ))),
@@ -673,12 +658,12 @@ impl OnionObject {
         })
     }
 
-    pub fn binary_mod(&self, other: &Self) -> Result<OnionStaticObject, ObjectError> {
+    pub fn binary_mod(&self, other: &Self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| {
             other.with_data(|other_obj| match (obj, other_obj) {
                 (OnionObject::Integer(i1), OnionObject::Integer(i2)) => {
                     if *i2 == 0 {
-                        return Err(ObjectError::InvalidOperation(
+                        return Err(RuntimeError::InvalidOperation(
                             "Division by zero".to_string(),
                         ));
                     }
@@ -693,7 +678,7 @@ impl OnionObject {
                 (OnionObject::Float(f1), OnionObject::Integer(i2)) => {
                     Ok(OnionStaticObject::new(OnionObject::Float(f1 % *i2 as f64)))
                 }
-                _ => Err(ObjectError::InvalidOperation(format!(
+                _ => Err(RuntimeError::InvalidOperation(format!(
                     "Invalid binary mod operation for {:?} and {:?}",
                     obj, other_obj
                 ))),
@@ -701,7 +686,7 @@ impl OnionObject {
         })
     }
 
-    pub fn binary_pow(&self, other: &Self) -> Result<OnionStaticObject, ObjectError> {
+    pub fn binary_pow(&self, other: &Self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| {
             other.with_data(|other_obj| match (obj, other_obj) {
                 (OnionObject::Integer(i1), OnionObject::Integer(i2)) => Ok(OnionStaticObject::new(
@@ -716,7 +701,7 @@ impl OnionObject {
                 (OnionObject::Float(f1), OnionObject::Integer(i2)) => Ok(OnionStaticObject::new(
                     OnionObject::Float(f1.powi(*i2 as i32)),
                 )),
-                _ => Err(ObjectError::InvalidOperation(format!(
+                _ => Err(RuntimeError::InvalidOperation(format!(
                     "Invalid binary pow operation for {:?} and {:?}",
                     obj, other_obj
                 ))),
@@ -724,7 +709,7 @@ impl OnionObject {
         })
     }
 
-    pub fn binary_and(&self, other: &Self) -> Result<OnionStaticObject, ObjectError> {
+    pub fn binary_and(&self, other: &Self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| {
             other.with_data(|other_obj| match (obj, other_obj) {
                 (OnionObject::Integer(i1), OnionObject::Integer(i2)) => {
@@ -733,7 +718,7 @@ impl OnionObject {
                 (OnionObject::Boolean(f1), OnionObject::Boolean(f2)) => {
                     Ok(OnionStaticObject::new(OnionObject::Boolean(*f1 && *f2)))
                 }
-                _ => Err(ObjectError::InvalidOperation(format!(
+                _ => Err(RuntimeError::InvalidOperation(format!(
                     "Invalid binary and operation for {:?} and {:?}",
                     obj, other_obj
                 ))),
@@ -741,7 +726,7 @@ impl OnionObject {
         })
     }
 
-    pub fn binary_or(&self, other: &Self) -> Result<OnionStaticObject, ObjectError> {
+    pub fn binary_or(&self, other: &Self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| {
             other.with_data(|other_obj| match (obj, other_obj) {
                 (OnionObject::Integer(i1), OnionObject::Integer(i2)) => {
@@ -750,7 +735,7 @@ impl OnionObject {
                 (OnionObject::Boolean(f1), OnionObject::Boolean(f2)) => {
                     Ok(OnionStaticObject::new(OnionObject::Boolean(*f1 || *f2)))
                 }
-                _ => Err(ObjectError::InvalidOperation(format!(
+                _ => Err(RuntimeError::InvalidOperation(format!(
                     "Invalid binary or operation for {:?} and {:?}",
                     obj, other_obj
                 ))),
@@ -758,13 +743,13 @@ impl OnionObject {
         })
     }
 
-    pub fn binary_xor(&self, other: &Self) -> Result<OnionStaticObject, ObjectError> {
+    pub fn binary_xor(&self, other: &Self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| {
             other.with_data(|other_obj| match (obj, other_obj) {
                 (OnionObject::Integer(i1), OnionObject::Integer(i2)) => {
                     Ok(OnionStaticObject::new(OnionObject::Integer(i1 ^ i2)))
                 }
-                _ => Err(ObjectError::InvalidOperation(format!(
+                _ => Err(RuntimeError::InvalidOperation(format!(
                     "Invalid binary xor operation for {:?} and {:?}",
                     obj, other_obj
                 ))),
@@ -772,13 +757,13 @@ impl OnionObject {
         })
     }
 
-    pub fn binary_shl(&self, other: &Self) -> Result<OnionStaticObject, ObjectError> {
+    pub fn binary_shl(&self, other: &Self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| {
             other.with_data(|other_obj| match (obj, other_obj) {
                 (OnionObject::Integer(i1), OnionObject::Integer(i2)) => {
                     Ok(OnionStaticObject::new(OnionObject::Integer(i1 << i2)))
                 }
-                _ => Err(ObjectError::InvalidOperation(format!(
+                _ => Err(RuntimeError::InvalidOperation(format!(
                     "Invalid binary shl operation for {:?} and {:?}",
                     obj, other_obj
                 ))),
@@ -786,13 +771,13 @@ impl OnionObject {
         })
     }
 
-    pub fn binary_shr(&self, other: &Self) -> Result<OnionStaticObject, ObjectError> {
+    pub fn binary_shr(&self, other: &Self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| {
             other.with_data(|other_obj| match (obj, other_obj) {
                 (OnionObject::Integer(i1), OnionObject::Integer(i2)) => {
                     Ok(OnionStaticObject::new(OnionObject::Integer(i1 >> i2)))
                 }
-                _ => Err(ObjectError::InvalidOperation(format!(
+                _ => Err(RuntimeError::InvalidOperation(format!(
                     "Invalid binary shr operation for {:?} and {:?}",
                     obj, other_obj
                 ))),
@@ -800,18 +785,18 @@ impl OnionObject {
         })
     }
 
-    pub fn binary_eq(&self, other: &Self) -> Result<bool, ObjectError> {
+    pub fn binary_eq(&self, other: &Self) -> Result<bool, RuntimeError> {
         self.equals(other)
     }
 
-    pub fn binary_lt(&self, other: &Self) -> Result<bool, ObjectError> {
+    pub fn binary_lt(&self, other: &Self) -> Result<bool, RuntimeError> {
         self.with_data(|obj| {
             other.with_data(|other_obj| match (obj, other_obj) {
                 (OnionObject::Integer(i1), OnionObject::Integer(i2)) => Ok(i1 < i2),
                 (OnionObject::Float(f1), OnionObject::Float(f2)) => Ok(f1 < f2),
                 (OnionObject::Integer(i1), OnionObject::Float(f2)) => Ok((*i1 as f64) < *f2),
                 (OnionObject::Float(f1), OnionObject::Integer(i2)) => Ok(*f1 < *i2 as f64),
-                _ => Err(ObjectError::InvalidOperation(format!(
+                _ => Err(RuntimeError::InvalidOperation(format!(
                     "Invalid binary lt operation for {:?} and {:?}",
                     obj, other_obj
                 ))),
@@ -819,14 +804,14 @@ impl OnionObject {
         })
     }
 
-    pub fn binary_gt(&self, other: &Self) -> Result<bool, ObjectError> {
+    pub fn binary_gt(&self, other: &Self) -> Result<bool, RuntimeError> {
         self.with_data(|obj| {
             other.with_data(|other_obj| match (obj, other_obj) {
                 (OnionObject::Integer(i1), OnionObject::Integer(i2)) => Ok(i1 > i2),
                 (OnionObject::Float(f1), OnionObject::Float(f2)) => Ok(f1 > f2),
                 (OnionObject::Integer(i1), OnionObject::Float(f2)) => Ok((*i1 as f64) > *f2),
                 (OnionObject::Float(f1), OnionObject::Integer(i2)) => Ok(*f1 > *i2 as f64),
-                _ => Err(ObjectError::InvalidOperation(format!(
+                _ => Err(RuntimeError::InvalidOperation(format!(
                     "Invalid binary gt operation for {:?} and {:?}",
                     obj, other_obj
                 ))),
@@ -834,42 +819,42 @@ impl OnionObject {
         })
     }
 
-    pub fn unary_neg(&self) -> Result<OnionStaticObject, ObjectError> {
+    pub fn unary_neg(&self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| match obj {
             OnionObject::Integer(i) => Ok(OnionStaticObject::new(OnionObject::Integer(-i))),
             OnionObject::Float(f) => Ok(OnionStaticObject::new(OnionObject::Float(-f))),
-            _ => Err(ObjectError::InvalidOperation(format!(
+            _ => Err(RuntimeError::InvalidOperation(format!(
                 "Invalid unary neg operation for {:?}",
                 obj
             ))),
         })
     }
 
-    pub fn unary_plus(&self) -> Result<OnionStaticObject, ObjectError> {
+    pub fn unary_plus(&self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| match obj {
             OnionObject::Integer(i) => Ok(OnionStaticObject::new(OnionObject::Integer(i.abs()))),
             OnionObject::Float(f) => Ok(OnionStaticObject::new(OnionObject::Float(f.abs()))),
-            _ => Err(ObjectError::InvalidOperation(format!(
+            _ => Err(RuntimeError::InvalidOperation(format!(
                 "Invalid unary plus operation for {:?}",
                 obj
             ))),
         })
     }
 
-    pub fn unary_not(&self) -> Result<OnionStaticObject, ObjectError> {
+    pub fn unary_not(&self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| match obj {
             OnionObject::Boolean(b) => Ok(OnionStaticObject::new(OnionObject::Boolean(!b))),
             OnionObject::Integer(i) => Ok(OnionStaticObject::new(OnionObject::Integer(!i))),
-            _ => Err(ObjectError::InvalidOperation(format!(
+            _ => Err(RuntimeError::InvalidOperation(format!(
                 "Invalid unary not operation for {:?}",
                 obj
             ))),
         })
     }
 
-    pub fn with_attribute<F, R>(&self, key: &OnionObject, f: &F) -> Result<R, ObjectError>
+    pub fn with_attribute<F, R>(&self, key: &OnionObject, f: &F) -> Result<R, RuntimeError>
     where
-        F: Fn(&OnionObject) -> Result<R, ObjectError>,
+        F: Fn(&OnionObject) -> Result<R, RuntimeError>,
     {
         self.with_data(|obj| match obj {
             OnionObject::Tuple(tuple) => tuple.with_attribute(key, f),
@@ -877,16 +862,16 @@ impl OnionObject {
             OnionObject::Pair(pair) => pair.with_attribute(key, f),
             OnionObject::Lambda(lambda) => lambda.with_attribute(key, f),
             OnionObject::LazySet(lazy_set) => lazy_set.with_attribute(key, f),
-            _ => Err(ObjectError::InvalidOperation(format!(
+            _ => Err(RuntimeError::InvalidOperation(format!(
                 "with_attribute() not supported for {:?}",
                 self
             ))),
         })
     }
 
-    pub fn with_attribute_mut<F, R>(&mut self, key: &OnionObject, f: &F) -> Result<R, ObjectError>
+    pub fn with_attribute_mut<F, R>(&mut self, key: &OnionObject, f: &F) -> Result<R, RuntimeError>
     where
-        F: Fn(&mut OnionObject) -> Result<R, ObjectError>,
+        F: Fn(&mut OnionObject) -> Result<R, RuntimeError>,
     {
         self.with_data_mut(|obj| match obj {
             OnionObject::Tuple(tuple) => tuple.with_attribute_mut(key, f),
@@ -894,19 +879,19 @@ impl OnionObject {
             OnionObject::Pair(pair) => pair.with_attribute_mut(key, f),
             OnionObject::Lambda(lambda) => lambda.with_attribute_mut(key, f),
             OnionObject::LazySet(lazy_set) => lazy_set.with_attribute_mut(key, f),
-            _ => Err(ObjectError::InvalidOperation(format!(
+            _ => Err(RuntimeError::InvalidOperation(format!(
                 "with_attribute_mut() not supported for {:?}",
                 obj
             ))),
         })
     }
 
-    pub fn at(&self, index: i64) -> Result<OnionStaticObject, ObjectError> {
+    pub fn at(&self, index: i64) -> Result<OnionStaticObject, RuntimeError> {
         match self {
             OnionObject::Tuple(tuple) => tuple.at(index),
             OnionObject::String(s) => {
                 if index < 0 || index >= s.len() as i64 {
-                    return Err(ObjectError::InvalidOperation(format!(
+                    return Err(RuntimeError::InvalidOperation(format!(
                         "Index out of bounds for String: {}",
                         s
                     )));
@@ -917,7 +902,7 @@ impl OnionObject {
             }
             OnionObject::Bytes(b) => {
                 if index < 0 || index >= b.len() as i64 {
-                    return Err(ObjectError::InvalidOperation(format!(
+                    return Err(RuntimeError::InvalidOperation(format!(
                         "Index out of bounds for Bytes: {:?}",
                         b
                     )));
@@ -926,39 +911,39 @@ impl OnionObject {
                     b[index as usize],
                 ])))
             }
-            _ => Err(ObjectError::InvalidOperation(format!(
+            _ => Err(RuntimeError::InvalidOperation(format!(
                 "index_of() not supported for {:?}",
                 self
             ))),
         }
     }
 
-    pub fn key_of(&self) -> Result<OnionStaticObject, ObjectError> {
+    pub fn key_of(&self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| match obj {
             OnionObject::Named(named) => Ok(named.get_key().clone().stabilize()),
             OnionObject::Pair(pair) => Ok(pair.get_key().clone().stabilize()),
-            _ => Err(ObjectError::InvalidOperation(format!(
+            _ => Err(RuntimeError::InvalidOperation(format!(
                 "key_of() not supported for {:?}",
                 obj
             ))),
         })
     }
 
-    pub fn value_of(&self) -> Result<OnionStaticObject, ObjectError> {
+    pub fn value_of(&self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| match obj {
             OnionObject::Named(named) => Ok(named.get_value().clone().stabilize()),
             OnionObject::Pair(pair) => Ok(pair.get_value().clone().stabilize()),
             OnionObject::Undefined(s) => {
                 Ok(OnionStaticObject::new(OnionObject::Undefined(s.clone())))
             }
-            _ => Err(ObjectError::InvalidOperation(format!(
+            _ => Err(RuntimeError::InvalidOperation(format!(
                 "value_of() not supported for {:?}",
                 obj
             ))),
         })
     }
 
-    pub fn type_of(&self) -> Result<String, ObjectError> {
+    pub fn type_of(&self) -> Result<String, RuntimeError> {
         self.with_data(|obj| match obj {
             OnionObject::Integer(_) => Ok("Integer".to_string()),
             OnionObject::Float(_) => Ok("Float".to_string()),
@@ -972,7 +957,7 @@ impl OnionObject {
             OnionObject::Named(_) => Ok("Named".to_string()),
             OnionObject::LazySet(_) => Ok("LazySet".to_string()),
             OnionObject::InstructionPackage(_) => Ok("InstructionPackage".to_string()),
-            _ => Err(ObjectError::InvalidOperation(format!(
+            _ => Err(RuntimeError::InvalidOperation(format!(
                 "type_of() not supported for {:?}",
                 obj
             ))),
@@ -980,7 +965,7 @@ impl OnionObject {
     }
 
     #[inline(always)]
-    pub fn copy(&self) -> Result<OnionStaticObject, ObjectError> {
+    pub fn copy(&self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| Ok(obj.clone().stabilize()))
     }
 }
@@ -1092,7 +1077,7 @@ impl OnionStaticObject {
     pub fn mutablize(
         &self,
         gc: &mut GC<OnionObjectCell>,
-    ) -> Result<OnionStaticObject, ObjectError> {
+    ) -> Result<OnionStaticObject, RuntimeError> {
         self.obj.with_data(|obj| Ok(obj.clone().mutablize(gc)))
     }
 
@@ -1103,7 +1088,7 @@ macro_rules! unwrap_object {
     ($obj:expr, $variant:path) => {
         match $obj {
             $variant(o) => Ok(o),
-            _ => Err(ObjectError::InvalidType(format!(
+            _ => Err(RuntimeError::InvalidType(format!(
                 "Expected {}, found {:?}",
                 stringify!($variant),
                 $obj

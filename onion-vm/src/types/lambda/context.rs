@@ -1,9 +1,7 @@
 use rustc_hash::FxHashMap as HashMap;
+use serde_json::{Map, Value};
 
-use crate::{
-    lambda::runnable::RuntimeError,
-    types::object::{ObjectError, OnionStaticObject},
-};
+use crate::{lambda::runnable::RuntimeError, types::object::OnionStaticObject};
 
 #[derive(Clone, Debug)]
 pub struct Frame {
@@ -17,6 +15,38 @@ impl Frame {
     }
     pub fn get_stack_mut(&mut self) -> &mut Vec<OnionStaticObject> {
         &mut self.stack
+    }
+
+    pub fn format_context(&self) -> Value {
+        let mut frame_obj = Map::new();
+
+        // Format variables
+        let mut variables = Map::new();
+        for (var_name, var_value) in &self.variables {
+            let value_str = var_value
+                .weak()
+                .try_borrow()
+                .map(|obj| obj.to_string().unwrap_or_else(|_| format!("{:?}", obj)))
+                .unwrap_or_else(|_| "<borrow_error>".to_string());
+            variables.insert(var_name.to_string(), Value::String(value_str));
+        }
+        frame_obj.insert("variables".to_string(), Value::Object(variables));
+
+        // Format stack
+        let stack_values: Vec<Value> = self.stack
+            .iter()
+            .map(|obj| {
+                let obj_str = obj
+                    .weak()
+                    .try_borrow()
+                    .map(|o| o.to_string().unwrap_or_else(|_| format!("{:?}", o)))
+                    .unwrap_or_else(|_| "<borrow_error>".to_string());
+                Value::String(obj_str)
+            })
+            .collect();
+        frame_obj.insert("stack".to_string(), Value::Array(stack_values));
+
+        Value::Object(frame_obj)
     }
 }
 
@@ -41,7 +71,8 @@ impl Context {
                 "Cannot pop frame from empty context".to_string(),
             )),
         }
-    }    pub fn concat_last_frame(&mut self) -> Result<(), RuntimeError> {
+    }
+    pub fn concat_last_frame(&mut self) -> Result<(), RuntimeError> {
         if self.frames.len() < 2 {
             return Ok(());
         }
@@ -179,9 +210,9 @@ impl Context {
     //     &mut self,
     //     name: String,
     //     value: OnionStaticObject,
-    // ) -> Result<(), ObjectError> {
+    // ) -> Result<(), RuntimeError> {
     //     if self.frames.len() == 0 {
-    //         return Err(ObjectError::InvalidOperation(
+    //         return Err(RuntimeError::InvalidOperation(
     //             "Cannot let variable in empty context".to_string(),
     //         ));
     //     }
@@ -194,14 +225,14 @@ impl Context {
     //         }
     //     }    //     Ok(())
     // }
-    
+
     pub fn let_variable(
         &mut self,
         name: usize,
         value: OnionStaticObject,
-    ) -> Result<(), ObjectError> {
+    ) -> Result<(), RuntimeError> {
         if self.frames.len() == 0 {
-            return Err(ObjectError::InvalidOperation(
+            return Err(RuntimeError::InvalidOperation(
                 "Cannot let variable in empty context".to_string(),
             ));
         }
@@ -210,7 +241,6 @@ impl Context {
         last_frame.variables.insert(name, value);
         Ok(())
     }
-
 
     // pub fn get_variable(&self, name: &String) -> Result<&OnionStaticObject, RuntimeError> {
     //     if self.frames.len() == 0 {
@@ -241,7 +271,7 @@ impl Context {
             return Err(RuntimeError::DetailedError(
                 "Cannot get variable from empty context".to_string(),
             ));
-        }        // 反向遍历所有帧，从最新的帧开始查找
+        } // 反向遍历所有帧，从最新的帧开始查找
         for frame in self.frames.iter().rev() {
             if let Some(value) = frame.variables.get(&name) {
                 return Ok(value);
@@ -296,7 +326,7 @@ impl Context {
             return Err(RuntimeError::DetailedError(
                 "Cannot get variable from empty context".to_string(),
             ));
-        }        // 反向遍历所有帧，从最新的帧开始查找
+        } // 反向遍历所有帧，从最新的帧开始查找
         for frame in self.frames.iter_mut().rev() {
             if let Some(value) = frame.variables.get_mut(&name) {
                 return Ok(value);
@@ -337,11 +367,14 @@ impl Context {
         Ok(last_frame.get_stack_mut())
     }
 
+    #[inline(always)]
     pub fn push_to_stack(stack: &mut Vec<OnionStaticObject>, object: OnionStaticObject) {
         stack.push(object);
     }
 
-    pub fn pop_from_stack(stack: &mut Vec<OnionStaticObject>) -> Result<OnionStaticObject, RuntimeError> {
+    pub fn pop_from_stack(
+        stack: &mut Vec<OnionStaticObject>,
+    ) -> Result<OnionStaticObject, RuntimeError> {
         if stack.is_empty() {
             return Err(RuntimeError::DetailedError(
                 "Cannot pop from empty stack".to_string(),
@@ -350,7 +383,11 @@ impl Context {
         Ok(stack.pop().unwrap())
     }
 
-    pub fn discard_from_stack(stack: &mut Vec<OnionStaticObject>, count: usize) -> Result<(), RuntimeError> {
+    #[inline(always)]
+    pub fn discard_from_stack(
+        stack: &mut Vec<OnionStaticObject>,
+        count: usize,
+    ) -> Result<(), RuntimeError> {
         if stack.len() < count {
             return Err(RuntimeError::DetailedError(
                 "Cannot discard more objects than available in stack".to_string(),
@@ -360,6 +397,7 @@ impl Context {
         Ok(())
     }
 
+    #[inline(always)]
     pub fn get_object_from_stack(
         stack: &Vec<OnionStaticObject>,
         idx: usize,
@@ -372,11 +410,49 @@ impl Context {
         Ok(&stack[stack.len() - 1 - idx])
     }
 
-    pub fn replace_last_object(
-        stack: &mut Vec<OnionStaticObject>,
-        object: OnionStaticObject,
-    ) {
+    pub fn replace_last_object(stack: &mut Vec<OnionStaticObject>, object: OnionStaticObject) {
         let last_index = stack.len() - 1;
         stack[last_index] = object;
+    }
+}
+
+impl Context {
+    pub fn format_to_json(&self) -> Value {
+        let mut frames = Map::new();
+        
+        for (i, frame) in self.frames.iter().enumerate() {
+            let mut frame_obj = Map::new();
+            
+            // Format variables
+            let mut variables = Map::new();
+            for (var_name, var_value) in &frame.variables {
+                let value_str = var_value
+                    .weak()
+                    .try_borrow()
+                    .map(|obj| obj.to_string().unwrap_or_else(|_| format!("{:?}", obj)))
+                    .unwrap_or_else(|_| "<borrow_error>".to_string());
+                
+                variables.insert(var_name.to_string(), Value::String(value_str));
+            }
+            frame_obj.insert("variables".to_string(), Value::Object(variables));
+            
+            // Format stack
+            let stack_values: Vec<Value> = frame.stack
+                .iter()
+                .map(|obj| {
+                    let obj_str = obj
+                        .weak()
+                        .try_borrow()
+                        .map(|o| o.to_string().unwrap_or_else(|_| format!("{:?}", o)))
+                        .unwrap_or_else(|_| "<borrow_error>".to_string());
+                    Value::String(obj_str)
+                })
+                .collect();
+            frame_obj.insert("stack".to_string(), Value::Array(stack_values));
+            
+            frames.insert(format!("frame_{}", i), Value::Object(frame_obj));
+        }
+        
+        Value::Object(frames)
     }
 }

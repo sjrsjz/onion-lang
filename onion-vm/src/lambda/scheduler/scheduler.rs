@@ -92,4 +92,20 @@ impl Runnable for Scheduler {
             result: self.result.clone(),
         })
     }
+
+    fn format_context(
+            &self,
+        ) -> Result<serde_json::Value, RuntimeError> {
+        let mut stack_json_array = serde_json::Value::Array(vec![]);
+        for runnable in &self.runnable_stack {
+            let frame_json = runnable.format_context()?;
+            stack_json_array.as_array_mut().unwrap().push(frame_json);
+        }
+        // {type: "Scheduler", frames: frame_json_array}
+        Ok(serde_json::json!({
+            "type": "Scheduler",
+            "frames": stack_json_array
+        }))
+    }
+
 }

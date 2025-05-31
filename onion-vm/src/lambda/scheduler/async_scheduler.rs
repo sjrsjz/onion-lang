@@ -78,4 +78,19 @@ impl Runnable for AsyncScheduler {
             runnables: self.runnables.iter().map(|r| r.copy(gc)).collect(),
         })
     }
+
+    fn format_context(
+            &self,
+        ) -> Result<serde_json::Value, RuntimeError> {
+        let mut tasks_json_array = serde_json::Value::Array(vec![]);
+        for runnable in &self.runnables {
+            let frame_json = runnable.format_context()?;
+            tasks_json_array.as_array_mut().unwrap().push(frame_json);
+        }
+        // {type: "AsyncScheduler", tasks: tasks_json_array}
+        Ok(serde_json::json!({
+            "type": "AsyncScheduler",
+            "tasks": tasks_json_array
+        }))
+    }
 }

@@ -4,18 +4,21 @@ use onion_vm::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
     onion_tuple,
     types::{
-        lambda::definition::{LambdaBody, OnionLambdaDefinition}, named::OnionNamed, object::{ObjectError, OnionObject, OnionObjectCell, OnionStaticObject}, tuple::OnionTuple
+        lambda::definition::{LambdaBody, OnionLambdaDefinition},
+        named::OnionNamed,
+        object::{OnionObject, OnionObjectCell, OnionStaticObject},
+        tuple::OnionTuple,
     },
     GC,
 };
 
+mod http;
 mod io;
-mod types;
+mod json;
 mod math;
 mod string;
-mod http;
 mod time;
-mod json;
+mod types;
 
 pub fn build_named_dict(dict: HashMap<String, OnionStaticObject>) -> OnionStaticObject {
     let mut pairs = vec![];
@@ -28,7 +31,7 @@ pub fn build_named_dict(dict: HashMap<String, OnionStaticObject>) -> OnionStatic
     OnionTuple::new_static_no_ref(pairs)
 }
 
-pub fn get_attr_direct(obj: &OnionObject, key: String) -> Result<OnionStaticObject, ObjectError> {
+pub fn get_attr_direct(obj: &OnionObject, key: String) -> Result<OnionStaticObject, RuntimeError> {
     obj.with_attribute(&OnionObject::String(key), &|obj| {
         Ok(obj.clone().stabilize())
     })
@@ -52,7 +55,7 @@ where
         &mut self,
         argument: OnionStaticObject,
         _gc: &mut GC<OnionObjectCell>,
-    ) -> Result<(), ObjectError> {
+    ) -> Result<(), RuntimeError> {
         self.argument = argument;
         Ok(())
     }
@@ -80,6 +83,13 @@ where
             argument: self.argument.clone(),
             function: Arc::clone(&self.function),
         })
+    }
+
+    fn format_context(&self) -> Result<serde_json::Value, RuntimeError> {
+        Ok(serde_json::json!({
+            "type": "NativeFunctionGenerator",
+            "argument": self.argument.to_string(),
+        }))
     }
 }
 

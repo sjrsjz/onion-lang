@@ -11,7 +11,7 @@ use onion_vm::{
     onion_tuple,
     types::{
         lambda::definition::{LambdaBody, OnionLambdaDefinition},
-        object::{ObjectError, OnionObject, OnionObjectCell, OnionStaticObject},
+        object::{OnionObject, OnionObjectCell, OnionStaticObject},
         tuple::OnionTuple,
     },
     GC,
@@ -66,16 +66,13 @@ fn sleep_seconds(
     argument: OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let seconds = argument
-        .weak()
-        .with_data(|data| {
-            get_attr_direct(data, "seconds".to_string())?
-                .weak()
-                .try_borrow()?
-                .to_integer()
-                .map_err(|e| ObjectError::InvalidType(format!("Invalid seconds: {}", e)))
-        })
-        .map_err(RuntimeError::ObjectError)?;
+    let seconds = argument.weak().with_data(|data| {
+        get_attr_direct(data, "seconds".to_string())?
+            .weak()
+            .try_borrow()?
+            .to_integer()
+            .map_err(|e| RuntimeError::InvalidType(format!("Invalid seconds: {}", e)))
+    })?;
 
     if seconds < 0 {
         return Err(RuntimeError::DetailedError(
@@ -92,16 +89,13 @@ fn sleep_millis(
     argument: OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let millis = argument
-        .weak()
-        .with_data(|data| {
-            get_attr_direct(data, "millis".to_string())?
-                .weak()
-                .try_borrow()?
-                .to_integer()
-                .map_err(|e| ObjectError::InvalidType(format!("Invalid milliseconds: {}", e)))
-        })
-        .map_err(RuntimeError::ObjectError)?;
+    let millis = argument.weak().with_data(|data| {
+        get_attr_direct(data, "millis".to_string())?
+            .weak()
+            .try_borrow()?
+            .to_integer()
+            .map_err(|e| RuntimeError::InvalidType(format!("Invalid milliseconds: {}", e)))
+    })?;
 
     if millis < 0 {
         return Err(RuntimeError::DetailedError(
@@ -118,16 +112,13 @@ fn sleep_micros(
     argument: OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let micros = argument
-        .weak()
-        .with_data(|data| {
-            get_attr_direct(data, "micros".to_string())?
-                .weak()
-                .try_borrow()?
-                .to_integer()
-                .map_err(|e| ObjectError::InvalidType(format!("Invalid microseconds: {}", e)))
-        })
-        .map_err(RuntimeError::ObjectError)?;
+    let micros = argument.weak().with_data(|data| {
+        get_attr_direct(data, "micros".to_string())?
+            .weak()
+            .try_borrow()?
+            .to_integer()
+            .map_err(|e| RuntimeError::InvalidType(format!("Invalid microseconds: {}", e)))
+    })?;
 
     if micros < 0 {
         return Err(RuntimeError::DetailedError(
@@ -189,16 +180,13 @@ fn format_time(
     argument: OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let timestamp = argument
-        .weak()
-        .with_data(|data| {
-            get_attr_direct(data, "timestamp".to_string())?
-                .weak()
-                .try_borrow()?
-                .to_integer()
-                .map_err(|e| ObjectError::InvalidType(format!("Invalid timestamp: {}", e)))
-        })
-        .map_err(RuntimeError::ObjectError)?;
+    let timestamp = argument.weak().with_data(|data| {
+        get_attr_direct(data, "timestamp".to_string())?
+            .weak()
+            .try_borrow()?
+            .to_integer()
+            .map_err(|e| RuntimeError::InvalidType(format!("Invalid timestamp: {}", e)))
+    })?;
 
     if timestamp < 0 {
         return Err(RuntimeError::DetailedError(
@@ -215,24 +203,21 @@ fn time_diff(
     argument: OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let (start, end) = argument
-        .weak()
-        .with_data(|data| {
-            let start = get_attr_direct(data, "start".to_string())?
-                .weak()
-                .try_borrow()?
-                .to_integer()
-                .map_err(|e| ObjectError::InvalidType(format!("Invalid start timestamp: {}", e)))?;
+    let (start, end) = argument.weak().with_data(|data| {
+        let start = get_attr_direct(data, "start".to_string())?
+            .weak()
+            .try_borrow()?
+            .to_integer()
+            .map_err(|e| RuntimeError::InvalidType(format!("Invalid start timestamp: {}", e)))?;
 
-            let end = get_attr_direct(data, "end".to_string())?
-                .weak()
-                .try_borrow()?
-                .to_integer()
-                .map_err(|e| ObjectError::InvalidType(format!("Invalid end timestamp: {}", e)))?;
+        let end = get_attr_direct(data, "end".to_string())?
+            .weak()
+            .try_borrow()?
+            .to_integer()
+            .map_err(|e| RuntimeError::InvalidType(format!("Invalid end timestamp: {}", e)))?;
 
-            Ok((start, end))
-        })
-        .map_err(RuntimeError::ObjectError)?;
+        Ok((start, end))
+    })?;
 
     let diff = end - start;
     Ok(OnionObject::Integer(diff).stabilize())
@@ -273,13 +258,13 @@ impl Runnable for AsyncSleep {
         &mut self,
         argument: OnionStaticObject,
         _gc: &mut GC<OnionObjectCell>,
-    ) -> Result<(), ObjectError> {
+    ) -> Result<(), RuntimeError> {
         self.millis = argument.weak().with_data(|data| {
             get_attr_direct(data, "millis".to_string())?
                 .weak()
                 .try_borrow()?
                 .to_integer()
-                .map_err(|e| ObjectError::InvalidType(format!("Invalid millis: {}", e)))
+                .map_err(|e| RuntimeError::InvalidType(format!("Invalid millis: {}", e)))
         })?;
         self.start_time = SystemTime::now();
         Ok(())
@@ -311,6 +296,16 @@ impl Runnable for AsyncSleep {
             millis: self.millis,
             start_time: self.start_time,
         })
+    }
+
+    fn format_context(&self) -> Result<serde_json::Value, RuntimeError> {
+        Ok(serde_json::json!({
+            "millis": self.millis,
+            "start_time": self.start_time
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0),
+        }))
     }
 }
 

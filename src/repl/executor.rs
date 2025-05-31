@@ -1,7 +1,7 @@
 use colored::*;
 use onion_vm::{
     lambda::{
-        runnable::{Runnable, StepResult},
+        runnable::{Runnable, RuntimeError, StepResult},
         scheduler::scheduler::Scheduler,
     },
     types::{
@@ -12,7 +12,7 @@ use onion_vm::{
             },
         },
         named::OnionNamed,
-        object::{ObjectError, OnionObject, OnionStaticObject},
+        object::{OnionObject, OnionStaticObject},
         tuple::OnionTuple,
     },
     unwrap_object, GC,
@@ -43,19 +43,6 @@ impl ReplExecutor {
             0
         }
     }
-
-    /// 获取最后一次执行的结果
-    pub fn get_last_result(&self) -> Option<OnionStaticObject> {
-        if let OnionObject::Tuple(tuple) = &*self.out_tuple.weak().borrow() {
-            tuple
-                .elements
-                .last()
-                .map(|obj| OnionStaticObject::new(obj.borrow().clone()))
-        } else {
-            None
-        }
-    }
-
     /// 清空历史记录
     pub fn clear_history(&mut self) {
         let empty_tuple = OnionTuple::new_static(vec![]);

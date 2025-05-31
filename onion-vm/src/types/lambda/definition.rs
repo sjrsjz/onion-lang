@@ -3,8 +3,8 @@ use std::{cell::RefCell, fmt::{Debug, Display}, sync::Arc};
 use arc_gc::{arc::GCArc, gc::GC, traceable::GCTraceable};
 
 use crate::{
-    lambda::runnable::Runnable,
-    types::object::{ObjectError, OnionObject, OnionObjectCell, OnionStaticObject},
+    lambda::runnable::{Runnable, RuntimeError},
+    types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
 };
 
 use super::runnable::OnionLambdaRunnable;
@@ -71,7 +71,7 @@ impl OnionLambdaDefinition {
         argument: OnionStaticObject,
         this_lambda: &OnionStaticObject,
         gc: &mut GC<OnionObjectCell>,
-    ) -> Result<Box<dyn Runnable>, ObjectError> {
+    ) -> Result<Box<dyn Runnable>, RuntimeError> {
         match &self.body {
             LambdaBody::Instruction(instruction) => {
                 let runnable = instruction.with_data(|instruction| match instruction {
@@ -84,7 +84,7 @@ impl OnionLambdaDefinition {
                         match package.get_table().get(&self.signature) {
                             Some(ip) => *ip as isize,
                             None => {
-                                return Err(ObjectError::InvalidOperation(format!(
+                                return Err(RuntimeError::InvalidOperation(format!(
                                     "Signature '{}' not found in instruction package",
                                     self.signature
                                 )));
@@ -92,7 +92,7 @@ impl OnionLambdaDefinition {
                         },
                     ),
                     _ => {
-                        return Err(ObjectError::InvalidOperation(
+                        return Err(RuntimeError::InvalidOperation(
                             "Lambda body must be an instruction package".to_string(),
                         ));
                     }
@@ -133,9 +133,9 @@ impl OnionLambdaDefinition {
         }
     }
 
-    pub fn with_attribute<F, R>(&self, key: &OnionObject, f: &F) -> Result<R, ObjectError>
+    pub fn with_attribute<F, R>(&self, key: &OnionObject, f: &F) -> Result<R, RuntimeError>
     where
-        F: Fn(&OnionObject) -> Result<R, ObjectError>,
+        F: Fn(&OnionObject) -> Result<R, RuntimeError>,
     {
         match key {
             OnionObject::String(s) if s.as_str() == "parameter" => f(&*self.parameter.try_borrow()?),
@@ -144,31 +144,31 @@ impl OnionLambdaDefinition {
             OnionObject::String(s) if s.as_str() == "signature" => {
                 f(&OnionObject::String(self.signature.clone()))
             }
-            _ => Err(ObjectError::InvalidOperation(format!(
+            _ => Err(RuntimeError::InvalidOperation(format!(
                 "Attribute '{:?}' not found in lambda definition",
                 key
             ))),
         }
     }
 
-    pub fn with_attribute_mut<F, R>(&mut self, key: &OnionObject, f: &F) -> Result<R, ObjectError>
+    pub fn with_attribute_mut<F, R>(&mut self, key: &OnionObject, f: &F) -> Result<R, RuntimeError>
     where
-        F: Fn(&mut OnionObject) -> Result<R, ObjectError>,
+        F: Fn(&mut OnionObject) -> Result<R, RuntimeError>,
     {
         match key {
             OnionObject::String(s) if s.as_str() == "parameter" => f(&mut *self.parameter.try_borrow_mut()?),
             OnionObject::String(s) if s.as_str() == "capture" => f(&mut *self.capture.try_borrow_mut()?),
             OnionObject::String(s) if s.as_str() == "self" => f(&mut *self.self_object.try_borrow_mut()?),
-            _ => Err(ObjectError::InvalidOperation(format!(
+            _ => Err(RuntimeError::InvalidOperation(format!(
                 "Attribute '{:?}' not found in lambda definition",
                 key
             ))),
         }
     }
 
-    pub fn with_parameter<F, R>(&self, f: F) -> Result<R, ObjectError>
+    pub fn with_parameter<F, R>(&self, f: F) -> Result<R, RuntimeError>
     where
-        F: Fn(&OnionObject) -> Result<R, ObjectError>,
+        F: Fn(&OnionObject) -> Result<R, RuntimeError>,
     {
         f(&*self.parameter.try_borrow()?)
     }

@@ -7,7 +7,7 @@ use arc_gc::gc::GC;
 
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
-    types::object::{ObjectError, OnionObject, OnionObjectCell, OnionStaticObject},
+    types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
 };
 
 use super::{
@@ -47,7 +47,7 @@ impl OnionLambdaRunnable {
         this_lambda: OnionStaticObject,
         instruction: Arc<RefCell<VMInstructionPackage>>,
         ip: isize,
-    ) -> Result<Self, ObjectError> {
+    ) -> Result<Self, RuntimeError> {
         let mut new_context = Context::new();
         Context::push_frame(
             &mut new_context,
@@ -58,14 +58,14 @@ impl OnionLambdaRunnable {
         );
 
         let OnionObject::Tuple(tuple) = &*argument.weak().try_borrow()? else {
-            return Err(ObjectError::InvalidOperation(
+            return Err(RuntimeError::InvalidOperation(
                 "Argument must be a tuple".to_string(),
             ));
         };
 
         let (index_this, index_self, index_arguments) = {
             let instruction_ref = instruction.try_borrow().map_err(|_| {
-                ObjectError::InvalidOperation(
+                RuntimeError::InvalidOperation(
                     "Cannot access instruction package (already borrowed)".to_string(),
                 )
             })?;
@@ -76,7 +76,7 @@ impl OnionLambdaRunnable {
                 .iter()
                 .position(|s| s == "this")
                 .ok_or_else(|| {
-                    ObjectError::InvalidOperation(
+                    RuntimeError::InvalidOperation(
                         "Missing required variable 'this' in string pool".to_string(),
                     )
                 })?;
@@ -85,7 +85,7 @@ impl OnionLambdaRunnable {
                 .iter()
                 .position(|s| s == "self")
                 .ok_or_else(|| {
-                    ObjectError::InvalidOperation(
+                    RuntimeError::InvalidOperation(
                         "Missing required variable 'self' in string pool".to_string(),
                     )
                 })?;
@@ -94,7 +94,7 @@ impl OnionLambdaRunnable {
                 .iter()
                 .position(|s| s == "arguments")
                 .ok_or_else(|| {
-                    ObjectError::InvalidOperation(
+                    RuntimeError::InvalidOperation(
                         "Missing required variable 'arguments' in string pool".to_string(),
                     )
                 })?;
@@ -106,7 +106,7 @@ impl OnionLambdaRunnable {
         new_context
             .let_variable(index_this, this_lambda.clone())
             .map_err(|e| {
-                ObjectError::InvalidOperation(format!(
+                RuntimeError::InvalidOperation(format!(
                     "Failed to initialize 'this' variable: {}",
                     e
                 ))
@@ -115,7 +115,7 @@ impl OnionLambdaRunnable {
         new_context
             .let_variable(index_self, self_object.clone())
             .map_err(|e| {
-                ObjectError::InvalidOperation(format!(
+                RuntimeError::InvalidOperation(format!(
                     "Failed to initialize 'self' variable: {}",
                     e
                 ))
@@ -124,7 +124,7 @@ impl OnionLambdaRunnable {
         new_context
             .let_variable(index_arguments, argument.clone())
             .map_err(|e| {
-                ObjectError::InvalidOperation(format!(
+                RuntimeError::InvalidOperation(format!(
                     "Failed to initialize 'arguments' variable: {}",
                     e
                 ))
@@ -138,13 +138,13 @@ impl OnionLambdaRunnable {
                             match instruction
                                 .try_borrow()
                                 .map_err(|_| {
-                                    ObjectError::InvalidOperation(
+                                    RuntimeError::InvalidOperation(
                                         "Failed to borrow instruction".to_string(),
                                     )
                                 })?
                                 .get_string_pool()
                                 .iter()
-                                .position(|s| s == key_str)
+                                .position(|s| *s == *key_str)
                             {
                                 Some(index) => new_context
                                     .let_variable(index, named.get_value().clone().stabilize()),
@@ -348,4 +348,26 @@ impl Runnable for OnionLambdaRunnable {
             instruction_table: self.instruction_table.clone(),
         })
     }
+
+    fn format_context(
+            &self,
+        ) -> Result<serde_json::Value, RuntimeError> {
+        let mut stack_json_array = serde_json::Value::Array(vec![]);
+        for frame in &self.context.frames {
+            let frame_json = frame.format_context();
+            stack_json_array.as_array_mut().unwrap().push(frame_json);
+        }
+        // {type: "OnionLambdaRunnable", frames: frame_json_array}
+        Ok(serde_json::json!({
+            "type": "lambda_runnable",
+            "frames": stack_json_array,
+            "ip": self.ip,
+            "argument": self.argument.to_string(),
+            "capture": self.capture.to_string(),
+            "self_object": self.self_object.to_string(),
+            "this_lambda": self.this_lambda.to_string(),
+            "result": self.result.to_string(),
+        }))
+    }
+    
 }

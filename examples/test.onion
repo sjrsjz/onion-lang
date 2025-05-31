@@ -36,7 +36,6 @@ stdlib.io.println(
     }.collect()
 );
 
-
 classA := (struct?, interface => mut {
     print => () -> {
         stdlib.io.println("这是类A的print方法");

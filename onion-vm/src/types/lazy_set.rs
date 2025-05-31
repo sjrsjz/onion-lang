@@ -9,7 +9,7 @@ use crate::{
 
 use super::{
     lambda::definition::{LambdaBody, OnionLambdaDefinition},
-    object::{ObjectError, OnionObject, OnionObjectCell, OnionStaticObject},
+    object::{OnionObject, OnionObjectCell, OnionStaticObject},
     tuple::OnionTuple,
 };
 
@@ -69,9 +69,9 @@ impl OnionLazySet {
         }
     }
 
-    pub fn with_attribute<F, R>(&self, key: &OnionObject, f: &F) -> Result<R, ObjectError>
+    pub fn with_attribute<F, R>(&self, key: &OnionObject, f: &F) -> Result<R, RuntimeError>
     where
-        F: Fn(&OnionObject) -> Result<R, ObjectError>,
+        F: Fn(&OnionObject) -> Result<R, RuntimeError>,
     {
         match key {
             OnionObject::String(s) if s.as_str() == "container" => {
@@ -99,16 +99,16 @@ impl OnionLazySet {
                 };
                 result
             }
-            _ => Err(ObjectError::InvalidOperation(format!(
+            _ => Err(RuntimeError::InvalidOperation(format!(
                 "Attribute '{:?}' not found in lazy set",
                 key
             ))),
         }
     }
 
-    pub fn with_attribute_mut<F, R>(&mut self, key: &OnionObject, f: &F) -> Result<R, ObjectError>
+    pub fn with_attribute_mut<F, R>(&mut self, key: &OnionObject, f: &F) -> Result<R, RuntimeError>
     where
-        F: Fn(&mut OnionObject) -> Result<R, ObjectError>,
+        F: Fn(&mut OnionObject) -> Result<R, RuntimeError>,
     {
         match key {
             OnionObject::String(s) if s.as_str() == "container" => {
@@ -117,7 +117,7 @@ impl OnionLazySet {
             OnionObject::String(s) if s.as_str() == "filter" => {
                 f(&mut *self.filter.try_borrow_mut()?)
             }
-            _ => Err(ObjectError::InvalidOperation(format!(
+            _ => Err(RuntimeError::InvalidOperation(format!(
                 "Attribute '{:?}' not found in lazy set",
                 key
             ))),
@@ -138,7 +138,7 @@ impl Runnable for OnionLazySetCollector {
         &mut self,
         _argument: OnionStaticObject,
         _gc: &mut GC<OnionObjectCell>,
-    ) -> Result<(), ObjectError> {
+    ) -> Result<(), RuntimeError> {
         Ok(()) // This collector does not use an argument, so we can ignore it.
     }
     fn copy(&self, _gc: &mut GC<OnionObjectCell>) -> Box<dyn Runnable> {
@@ -157,18 +157,9 @@ impl Runnable for OnionLazySetCollector {
     ) -> Result<(), RuntimeError> {
         match step_result {
             StepResult::Return(result) => {
-                match &*result
-                    .weak()
-                    .try_borrow()
-                    .map_err(RuntimeError::ObjectError)?
-                {
+                match &*result.weak().try_borrow()? {
                     OnionObject::Boolean(true) => {
-                        match &*self
-                            .container
-                            .weak()
-                            .try_borrow()
-                            .map_err(RuntimeError::ObjectError)?
-                        {
+                        match &*self.container.weak().try_borrow()? {
                             OnionObject::Tuple(tuple) => {
                                 // 如果是布尔值 true，表示需要收集当前元素
                                 if let Some(item) = tuple.elements.get(self.current_index - 1) {
@@ -211,7 +202,7 @@ impl Runnable for OnionLazySetCollector {
                             OnionObject::Lambda(func) => {
                                 let OnionObject::Tuple(params) = &*func.parameter.try_borrow()?
                                 else {
-                                    return Err(ObjectError::InvalidType(format!(
+                                    return Err(RuntimeError::InvalidType(format!(
                                         "Filter's parameter must be a tuple, got {:?}",
                                         func.parameter
                                     )));
@@ -236,10 +227,19 @@ impl Runnable for OnionLazySetCollector {
                         )))
                     }
                 }
-                _ => Err(ObjectError::InvalidType(
+                _ => Err(RuntimeError::InvalidType(
                     "Container must be a tuple".to_string(),
                 )),
             })
-            .map_err(RuntimeError::ObjectError)
+    }
+
+    fn format_context(&self) -> Result<serde_json::Value, RuntimeError> {
+        return Ok(serde_json::json!({
+            "type": "LazySetCollector",
+            "container": self.container.to_string(),
+            "filter": self.filter.to_string(),
+            "collected": self.collected.iter().map(|o| o.to_string()).collect::<Vec<_>>(),
+            "current_index": self.current_index,
+        }));
     }
 }

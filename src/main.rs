@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use onion_frontend::compile::{build_code, compile_to_bytecode};
 use onion_vm::{
     lambda::{
-        runnable::{Runnable, StepResult},
+        runnable::{Runnable, RuntimeError, StepResult},
         scheduler::scheduler::Scheduler,
     },
     types::{
@@ -17,7 +17,7 @@ use onion_vm::{
             },
         },
         named::OnionNamed,
-        object::{ObjectError, OnionObject},
+        object::OnionObject,
         tuple::OnionTuple,
     },
     unwrap_object, GC,
@@ -359,20 +359,14 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
                             .weak()
                             .try_borrow()
                             .map_err(|e| format!("Failed to borrow result: {:?}", e))?;
-                        let result = unwrap_object!(
-                            &*result_borrowed,
-                            OnionObject::Pair
-                        )
-                        .map_err(|e| format!("Failed to unwrap result: {:?}", e))?;
+                        let result = unwrap_object!(&*result_borrowed, OnionObject::Pair)
+                            .map_err(|e| format!("Failed to unwrap result: {:?}", e))?;
                         let key_borrowed = result
                             .get_key()
                             .try_borrow()
                             .map_err(|e| format!("Failed to borrow result: {:?}", e))?;
-                        let success = *unwrap_object!(
-                            &*key_borrowed,
-                            OnionObject::Boolean
-                        )
-                        .map_err(|e| format!("Failed to get success key: {:?}", e))?;
+                        let success = *unwrap_object!(&*key_borrowed, OnionObject::Boolean)
+                            .map_err(|e| format!("Failed to get success key: {:?}", e))?;
                         if !success {
                             let value_borrowed = result
                                 .get_value()
@@ -381,11 +375,8 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
                             println!(
                                 "{} {}",
                                 "Error:".red().bold(),
-                                unwrap_object!(
-                                    &*value_borrowed,
-                                    OnionObject::String
-                                )
-                                .map_err(|e| format!("Failed to get error message: {:?}", e))?
+                                unwrap_object!(&*value_borrowed, OnionObject::String)
+                                    .map_err(|e| format!("Failed to get error message: {:?}", e))?
                             );
                             return Err("Execution failed".to_string());
                         }
@@ -414,7 +405,13 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
                         break;
                     }
                     StepResult::Error(err) => {
-                        return Err(format!("Runtime error: {}", err));
+                        return Err(format!(
+                            "Runtime error: {}\nContext:\n{}",
+                            err,
+                            scheduler
+                                .format_context()
+                                .map_err(|e| format!("Failed to format context: {}", e))?
+                        ));
                     }
                 }
             }

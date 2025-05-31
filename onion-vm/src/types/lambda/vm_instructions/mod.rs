@@ -12,7 +12,7 @@ use crate::{
     types::{
         lazy_set::OnionLazySet,
         named::OnionNamed,
-        object::{ObjectError, OnionObject, OnionObjectCell},
+        object::{OnionObject, OnionObjectCell},
         pair::OnionPair,
         tuple::OnionTuple,
     },
@@ -219,20 +219,16 @@ pub fn build_range(
     let stack = runnable.context.get_current_stack_mut()?;
     let left = Context::get_object_from_stack(stack, 1)?;
     let right = Context::get_object_from_stack(stack, 0)?;
-    let range = OnionObject::Range(
-        left.weak()
-            .try_borrow()
-            .map_err(RuntimeError::ObjectError)?
-            .to_integer()
-            .map_err(|e| RuntimeError::DetailedError(format!("Failed to build range: {}", e)))?,
-        right
-            .weak()
-            .try_borrow()
-            .map_err(RuntimeError::ObjectError)?
-            .to_integer()
-            .map_err(|e| RuntimeError::DetailedError(format!("Failed to build range: {}", e)))?,
-    )
-    .stabilize();
+    let range =
+        OnionObject::Range(
+            left.weak().try_borrow()?.to_integer().map_err(|e| {
+                RuntimeError::DetailedError(format!("Failed to build range: {}", e))
+            })?,
+            right.weak().try_borrow()?.to_integer().map_err(|e| {
+                RuntimeError::DetailedError(format!("Failed to build range: {}", e))
+            })?,
+        )
+        .stabilize();
 
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, range);
@@ -302,16 +298,10 @@ pub fn load_lambda(
         .context
         .get_object_rev(if should_capture { 2 } else { 1 })?
         .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .clone_value()
-        .map_err(RuntimeError::ObjectError)?;
+        .try_borrow()?
+        .clone_value()?;
 
-    let OnionObject::Tuple(_) = &*default_parameters
-        .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-    else {
+    let OnionObject::Tuple(_) = &*default_parameters.weak().try_borrow()? else {
         return Err(RuntimeError::DetailedError(format!(
             "Invalid object type for default parameters: {}",
             default_parameters
@@ -322,15 +312,9 @@ pub fn load_lambda(
         .context
         .get_object_rev(0)?
         .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .clone_value()
-        .map_err(RuntimeError::ObjectError)?;
-    let OnionObject::InstructionPackage(_) = &*instruction_package
-        .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-    else {
+        .try_borrow()?
+        .clone_value()?;
+    let OnionObject::InstructionPackage(_) = &*instruction_package.weak().try_borrow()? else {
         return Err(RuntimeError::DetailedError(format!(
             "Invalid object type for instruction package: {}",
             instruction_package
@@ -339,13 +323,7 @@ pub fn load_lambda(
 
     let lambda = OnionLambdaDefinition::new_static(
         &default_parameters,
-        LambdaBody::Instruction(Box::new(
-            instruction_package
-                .weak()
-                .try_borrow()
-                .map_err(RuntimeError::ObjectError)?
-                .clone(),
-        )),
+        LambdaBody::Instruction(Box::new(instruction_package.weak().try_borrow()?.clone())),
         captured_value,
         None,
         signature,
@@ -385,8 +363,7 @@ pub fn let_var(
 
     runnable
         .context
-        .let_variable(index as usize, value.clone())
-        .map_err(RuntimeError::ObjectError)?;
+        .let_variable(index as usize, value.clone())?;
     Ok(StepResult::Continue)
 }
 
@@ -427,15 +404,8 @@ pub fn set_var(
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
     left.weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .assign(
-            &*right
-                .weak()
-                .try_borrow()
-                .map_err(RuntimeError::ObjectError)?,
-        )
-        .map_err(RuntimeError::ObjectError)?;
+        .try_borrow()?
+        .assign(&*right.weak().try_borrow()?)?;
     // 保留左侧对象的引用，由于其是不可变的可变对象的引用，assign不会导致GC错误回收
     runnable.context.discard_objects(1)?;
     Ok(StepResult::Continue)
@@ -460,15 +430,14 @@ pub fn get_attr(
                         _ => value,
                     },
                     Err(e) => {
-                        return Err(ObjectError::InvalidOperation(format!(
+                        return Err(RuntimeError::InvalidOperation(format!(
                             "Failed to get attribute {:?} from object {:?}: {}",
                             attr, obj, e
                         )));
                     }
                 },
             )
-        })
-        .map_err(RuntimeError::ObjectError)?
+        })?
         .stabilize();
 
     runnable.context.discard_objects(2)?;
@@ -487,10 +456,7 @@ pub fn index_of(
 
     // Extract the integer index value
     let index_value = {
-        let index_ref = index_obj
-            .weak()
-            .try_borrow()
-            .map_err(RuntimeError::ObjectError)?;
+        let index_ref = index_obj.weak().try_borrow()?;
         if let OnionObject::Integer(index) = &*index_ref {
             *index
         } else {
@@ -503,11 +469,8 @@ pub fn index_of(
 
     // Get the element at the index
     let element = {
-        let obj_ref = container_obj
-            .weak()
-            .try_borrow()
-            .map_err(RuntimeError::ObjectError)?;
-        obj_ref.at(index_value).map_err(RuntimeError::ObjectError)?
+        let obj_ref = container_obj.weak().try_borrow()?;
+        obj_ref.at(index_value)?
     };
 
     // Now modify the context after all borrows are dropped
@@ -523,12 +486,7 @@ pub fn key_of(
 ) -> Result<StepResult, RuntimeError> {
     let stack = runnable.context.get_current_stack_mut()?;
     let obj = Context::get_object_from_stack(stack, 0)?;
-    let key = obj
-        .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .key_of()
-        .map_err(RuntimeError::ObjectError)?;
+    let key = obj.weak().try_borrow()?.key_of()?;
     Context::replace_last_object(stack, key);
     Ok(StepResult::Continue)
 }
@@ -540,12 +498,7 @@ pub fn value_of(
 ) -> Result<StepResult, RuntimeError> {
     let stack = runnable.context.get_current_stack_mut()?;
     let obj = Context::get_object_from_stack(stack, 0)?;
-    let value = obj
-        .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .value_of()
-        .map_err(RuntimeError::ObjectError)?;
+    let value = obj.weak().try_borrow()?.value_of()?;
     Context::replace_last_object(stack, value);
     Ok(StepResult::Continue)
 }
@@ -558,12 +511,7 @@ pub fn type_of(
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
     let obj = Context::get_object_from_stack(stack, 0)?;
-    let type_name = obj
-        .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .type_of()
-        .map_err(RuntimeError::ObjectError)?;
+    let type_name = obj.weak().try_borrow()?.type_of()?;
     Context::replace_last_object(stack, OnionObject::String(type_name).stabilize());
     Ok(StepResult::Continue)
 }
@@ -576,12 +524,7 @@ pub fn copy(
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
     let obj = Context::get_object_from_stack(stack, 0)?;
-    let copied_obj = obj
-        .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .copy()
-        .map_err(RuntimeError::ObjectError)?;
+    let copied_obj = obj.weak().try_borrow()?.copy()?;
     Context::discard_from_stack(stack, 1)?;
     Context::push_to_stack(stack, copied_obj);
     Ok(StepResult::Continue)
@@ -596,15 +539,8 @@ pub fn check_is_same_object(
     let obj2 = runnable.context.get_object_rev(1)?;
     let is_same = obj1
         .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .is_same(
-            &*obj2
-                .weak()
-                .try_borrow()
-                .map_err(RuntimeError::ObjectError)?,
-        )
-        .map_err(RuntimeError::ObjectError)?;
+        .try_borrow()?
+        .is_same(&*obj2.weak().try_borrow()?)?;
     runnable.context.discard_objects(2)?;
     runnable
         .context
@@ -623,15 +559,8 @@ pub fn binary_add(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .binary_add(
-            &*right
-                .weak()
-                .try_borrow()
-                .map_err(RuntimeError::ObjectError)?,
-        )
-        .map_err(RuntimeError::ObjectError)?;
+        .try_borrow()?
+        .binary_add(&*right.weak().try_borrow()?)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -648,15 +577,8 @@ pub fn binary_subtract(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .binary_sub(
-            &*right
-                .weak()
-                .try_borrow()
-                .map_err(RuntimeError::ObjectError)?,
-        )
-        .map_err(RuntimeError::ObjectError)?;
+        .try_borrow()?
+        .binary_sub(&*right.weak().try_borrow()?)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -673,15 +595,8 @@ pub fn binary_multiply(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .binary_mul(
-            &*right
-                .weak()
-                .try_borrow()
-                .map_err(RuntimeError::ObjectError)?,
-        )
-        .map_err(RuntimeError::ObjectError)?;
+        .try_borrow()?
+        .binary_mul(&*right.weak().try_borrow()?)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -698,15 +613,8 @@ pub fn binary_divide(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .binary_div(
-            &*right
-                .weak()
-                .try_borrow()
-                .map_err(RuntimeError::ObjectError)?,
-        )
-        .map_err(RuntimeError::ObjectError)?;
+        .try_borrow()?
+        .binary_div(&*right.weak().try_borrow()?)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -723,15 +631,8 @@ pub fn binary_modulus(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .binary_mod(
-            &*right
-                .weak()
-                .try_borrow()
-                .map_err(RuntimeError::ObjectError)?,
-        )
-        .map_err(RuntimeError::ObjectError)?;
+        .try_borrow()?
+        .binary_mod(&*right.weak().try_borrow()?)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -748,15 +649,8 @@ pub fn binary_power(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .binary_pow(
-            &*right
-                .weak()
-                .try_borrow()
-                .map_err(RuntimeError::ObjectError)?,
-        )
-        .map_err(RuntimeError::ObjectError)?;
+        .try_borrow()?
+        .binary_pow(&*right.weak().try_borrow()?)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -773,15 +667,8 @@ pub fn binary_bitwise_or(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .binary_or(
-            &*right
-                .weak()
-                .try_borrow()
-                .map_err(RuntimeError::ObjectError)?,
-        )
-        .map_err(RuntimeError::ObjectError)?;
+        .try_borrow()?
+        .binary_or(&*right.weak().try_borrow()?)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -798,15 +685,8 @@ pub fn binary_bitwise_and(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .binary_and(
-            &*right
-                .weak()
-                .try_borrow()
-                .map_err(RuntimeError::ObjectError)?,
-        )
-        .map_err(RuntimeError::ObjectError)?;
+        .try_borrow()?
+        .binary_and(&*right.weak().try_borrow()?)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -823,15 +703,8 @@ pub fn binary_bitwise_xor(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .binary_xor(
-            &*right
-                .weak()
-                .try_borrow()
-                .map_err(RuntimeError::ObjectError)?,
-        )
-        .map_err(RuntimeError::ObjectError)?;
+        .try_borrow()?
+        .binary_xor(&*right.weak().try_borrow()?)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -848,15 +721,8 @@ pub fn binary_shift_left(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .binary_shl(
-            &*right
-                .weak()
-                .try_borrow()
-                .map_err(RuntimeError::ObjectError)?,
-        )
-        .map_err(RuntimeError::ObjectError)?;
+        .try_borrow()?
+        .binary_shl(&*right.weak().try_borrow()?)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -873,15 +739,8 @@ pub fn binary_shift_right(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .binary_shr(
-            &*right
-                .weak()
-                .try_borrow()
-                .map_err(RuntimeError::ObjectError)?,
-        )
-        .map_err(RuntimeError::ObjectError)?;
+        .try_borrow()?
+        .binary_shr(&*right.weak().try_borrow()?)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -898,15 +757,8 @@ pub fn binary_equal(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .binary_eq(
-            &*right
-                .weak()
-                .try_borrow()
-                .map_err(RuntimeError::ObjectError)?,
-        )
-        .map_err(RuntimeError::ObjectError)?;
+        .try_borrow()?
+        .binary_eq(&*right.weak().try_borrow()?)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, OnionObject::Boolean(result).stabilize());
     Ok(StepResult::Continue)
@@ -923,15 +775,8 @@ pub fn binary_not_equal(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .binary_eq(
-            &*right
-                .weak()
-                .try_borrow()
-                .map_err(RuntimeError::ObjectError)?,
-        )
-        .map_err(RuntimeError::ObjectError)?;
+        .try_borrow()?
+        .binary_eq(&*right.weak().try_borrow()?)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, OnionObject::Boolean(!result).stabilize());
     Ok(StepResult::Continue)
@@ -948,15 +793,8 @@ pub fn binary_greater(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .binary_gt(
-            &*right
-                .weak()
-                .try_borrow()
-                .map_err(RuntimeError::ObjectError)?,
-        )
-        .map_err(RuntimeError::ObjectError)?;
+        .try_borrow()?
+        .binary_gt(&*right.weak().try_borrow()?)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, OnionObject::Boolean(result).stabilize());
     Ok(StepResult::Continue)
@@ -973,15 +811,8 @@ pub fn binary_greater_equal(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .binary_lt(
-            &*right
-                .weak()
-                .try_borrow()
-                .map_err(RuntimeError::ObjectError)?,
-        )
-        .map_err(RuntimeError::ObjectError)?;
+        .try_borrow()?
+        .binary_lt(&*right.weak().try_borrow()?)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, OnionObject::Boolean(!result).stabilize());
     Ok(StepResult::Continue)
@@ -998,15 +829,8 @@ pub fn binary_less(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .binary_lt(
-            &*right
-                .weak()
-                .try_borrow()
-                .map_err(RuntimeError::ObjectError)?,
-        )
-        .map_err(RuntimeError::ObjectError)?;
+        .try_borrow()?
+        .binary_lt(&*right.weak().try_borrow()?)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, OnionObject::Boolean(result).stabilize());
     Ok(StepResult::Continue)
@@ -1023,15 +847,8 @@ pub fn binary_less_equal(
     let left = Context::get_object_from_stack(stack, 1)?;
     let result = left
         .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .binary_gt(
-            &*right
-                .weak()
-                .try_borrow()
-                .map_err(RuntimeError::ObjectError)?,
-        )
-        .map_err(RuntimeError::ObjectError)?;
+        .try_borrow()?
+        .binary_gt(&*right.weak().try_borrow()?)?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, OnionObject::Boolean(!result).stabilize());
     Ok(StepResult::Continue)
@@ -1045,12 +862,7 @@ pub fn unary_bitwise_not(
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
     let obj = Context::get_object_from_stack(stack, 0)?;
-    let result = obj
-        .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .unary_not()
-        .map_err(RuntimeError::ObjectError)?;
+    let result = obj.weak().try_borrow()?.unary_not()?;
     Context::discard_from_stack(stack, 1)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -1063,12 +875,7 @@ pub fn unary_plus(
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
     let obj = Context::get_object_from_stack(stack, 0)?;
-    let result = obj
-        .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .unary_plus()
-        .map_err(RuntimeError::ObjectError)?;
+    let result = obj.weak().try_borrow()?.unary_plus()?;
     Context::discard_from_stack(stack, 1)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -1081,12 +888,7 @@ pub fn unary_minus(
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
     let obj = Context::get_object_from_stack(stack, 0)?;
-    let result = obj
-        .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .unary_neg()
-        .map_err(RuntimeError::ObjectError)?;
+    let result = obj.weak().try_borrow()?.unary_neg()?;
     Context::discard_from_stack(stack, 1)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -1132,13 +934,7 @@ pub fn jump_if_false(
         )));
     };
     let condition = runnable.context.get_object_rev(0)?;
-    if !condition
-        .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .to_boolean()
-        .map_err(RuntimeError::ObjectError)?
-    {
+    if !condition.weak().try_borrow()?.to_boolean()? {
         runnable.ip += offset as isize;
     }
     runnable.context.discard_objects(1)?;
@@ -1150,12 +946,7 @@ pub fn get_length(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let obj = runnable.context.get_object_rev(0)?;
-    let length = obj
-        .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .len()
-        .map_err(RuntimeError::ObjectError)?;
+    let length = obj.weak().try_borrow()?.len()?;
     runnable.context.discard_objects(1)?;
     runnable.context.push_object(length)?;
     Ok(StepResult::Continue)
@@ -1197,13 +988,7 @@ pub fn assert(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let condition = runnable.context.get_object_rev(0)?;
-    if !condition
-        .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .to_boolean()
-        .map_err(RuntimeError::ObjectError)?
-    {
+    if !condition.weak().try_borrow()?.to_boolean()? {
         return Err(RuntimeError::DetailedError(format!(
             "Assertion failed: {}",
             condition
@@ -1223,21 +1008,11 @@ pub fn is_in(
 
     // 先检查元素是否在惰性集合的容器中
     let is_in = {
-        match &*container
-            .weak()
-            .try_borrow()
-            .map_err(RuntimeError::ObjectError)?
-        {
+        match &*container.weak().try_borrow()? {
             OnionObject::LazySet(lazy_set) => lazy_set
                 .get_container()
-                .try_borrow()
-                .map_err(RuntimeError::ObjectError)?
-                .contains(
-                    &*element
-                        .weak()
-                        .try_borrow()
-                        .map_err(RuntimeError::ObjectError)?,
-                )
+                .try_borrow()?
+                .contains(&*element.weak().try_borrow()?)
                 .map_err(|e| {
                     RuntimeError::DetailedError(format!("Failed to check containment: {}", e))
                 })?,
@@ -1260,24 +1035,17 @@ pub fn is_in(
     }
 
     // 如果在容器中，则调用惰性集合的过滤器
-    let (args, filter) = match &*container
-        .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-    {
-        OnionObject::LazySet(lazy_set) => lazy_set
-            .get_filter()
-            .with_data(|filter| {
-                let OnionObject::Lambda(_) = filter else {
-                    // 过滤器不是 Lambda 对象，认定为惰性求值结果为 filter
-                    let filter = filter.clone().stabilize();
-                    return Ok((None, filter));
-                };
-                let args = OnionTuple::new_static(vec![element]);
+    let (args, filter) = match &*container.weak().try_borrow()? {
+        OnionObject::LazySet(lazy_set) => lazy_set.get_filter().with_data(|filter| {
+            let OnionObject::Lambda(_) = filter else {
+                // 过滤器不是 Lambda 对象，认定为惰性求值结果为 filter
                 let filter = filter.clone().stabilize();
-                return Ok((Some(args), filter));
-            })
-            .map_err(RuntimeError::ObjectError)?,
+                return Ok((None, filter));
+            };
+            let args = OnionTuple::new_static(vec![element]);
+            let filter = filter.clone().stabilize();
+            return Ok((Some(args), filter));
+        })?,
         _ => {
             return Err(RuntimeError::DetailedError(format!(
                 "Container is not a LazySet: {}",
@@ -1306,42 +1074,39 @@ pub fn call_lambda(
 ) -> Result<StepResult, RuntimeError> {
     let lambda = runnable.context.get_object_rev(1)?;
     let args = runnable.context.get_object_rev(0)?;
-    let new_runnable = lambda
-        .weak()
-        .with_data(|lambda_ref| {
-            if let OnionObject::Lambda(lambda_ref) = lambda_ref {
-                let assigned = lambda_ref.parameter.as_ref().with_data(|parameter| {
-                    let OnionObject::Tuple(parameters) = parameter else {
-                        return Err(ObjectError::InvalidType(format!(
-                            "Lambda parameters are not a Tuple: {:?}",
-                            lambda_ref
-                        )));
-                    };
+    let new_runnable = lambda.weak().with_data(|lambda_ref| {
+        if let OnionObject::Lambda(lambda_ref) = lambda_ref {
+            let assigned = lambda_ref.parameter.with_data(|parameter| {
+                let OnionObject::Tuple(parameters) = parameter else {
+                    return Err(RuntimeError::InvalidType(format!(
+                        "Lambda parameters are not a Tuple: {:?}",
+                        lambda_ref
+                    )));
+                };
 
-                    let OnionObject::Tuple(args_tuple) = &*args.weak().try_borrow()? else {
-                        return Err(ObjectError::InvalidType(format!(
-                            "Arguments are not a Tuple: {}",
-                            args
-                        )));
-                    };
-                    parameters.clone_and_named_assignment(args_tuple)
-                })?;
+                let OnionObject::Tuple(args_tuple) = &*args.weak().try_borrow()? else {
+                    return Err(RuntimeError::InvalidType(format!(
+                        "Arguments are not a Tuple: {}",
+                        args
+                    )));
+                };
+                parameters.clone_and_named_assignment(args_tuple)
+            })?;
+            lambda_ref
+                .create_runnable(assigned, lambda, gc)
+                .map_err(|e| {
+                    RuntimeError::InvalidType(format!(
+                        "Failed to create runnable from lambda: {}",
+                        e
+                    ))
+                })
+        } else {
+            Err(RuntimeError::InvalidType(format!(
+                "Object is not a Lambda: {:?}",
                 lambda_ref
-                    .create_runnable(assigned, lambda, gc)
-                    .map_err(|e| {
-                        ObjectError::InvalidType(format!(
-                            "Failed to create runnable from lambda: {}",
-                            e
-                        ))
-                    })
-            } else {
-                Err(ObjectError::InvalidType(format!(
-                    "Object is not a Lambda: {:?}",
-                    lambda_ref
-                )))
-            }
-        })
-        .map_err(RuntimeError::ObjectError)?;
+            )))
+        }
+    })?;
 
     runnable.context.discard_objects(2)?;
     Ok(StepResult::NewRunnable(new_runnable))
@@ -1352,11 +1117,7 @@ pub fn mutablize(
     _opcode: &ProcessedOpcode,
     gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
-    let heap = runnable
-        .context
-        .get_object_rev(0)?
-        .mutablize(gc)
-        .map_err(RuntimeError::ObjectError)?;
+    let heap = runnable.context.get_object_rev(0)?.mutablize(gc)?;
     runnable.context.discard_objects(1)?;
     runnable.context.push_object(heap)?;
     Ok(StepResult::Continue)
@@ -1368,12 +1129,7 @@ pub fn immutablize(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let obj = runnable.context.get_object_rev(0)?;
-    let immutable_obj = obj
-        .weak()
-        .try_borrow()
-        .map_err(RuntimeError::ObjectError)?
-        .clone_value()
-        .map_err(RuntimeError::ObjectError)?;
+    let immutable_obj = obj.weak().try_borrow()?.clone_value()?;
     runnable.context.discard_objects(1)?;
     runnable.context.push_object(immutable_obj)?;
     Ok(StepResult::Continue)
@@ -1407,17 +1163,13 @@ pub fn import(
     let path = runnable.context.get_object_rev(0)?;
 
     let package = {
-        let OnionObject::String(path) = &*path
-            .weak()
-            .try_borrow()
-            .map_err(RuntimeError::ObjectError)?
-        else {
+        let OnionObject::String(path) = &*path.weak().try_borrow()? else {
             return Err(RuntimeError::DetailedError(format!(
                 "Invalid path type for `import`: {}",
                 path
             )));
         };
-        VMInstructionPackage::read_from_file(path).map_err(|e| {
+        VMInstructionPackage::read_from_file(&path).map_err(|e| {
             RuntimeError::DetailedError(format!(
                 "Failed to read instruction package from file: {}",
                 e
@@ -1447,42 +1199,39 @@ pub fn sync_call(
 ) -> Result<StepResult, RuntimeError> {
     let lambda = runnable.context.get_object_rev(1)?;
     let args = runnable.context.get_object_rev(0)?;
-    let new_runnable = lambda
-        .weak()
-        .with_data(|lambda_ref| {
-            if let OnionObject::Lambda(lambda_ref) = lambda_ref {
-                let assigned = lambda_ref.parameter.as_ref().with_data(|parameter| {
-                    let OnionObject::Tuple(parameters) = parameter else {
-                        return Err(ObjectError::InvalidType(format!(
-                            "Lambda parameters are not a Tuple: {:?}",
-                            lambda_ref
-                        )));
-                    };
+    let new_runnable = lambda.weak().with_data(|lambda_ref| {
+        if let OnionObject::Lambda(lambda_ref) = lambda_ref {
+            let assigned = lambda_ref.parameter.with_data(|parameter| {
+                let OnionObject::Tuple(parameters) = parameter else {
+                    return Err(RuntimeError::InvalidType(format!(
+                        "Lambda parameters are not a Tuple: {:?}",
+                        lambda_ref
+                    )));
+                };
 
-                    let OnionObject::Tuple(args_tuple) = &*args.weak().try_borrow()? else {
-                        return Err(ObjectError::InvalidType(format!(
-                            "Arguments are not a Tuple: {}",
-                            args
-                        )));
-                    };
-                    parameters.clone_and_named_assignment(args_tuple)
-                })?;
+                let OnionObject::Tuple(args_tuple) = &*args.weak().try_borrow()? else {
+                    return Err(RuntimeError::InvalidType(format!(
+                        "Arguments are not a Tuple: {}",
+                        args
+                    )));
+                };
+                parameters.clone_and_named_assignment(args_tuple)
+            })?;
+            lambda_ref
+                .create_runnable(assigned, lambda, gc)
+                .map_err(|e| {
+                    RuntimeError::InvalidType(format!(
+                        "Failed to create runnable from lambda: {}",
+                        e
+                    ))
+                })
+        } else {
+            Err(RuntimeError::InvalidType(format!(
+                "Object is not a Lambda: {:?}",
                 lambda_ref
-                    .create_runnable(assigned, lambda, gc)
-                    .map_err(|e| {
-                        ObjectError::InvalidType(format!(
-                            "Failed to create runnable from lambda: {}",
-                            e
-                        ))
-                    })
-            } else {
-                Err(ObjectError::InvalidType(format!(
-                    "Object is not a Lambda: {:?}",
-                    lambda_ref
-                )))
-            }
-        })
-        .map_err(RuntimeError::ObjectError)?;
+            )))
+        }
+    })?;
 
     runnable.context.discard_objects(2)?;
     let async_scheduler = Scheduler::new(vec![new_runnable]);
@@ -1513,42 +1262,39 @@ pub fn async_call(
 ) -> Result<StepResult, RuntimeError> {
     let lambda = runnable.context.get_object_rev(1)?;
     let args = runnable.context.get_object_rev(0)?;
-    let new_runnable = lambda
-        .weak()
-        .with_data(|lambda_ref| {
-            if let OnionObject::Lambda(lambda_ref) = lambda_ref {
-                let assigned = lambda_ref.parameter.as_ref().with_data(|parameter| {
-                    let OnionObject::Tuple(parameters) = parameter else {
-                        return Err(ObjectError::InvalidType(format!(
-                            "Lambda parameters are not a Tuple: {:?}",
-                            lambda_ref
-                        )));
-                    };
+    let new_runnable = lambda.weak().with_data(|lambda_ref| {
+        if let OnionObject::Lambda(lambda_ref) = lambda_ref {
+            let assigned = lambda_ref.parameter.with_data(|parameter| {
+                let OnionObject::Tuple(parameters) = parameter else {
+                    return Err(RuntimeError::InvalidType(format!(
+                        "Lambda parameters are not a Tuple: {:?}",
+                        lambda_ref
+                    )));
+                };
 
-                    let OnionObject::Tuple(args_tuple) = &*args.weak().try_borrow()? else {
-                        return Err(ObjectError::InvalidType(format!(
-                            "Arguments are not a Tuple: {}",
-                            args
-                        )));
-                    };
-                    parameters.clone_and_named_assignment(args_tuple)
-                })?;
+                let OnionObject::Tuple(args_tuple) = &*args.weak().try_borrow()? else {
+                    return Err(RuntimeError::InvalidType(format!(
+                        "Arguments are not a Tuple: {}",
+                        args
+                    )));
+                };
+                parameters.clone_and_named_assignment(args_tuple)
+            })?;
+            lambda_ref
+                .create_runnable(assigned, lambda, gc)
+                .map_err(|e| {
+                    RuntimeError::InvalidType(format!(
+                        "Failed to create runnable from lambda: {}",
+                        e
+                    ))
+                })
+        } else {
+            Err(RuntimeError::InvalidType(format!(
+                "Object is not a Lambda: {:?}",
                 lambda_ref
-                    .create_runnable(assigned, lambda, gc)
-                    .map_err(|e| {
-                        ObjectError::InvalidType(format!(
-                            "Failed to create runnable from lambda: {}",
-                            e
-                        ))
-                    })
-            } else {
-                Err(ObjectError::InvalidType(format!(
-                    "Object is not a Lambda: {:?}",
-                    lambda_ref
-                )))
-            }
-        })
-        .map_err(RuntimeError::ObjectError)?;
+            )))
+        }
+    })?;
 
     runnable.context.discard_objects(2)?;
     let async_scheduler = AsyncScheduler::new(vec![new_runnable]);

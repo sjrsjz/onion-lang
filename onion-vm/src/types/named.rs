@@ -2,7 +2,9 @@ use std::fmt::Debug;
 
 use arc_gc::{arc::GCArc, traceable::GCTraceable};
 
-use super::object::{ObjectError, OnionObject, OnionObjectCell, OnionStaticObject};
+use crate::lambda::runnable::RuntimeError;
+
+use super::object::{OnionObject, OnionObjectCell, OnionStaticObject};
 
 #[derive(Clone)]
 pub struct OnionNamed {
@@ -69,7 +71,7 @@ impl OnionNamed {
 }
 
 impl OnionNamed {
-    pub fn equals(&self, other: &OnionObject) -> Result<bool, ObjectError> {
+    pub fn equals(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
         match other {
             OnionObject::Named(pair) => {
                 if self.key.equals(pair.key.as_ref())? && self.value.equals(pair.value.as_ref())? {
@@ -81,18 +83,18 @@ impl OnionNamed {
         Ok(false)
     }
 
-    pub fn with_attribute<F, R>(&self, key: &OnionObject, f: &F) -> Result<R, ObjectError>
+    pub fn with_attribute<F, R>(&self, key: &OnionObject, f: &F) -> Result<R, RuntimeError>
     where
-        F: Fn(&OnionObject) -> Result<R, ObjectError>,
+        F: Fn(&OnionObject) -> Result<R, RuntimeError>,
     {
         self.value
             .with_attribute(key, f)
             .or_else(|_| self.key.with_attribute(key, f))
     }
 
-    pub fn with_attribute_mut<F, R>(&mut self, key: &OnionObject, f: &F) -> Result<R, ObjectError>
+    pub fn with_attribute_mut<F, R>(&mut self, key: &OnionObject, f: &F) -> Result<R, RuntimeError>
     where
-        F: Fn(&mut OnionObject) -> Result<R, ObjectError>,
+        F: Fn(&mut OnionObject) -> Result<R, RuntimeError>,
     {
         self.value
             .with_attribute_mut(key, f)

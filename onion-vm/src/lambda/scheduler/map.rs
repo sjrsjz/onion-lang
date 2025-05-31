@@ -3,7 +3,7 @@ use arc_gc::gc::GC;
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
     types::{
-        object::{ObjectError, OnionObject, OnionObjectCell, OnionStaticObject},
+        object::{OnionObject, OnionObjectCell, OnionStaticObject},
         tuple::OnionTuple,
     },
 };
@@ -21,7 +21,7 @@ impl Runnable for Mapping {
         &mut self,
         _argument: OnionStaticObject,
         _gc: &mut GC<OnionObjectCell>,
-    ) -> Result<(), ObjectError> {
+    ) -> Result<(), RuntimeError> {
         Ok(()) // This collector does not use an argument, so we can ignore it.
     }
     fn copy(&self, _gc: &mut GC<OnionObjectCell>) -> Box<dyn Runnable> {
@@ -63,7 +63,7 @@ impl Runnable for Mapping {
                             OnionObject::Lambda(func) => {
                                 let OnionObject::Tuple(params) = &*func.parameter.try_borrow()?
                                 else {
-                                    return Err(ObjectError::InvalidType(format!(
+                                    return Err(RuntimeError::InvalidType(format!(
                                         "Map's parameter must be a tuple, got {:?}",
                                         func.parameter
                                     )));
@@ -88,10 +88,19 @@ impl Runnable for Mapping {
                         )))
                     }
                 }
-                _ => Err(ObjectError::InvalidType(
+                _ => Err(RuntimeError::InvalidType(
                     "Container must be a tuple".to_string(),
                 )),
             })
-            .map_err(RuntimeError::ObjectError)
+    }
+
+    fn format_context(&self) -> Result<serde_json::Value, RuntimeError> {
+        return Ok(serde_json::json!({
+            "type": "Mapping",
+            "container": self.container.to_string(),
+            "map": self.map.to_string(),
+            "collected": self.collected.iter().map(|o| o.to_string()).collect::<Vec<_>>(),
+            "current_index": self.current_index,
+        }));
     }
 }

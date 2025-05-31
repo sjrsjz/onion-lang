@@ -1,14 +1,17 @@
 use std::fmt::Display;
 
 use arc_gc::gc::GC;
+use serde_json::Value;
 
-use crate::types::object::{ObjectError, OnionObject, OnionObjectCell, OnionStaticObject};
+use crate::types::object::{OnionObjectCell, OnionStaticObject};
 
 #[derive(Clone, Debug)]
 pub enum RuntimeError {
     StepError(String),
     DetailedError(String),
-    ObjectError(ObjectError),
+    InvalidType(String),
+    InvalidOperation(String),
+    BrokenReference,
 }
 
 impl Display for RuntimeError {
@@ -16,7 +19,9 @@ impl Display for RuntimeError {
         match self {
             RuntimeError::StepError(msg) => write!(f, "Step Error: {}", msg),
             RuntimeError::DetailedError(msg) => write!(f, "Detailed Error: {}", msg),
-            RuntimeError::ObjectError(err) => write!(f, "Object Error: {}", err),
+            RuntimeError::InvalidType(msg) => write!(f, "Invalid type: {}", msg),
+            RuntimeError::InvalidOperation(msg) => write!(f, "Invalid operation: {}", msg),
+            RuntimeError::BrokenReference => write!(f, "Broken reference encountered"),
         }
     }
 }
@@ -34,16 +39,22 @@ pub trait Runnable {
         &mut self,
         argument: OnionStaticObject,
         gc: &mut GC<OnionObjectCell>,
-    ) -> Result<(), ObjectError> {
-        Err(ObjectError::InvalidOperation(
+    ) -> Result<(), RuntimeError> {
+        Err(RuntimeError::InvalidOperation(
             "set_argument not implemented".to_string(),
         ))
     }
     fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError>;
-    fn receive(&mut self, step_result: StepResult, gc: &mut GC<OnionObjectCell>) -> Result<(), RuntimeError> {
+    fn receive(
+        &mut self,
+        step_result: StepResult,
+        gc: &mut GC<OnionObjectCell>,
+    ) -> Result<(), RuntimeError> {
         Err(RuntimeError::DetailedError(
             "receive not implemented".to_string(),
         ))
     }
     fn copy(&self, gc: &mut GC<OnionObjectCell>) -> Box<dyn Runnable>;
+
+    fn format_context(&self) -> Result<Value, RuntimeError>;
 }

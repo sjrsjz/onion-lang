@@ -11,7 +11,7 @@ use onion_vm::{
     onion_tuple,
     types::{
         lambda::definition::{LambdaBody, OnionLambdaDefinition},
-        object::{ObjectError, OnionObject, OnionObjectCell, OnionStaticObject},
+        object::{OnionObject, OnionObjectCell, OnionStaticObject},
         tuple::OnionTuple,
     },
     unwrap_object, GC,
@@ -174,7 +174,7 @@ impl Runnable for AsyncHttpRequest {
         &mut self,
         _argument: OnionStaticObject,
         _gc: &mut GC<OnionObjectCell>,
-    ) -> Result<(), ObjectError> {
+    ) -> Result<(), RuntimeError> {
         Ok(())
     }
 
@@ -230,12 +230,31 @@ impl Runnable for AsyncHttpRequest {
             state: Arc::clone(&self.state),
         })
     }
+
+    fn format_context(&self) -> Result<serde_json::Value, RuntimeError> {
+        let state = {
+            let state_guard = self.state.lock().unwrap();
+            match &*state_guard {
+                RequestState::Pending => "Pending",
+                RequestState::InProgress => "In Progress",
+                RequestState::Completed(_) => "Completed",
+            }
+        };
+
+        Ok(serde_json::json!({
+            "url": self.url,
+            "method": self.method,
+            "headers": self.headers,
+            "body": self.body,
+            "state": state,
+        }))
+    }
 }
 
 /// 解析请求参数并创建HTTP请求
 fn parse_request_params(
     argument: &OnionStaticObject,
-) -> Result<(String, String, HashMap<String, String>, Option<String>), ObjectError> {
+) -> Result<(String, String, HashMap<String, String>, Option<String>), RuntimeError> {
     argument.weak().with_data(|data| {
         let _request_obj = unwrap_object!(data, OnionObject::Tuple)?;
 
@@ -244,7 +263,7 @@ fn parse_request_params(
             .weak()
             .try_borrow()?
             .to_string()
-            .map_err(|e| ObjectError::InvalidType(format!("Invalid URL: {}", e)))?;
+            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))?;
 
         // 获取方法，默认为GET
         let method = get_attr_direct(data, "method".to_string())
@@ -297,9 +316,9 @@ fn http_get(
                 .weak()
                 .try_borrow()?
                 .to_string()
-                .map_err(|e| ObjectError::InvalidType(format!("Invalid URL: {}", e)))
+                .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))
         })
-        .map_err(RuntimeError::ObjectError)?;
+        ?;
 
     let headers = HashMap::new();
     let request = AsyncHttpRequest::new(url, "GET".to_string(), headers, None);
@@ -329,7 +348,7 @@ fn http_post(
                 .weak()
                 .try_borrow()?
                 .to_string()
-                .map_err(|e| ObjectError::InvalidType(format!("Invalid URL: {}", e)))?;
+                .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))?;
 
             let body = get_attr_direct(data, "body".to_string())
                 .ok()
@@ -337,7 +356,7 @@ fn http_post(
 
             Ok((url, body))
         })
-        .map_err(RuntimeError::ObjectError)?;
+        ?;
 
     let headers = HashMap::new();
     let request = AsyncHttpRequest::new(url, "POST".to_string(), headers, body);
@@ -366,7 +385,7 @@ fn http_put(
                 .weak()
                 .try_borrow()?
                 .to_string()
-                .map_err(|e| ObjectError::InvalidType(format!("Invalid URL: {}", e)))?;
+                .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))?;
 
             let body = get_attr_direct(data, "body".to_string())
                 .ok()
@@ -374,7 +393,7 @@ fn http_put(
 
             Ok((url, body))
         })
-        .map_err(RuntimeError::ObjectError)?;
+        ?;
 
     let headers = HashMap::new();
     let request = AsyncHttpRequest::new(url, "PUT".to_string(), headers, body);
@@ -403,9 +422,9 @@ fn http_delete(
                 .weak()
                 .try_borrow()?
                 .to_string()
-                .map_err(|e| ObjectError::InvalidType(format!("Invalid URL: {}", e)))
+                .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))
         })
-        .map_err(RuntimeError::ObjectError)?;
+        ?;
 
     let headers = HashMap::new();
     let request = AsyncHttpRequest::new(url, "DELETE".to_string(), headers, None);
@@ -434,7 +453,7 @@ fn http_patch(
                 .weak()
                 .try_borrow()?
                 .to_string()
-                .map_err(|e| ObjectError::InvalidType(format!("Invalid URL: {}", e)))?;
+                .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))?;
 
             let body = get_attr_direct(data, "body".to_string())
                 .ok()
@@ -442,7 +461,7 @@ fn http_patch(
 
             Ok((url, body))
         })
-        .map_err(RuntimeError::ObjectError)?;
+        ?;
 
     let headers = HashMap::new();
     let request = AsyncHttpRequest::new(url, "PATCH".to_string(), headers, body);
@@ -463,7 +482,7 @@ fn http_request(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let (url, method, headers, body) =
-        parse_request_params(&argument).map_err(RuntimeError::ObjectError)?;
+        parse_request_params(&argument)?;
 
     let request = AsyncHttpRequest::new(url, method, headers, body);
 
@@ -492,9 +511,9 @@ fn http_get_sync(
                 .weak()
                 .try_borrow()?
                 .to_string()
-                .map_err(|e| ObjectError::InvalidType(format!("Invalid URL: {}", e)))
+                .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))
         })
-        .map_err(RuntimeError::ObjectError)?;
+        ?;
 
     // 直接执行HTTP请求并返回结果
     let headers = HashMap::new();
@@ -516,7 +535,7 @@ fn http_post_sync(
                 .weak()
                 .try_borrow()?
                 .to_string()
-                .map_err(|e| ObjectError::InvalidType(format!("Invalid URL: {}", e)))?;
+                .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))?;
 
             let body = get_attr_direct(data, "body".to_string())
                 .ok()
@@ -524,7 +543,7 @@ fn http_post_sync(
 
             Ok((url, body))
         })
-        .map_err(RuntimeError::ObjectError)?;
+        ?;
 
     let headers = HashMap::new();
     match AsyncHttpRequest::perform_http_request(&url, "POST", &headers, body.as_deref()) {
