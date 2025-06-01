@@ -7,7 +7,7 @@ use opcode::{OpcodeArgument, ProcessedOpcode};
 use crate::{
     lambda::{
         runnable::{RuntimeError, StepResult},
-        scheduler::{async_scheduler::AsyncScheduler, map::Mapping, scheduler::Scheduler},
+        scheduler::{async_scheduler::AsyncScheduler, map_scheduler::Mapping, scheduler::Scheduler},
     },
     types::{
         lazy_set::OnionLazySet,
@@ -1244,10 +1244,10 @@ pub fn map_to(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let container = runnable.context.get_object_rev(1)?;
-    let map = runnable.context.get_object_rev(0)?;
+    let mapper = runnable.context.get_object_rev(0)?;
     let mapping = Mapping {
         container: container.clone(),
-        map: map.clone(),
+        mapper: mapper.clone(),
         collected: vec![],
         current_index: 0,
     };

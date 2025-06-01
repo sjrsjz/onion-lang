@@ -1,4 +1,3 @@
-
 use arc_gc::gc::GC;
 
 use crate::{
@@ -120,7 +119,7 @@ impl OnionLambdaRunnable {
                 ))
             })?;
 
-        for (_, item) in tuple.elements.iter().enumerate() {
+        for item in tuple.elements.iter() {
             match &*item.try_borrow()? {
                 OnionObject::Named(named) => {
                     named.get_key().with_data(|key| match key {

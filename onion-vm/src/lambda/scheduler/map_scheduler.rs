@@ -11,7 +11,7 @@ use crate::{
 #[derive(Clone)]
 pub struct Mapping {
     pub(crate) container: OnionStaticObject,
-    pub(crate) map: OnionStaticObject,
+    pub(crate) mapper: OnionStaticObject,
     pub(crate) collected: Vec<OnionStaticObject>,
     pub(crate) current_index: usize,
 }
@@ -27,7 +27,7 @@ impl Runnable for Mapping {
     fn copy(&self, _gc: &mut GC<OnionObjectCell>) -> Box<dyn Runnable> {
         Box::new(Mapping {
             container: self.container.clone(),
-            map: self.map.clone(),
+            mapper: self.mapper.clone(),
             collected: self.collected.clone(),
             current_index: self.current_index,
         })
@@ -57,27 +57,27 @@ impl Runnable for Mapping {
             .with_data(|container| match container {
                 OnionObject::Tuple(tuple) => {
                     // 使用索引获取当前元素
-                    if let Some(item) = tuple.elements.get(self.current_index) {
-                        let item_clone = item.clone();
-                        self.map.weak().with_data(|filter| match filter {
-                            OnionObject::Lambda(func) => {
-                                let OnionObject::Tuple(params) = &*func.parameter.try_borrow()?
+                    if let Some(element) = tuple.elements.get(self.current_index) {
+                        let element_clone = element.clone();
+                        self.mapper.weak().with_data(|mapper_obj| match mapper_obj {
+                            OnionObject::Lambda(lambda) => {
+                                let OnionObject::Tuple(params) = &*lambda.parameter.try_borrow()?
                                 else {
                                     return Err(RuntimeError::InvalidType(format!(
                                         "Map's parameter must be a tuple, got {:?}",
-                                        func.parameter
+                                        lambda.parameter
                                     )));
                                 };
                                 let argument =
                                     params.clone_and_named_assignment(&OnionTuple::new(vec![
-                                        item_clone,
+                                        element_clone,
                                     ]))?;
-                                let runnable = func.create_runnable(argument, &self.map, gc)?;
+                                let runnable = lambda.create_runnable(argument, &self.mapper, gc)?;
                                 Ok(StepResult::NewRunnable(runnable))
                             }
                             OnionObject::Boolean(false) => Ok(StepResult::Continue),
                             _ => {
-                                self.collected.push(item_clone.stabilize());
+                                self.collected.push(element_clone.stabilize());
                                 Ok(StepResult::Continue)
                             }
                         })
@@ -98,7 +98,7 @@ impl Runnable for Mapping {
         return Ok(serde_json::json!({
             "type": "Mapping",
             "container": self.container.to_string(),
-            "map": self.map.to_string(),
+            "mapper": self.mapper.to_string(),
             "collected": self.collected.iter().map(|o| o.to_string()).collect::<Vec<_>>(),
             "current_index": self.current_index,
         }));
