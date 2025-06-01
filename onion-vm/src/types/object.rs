@@ -27,6 +27,7 @@ use super::{
 pub struct OnionObjectCell(pub RefCell<OnionObject>);
 
 impl OnionObjectCell {
+    #[inline(always)]
     pub fn with_data<T, F>(&self, f: F) -> Result<T, RuntimeError>
     where
         F: FnOnce(&OnionObject) -> Result<T, RuntimeError>,
@@ -36,6 +37,7 @@ impl OnionObjectCell {
             Err(_) => Err(RuntimeError::BrokenReference),
         }
     }
+    #[inline(always)]
     pub fn with_data_mut<T, F>(&self, f: F) -> Result<T, RuntimeError>
     where
         F: FnOnce(&mut OnionObject) -> Result<T, RuntimeError>,
@@ -46,37 +48,29 @@ impl OnionObjectCell {
         }
     }
 
+    #[inline(always)]
     pub fn with_attribute<T, F>(&self, key: &OnionObject, f: &F) -> Result<T, RuntimeError>
     where
         F: Fn(&OnionObject) -> Result<T, RuntimeError>,
     {
         match self.0.try_borrow() {
-            Ok(obj) => {
-                obj.with_attribute(key, f)
-            }
+            Ok(obj) => obj.with_attribute(key, f),
             Err(_) => Err(RuntimeError::BrokenReference),
-            
         }
     }
 
-    pub fn with_attribute_mut<T, F>(
-        &self,
-        key: &OnionObject,
-        f: &F,
-    ) -> Result<T, RuntimeError>
+    #[inline(always)]
+    pub fn with_attribute_mut<T, F>(&self, key: &OnionObject, f: &F) -> Result<T, RuntimeError>
     where
         F: Fn(&mut OnionObject) -> Result<T, RuntimeError>,
     {
         match self.0.try_borrow_mut() {
-            Ok(mut obj) => {
-                obj.with_attribute_mut(key, f)
-            }
+            Ok(mut obj) => obj.with_attribute_mut(key, f),
             Err(_) => Err(RuntimeError::BrokenReference),
         }
     }
 
-
-
+    #[inline(always)]
     pub fn upgrade(&self) -> Option<Vec<GCArc<OnionObjectCell>>> {
         match self.0.try_borrow() {
             Ok(obj) => obj.upgrade(),
@@ -84,19 +78,27 @@ impl OnionObjectCell {
         }
     }
 
+    #[inline(always)]
     pub fn stabilize(self) -> OnionStaticObject {
         OnionStaticObject::new(self.borrow().clone())
     }
 
+    #[inline(always)]
     pub fn equals(&self, other: &Self) -> Result<bool, RuntimeError> {
         self.with_data(|obj| other.with_data(|other_obj| obj.equals(other_obj)))
     }
 
+    #[inline(always)]
     pub fn try_borrow(&self) -> Result<std::cell::Ref<OnionObject>, RuntimeError> {
-        self.0.try_borrow().map_err(|_| RuntimeError::BrokenReference)
+        self.0
+            .try_borrow()
+            .map_err(|_| RuntimeError::BrokenReference)
     }
+    #[inline(always)]
     pub fn try_borrow_mut(&self) -> Result<std::cell::RefMut<OnionObject>, RuntimeError> {
-        self.0.try_borrow_mut().map_err(|_| RuntimeError::BrokenReference)
+        self.0
+            .try_borrow_mut()
+            .map_err(|_| RuntimeError::BrokenReference)
     }
 }
 
@@ -143,9 +145,8 @@ impl Debug for OnionObjectCell {
 impl Display for OnionObjectCell {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self.0.borrow())
-    }    
+    }
 }
-
 
 #[derive(Clone)]
 pub enum OnionObject {
@@ -247,7 +248,7 @@ impl OnionObject {
     }
 
     pub fn len(&self) -> Result<OnionStaticObject, RuntimeError> {
-        match self {
+        self.with_data(|obj| match obj {
             OnionObject::Tuple(tuple) => tuple.len(),
             OnionObject::String(s) => {
                 Ok(OnionStaticObject::new(OnionObject::Integer(s.len() as i64)))
@@ -262,7 +263,7 @@ impl OnionObject {
                 "len() not supported for {:?}",
                 self
             ))),
-        }
+        })
     }
 
     pub fn contains(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
@@ -887,7 +888,7 @@ impl OnionObject {
     }
 
     pub fn at(&self, index: i64) -> Result<OnionStaticObject, RuntimeError> {
-        match self {
+        self.with_data(|obj| match obj {
             OnionObject::Tuple(tuple) => tuple.at(index),
             OnionObject::String(s) => {
                 if index < 0 || index >= s.len() as i64 {
@@ -915,7 +916,7 @@ impl OnionObject {
                 "index_of() not supported for {:?}",
                 self
             ))),
-        }
+        })
     }
 
     pub fn key_of(&self) -> Result<OnionStaticObject, RuntimeError> {
@@ -1067,7 +1068,6 @@ impl OnionStaticObject {
         }
     }
 
-
     #[inline(always)]
     pub fn weak(&self) -> &OnionObjectCell {
         &self.obj
@@ -1080,7 +1080,6 @@ impl OnionStaticObject {
     ) -> Result<OnionStaticObject, RuntimeError> {
         self.obj.with_data(|obj| Ok(obj.clone().mutablize(gc)))
     }
-
 }
 
 #[macro_export]

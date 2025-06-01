@@ -306,7 +306,7 @@ impl Runnable for OnionLambdaRunnable {
             let opcode = code[self.ip as usize];
             let mut ip = self.ip as usize;
             let mut instruction32 = Instruction32::new(code, &mut ip);
-            let code: Option<ProcessedOpcode> = instruction32.get_processed_opcode();
+            let code = instruction32.get_processed_opcode();
             (code, opcode, ip)
         };
         match code {
@@ -349,9 +349,7 @@ impl Runnable for OnionLambdaRunnable {
         })
     }
 
-    fn format_context(
-            &self,
-        ) -> Result<serde_json::Value, RuntimeError> {
+    fn format_context(&self) -> Result<serde_json::Value, RuntimeError> {
         let mut stack_json_array = serde_json::Value::Array(vec![]);
         for frame in &self.context.frames {
             let frame_json = frame.format_context();
@@ -369,5 +367,4 @@ impl Runnable for OnionLambdaRunnable {
             "result": self.result.to_string(),
         }))
     }
-    
 }

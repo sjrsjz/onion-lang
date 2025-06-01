@@ -77,8 +77,8 @@ impl OnionLambdaDefinition {
                 let runnable = instruction.with_data(|instruction| match instruction {
                     OnionObject::InstructionPackage(package) => OnionLambdaRunnable::new(
                         argument,
-                        self.capture.as_ref().clone().stabilize(),
-                        self.self_object.as_ref().clone().stabilize(),
+                        self.capture.clone().stabilize(),
+                        self.self_object.clone().stabilize(),
                         this_lambda.clone(),
                         Arc::new(RefCell::new(package.clone())),
                         match package.get_table().get(&self.signature) {
