@@ -1,4 +1,8 @@
-use std::{cell::RefCell, fmt::{Debug, Display}, sync::Arc};
+use std::{
+    cell::RefCell,
+    fmt::{Debug, Display},
+    sync::Arc,
+};
 
 use arc_gc::{arc::GCArc, gc::GC, traceable::GCTraceable};
 
@@ -30,7 +34,7 @@ impl Display for LambdaBody {
             LambdaBody::Instruction(instruction) => write!(f, "Instruction({:?})", instruction),
             LambdaBody::NativeFunction(_) => write!(f, "NativeFunction"),
         }
-    }    
+    }
 }
 
 #[derive(Clone)]
@@ -80,7 +84,7 @@ impl OnionLambdaDefinition {
                         self.capture.clone().stabilize(),
                         self.self_object.clone().stabilize(),
                         this_lambda.clone(),
-                        Arc::new(RefCell::new(package.clone())),
+                        Box::new(package.clone()),
                         match package.get_table().get(&self.signature) {
                             Some(ip) => *ip as isize,
                             None => {
@@ -138,7 +142,9 @@ impl OnionLambdaDefinition {
         F: Fn(&OnionObject) -> Result<R, RuntimeError>,
     {
         match key {
-            OnionObject::String(s) if s.as_str() == "parameter" => f(&*self.parameter.try_borrow()?),
+            OnionObject::String(s) if s.as_str() == "parameter" => {
+                f(&*self.parameter.try_borrow()?)
+            }
             OnionObject::String(s) if s.as_str() == "capture" => f(&*self.capture.try_borrow()?),
             OnionObject::String(s) if s.as_str() == "self" => f(&*self.self_object.try_borrow()?),
             OnionObject::String(s) if s.as_str() == "signature" => {
@@ -156,9 +162,15 @@ impl OnionLambdaDefinition {
         F: Fn(&mut OnionObject) -> Result<R, RuntimeError>,
     {
         match key {
-            OnionObject::String(s) if s.as_str() == "parameter" => f(&mut *self.parameter.try_borrow_mut()?),
-            OnionObject::String(s) if s.as_str() == "capture" => f(&mut *self.capture.try_borrow_mut()?),
-            OnionObject::String(s) if s.as_str() == "self" => f(&mut *self.self_object.try_borrow_mut()?),
+            OnionObject::String(s) if s.as_str() == "parameter" => {
+                f(&mut *self.parameter.try_borrow_mut()?)
+            }
+            OnionObject::String(s) if s.as_str() == "capture" => {
+                f(&mut *self.capture.try_borrow_mut()?)
+            }
+            OnionObject::String(s) if s.as_str() == "self" => {
+                f(&mut *self.self_object.try_borrow_mut()?)
+            }
             _ => Err(RuntimeError::InvalidOperation(format!(
                 "Attribute '{:?}' not found in lambda definition",
                 key

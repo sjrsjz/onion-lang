@@ -1,7 +1,3 @@
-use std::{
-    cell::{Ref, RefCell},
-    sync::Arc,
-};
 
 use arc_gc::gc::GC;
 
@@ -34,7 +30,7 @@ pub struct OnionLambdaRunnable {
     pub(crate) context: Context,
     pub(crate) error: Option<RuntimeError>,
     pub(crate) ip: isize, // Instruction pointer
-    pub(crate) instruction: Arc<RefCell<VMInstructionPackage>>,
+    pub(crate) instruction: Box<VMInstructionPackage>,
 
     pub(crate) instruction_table: Vec<InstructionHandler>,
 }
@@ -45,7 +41,7 @@ impl OnionLambdaRunnable {
         capture: OnionStaticObject,
         self_object: OnionStaticObject,
         this_lambda: OnionStaticObject,
-        instruction: Arc<RefCell<VMInstructionPackage>>,
+        instruction: Box<VMInstructionPackage>,
         ip: isize,
     ) -> Result<Self, RuntimeError> {
         let mut new_context = Context::new();
@@ -64,13 +60,7 @@ impl OnionLambdaRunnable {
         };
 
         let (index_this, index_self, index_arguments) = {
-            let instruction_ref = instruction.try_borrow().map_err(|_| {
-                RuntimeError::InvalidOperation(
-                    "Cannot access instruction package (already borrowed)".to_string(),
-                )
-            })?;
-
-            let string_pool = instruction_ref.get_string_pool();
+            let string_pool = instruction.get_string_pool();
 
             let index_this = string_pool
                 .iter()
@@ -136,12 +126,6 @@ impl OnionLambdaRunnable {
                     named.get_key().with_data(|key| match key {
                         OnionObject::String(key_str) => {
                             match instruction
-                                .try_borrow()
-                                .map_err(|_| {
-                                    RuntimeError::InvalidOperation(
-                                        "Failed to borrow instruction".to_string(),
-                                    )
-                                })?
                                 .get_string_pool()
                                 .iter()
                                 .position(|s| *s == *key_str)
@@ -268,11 +252,6 @@ impl OnionLambdaRunnable {
             instruction_table,
         })
     }
-    pub fn borrow_instruction(&self) -> Result<Ref<VMInstructionPackage>, RuntimeError> {
-        self.instruction
-            .try_borrow()
-            .map_err(|_| RuntimeError::DetailedError("Failed to borrow instruction".to_string()))
-    }
 }
 
 impl Runnable for OnionLambdaRunnable {
@@ -296,8 +275,7 @@ impl Runnable for OnionLambdaRunnable {
         }
 
         let (code, raw, new_ip) = {
-            let instruction = self.borrow_instruction()?;
-            let code = instruction.get_code();
+            let code = self.instruction.get_code();
             if self.ip < 0 || self.ip as usize >= code.len() {
                 return Err(RuntimeError::DetailedError(
                     "Instruction pointer out of bounds".to_string(),
@@ -344,7 +322,7 @@ impl Runnable for OnionLambdaRunnable {
             context: self.context.clone(),
             error: self.error.clone(),
             ip: self.ip,
-            instruction: Arc::clone(&self.instruction),
+            instruction: self.instruction.clone(),
             instruction_table: self.instruction_table.clone(),
         })
     }

@@ -41,7 +41,7 @@ pub fn load_int(
         Ok(StepResult::Continue)
     } else {
         Err(RuntimeError::DetailedError(format!(
-            "Invalid argument type for LoadInt: {:?}",
+            "Expected Int64 operand for LoadInt instruction, but found {:?}",
             opcode.operand1
         )))
     }
@@ -81,7 +81,7 @@ pub fn load_float(
         Ok(StepResult::Continue)
     } else {
         Err(RuntimeError::DetailedError(format!(
-            "Invalid argument type for LoadFloat: {:?}",
+            "Expected Float64 operand for LoadFloat instruction, but found {:?}",
             opcode.operand1
         )))
     }
@@ -93,15 +93,14 @@ pub fn load_string(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     if let OpcodeArgument::String(value) = opcode.operand1 {
-        let string = OnionObject::String(
-            runnable.borrow_instruction()?.get_string_pool()[value as usize].clone(),
-        )
-        .stabilize();
+        let string =
+            OnionObject::String(runnable.instruction.get_string_pool()[value as usize].clone())
+                .stabilize();
         runnable.context.push_object(string)?;
         Ok(StepResult::Continue)
     } else {
         Err(RuntimeError::DetailedError(format!(
-            "Invalid argument type for LoadString: {:?}",
+            "Expected String operand for LoadString instruction, but found {:?}",
             opcode.operand1
         )))
     }
@@ -113,15 +112,14 @@ pub fn load_bytes(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     if let OpcodeArgument::ByteArray(value) = opcode.operand1 {
-        let bytes = OnionObject::Bytes(
-            runnable.borrow_instruction()?.get_bytes_pool()[value as usize].clone(),
-        )
-        .stabilize();
+        let bytes =
+            OnionObject::Bytes(runnable.instruction.get_bytes_pool()[value as usize].clone())
+                .stabilize();
         runnable.context.push_object(bytes)?;
         Ok(StepResult::Continue)
     } else {
         Err(RuntimeError::DetailedError(format!(
-            "Invalid argument type for LoadBytes: {:?}",
+            "Expected ByteArray operand for LoadBytes instruction, but found {:?}",
             opcode.operand1
         )))
     }
@@ -139,7 +137,7 @@ pub fn load_bool(
         Ok(StepResult::Continue)
     } else {
         Err(RuntimeError::DetailedError(format!(
-            "Invalid argument type for LoadBoolean: {:?}",
+            "Expected Int32 operand for LoadBool instruction, but found {:?}",
             opcode.operand1
         )))
     }
@@ -174,7 +172,7 @@ pub fn build_tuple(
         Ok(StepResult::Continue)
     } else {
         Err(RuntimeError::DetailedError(format!(
-            "Invalid argument type for BuildTuple: {:?}",
+            "Expected Int64 operand for BuildTuple instruction, but found {:?}",
             opcode.operand1
         )))
     }
@@ -257,31 +255,32 @@ pub fn load_lambda(
 ) -> Result<StepResult, RuntimeError> {
     let OpcodeArgument::String(signature_index) = opcode.operand1 else {
         return Err(RuntimeError::DetailedError(format!(
-            "Invalid argument type for Lambda's signature index: {:?}",
+            "Expected String operand for lambda signature index, but found {:?}",
             opcode.operand1
         )));
     };
     let OpcodeArgument::Int64(_code_position) = opcode.operand2 else {
         return Err(RuntimeError::DetailedError(format!(
-            "Invalid argument type for Lambda's code position: {:?}",
+            "Expected Int64 operand for lambda code position, but found {:?}",
             opcode.operand2
         )));
     };
     let OpcodeArgument::Int32(flags) = opcode.operand3 else {
         return Err(RuntimeError::DetailedError(format!(
-            "Invalid argument type for Lambda's flags: {:?}",
+            "Expected Int32 operand for lambda flags, but found {:?}",
             opcode.operand3
         )));
     };
 
     let signature = runnable
-        .borrow_instruction()?
+        .instruction
         .get_string_pool()
         .get(signature_index as usize)
         .ok_or_else(|| {
             RuntimeError::DetailedError(format!(
-                "Signature index out of bounds: {}",
-                signature_index
+                "Lambda signature index {} is out of bounds (pool size: {})",
+                signature_index,
+                runnable.instruction.get_string_pool().len()
             ))
         })?
         .clone();
@@ -299,11 +298,12 @@ pub fn load_lambda(
         .get_object_rev(if should_capture { 2 } else { 1 })?
         .weak()
         .try_borrow()?
-        .clone_value()?;
+        .clone()
+        .stabilize();
 
     let OnionObject::Tuple(_) = &*default_parameters.weak().try_borrow()? else {
         return Err(RuntimeError::DetailedError(format!(
-            "Invalid object type for default parameters: {}",
+            "Lambda default parameters must be a Tuple, but found {}",
             default_parameters
         )));
     };
@@ -313,10 +313,11 @@ pub fn load_lambda(
         .get_object_rev(0)?
         .weak()
         .try_borrow()?
-        .clone_value()?;
+        .clone()
+        .stabilize();
     let OnionObject::InstructionPackage(_) = &*instruction_package.weak().try_borrow()? else {
         return Err(RuntimeError::DetailedError(format!(
-            "Invalid object type for instruction package: {}",
+            "Lambda instruction must be an InstructionPackage, but found {}",
             instruction_package
         )));
     };
@@ -343,7 +344,7 @@ pub fn let_var(
 ) -> Result<StepResult, RuntimeError> {
     let OpcodeArgument::String(index) = opcode.operand1 else {
         return Err(RuntimeError::DetailedError(format!(
-            "Invalid argument type for LetVariable: {:?}",
+            "Expected String operand for variable index in LetVar instruction, but found {:?}",
             opcode.operand1
         )));
     };
@@ -374,7 +375,7 @@ pub fn get_var(
 ) -> Result<StepResult, RuntimeError> {
     let OpcodeArgument::String(index) = opcode.operand1 else {
         return Err(RuntimeError::DetailedError(format!(
-            "Invalid argument type for GetVariable: {:?}",
+            "Expected String operand for variable index in GetVar instruction, but found {:?}",
             opcode.operand1
         )));
     };
@@ -431,7 +432,7 @@ pub fn get_attr(
                     },
                     Err(e) => {
                         return Err(RuntimeError::InvalidOperation(format!(
-                            "Failed to get attribute {:?} from object {:?}: {}",
+                            "Cannot access attribute {:?} on object {}: {}",
                             attr, obj, e
                         )));
                     }
@@ -461,7 +462,7 @@ pub fn index_of(
             *index
         } else {
             return Err(RuntimeError::DetailedError(format!(
-                "Invalid index type for IndexOf: {}",
+                "Index must be an integer, but found {}",
                 index_obj
             )));
         }
@@ -990,7 +991,7 @@ pub fn assert(
     let condition = runnable.context.get_object_rev(0)?;
     if !condition.weak().try_borrow()?.to_boolean()? {
         return Err(RuntimeError::DetailedError(format!(
-            "Assertion failed: {}",
+            "Assertion failed: condition evaluated to false (value: {})",
             condition
         )));
     }
@@ -1007,23 +1008,20 @@ pub fn is_in(
     let container = runnable.context.get_object_rev(0)?;
 
     // 先检查元素是否在惰性集合的容器中
-    let is_in = {
-        match &*container.weak().try_borrow()? {
+    let is_in = container
+        .weak()
+        .with_data(|container_ref| match container_ref {
             OnionObject::LazySet(lazy_set) => lazy_set
                 .get_container()
                 .try_borrow()?
-                .contains(&*element.weak().try_borrow()?)
-                .map_err(|e| {
-                    RuntimeError::DetailedError(format!("Failed to check containment: {}", e))
-                })?,
+                .contains(&*element.weak().try_borrow()?),
             _ => {
                 return Err(RuntimeError::DetailedError(format!(
                     "Container is not a LazySet: {}",
                     container
                 )));
             }
-        }
-    };
+        })?;
 
     if !is_in {
         // 元素不在容器中，直接返回 false
@@ -1035,24 +1033,27 @@ pub fn is_in(
     }
 
     // 如果在容器中，则调用惰性集合的过滤器
-    let (args, filter) = match &*container.weak().try_borrow()? {
-        OnionObject::LazySet(lazy_set) => lazy_set.get_filter().with_data(|filter| {
-            let OnionObject::Lambda(_) = filter else {
-                // 过滤器不是 Lambda 对象，认定为惰性求值结果为 filter
+    let (args, filter) = container.weak().with_data(|container_ref| {
+        match container_ref {
+            OnionObject::LazySet(lazy_set) => {
+                let filter = lazy_set.get_filter().try_borrow()?;
+                let OnionObject::Lambda(_) = &*filter else {
+                    // 过滤器不是 Lambda 对象，认定为惰性求值结果为 filter
+                    let filter = filter.clone().stabilize();
+                    return Ok((None, filter));
+                };
+                let args = OnionTuple::new_static(vec![element]);
                 let filter = filter.clone().stabilize();
-                return Ok((None, filter));
-            };
-            let args = OnionTuple::new_static(vec![element]);
-            let filter = filter.clone().stabilize();
-            return Ok((Some(args), filter));
-        })?,
-        _ => {
-            return Err(RuntimeError::DetailedError(format!(
-                "Container is not a LazySet: {}",
-                container
-            )));
+                return Ok((Some(args), filter));
+            }
+            _ => {
+                return Err(RuntimeError::DetailedError(format!(
+                    "Container is not a LazySet: {}",
+                    container
+                )));
+            }
         }
-    };
+    })?;
 
     runnable.context.discard_objects(2)?;
 
@@ -1079,14 +1080,14 @@ pub fn call_lambda(
             let assigned = lambda_ref.parameter.with_data(|parameter| {
                 let OnionObject::Tuple(parameters) = parameter else {
                     return Err(RuntimeError::InvalidType(format!(
-                        "Lambda parameters are not a Tuple: {:?}",
+                        "Lambda parameters must be a Tuple, but found {:?}",
                         lambda_ref
                     )));
                 };
 
                 let OnionObject::Tuple(args_tuple) = &*args.weak().try_borrow()? else {
                     return Err(RuntimeError::InvalidType(format!(
-                        "Arguments are not a Tuple: {}",
+                        "Function arguments must be a Tuple, but found {}",
                         args
                     )));
                 };
@@ -1149,8 +1150,7 @@ pub fn fork_instruction(
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
-    let forked =
-        OnionObject::InstructionPackage(runnable.borrow_instruction()?.clone()).stabilize();
+    let forked = OnionObject::InstructionPackage(*runnable.instruction.clone()).stabilize();
     runnable.context.push_object(forked)?;
     Ok(StepResult::Continue)
 }
@@ -1162,8 +1162,8 @@ pub fn import(
 ) -> Result<StepResult, RuntimeError> {
     let path = runnable.context.get_object_rev(0)?;
 
-    let package = {
-        let OnionObject::String(path) = &*path.weak().try_borrow()? else {
+    let package = path.weak().with_data(|path_ref| {
+        let OnionObject::String(path) = path_ref else {
             return Err(RuntimeError::DetailedError(format!(
                 "Invalid path type for `import`: {}",
                 path
@@ -1171,11 +1171,11 @@ pub fn import(
         };
         VMInstructionPackage::read_from_file(&path).map_err(|e| {
             RuntimeError::DetailedError(format!(
-                "Failed to read instruction package from file: {}",
-                e
+                "Failed to load instruction package from '{}': {}",
+                path, e
             ))
-        })?
-    };
+        })
+    })?;
     match VMInstructionPackage::validate(&package) {
         Err(e) => {
             return Err(RuntimeError::DetailedError(format!(
@@ -1204,14 +1204,14 @@ pub fn sync_call(
             let assigned = lambda_ref.parameter.with_data(|parameter| {
                 let OnionObject::Tuple(parameters) = parameter else {
                     return Err(RuntimeError::InvalidType(format!(
-                        "Lambda parameters are not a Tuple: {:?}",
+                        "Lambda parameters must be a Tuple, but found {:?}",
                         lambda_ref
                     )));
                 };
 
                 let OnionObject::Tuple(args_tuple) = &*args.weak().try_borrow()? else {
                     return Err(RuntimeError::InvalidType(format!(
-                        "Arguments are not a Tuple: {}",
+                        "Function arguments must be a Tuple, but found {}",
                         args
                     )));
                 };
@@ -1267,14 +1267,14 @@ pub fn async_call(
             let assigned = lambda_ref.parameter.with_data(|parameter| {
                 let OnionObject::Tuple(parameters) = parameter else {
                     return Err(RuntimeError::InvalidType(format!(
-                        "Lambda parameters are not a Tuple: {:?}",
+                        "Lambda parameters must be a Tuple, but found {:?}",
                         lambda_ref
                     )));
                 };
 
                 let OnionObject::Tuple(args_tuple) = &*args.weak().try_borrow()? else {
                     return Err(RuntimeError::InvalidType(format!(
-                        "Arguments are not a Tuple: {}",
+                        "Function arguments must be a Tuple, but found {}",
                         args
                     )));
                 };

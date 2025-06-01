@@ -493,7 +493,8 @@ fn analyze_node<'t>(
                                     let _ = dir_stack.pop();
 
                                     match compile_result {
-                                        Ok(ir_package) => {                                            // 替换文件扩展名为onionc
+                                        Ok(ir_package) => {
+                                            // 替换文件扩展名为onionc
                                             let onionc_file_path =
                                                 if let Some(pos) = file_path.rfind('.') {
                                                     format!("{}.onionc", &file_path[..pos])
@@ -1271,6 +1272,25 @@ fn analyze_node<'t>(
         ASTNodeType::Null => AssumedType::Null,
         ASTNodeType::Undefined => AssumedType::Undefined,
         ASTNodeType::Range => AssumedType::Range,
+        ASTNodeType::None => AssumedType::Undefined,
+        ASTNodeType::Is => {
+            for child in &node.children {
+                let _ = analyze_node(
+                    child,
+                    context,
+                    errors,   // Pass errors
+                    warnings, // Pass warnings
+                    dynamic,
+                    break_at_position,
+                    context_at_break,
+                    dir_stack,
+                );
+                if context_at_break.is_some() {
+                    return AssumedType::Unknown;
+                }
+            }
+            return AssumedType::Boolean; // 'is' checks return a boolean
+        }
         // Default case for other node types
         _ => {
             let mut last_type = AssumedType::Unknown;
