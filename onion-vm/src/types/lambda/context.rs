@@ -26,14 +26,18 @@ impl Frame {
             let value_str = var_value
                 .weak()
                 .try_borrow()
-                .map(|obj| obj.to_string(&vec![]).unwrap_or_else(|_| format!("{:?}", obj)))
+                .map(|obj| {
+                    obj.to_string(&vec![])
+                        .unwrap_or_else(|_| format!("{:?}", obj))
+                })
                 .unwrap_or_else(|_| "<borrow_error>".to_string());
             variables.insert(var_name.to_string(), Value::String(value_str));
         }
         frame_obj.insert("variables".to_string(), Value::Object(variables));
 
         // Format stack
-        let stack_values: Vec<Value> = self.stack
+        let stack_values: Vec<Value> = self
+            .stack
             .iter()
             .map(|obj| {
                 let obj_str = obj
@@ -266,22 +270,16 @@ impl Context {
     //     )))
     // }
 
-    pub fn get_variable(&self, name: usize) -> Result<&OnionStaticObject, RuntimeError> {
+    pub fn get_variable(&self, name: usize) -> Option<&OnionStaticObject> {
         if self.frames.len() == 0 {
-            return Err(RuntimeError::DetailedError(
-                "Cannot get variable from empty context".to_string(),
-            ));
+            return None;
         } // 反向遍历所有帧，从最新的帧开始查找
         for frame in self.frames.iter().rev() {
             if let Some(value) = frame.variables.get(&name) {
-                return Ok(value);
+                return Some(value);
             }
         }
-
-        Err(RuntimeError::DetailedError(format!(
-            "Variable `{}` not found",
-            name
-        )))
+        None
     }
 
     fn _debug_print(&self) {
@@ -318,25 +316,16 @@ impl Context {
     //     )))
     // }
 
-    pub fn get_variable_mut(
-        &mut self,
-        name: usize,
-    ) -> Result<&mut OnionStaticObject, RuntimeError> {
+    pub fn get_variable_mut(&mut self, name: usize) -> Option<&mut OnionStaticObject> {
         if self.frames.len() == 0 {
-            return Err(RuntimeError::DetailedError(
-                "Cannot get variable from empty context".to_string(),
-            ));
+            return None;
         } // 反向遍历所有帧，从最新的帧开始查找
         for frame in self.frames.iter_mut().rev() {
             if let Some(value) = frame.variables.get_mut(&name) {
-                return Ok(value);
+                return Some(value);
             }
         }
-
-        Err(RuntimeError::DetailedError(format!(
-            "Variable `{}` not found",
-            name
-        )))
+        None
     }
 
     pub fn swap(&mut self, idx1: usize, idx2: usize) -> Result<(), RuntimeError> {
@@ -419,25 +408,29 @@ impl Context {
 impl Context {
     pub fn format_to_json(&self) -> Value {
         let mut frames = Map::new();
-        
+
         for (i, frame) in self.frames.iter().enumerate() {
             let mut frame_obj = Map::new();
-            
+
             // Format variables
             let mut variables = Map::new();
             for (var_name, var_value) in &frame.variables {
                 let value_str = var_value
                     .weak()
                     .try_borrow()
-                    .map(|obj| obj.to_string(&vec![]).unwrap_or_else(|_| format!("{:?}", obj)))
+                    .map(|obj| {
+                        obj.to_string(&vec![])
+                            .unwrap_or_else(|_| format!("{:?}", obj))
+                    })
                     .unwrap_or_else(|_| "<borrow_error>".to_string());
-                
+
                 variables.insert(var_name.to_string(), Value::String(value_str));
             }
             frame_obj.insert("variables".to_string(), Value::Object(variables));
-            
+
             // Format stack
-            let stack_values: Vec<Value> = frame.stack
+            let stack_values: Vec<Value> = frame
+                .stack
                 .iter()
                 .map(|obj| {
                     let obj_str = obj
@@ -449,10 +442,10 @@ impl Context {
                 })
                 .collect();
             frame_obj.insert("stack".to_string(), Value::Array(stack_values));
-            
+
             frames.insert(format!("frame_{}", i), Value::Object(frame_obj));
         }
-        
+
         Value::Object(frames)
     }
 }

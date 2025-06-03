@@ -394,6 +394,12 @@ impl<'t> IRGenerator<'t> {
                 instructions.push((self.generate_debug_info(ast_node), IR::Emit));
                 Ok(instructions)
             }
+            ASTNodeType::Raise => {
+                let mut instructions = Vec::new();
+                instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
+                instructions.push((self.generate_debug_info(ast_node), IR::Raise));
+                Ok(instructions)
+            }
             ASTNodeType::Number(number_str) => {
                 // check if number_str is float or int
                 let mut instructions = Vec::new();

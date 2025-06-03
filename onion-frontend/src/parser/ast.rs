@@ -485,6 +485,7 @@ pub enum ASTNodeType {
     Map,                // collection |> map
     Annotation(String), // @annotation expr
     Is,                 // x is y
+    Raise,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -1123,7 +1124,10 @@ fn match_return_emit_raise<'t>(
     if current >= tokens.len() {
         return Ok((None, 0));
     }
-    if !is_identifier(&tokens[current], "return") && !is_identifier(&tokens[current], "emit") {
+    if !is_identifier(&tokens[current], "return")
+        && !is_identifier(&tokens[current], "emit")
+        && !is_identifier(&tokens[current], "raise")
+    {
         return Ok((None, 0));
     }
     let right_tokens = tokens[current + 1..].to_vec();
@@ -1142,6 +1146,7 @@ fn match_return_emit_raise<'t>(
     let node_type = match tokens[current].first().unwrap().token {
         "return" => ASTNodeType::Return,
         "emit" => ASTNodeType::Emit,
+        "raise" => ASTNodeType::Raise,
         _ => unreachable!(),
     };
     Ok((

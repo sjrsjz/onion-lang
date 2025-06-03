@@ -47,12 +47,12 @@ impl Runnable for AsyncScheduler {
                             self.runnables.remove(i);
                         }
                         StepResult::Error(error) => {
-                            return Err(RuntimeError::StepError(error.to_string()));
+                            return Err(error);
                         }
                     }
                 }
                 Err(e) => {
-                    return Err(RuntimeError::StepError(e.to_string()));
+                    return Err(e);
                 }
             }
         }

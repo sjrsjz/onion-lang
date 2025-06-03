@@ -9,6 +9,15 @@ push := stdlib.types.tuple.push;
 push(tupleA, 4);
 stdlib.io.println("元组tupleA:", tupleA);
 
+stdlib.io.println(
+    sync () -> {
+        raise "这是一个错误";
+        "这行代码不会被执行";
+    }()
+
+);
+
+
 Result := (result_pair?, result => mut undefined) -> (
     result_pair : {
         is_ok => () -> keyof keyof self,
@@ -125,7 +134,7 @@ stdlib.io.println(
         f => () -> {
         "A"[-1]
         },
-        except => (err?) -> "捕获到错误: " + err
+        except => (err?) -> "捕获到错误: " + (valueof err)
     )
 );
 

@@ -80,6 +80,7 @@ pub enum IR {
     LengthOf,           // get length of object
     IsSameObject,       // check if two objects are the same
     MapTo,
+    Raise // raise an custom value
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

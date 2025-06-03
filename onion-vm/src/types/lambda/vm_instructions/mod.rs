@@ -7,7 +7,9 @@ use opcode::{OpcodeArgument, ProcessedOpcode};
 use crate::{
     lambda::{
         runnable::{RuntimeError, StepResult},
-        scheduler::{async_scheduler::AsyncScheduler, map_scheduler::Mapping, scheduler::Scheduler},
+        scheduler::{
+            async_scheduler::AsyncScheduler, map_scheduler::Mapping, scheduler::Scheduler,
+        },
     },
     types::{
         lazy_set::OnionLazySet,
@@ -391,7 +393,20 @@ pub fn get_var(
     //     runnable.context.get_variable(name)?
     // };
 
-    let value = runnable.context.get_variable(index as usize)?;
+    let value = runnable.context.get_variable(index as usize);
+    if value.is_none() {
+        let var_name = runnable
+            .instruction
+            .get_string_pool()
+            .get(index as usize)
+            .cloned()
+            .unwrap_or_else(|| format!("Variable at index {}", index));
+        return Err(RuntimeError::DetailedError(format!(
+            "Variable '{}' not found in context",
+            var_name
+        )));
+    }
+    let value = value.unwrap();
 
     runnable.context.push_object(value.clone())?;
     Ok(StepResult::Continue)
@@ -1300,4 +1315,14 @@ pub fn async_call(
     runnable.context.discard_objects(2)?;
     let async_scheduler = AsyncScheduler::new(vec![new_runnable]);
     Ok(StepResult::NewRunnable(Box::new(async_scheduler)))
+}
+
+pub fn raise(
+    runnable: &mut LambdaRunnable,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObjectCell>,
+) -> Result<StepResult, RuntimeError> {
+    // 获取抛出对象
+    let value = runnable.context.pop()?;
+    return Err(RuntimeError::CustomValue(value));
 }

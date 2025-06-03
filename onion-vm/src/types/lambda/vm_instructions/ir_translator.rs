@@ -458,6 +458,11 @@ impl IRTranslator {
                         Opcode32::build_opcode(VMInstruction::Emit as u8, 0, 0, 0).get_opcode(),
                     );
                 }
+                IR::Raise => {
+                    self.code.push(
+                        Opcode32::build_opcode(VMInstruction::Raise as u8, 0, 0, 0).get_opcode(),
+                    );
+                }
                 IR::AsyncCallLambda => {
                     self.code.push(
                         Opcode32::build_opcode(VMInstruction::AsyncCall as u8, 0, 0, 0)

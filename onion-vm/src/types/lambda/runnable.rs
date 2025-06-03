@@ -224,6 +224,7 @@ impl OnionLambdaRunnable {
         instruction_table[VMInstruction::AsyncCall as usize] = vm_instructions::async_call;
         instruction_table[VMInstruction::SyncCall as usize] = vm_instructions::sync_call;
         instruction_table[VMInstruction::Return as usize] = vm_instructions::return_value;
+        instruction_table[VMInstruction::Raise as usize] = vm_instructions::raise;
         instruction_table[VMInstruction::Jump as usize] = vm_instructions::jump;
         instruction_table[VMInstruction::JumpIfFalse as usize] = vm_instructions::jump_if_false;
 

@@ -27,10 +27,13 @@ impl Runnable for Scheduler {
         if let Some(runnable) = self.runnable_stack.last_mut() {
             match match runnable.step(gc) {
                 Ok(step_result) => step_result,
-                Err(e) => {
+                Err(error) => {
                     return Ok(StepResult::Return(OnionPair::new_static(
                         &OnionObject::Boolean(false).stabilize(),
-                        &OnionObject::String(e.to_string()).stabilize(),
+                        &match error {
+                            RuntimeError::CustomValue(v) => v,
+                            _ => OnionObject::Undefined(Some(error.to_string())).stabilize(),
+                        },
                     )))
                 }
             } {
@@ -62,7 +65,10 @@ impl Runnable for Scheduler {
                 }
                 StepResult::Error(error) => Ok(StepResult::Return(OnionPair::new_static(
                     &OnionObject::Boolean(false).stabilize(),
-                    &OnionObject::String(error.to_string()).stabilize(),
+                    &match error {
+                        RuntimeError::CustomValue(v) => v,
+                        _ => OnionObject::Undefined(Some(error.to_string())).stabilize(),
+                    },
                 ))),
             }
         } else {
@@ -93,9 +99,7 @@ impl Runnable for Scheduler {
         })
     }
 
-    fn format_context(
-            &self,
-        ) -> Result<serde_json::Value, RuntimeError> {
+    fn format_context(&self) -> Result<serde_json::Value, RuntimeError> {
         let mut stack_json_array = serde_json::Value::Array(vec![]);
         for runnable in &self.runnable_stack {
             let frame_json = runnable.format_context()?;
@@ -107,5 +111,4 @@ impl Runnable for Scheduler {
             "frames": stack_json_array
         }))
     }
-
 }

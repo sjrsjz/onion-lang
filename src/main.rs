@@ -302,7 +302,9 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
     // Create standard library object
     let stdlib_pair = OnionNamed::new_static(
         &OnionObject::String("stdlib".to_string()).stabilize(),
-        &stdlib::build_module(),
+        &stdlib::build_module()
+            .mutablize(&mut gc)
+            .map_err(|e| format!("Failed to create standard library object: {:?}", e))?,
     );
 
     // Create Lambda definition
@@ -376,8 +378,9 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
                             println!(
                                 "{} {}",
                                 "Error:".red().bold(),
-                                unwrap_object!(&*value_borrowed, OnionObject::String)
-                                    .map_err(|e| format!("Failed to get error message: {:?}", e))?
+                                value_borrowed.to_string(&vec![]).map_err(|e| {
+                                    format!("Failed to get error message: {:?}", e)
+                                })?
                             );
                             return Err("Execution failed".to_string());
                         }

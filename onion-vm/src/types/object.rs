@@ -433,7 +433,7 @@ impl OnionObject {
                 }),
                 OnionObject::Null => Ok("null".to_string()),
                 OnionObject::Undefined(s) => Ok(match s {
-                    Some(s) => format!("undefined({})", s),
+                    Some(s) => format!("undefined({:?})", s),
                     None => "undefined".to_string(),
                 }),
                 OnionObject::Range(start, end) => Ok(format!("{}..{}", start, end)),
@@ -510,7 +510,7 @@ impl OnionObject {
                 OnionObject::Boolean(b) => Ok(format!("{}", b)),
                 OnionObject::Null => Ok("null".to_string()),
                 OnionObject::Undefined(s) => Ok(match s {
-                    Some(s) => format!("undefined({})", s),
+                    Some(s) => format!("undefined({:?})", s),
                     None => "undefined".to_string(),
                 }),
                 OnionObject::Range(start, end) => Ok(format!("{}..{}", start, end)),
@@ -1046,7 +1046,7 @@ impl OnionObject {
             OnionObject::Named(named) => Ok(named.get_value().clone().stabilize()),
             OnionObject::Pair(pair) => Ok(pair.get_value().clone().stabilize()),
             OnionObject::Undefined(s) => {
-                Ok(OnionStaticObject::new(OnionObject::Undefined(s.clone())))
+                Ok(OnionStaticObject::new(OnionObject::String(s.clone().unwrap_or_else(|| "".to_string()))))
             }
             _ => Err(RuntimeError::InvalidOperation(format!(
                 "value_of() not supported for {:?}",
