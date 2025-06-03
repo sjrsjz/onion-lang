@@ -46,7 +46,7 @@ Err := (v?) -> Result(false : v);
 
 @required stdlib;
 stdlib.io.println("test");
-stdlib.io.println(Result(sync () -> {"A"[-1]}()).map_err((err?) -> "捕获到错误")); // overflow error? wtf
+stdlib.io.println(Result(sync () -> {"A"[-1]}()).map_err((err?) -> "捕获到错误"));
 
 
 // 斐波那契函数
