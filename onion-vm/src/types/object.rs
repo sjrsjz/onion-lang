@@ -347,8 +347,10 @@ impl OnionObject {
         };
         match weak.upgrade() {
             Some(strong) => strong.as_ref().with_data_mut(|obj| {
-                *obj = other.clone();
-                Ok(())
+                other.with_data(|other| {
+                    *obj = other.clone();
+                    Ok(())
+                })
             }),
             None => Err(RuntimeError::BrokenReference),
         }

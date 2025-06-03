@@ -3,6 +3,38 @@
 @required stdlib;
 stdlib.io.println("======== Onion语言测试文件 ========");
 
+Result := (result_pair?, result => mut undefined) -> (
+    result_pair : {
+        is_ok => () -> keyof keyof self,
+        is_err => () -> not keyof keyof self,
+        map => (f?) -> {
+            if (self.is_ok()) {
+                return result(true : f(valueof self));
+            } else {
+                return result(false : valueof self);
+            }
+        },
+        map_err => (f?) -> {
+            if (self.is_err()) {
+                return result(false : f(valueof self));
+            } else {
+                return result(true : valueof self);
+            }
+        },
+    }
+);
+
+Result.parameter.result = Result;
+
+Ok := (v?) -> Result(true : v);
+Err := (v?) -> Result(false : v);
+
+@required stdlib;
+stdlib.io.println("test");
+stdlib.io.println(Result(sync () -> {"A"[-1]}()).map_err((err?) -> "捕获到错误")); // overflow error? wtf
+
+return;
+
 // 斐波那契函数
 fib := mut (n?) -> {
     if (n <= 1) {
