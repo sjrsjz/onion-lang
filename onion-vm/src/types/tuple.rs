@@ -1,6 +1,9 @@
-use std::fmt::Debug;
+use std::{collections::VecDeque, fmt::Debug};
 
-use arc_gc::{arc::GCArc, traceable::GCTraceable};
+use arc_gc::{
+    arc::{GCArc, GCArcWeak},
+    traceable::GCTraceable,
+};
 
 use crate::lambda::runnable::RuntimeError;
 
@@ -11,10 +14,10 @@ pub struct OnionTuple {
     pub elements: Vec<OnionObjectCell>,
 }
 
-impl GCTraceable for OnionTuple {
-    fn visit(&self) {
+impl GCTraceable<OnionObjectCell> for OnionTuple {
+    fn collect(&self, queue: &mut VecDeque<GCArcWeak<OnionObjectCell>>) {
         for element in &self.elements {
-            element.visit();
+            element.collect(queue);
         }
     }
 }
@@ -294,5 +297,48 @@ impl OnionTuple {
         Ok(OnionStaticObject::new(OnionObject::Tuple(OnionTuple {
             elements: new_elements,
         })))
+    }
+}
+
+impl OnionTuple {
+    pub fn push(&mut self, element: OnionObjectCell) {
+        self.elements.push(element);
+    }
+    pub fn pop(&mut self) -> Option<OnionStaticObject> {
+        if self.elements.is_empty() {
+            None
+        } else {
+            let last_element = self.elements.last().cloned().map(|e| e.stabilize());
+            self.elements.pop();
+            last_element
+        }
+    }
+    pub fn is_empty(&self) -> bool {
+        self.elements.is_empty()
+    }
+    pub fn clear(&mut self) {
+        self.elements.clear();
+    }
+    pub fn insert(&mut self, index: usize, element: OnionObjectCell) -> Result<(), RuntimeError> {
+        if index > self.elements.len() {
+            return Err(RuntimeError::InvalidOperation(format!(
+                "Index out of bounds: {}",
+                index
+            )));
+        }
+        self.elements.insert(index, element);
+        Ok(())
+    }
+    pub fn remove(&mut self, index: usize) -> Result<OnionStaticObject, RuntimeError> {
+        let element_to_remove = self
+            .elements
+            .get(index)
+            .ok_or_else(|| {
+                RuntimeError::InvalidOperation(format!("Index out of bounds: {}", index))
+            })?
+            .clone()
+            .stabilize();
+        self.elements.remove(index);
+        Ok(element_to_remove)
     }
 }

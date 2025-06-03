@@ -1,5 +1,6 @@
-use std::{cell::RefCell, collections::HashMap, sync::Arc};
+use std::{cell::RefCell, sync::Arc};
 
+use indexmap::IndexMap;
 use onion_vm::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
     onion_tuple,
@@ -19,8 +20,10 @@ mod math;
 mod string;
 mod time;
 mod types;
+mod tuple;
 
-pub fn build_named_dict(dict: HashMap<String, OnionStaticObject>) -> OnionStaticObject {
+
+pub fn build_named_dict(dict: IndexMap<String, OnionStaticObject>) -> OnionStaticObject {
     let mut pairs = vec![];
     for (key, value) in dict {
         pairs.push(OnionNamed::new_static(
@@ -117,7 +120,7 @@ where
 }
 
 pub fn build_module() -> OnionStaticObject {
-    let mut module = HashMap::new();
+    let mut module = IndexMap::new();
     module.insert("io".to_string(), io::build_module());
     module.insert("types".to_string(), types::build_module());
     module.insert("math".to_string(), math::build_module());

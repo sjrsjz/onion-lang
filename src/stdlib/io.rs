@@ -1,8 +1,6 @@
-use std::{
-    collections::HashMap,
-    io::{stdout, Write},
-};
+use std::io::{stdout, Write};
 
+use indexmap::IndexMap;
 use onion_vm::{
     lambda::runnable::RuntimeError,
     onion_tuple,
@@ -83,7 +81,7 @@ fn input(
 }
 
 pub fn build_module() -> OnionStaticObject {
-    let mut module = HashMap::new();
+    let mut module = IndexMap::new();
     module.insert(
         "println".to_string(),
         wrap_native_function(
@@ -99,7 +97,7 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(&onion_tuple!(), None, None, "io::print".to_string(), print),
     );
 
-    let mut input_params = HashMap::new();
+    let mut input_params = IndexMap::new();
     input_params.insert(
         "hint".to_string(),
         OnionObject::String("Input: ".to_string()).stabilize(),

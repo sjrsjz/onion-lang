@@ -1,6 +1,9 @@
-use std::fmt::Debug;
+use std::{collections::VecDeque, fmt::Debug};
 
-use arc_gc::{arc::GCArc, traceable::GCTraceable};
+use arc_gc::{
+    arc::{GCArc, GCArcWeak},
+    traceable::GCTraceable,
+};
 
 use crate::lambda::runnable::RuntimeError;
 
@@ -12,10 +15,10 @@ pub struct OnionPair {
     pub value: Box<OnionObjectCell>, // 使用 Box 避免递归
 }
 
-impl GCTraceable for OnionPair {
-    fn visit(&self) {
-        self.key.visit();
-        self.value.visit();
+impl GCTraceable<OnionObjectCell> for OnionPair {
+    fn collect(&self, queue: &mut VecDeque<GCArcWeak<OnionObjectCell>>) {
+        self.key.collect(queue);
+        self.value.collect(queue);
     }
 }
 

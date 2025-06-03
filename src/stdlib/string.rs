@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-
+use indexmap::IndexMap;
 use onion_vm::{
     lambda::runnable::RuntimeError,
     types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
@@ -115,10 +114,10 @@ fn concat(
 }
 
 pub fn build_module() -> OnionStaticObject {
-    let mut module = HashMap::new();
+    let mut module = IndexMap::new();
 
     // length 函数
-    let mut length_params = HashMap::new();
+    let mut length_params = IndexMap::new();
     length_params.insert(
         "string".to_string(),
         OnionObject::Undefined(Some("String to get length".to_string())).stabilize(),
@@ -135,7 +134,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // trim 函数
-    let mut trim_params = HashMap::new();
+    let mut trim_params = IndexMap::new();
     trim_params.insert(
         "string".to_string(),
         OnionObject::Undefined(Some("String to trim".to_string())).stabilize(),
@@ -152,7 +151,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // uppercase 函数
-    let mut uppercase_params = HashMap::new();
+    let mut uppercase_params = IndexMap::new();
     uppercase_params.insert(
         "string".to_string(),
         OnionObject::Undefined(Some("String to convert to uppercase".to_string())).stabilize(),
@@ -169,7 +168,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // lowercase 函数
-    let mut lowercase_params = HashMap::new();
+    let mut lowercase_params = IndexMap::new();
     lowercase_params.insert(
         "string".to_string(),
         OnionObject::Undefined(Some("String to convert to lowercase".to_string())).stabilize(),
@@ -186,7 +185,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // contains 函数
-    let mut contains_params = HashMap::new();
+    let mut contains_params = IndexMap::new();
     contains_params.insert(
         "string".to_string(),
         OnionObject::Undefined(Some("String to search within".to_string())).stabilize(),
@@ -207,7 +206,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // concat 函数
-    let mut concat_params = HashMap::new();
+    let mut concat_params = IndexMap::new();
     concat_params.insert(
         "a".to_string(),
         OnionObject::Undefined(Some("First string to concatenate".to_string())).stabilize(),

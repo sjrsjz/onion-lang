@@ -1,11 +1,11 @@
 use super::{build_named_dict, wrap_native_function};
+use indexmap::IndexMap;
 use onion_vm::types::{pair::OnionPair, tuple::OnionTuple};
 use onion_vm::{
     lambda::runnable::RuntimeError,
     types::object::{OnionObject, OnionStaticObject},
 };
 use serde_json::Value;
-use std::collections::HashMap;
 
 fn to_json(obj: OnionObject) -> Result<Value, RuntimeError> {
     obj.with_data(|data| {
@@ -139,10 +139,10 @@ pub fn stringify_json_pretty(obj: OnionObject) -> Result<String, RuntimeError> {
 
 /// 构建 JSON 模块
 pub fn build_module() -> OnionStaticObject {
-    let mut module = HashMap::new();
+    let mut module = IndexMap::new();
 
     // JSON.parse 函数参数定义
-    let mut parse_params = HashMap::new();
+    let mut parse_params = IndexMap::new();
     parse_params.insert(
         "json_string".to_string(),
         OnionObject::Undefined(Some("JSON string to parse".to_string())).stabilize(),
@@ -174,7 +174,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // JSON.stringify 函数参数定义
-    let mut stringify_params = HashMap::new();
+    let mut stringify_params = IndexMap::new();
     stringify_params.insert(
         "object".to_string(),
         OnionObject::Undefined(Some("Object to stringify".to_string())).stabilize(),
@@ -200,7 +200,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // JSON.stringify_pretty 函数参数定义
-    let mut stringify_pretty_params = HashMap::new();
+    let mut stringify_pretty_params = IndexMap::new();
     stringify_pretty_params.insert(
         "object".to_string(),
         OnionObject::Undefined(Some(

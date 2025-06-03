@@ -293,6 +293,8 @@ fn execute_ir_package(ir_package: &IRPackage) -> Result<(), String> {
 }
 
 fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> Result<(), String> {
+    let mut gc = GC::new();
+
     match VMInstructionPackage::validate(vm_instructions_package) {
         Err(e) => return Err(format!("Invalid VM instruction package: {}", e)),
         Ok(_) => {}
@@ -340,7 +342,6 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
 
     // Initialize scheduler and GC
     let mut scheduler = Scheduler::new(vec![lambda]);
-    let mut gc = GC::new();
 
     // Execute code
     loop {
@@ -420,6 +421,5 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
             }
         }
     }
-
     Ok(())
 }

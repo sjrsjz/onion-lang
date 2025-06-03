@@ -1,11 +1,11 @@
 use std::{
     cell::RefCell,
-    collections::HashMap,
     sync::Arc,
     thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use indexmap::IndexMap;
 use onion_vm::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
     onion_tuple,
@@ -232,7 +232,7 @@ pub struct AsyncSleep {
 impl AsyncSleep {
     pub fn get() -> OnionStaticObject {
         let params =
-            HashMap::from([("millis".to_string(), OnionObject::Integer(1000).stabilize())]);
+            IndexMap::from([("millis".to_string(), OnionObject::Integer(1000).stabilize())]);
         let params = build_named_dict(params);
         OnionLambdaDefinition::new_static(
             &params,
@@ -311,7 +311,7 @@ impl Runnable for AsyncSleep {
 
 /// 构建时间模块
 pub fn build_module() -> OnionStaticObject {
-    let mut module = HashMap::new(); // timestamp 函数 - 获取当前时间戳（秒）
+    let mut module = IndexMap::new(); // timestamp 函数 - 获取当前时间戳（秒）
     module.insert(
         "timestamp".to_string(),
         wrap_native_function(
@@ -348,7 +348,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // sleep_seconds 函数 - 睡眠秒数
-    let mut sleep_seconds_params = HashMap::new();
+    let mut sleep_seconds_params = IndexMap::new();
     sleep_seconds_params.insert("seconds".to_string(), OnionObject::Integer(1).stabilize());
     module.insert(
         "sleep_seconds".to_string(),
@@ -362,7 +362,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // sleep_millis 函数 - 睡眠毫秒数
-    let mut sleep_millis_params = HashMap::new();
+    let mut sleep_millis_params = IndexMap::new();
     sleep_millis_params.insert("millis".to_string(), OnionObject::Integer(1000).stabilize());
     module.insert(
         "sleep_millis".to_string(),
@@ -376,7 +376,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // sleep_micros 函数 - 睡眠微秒数
-    let mut sleep_micros_params = HashMap::new();
+    let mut sleep_micros_params = IndexMap::new();
     sleep_micros_params.insert(
         "micros".to_string(),
         OnionObject::Integer(1000000).stabilize(),
@@ -403,7 +403,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // format_time 函数 - 格式化时间戳
-    let mut format_time_params = HashMap::new();
+    let mut format_time_params = IndexMap::new();
     format_time_params.insert("timestamp".to_string(), OnionObject::Integer(0).stabilize());
     module.insert(
         "format_time".to_string(),
@@ -417,7 +417,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // time_diff 函数 - 计算时间差
-    let mut time_diff_params = HashMap::new();
+    let mut time_diff_params = IndexMap::new();
     time_diff_params.insert("start".to_string(), OnionObject::Integer(0).stabilize());
     time_diff_params.insert("end".to_string(), OnionObject::Integer(0).stabilize());
     module.insert(

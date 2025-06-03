@@ -1,6 +1,10 @@
-use std::{cell::RefCell, fmt::Debug, sync::Arc};
+use std::{cell::RefCell, collections::VecDeque, fmt::Debug, sync::Arc};
 
-use arc_gc::{arc::GCArc, gc::GC, traceable::GCTraceable};
+use arc_gc::{
+    arc::{GCArc, GCArcWeak},
+    gc::GC,
+    traceable::GCTraceable,
+};
 
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
@@ -19,10 +23,10 @@ pub struct OnionLazySet {
     pub filter: Box<OnionObjectCell>,
 }
 
-impl GCTraceable for OnionLazySet {
-    fn visit(&self) {
-        self.container.visit();
-        self.filter.visit();
+impl GCTraceable<OnionObjectCell> for OnionLazySet {
+    fn collect(&self, queue: &mut VecDeque<GCArcWeak<OnionObjectCell>>) {
+        self.container.collect(queue);
+        self.filter.collect(queue);
     }
 }
 

@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 
+use indexmap::IndexMap;
 use onion_vm::{
     lambda::runnable::RuntimeError,
     types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
@@ -364,7 +364,7 @@ fn atan(
 }
 
 pub fn build_module() -> OnionStaticObject {
-    let mut module = HashMap::new();
+    let mut module = IndexMap::new();
 
     // 数学常量
     module.insert(
@@ -377,7 +377,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // abs 函数
-    let mut abs_params = HashMap::new();
+    let mut abs_params = IndexMap::new();
     abs_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Number to get absolute value".to_string())).stabilize(),
@@ -392,7 +392,7 @@ pub fn build_module() -> OnionStaticObject {
             abs,
         ),
     ); // sin 函数
-    let mut sin_params = HashMap::new();
+    let mut sin_params = IndexMap::new();
     sin_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Angle in radians".to_string())).stabilize(),
@@ -409,7 +409,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // cos 函数
-    let mut cos_params = HashMap::new();
+    let mut cos_params = IndexMap::new();
     cos_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Angle in radians".to_string())).stabilize(),
@@ -426,7 +426,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // tan 函数
-    let mut tan_params = HashMap::new();
+    let mut tan_params = IndexMap::new();
     tan_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Angle in radians".to_string())).stabilize(),
@@ -443,7 +443,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // log 函数
-    let mut log_params = HashMap::new();
+    let mut log_params = IndexMap::new();
     log_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Number to calculate natural logarithm".to_string()))
@@ -461,7 +461,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // exp 函数
-    let mut exp_params = HashMap::new();
+    let mut exp_params = IndexMap::new();
     exp_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Exponent for e^x".to_string())).stabilize(),
@@ -478,7 +478,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // floor 函数
-    let mut floor_params = HashMap::new();
+    let mut floor_params = IndexMap::new();
     floor_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Number to floor".to_string())).stabilize(),
@@ -495,7 +495,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // ceil 函数
-    let mut ceil_params = HashMap::new();
+    let mut ceil_params = IndexMap::new();
     ceil_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Number to ceil".to_string())).stabilize(),
@@ -512,7 +512,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // round 函数
-    let mut round_params = HashMap::new();
+    let mut round_params = IndexMap::new();
     round_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Number to round".to_string())).stabilize(),
@@ -529,7 +529,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // asin 函数
-    let mut asin_params = HashMap::new();
+    let mut asin_params = IndexMap::new();
     asin_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Value between -1 and 1".to_string())).stabilize(),
@@ -546,7 +546,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // acos 函数
-    let mut acos_params = HashMap::new();
+    let mut acos_params = IndexMap::new();
     acos_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Value between -1 and 1".to_string())).stabilize(),
@@ -563,7 +563,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // atan 函数
-    let mut atan_params = HashMap::new();
+    let mut atan_params = IndexMap::new();
     atan_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Value for arctangent".to_string())).stabilize(),
@@ -580,7 +580,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // sqrt 函数
-    let mut sqrt_params = HashMap::new();
+    let mut sqrt_params = IndexMap::new();
     sqrt_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Number to calculate square root".to_string())).stabilize(),
@@ -597,7 +597,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // pow 函数
-    let mut pow_params = HashMap::new();
+    let mut pow_params = IndexMap::new();
     pow_params.insert(
         "base".to_string(),
         OnionObject::Undefined(Some("Base number".to_string())).stabilize(),
@@ -618,7 +618,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // exp 函数
-    let mut exp_params = HashMap::new();
+    let mut exp_params = IndexMap::new();
     exp_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Number to calculate exponent".to_string())).stabilize(),
@@ -635,7 +635,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // floor 函数
-    let mut floor_params = HashMap::new();
+    let mut floor_params = IndexMap::new();
     floor_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Number to round down".to_string())).stabilize(),
@@ -652,7 +652,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // ceil 函数
-    let mut ceil_params = HashMap::new();
+    let mut ceil_params = IndexMap::new();
     ceil_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Number to round up".to_string())).stabilize(),
@@ -669,7 +669,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // round 函数
-    let mut round_params = HashMap::new();
+    let mut round_params = IndexMap::new();
     round_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Number to round".to_string())).stabilize(),
@@ -686,7 +686,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // asin 函数
-    let mut asin_params = HashMap::new();
+    let mut asin_params = IndexMap::new();
     asin_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Value in radians".to_string())).stabilize(),
@@ -703,7 +703,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // acos 函数
-    let mut acos_params = HashMap::new();
+    let mut acos_params = IndexMap::new();
     acos_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Value in radians".to_string())).stabilize(),
@@ -720,7 +720,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // atan 函数
-    let mut atan_params = HashMap::new();
+    let mut atan_params = IndexMap::new();
     atan_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Value in radians".to_string())).stabilize(),

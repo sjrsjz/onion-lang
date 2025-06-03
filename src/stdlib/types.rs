@@ -1,12 +1,11 @@
-use std::collections::HashMap;
-
+use indexmap::IndexMap;
 use onion_vm::{
     lambda::runnable::RuntimeError,
     types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
     GC,
 };
 
-use super::{build_named_dict, get_attr_direct, wrap_native_function};
+use super::{build_named_dict, get_attr_direct, tuple, wrap_native_function};
 
 /// Convert object to string
 fn to_string(
@@ -211,10 +210,10 @@ fn find(
 
 /// Build the type conversion module
 pub fn build_module() -> OnionStaticObject {
-    let mut module = HashMap::new();
+    let mut module = IndexMap::new();
 
     // Type conversion functions
-    let mut to_string_params = HashMap::new();
+    let mut to_string_params = IndexMap::new();
     to_string_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Value to convert to string".to_string())).stabilize(),
@@ -230,7 +229,7 @@ pub fn build_module() -> OnionStaticObject {
         ),
     );
 
-    let mut to_int_params = HashMap::new();
+    let mut to_int_params = IndexMap::new();
     to_int_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Value to convert to integer".to_string())).stabilize(),
@@ -246,7 +245,7 @@ pub fn build_module() -> OnionStaticObject {
         ),
     );
 
-    let mut to_float_params = HashMap::new();
+    let mut to_float_params = IndexMap::new();
     to_float_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Value to convert to float".to_string())).stabilize(),
@@ -262,7 +261,7 @@ pub fn build_module() -> OnionStaticObject {
         ),
     );
 
-    let mut to_bool_params = HashMap::new();
+    let mut to_bool_params = IndexMap::new();
     to_bool_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Value to convert to boolean".to_string())).stabilize(),
@@ -279,7 +278,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // Type checking functions
-    let mut type_of_params = HashMap::new();
+    let mut type_of_params = IndexMap::new();
     type_of_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Value to get type of".to_string())).stabilize(),
@@ -295,7 +294,7 @@ pub fn build_module() -> OnionStaticObject {
         ),
     );
 
-    let mut is_int_params = HashMap::new();
+    let mut is_int_params = IndexMap::new();
     is_int_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Value to check if is integer".to_string())).stabilize(),
@@ -311,7 +310,7 @@ pub fn build_module() -> OnionStaticObject {
         ),
     );
 
-    let mut is_float_params = HashMap::new();
+    let mut is_float_params = IndexMap::new();
     is_float_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Value to check if is float".to_string())).stabilize(),
@@ -327,7 +326,7 @@ pub fn build_module() -> OnionStaticObject {
         ),
     );
 
-    let mut is_string_params = HashMap::new();
+    let mut is_string_params = IndexMap::new();
     is_string_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Value to check if is string".to_string())).stabilize(),
@@ -343,7 +342,7 @@ pub fn build_module() -> OnionStaticObject {
         ),
     );
 
-    let mut is_bool_params = HashMap::new();
+    let mut is_bool_params = IndexMap::new();
     is_bool_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Value to check if is boolean".to_string())).stabilize(),
@@ -360,7 +359,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // Find attribute function
-    let mut find_params = HashMap::new();
+    let mut find_params = IndexMap::new();
     find_params.insert(
         "obj".to_string(),
         OnionObject::Undefined(Some("Object to find attribute in".to_string())).stabilize(),
@@ -379,6 +378,8 @@ pub fn build_module() -> OnionStaticObject {
             find,
         ),
     );
+
+    module.insert("tuple".to_string(), tuple::build_module());
 
     build_named_dict(module)
 }

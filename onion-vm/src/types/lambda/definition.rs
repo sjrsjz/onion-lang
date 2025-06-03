@@ -1,10 +1,15 @@
 use std::{
     cell::RefCell,
+    collections::VecDeque,
     fmt::{Debug, Display},
     sync::Arc,
 };
 
-use arc_gc::{arc::GCArc, gc::GC, traceable::GCTraceable};
+use arc_gc::{
+    arc::{GCArc, GCArcWeak},
+    gc::GC,
+    traceable::GCTraceable,
+};
 
 use crate::{
     lambda::runnable::{Runnable, RuntimeError},
@@ -186,15 +191,15 @@ impl OnionLambdaDefinition {
     }
 }
 
-impl GCTraceable for OnionLambdaDefinition {
-    fn visit(&self) {
-        self.parameter.visit();
+impl GCTraceable<OnionObjectCell> for OnionLambdaDefinition {
+    fn collect(&self, queue: &mut VecDeque<GCArcWeak<OnionObjectCell>>) {
+        self.parameter.collect(queue);
         match &self.body {
-            LambdaBody::Instruction(instruction) => instruction.visit(),
-            LambdaBody::NativeFunction(_) => (),
+            LambdaBody::Instruction(instruction) => instruction.collect(queue),
+            LambdaBody::NativeFunction(_) => {}
         }
-        self.capture.visit();
-        self.self_object.visit();
+        self.capture.collect(queue);
+        self.self_object.collect(queue);
     }
 }
 

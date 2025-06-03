@@ -1,11 +1,11 @@
 use std::{
     cell::RefCell,
-    collections::HashMap,
     sync::{Arc, Mutex},
     thread,
     time::Duration,
 };
 
+use indexmap::IndexMap;
 use onion_vm::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
     onion_tuple,
@@ -31,7 +31,7 @@ enum RequestState {
 pub struct AsyncHttpRequest {
     url: String,
     method: String,
-    headers: HashMap<String, String>,
+    headers: IndexMap<String, String>,
     body: Option<String>,
     state: Arc<Mutex<RequestState>>,
 }
@@ -40,7 +40,7 @@ impl AsyncHttpRequest {
     pub fn new(
         url: String,
         method: String,
-        headers: HashMap<String, String>,
+        headers: IndexMap<String, String>,
         body: Option<String>,
     ) -> Self {
         Self {
@@ -79,7 +79,7 @@ impl AsyncHttpRequest {
     fn perform_http_request(
         url: &str,
         method: &str,
-        headers: &HashMap<String, String>,
+        headers: &IndexMap<String, String>,
         body: Option<&str>,
     ) -> Result<String, String> {
         // 创建Tokio runtime来处理异步请求
@@ -254,7 +254,7 @@ impl Runnable for AsyncHttpRequest {
 /// 解析请求参数并创建HTTP请求
 fn parse_request_params(
     argument: &OnionStaticObject,
-) -> Result<(String, String, HashMap<String, String>, Option<String>), RuntimeError> {
+) -> Result<(String, String, IndexMap<String, String>, Option<String>), RuntimeError> {
     argument.weak().with_data(|data| {
         let _request_obj = unwrap_object!(data, OnionObject::Tuple)?;
 
@@ -274,7 +274,7 @@ fn parse_request_params(
             .unwrap_or_else(|_| "GET".to_string());
 
         // 获取headers，如果有的话
-        let mut headers = HashMap::new();
+        let mut headers = IndexMap::new();
         if let Ok(headers_obj) = get_attr_direct(data, "headers".to_string()) {
             if let OnionObject::Tuple(headers_tuple) = &*headers_obj.weak().try_borrow()? {
                 for element in &headers_tuple.elements {
@@ -317,7 +317,7 @@ fn http_get(
             .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))
     })?;
 
-    let headers = HashMap::new();
+    let headers = IndexMap::new();
     let request = AsyncHttpRequest::new(url, "GET".to_string(), headers, None);
 
     // 将调度器包装成Lambda返回
@@ -352,7 +352,7 @@ fn http_post(
         Ok((url, body))
     })?;
 
-    let headers = HashMap::new();
+    let headers = IndexMap::new();
     let request = AsyncHttpRequest::new(url, "POST".to_string(), headers, body);
     // 将调度器包装成Lambda返回
     let lambda_body = LambdaBody::NativeFunction(Arc::new(RefCell::new(request)));
@@ -386,7 +386,7 @@ fn http_put(
         Ok((url, body))
     })?;
 
-    let headers = HashMap::new();
+    let headers = IndexMap::new();
     let request = AsyncHttpRequest::new(url, "PUT".to_string(), headers, body);
 
     let lambda_body = LambdaBody::NativeFunction(Arc::new(RefCell::new(request)));
@@ -414,7 +414,7 @@ fn http_delete(
             .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))
     })?;
 
-    let headers = HashMap::new();
+    let headers = IndexMap::new();
     let request = AsyncHttpRequest::new(url, "DELETE".to_string(), headers, None);
 
     let lambda_body = LambdaBody::NativeFunction(Arc::new(RefCell::new(request)));
@@ -448,7 +448,7 @@ fn http_patch(
         Ok((url, body))
     })?;
 
-    let headers = HashMap::new();
+    let headers = IndexMap::new();
     let request = AsyncHttpRequest::new(url, "PATCH".to_string(), headers, body);
 
     let lambda_body = LambdaBody::NativeFunction(Arc::new(RefCell::new(request)));
@@ -497,7 +497,7 @@ fn http_get_sync(
     })?;
 
     // 直接执行HTTP请求并返回结果
-    let headers = HashMap::new();
+    let headers = IndexMap::new();
     match AsyncHttpRequest::perform_http_request(&url, "GET", &headers, None) {
         Ok(response) => Ok(OnionObject::String(response).stabilize()),
         Err(error) => Ok(OnionObject::String(format!("HTTP Error: {}", error)).stabilize()),
@@ -523,7 +523,7 @@ fn http_post_sync(
         Ok((url, body))
     })?;
 
-    let headers = HashMap::new();
+    let headers = IndexMap::new();
     match AsyncHttpRequest::perform_http_request(&url, "POST", &headers, body.as_deref()) {
         Ok(response) => Ok(OnionObject::String(response).stabilize()),
         Err(error) => Ok(OnionObject::String(format!("HTTP Error: {}", error)).stabilize()),
@@ -532,10 +532,10 @@ fn http_post_sync(
 
 /// 构建HTTP模块
 pub fn build_module() -> OnionStaticObject {
-    let mut module = HashMap::new();
+    let mut module = IndexMap::new();
 
     // GET请求参数
-    let mut get_params = HashMap::new();
+    let mut get_params = IndexMap::new();
     get_params.insert(
         "url".to_string(),
         OnionObject::String("".to_string()).stabilize(),
@@ -553,7 +553,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // POST请求参数
-    let mut post_params = HashMap::new();
+    let mut post_params = IndexMap::new();
     post_params.insert(
         "url".to_string(),
         OnionObject::String("".to_string()).stabilize(),
@@ -575,7 +575,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // PUT请求参数
-    let mut put_params = HashMap::new();
+    let mut put_params = IndexMap::new();
     put_params.insert(
         "url".to_string(),
         OnionObject::String("".to_string()).stabilize(),
@@ -597,7 +597,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // DELETE请求参数
-    let mut delete_params = HashMap::new();
+    let mut delete_params = IndexMap::new();
     delete_params.insert(
         "url".to_string(),
         OnionObject::String("".to_string()).stabilize(),
@@ -613,7 +613,7 @@ pub fn build_module() -> OnionStaticObject {
             http_delete,
         ),
     ); // PATCH请求参数
-    let mut patch_params = HashMap::new();
+    let mut patch_params = IndexMap::new();
     patch_params.insert(
         "url".to_string(),
         OnionObject::String("".to_string()).stabilize(),
@@ -635,7 +635,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // 同步GET请求 (用于测试)
-    let mut get_sync_params = HashMap::new();
+    let mut get_sync_params = IndexMap::new();
     get_sync_params.insert(
         "url".to_string(),
         OnionObject::String("".to_string()).stabilize(),
@@ -653,7 +653,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // 同步POST请求 (用于测试)
-    let mut post_sync_params = HashMap::new();
+    let mut post_sync_params = IndexMap::new();
     post_sync_params.insert(
         "url".to_string(),
         OnionObject::String("".to_string()).stabilize(),
@@ -675,7 +675,7 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     // 通用请求参数
-    let mut request_params = HashMap::new();
+    let mut request_params = IndexMap::new();
     request_params.insert(
         "url".to_string(),
         OnionObject::String("".to_string()).stabilize(),
