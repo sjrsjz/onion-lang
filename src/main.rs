@@ -399,7 +399,7 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
                         println!(
                             "{}",
                             result_value_borrowed
-                                .to_string()
+                                .to_string(&vec![])
                                 .map_err(|e| format!("Failed to get result value: {:?}", e))?
                         );
                         break;

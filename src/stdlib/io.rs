@@ -27,7 +27,7 @@ fn println(
                     .elements
                     .iter()
                     .map(|element| match element.try_borrow() {
-                        Ok(obj) => obj.to_string().unwrap_or("<unknown>".to_string()),
+                        Ok(obj) => obj.to_string(&vec![]).unwrap_or("<unknown>".to_string()),
                         Err(_) => "<borrow error>".to_string(),
                     })
                     .collect::<Vec<_>>()
@@ -50,7 +50,7 @@ fn print(
                     .elements
                     .iter()
                     .map(|element| match element.try_borrow() {
-                        Ok(obj) => obj.to_string().unwrap_or("<unknown>".to_string()),
+                        Ok(obj) => obj.to_string(&vec![]).unwrap_or("<unknown>".to_string()),
                         Err(_) => "<borrow error>".to_string(),
                     })
                     .collect::<Vec<_>>()
@@ -69,7 +69,7 @@ fn input(
         let hint = get_attr_direct(data, "hint".to_string())?
             .weak()
             .try_borrow()?
-            .to_string()?;
+            .to_string(&vec![])?;
         print!("{}", hint);
         stdout()
             .flush()

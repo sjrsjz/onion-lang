@@ -423,12 +423,13 @@ pub fn get_attr(
         .with_data(|attr| {
             Ok(
                 match obj.weak().with_attribute(attr, &|attr| Ok(attr.clone())) {
-                    Ok(value) => match value {
-                        OnionObject::Lambda(mut lambda) => {
+                    Ok(ref value) => match value {
+                        OnionObject::Lambda(ref lambda) => {
+                            let mut lambda = lambda.clone();
                             lambda.self_object = Box::new(obj.weak().clone());
                             OnionObject::Lambda(lambda)
                         }
-                        _ => value,
+                        _ => value.clone(),
                     },
                     Err(e) => {
                         return Err(RuntimeError::InvalidOperation(format!(

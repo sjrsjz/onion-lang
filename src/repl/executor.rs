@@ -194,7 +194,7 @@ impl ReplExecutor {
                         let result_str = result_value
                             .try_borrow()
                             .map_err(|e| format!("Failed to borrow result value: {:?}", e))?
-                            .to_string()
+                            .to_string(&vec![])
                             .map_err(|e| format!("Failed to get result value: {:?}", e))?;
                         println!("{} {}", "Result:".cyan(), result_str);
                         break;

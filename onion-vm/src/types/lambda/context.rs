@@ -26,7 +26,7 @@ impl Frame {
             let value_str = var_value
                 .weak()
                 .try_borrow()
-                .map(|obj| obj.to_string().unwrap_or_else(|_| format!("{:?}", obj)))
+                .map(|obj| obj.to_string(&vec![]).unwrap_or_else(|_| format!("{:?}", obj)))
                 .unwrap_or_else(|_| "<borrow_error>".to_string());
             variables.insert(var_name.to_string(), Value::String(value_str));
         }
@@ -39,7 +39,7 @@ impl Frame {
                 let obj_str = obj
                     .weak()
                     .try_borrow()
-                    .map(|o| o.to_string().unwrap_or_else(|_| format!("{:?}", o)))
+                    .map(|o| o.to_string(&vec![]).unwrap_or_else(|_| format!("{:?}", o)))
                     .unwrap_or_else(|_| "<borrow_error>".to_string());
                 Value::String(obj_str)
             })
@@ -429,7 +429,7 @@ impl Context {
                 let value_str = var_value
                     .weak()
                     .try_borrow()
-                    .map(|obj| obj.to_string().unwrap_or_else(|_| format!("{:?}", obj)))
+                    .map(|obj| obj.to_string(&vec![]).unwrap_or_else(|_| format!("{:?}", obj)))
                     .unwrap_or_else(|_| "<borrow_error>".to_string());
                 
                 variables.insert(var_name.to_string(), Value::String(value_str));
@@ -443,7 +443,7 @@ impl Context {
                     let obj_str = obj
                         .weak()
                         .try_borrow()
-                        .map(|o| o.to_string().unwrap_or_else(|_| format!("{:?}", o)))
+                        .map(|o| o.to_string(&vec![]).unwrap_or_else(|_| format!("{:?}", o)))
                         .unwrap_or_else(|_| "<borrow_error>".to_string());
                     Value::String(obj_str)
                 })

@@ -262,7 +262,7 @@ fn parse_request_params(
         let url = get_attr_direct(data, "url".to_string())?
             .weak()
             .try_borrow()?
-            .to_string()
+            .to_string(&vec![])
             .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))?;
 
         // 获取方法，默认为GET
@@ -270,7 +270,7 @@ fn parse_request_params(
             .unwrap_or_else(|_| OnionObject::String("GET".to_string()).stabilize())
             .weak()
             .try_borrow()?
-            .to_string()
+            .to_string(&vec![])
             .unwrap_or_else(|_| "GET".to_string());
 
         // 获取headers，如果有的话
@@ -282,12 +282,12 @@ fn parse_request_params(
                         let key = named
                             .get_key()
                             .try_borrow()?
-                            .to_string()
+                            .to_string(&vec![])
                             .unwrap_or_default();
                         let value = named
                             .get_value()
                             .try_borrow()?
-                            .to_string()
+                            .to_string(&vec![])
                             .unwrap_or_default();
                         headers.insert(key, value);
                     }
@@ -298,7 +298,7 @@ fn parse_request_params(
         // 获取body，如果有的话
         let body = get_attr_direct(data, "body".to_string())
             .ok()
-            .and_then(|body_obj| body_obj.weak().try_borrow().ok()?.to_string().ok());
+            .and_then(|body_obj| body_obj.weak().try_borrow().ok()?.to_string(&vec![]).ok());
 
         Ok((url, method, headers, body))
     })
@@ -309,16 +309,13 @@ fn http_get(
     argument: OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let url = argument
-        .weak()
-        .with_data(|data| {
-            get_attr_direct(data, "url".to_string())?
-                .weak()
-                .try_borrow()?
-                .to_string()
-                .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))
-        })
-        ?;
+    let url = argument.weak().with_data(|data| {
+        get_attr_direct(data, "url".to_string())?
+            .weak()
+            .try_borrow()?
+            .to_string(&vec![])
+            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))
+    })?;
 
     let headers = HashMap::new();
     let request = AsyncHttpRequest::new(url, "GET".to_string(), headers, None);
@@ -341,22 +338,19 @@ fn http_post(
     argument: OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let (url, body) = argument
-        .weak()
-        .with_data(|data| {
-            let url = get_attr_direct(data, "url".to_string())?
-                .weak()
-                .try_borrow()?
-                .to_string()
-                .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))?;
+    let (url, body) = argument.weak().with_data(|data| {
+        let url = get_attr_direct(data, "url".to_string())?
+            .weak()
+            .try_borrow()?
+            .to_string(&vec![])
+            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))?;
 
-            let body = get_attr_direct(data, "body".to_string())
-                .ok()
-                .and_then(|body_obj| body_obj.weak().try_borrow().ok()?.to_string().ok());
+        let body = get_attr_direct(data, "body".to_string())
+            .ok()
+            .and_then(|body_obj| body_obj.weak().try_borrow().ok()?.to_string(&vec![]).ok());
 
-            Ok((url, body))
-        })
-        ?;
+        Ok((url, body))
+    })?;
 
     let headers = HashMap::new();
     let request = AsyncHttpRequest::new(url, "POST".to_string(), headers, body);
@@ -378,22 +372,19 @@ fn http_put(
     argument: OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let (url, body) = argument
-        .weak()
-        .with_data(|data| {
-            let url = get_attr_direct(data, "url".to_string())?
-                .weak()
-                .try_borrow()?
-                .to_string()
-                .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))?;
+    let (url, body) = argument.weak().with_data(|data| {
+        let url = get_attr_direct(data, "url".to_string())?
+            .weak()
+            .try_borrow()?
+            .to_string(&vec![])
+            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))?;
 
-            let body = get_attr_direct(data, "body".to_string())
-                .ok()
-                .and_then(|body_obj| body_obj.weak().try_borrow().ok()?.to_string().ok());
+        let body = get_attr_direct(data, "body".to_string())
+            .ok()
+            .and_then(|body_obj| body_obj.weak().try_borrow().ok()?.to_string(&vec![]).ok());
 
-            Ok((url, body))
-        })
-        ?;
+        Ok((url, body))
+    })?;
 
     let headers = HashMap::new();
     let request = AsyncHttpRequest::new(url, "PUT".to_string(), headers, body);
@@ -415,16 +406,13 @@ fn http_delete(
     argument: OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let url = argument
-        .weak()
-        .with_data(|data| {
-            get_attr_direct(data, "url".to_string())?
-                .weak()
-                .try_borrow()?
-                .to_string()
-                .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))
-        })
-        ?;
+    let url = argument.weak().with_data(|data| {
+        get_attr_direct(data, "url".to_string())?
+            .weak()
+            .try_borrow()?
+            .to_string(&vec![])
+            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))
+    })?;
 
     let headers = HashMap::new();
     let request = AsyncHttpRequest::new(url, "DELETE".to_string(), headers, None);
@@ -446,22 +434,19 @@ fn http_patch(
     argument: OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let (url, body) = argument
-        .weak()
-        .with_data(|data| {
-            let url = get_attr_direct(data, "url".to_string())?
-                .weak()
-                .try_borrow()?
-                .to_string()
-                .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))?;
+    let (url, body) = argument.weak().with_data(|data| {
+        let url = get_attr_direct(data, "url".to_string())?
+            .weak()
+            .try_borrow()?
+            .to_string(&vec![])
+            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))?;
 
-            let body = get_attr_direct(data, "body".to_string())
-                .ok()
-                .and_then(|body_obj| body_obj.weak().try_borrow().ok()?.to_string().ok());
+        let body = get_attr_direct(data, "body".to_string())
+            .ok()
+            .and_then(|body_obj| body_obj.weak().try_borrow().ok()?.to_string(&vec![]).ok());
 
-            Ok((url, body))
-        })
-        ?;
+        Ok((url, body))
+    })?;
 
     let headers = HashMap::new();
     let request = AsyncHttpRequest::new(url, "PATCH".to_string(), headers, body);
@@ -481,8 +466,7 @@ fn http_request(
     argument: OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let (url, method, headers, body) =
-        parse_request_params(&argument)?;
+    let (url, method, headers, body) = parse_request_params(&argument)?;
 
     let request = AsyncHttpRequest::new(url, method, headers, body);
 
@@ -504,16 +488,13 @@ fn http_get_sync(
     argument: OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let url = argument
-        .weak()
-        .with_data(|data| {
-            get_attr_direct(data, "url".to_string())?
-                .weak()
-                .try_borrow()?
-                .to_string()
-                .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))
-        })
-        ?;
+    let url = argument.weak().with_data(|data| {
+        get_attr_direct(data, "url".to_string())?
+            .weak()
+            .try_borrow()?
+            .to_string(&vec![])
+            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))
+    })?;
 
     // 直接执行HTTP请求并返回结果
     let headers = HashMap::new();
@@ -528,22 +509,19 @@ fn http_post_sync(
     argument: OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let (url, body) = argument
-        .weak()
-        .with_data(|data| {
-            let url = get_attr_direct(data, "url".to_string())?
-                .weak()
-                .try_borrow()?
-                .to_string()
-                .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))?;
+    let (url, body) = argument.weak().with_data(|data| {
+        let url = get_attr_direct(data, "url".to_string())?
+            .weak()
+            .try_borrow()?
+            .to_string(&vec![])
+            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))?;
 
-            let body = get_attr_direct(data, "body".to_string())
-                .ok()
-                .and_then(|body_obj| body_obj.weak().try_borrow().ok()?.to_string().ok());
+        let body = get_attr_direct(data, "body".to_string())
+            .ok()
+            .and_then(|body_obj| body_obj.weak().try_borrow().ok()?.to_string(&vec![]).ok());
 
-            Ok((url, body))
-        })
-        ?;
+        Ok((url, body))
+    })?;
 
     let headers = HashMap::new();
     match AsyncHttpRequest::perform_http_request(&url, "POST", &headers, body.as_deref()) {

@@ -15,7 +15,7 @@ fn to_string(
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
         let value = get_attr_direct(data, "value".to_string())?;
-        let string_representation = value.weak().try_borrow()?.to_string()?;
+        let string_representation = value.weak().try_borrow()?.to_string(&vec![])?;
         Ok(OnionObject::String(string_representation).stabilize())
     })
 }

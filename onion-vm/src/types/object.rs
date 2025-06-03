@@ -181,7 +181,7 @@ impl Debug for OnionObject {
             OnionObject::Range(start, end) => write!(f, "Range({}, {})", start, end),
             OnionObject::Null => write!(f, "Null"),
             OnionObject::Undefined(s) => write!(f, "Undefined({})", s.as_deref().unwrap_or("")),
-            OnionObject::Tuple(tuple) => write!(f, "{:?}", tuple),
+            OnionObject::Tuple(tuple) => write!(f, "Tuple"),
             OnionObject::Pair(pair) => write!(f, "{:?}", pair),
             OnionObject::Named(named) => write!(f, "{:?}", named),
             OnionObject::LazySet(lazy_set) => write!(f, "{:?}", lazy_set),
@@ -200,6 +200,62 @@ impl Debug for OnionObject {
         }
     }
 }
+
+// impl Drop for OnionObject {
+//     fn drop(&mut self) {
+//         match self {
+//             OnionObject::Integer(_) => {
+//                 println!("Dropping Integer");
+//             }
+//             OnionObject::Float(_) => {
+//                 println!("Dropping Float");
+//             }
+//             OnionObject::String(_) => {
+//                 println!("Dropping String");
+//             }
+//             OnionObject::Bytes(_) => {
+//                 println!("Dropping Bytes");
+//             }
+//             OnionObject::Boolean(_) => {
+//                 println!("Dropping Boolean");
+//             }
+//             OnionObject::Range(_, _) => {
+//                 println!("Dropping Range");
+//             }
+//             OnionObject::Null => {
+//                 println!("Dropping Null");
+//             }
+//             OnionObject::Undefined(_) => {
+//                 println!("Dropping Undefined");
+//             }
+//             OnionObject::Tuple(tuple) => {
+//                 println!("Dropping Tuple with {} elements", tuple.elements.len());
+//             }
+//             OnionObject::Pair(_) => {
+//                 println!("Dropping Pair");
+//             }
+//             OnionObject::Named(_) => {
+//                 println!("Dropping Named");
+//             }
+//             OnionObject::LazySet(_) => {
+//                 println!("Dropping LazySet");
+//             }
+//             OnionObject::InstructionPackage(_) => {
+//                 println!("Dropping InstructionPackage");
+//             }
+//             OnionObject::Lambda(lambda) => {
+//                 println!("Dropping Lambda with signature: {:?}", lambda.signature);
+//             }
+//             OnionObject::Mut(weak) => {
+//                 if weak.is_valid() {
+//                     println!("Dropping Mut with strong reference");
+//                 } else {
+//                     println!("Dropping Mut with broken reference");
+//                 }
+//             }            
+//         }
+//     }
+// }
 
 impl GCTraceable for OnionObject {
     fn visit(&self) {
@@ -399,72 +455,81 @@ impl OnionObject {
         })
     }
 
-    pub fn to_string(&self) -> Result<String, RuntimeError> {
-        self.with_data(|obj| match obj {
-            OnionObject::Integer(i) => Ok(i.to_string()),
-            OnionObject::Float(f) => Ok(f.to_string()),
-            OnionObject::String(s) => Ok(s.clone()),
-            OnionObject::Bytes(b) => Ok(String::from_utf8_lossy(b).to_string()),
-            OnionObject::Boolean(b) => Ok(if *b {
-                "true".to_string()
-            } else {
-                "false".to_string()
-            }),
-            OnionObject::Null => Ok("null".to_string()),
-            OnionObject::Undefined(s) => Ok(match s {
-                Some(s) => format!("undefined({})", s),
-                None => "undefined".to_string(),
-            }),
-            OnionObject::Range(start, end) => Ok(format!("{}..{}", start, end)),
-            OnionObject::Tuple(tuple) => match tuple.elements.len() {
-                0 => Ok("()".to_string()),
-                1 => {
-                    let first = tuple.elements.first().unwrap();
-                    Ok(format!(
-                        "({},)",
-                        first
-                            .try_borrow()
-                            .map_err(|_| RuntimeError::BrokenReference)?
-                            .to_string()?
-                    ))
+    pub fn to_string(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+        self.with_data(|obj| {
+            for ptr in ptrs {
+                if addr_eq(obj, *ptr) {
+                    return Ok("...".to_string());
+                }
+            }
+            let mut new_ptrs = ptrs.clone();
+            new_ptrs.push(obj);
+            match obj {
+                OnionObject::Integer(i) => Ok(i.to_string()),
+                OnionObject::Float(f) => Ok(f.to_string()),
+                OnionObject::String(s) => Ok(s.clone()),
+                OnionObject::Bytes(b) => Ok(String::from_utf8_lossy(b).to_string()),
+                OnionObject::Boolean(b) => Ok(if *b {
+                    "true".to_string()
+                } else {
+                    "false".to_string()
+                }),
+                OnionObject::Null => Ok("null".to_string()),
+                OnionObject::Undefined(s) => Ok(match s {
+                    Some(s) => format!("undefined({})", s),
+                    None => "undefined".to_string(),
+                }),
+                OnionObject::Range(start, end) => Ok(format!("{}..{}", start, end)),
+                OnionObject::Tuple(tuple) => match tuple.elements.len() {
+                    0 => Ok("()".to_string()),
+                    1 => {
+                        let first = tuple.elements.first().unwrap();
+                        Ok(format!(
+                            "({},)",
+                            first
+                                .try_borrow()
+                                .map_err(|_| RuntimeError::BrokenReference)?
+                                .to_string(&new_ptrs)?
+                        ))
+                    }
+                    _ => {
+                        let elements: Result<Vec<String>, RuntimeError> = tuple
+                            .elements
+                            .iter()
+                            .map(|e| {
+                                e.try_borrow()
+                                    .map_err(|_| RuntimeError::BrokenReference)?
+                                    .to_string(&new_ptrs)
+                            })
+                            .collect();
+                        Ok(format!("({})", elements?.join(", ")))
+                    }
+                },
+                OnionObject::Pair(pair) => {
+                    let left = pair.key.borrow().to_string(&new_ptrs)?;
+                    let right = pair.value.borrow().to_string(&new_ptrs)?;
+                    Ok(format!("{} : {}", left, right))
+                }
+                OnionObject::Named(named) => {
+                    let name = named.key.try_borrow()?.to_string(&new_ptrs)?;
+                    let value = named.value.try_borrow()?.to_string(&new_ptrs)?;
+                    Ok(format!("{} => {}", name, value))
+                }
+                OnionObject::LazySet(lazy_set) => {
+                    let container = lazy_set.container.try_borrow()?.to_string(&new_ptrs)?;
+                    let filter = lazy_set.filter.try_borrow()?.to_string(&new_ptrs)?;
+                    Ok(format!("[{} | {}]", container, filter))
+                }
+                OnionObject::InstructionPackage(_) => Ok("InstructionPackage(...)".to_string()),
+                OnionObject::Lambda(lambda) => {
+                    let params = lambda.parameter.try_borrow()?.to_string(&new_ptrs)?;
+                    let body = lambda.body.to_string();
+                    Ok(format!("{}::{} -> {}", lambda.signature, params, body))
                 }
                 _ => {
-                    let elements: Result<Vec<String>, RuntimeError> = tuple
-                        .elements
-                        .iter()
-                        .map(|e| {
-                            e.try_borrow()
-                                .map_err(|_| RuntimeError::BrokenReference)?
-                                .to_string()
-                        })
-                        .collect();
-                    Ok(format!("({})", elements?.join(", ")))
+                    // 使用 Debug trait来处理其他类型的转换
+                    Ok(format!("{:?}", obj))
                 }
-            },
-            OnionObject::Pair(pair) => {
-                let left = pair.key.borrow().to_string()?;
-                let right = pair.value.borrow().to_string()?;
-                Ok(format!("{} : {}", left, right))
-            }
-            OnionObject::Named(named) => {
-                let name = named.key.try_borrow()?.to_string()?;
-                let value = named.value.try_borrow()?.to_string()?;
-                Ok(format!("{} => {}", name, value))
-            }
-            OnionObject::LazySet(lazy_set) => {
-                let container = lazy_set.container.try_borrow()?.to_string()?;
-                let filter = lazy_set.filter.try_borrow()?.to_string()?;
-                Ok(format!("[{} | {}]", container, filter))
-            }
-            OnionObject::InstructionPackage(_) => Ok("InstructionPackage(...)".to_string()),
-            OnionObject::Lambda(lambda) => {
-                let params = lambda.parameter.try_borrow()?.to_string()?;
-                let body = lambda.body.to_string();
-                Ok(format!("{}::{} -> {}", lambda.signature, params, body))
-            }
-            _ => {
-                // 使用 Debug trait来处理其他类型的转换
-                Ok(format!("{:?}", obj))
             }
         })
     }

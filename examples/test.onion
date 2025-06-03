@@ -1,4 +1,7 @@
 // 这是一个Onion语言测试文件
+A := (mut undefined,);
+A[0] = A;
+return A;
 
 @required stdlib;
 stdlib.io.println("======== Onion语言测试文件 ========");
@@ -24,7 +27,7 @@ Result := (result_pair?, result => mut undefined) -> (
     }
 );
 
-Result.parameter.result = Result;
+//Result.parameter.result = Result;
 
 Ok := (v?) -> Result(true : v);
 Err := (v?) -> Result(false : v);

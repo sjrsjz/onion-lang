@@ -20,7 +20,7 @@ fn to_json(obj: OnionObject) -> Result<Value, RuntimeError> {
                 let key = p
                     .get_key()
                     .try_borrow()?
-                    .to_string()
+                    .to_string(&vec![])
                     .map_err(|e| RuntimeError::InvalidOperation(e.to_string()))?;
                 let value = to_json(p.get_value().try_borrow()?.clone())
                     .map_err(|e| RuntimeError::InvalidOperation(e.to_string()))?;
@@ -43,7 +43,7 @@ fn to_json(obj: OnionObject) -> Result<Value, RuntimeError> {
                             let key = pair
                                 .get_key()
                                 .try_borrow()?
-                                .to_string()
+                                .to_string(&vec![])
                                 .map_err(|e| RuntimeError::InvalidOperation(e.to_string()))?;
                             let value = to_json(pair.get_value().try_borrow()?.clone())
                                 .map_err(|e| RuntimeError::InvalidOperation(e.to_string()))?;
