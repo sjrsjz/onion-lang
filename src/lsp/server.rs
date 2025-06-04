@@ -353,9 +353,22 @@ impl LspServer {
                     }
                 };
                 let mut dir_stack = DirStack::new(Some(&parent_dir)).unwrap();
+                let macro_result = analyzer::expand_macro(&ast);
+                if !macro_result.errors.is_empty() {
+                    error!(
+                        "Macro expansion errors: {}",
+                        macro_result.errors.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(", ")
+                    );
+                }
+                if !macro_result.warnings.is_empty() {
+                    warn!(
+                        "Macro expansion warnings: {}",
+                        macro_result.warnings.iter().map(|w| w.to_string()).collect::<Vec<_>>().join(", ")
+                    );
+                }
                 // 3. 调用分析器获取特定位置的上下文
                 let analysis_output =
-                    analyzer::analyze_ast(&ast, Some(byte_offset), &mut dir_stack);
+                    analyzer::analyze_ast(&macro_result.result_node, Some(byte_offset), &mut dir_stack);
 
                 // 4. 如果分析器在断点处捕获了上下文，则提取变量
                 if let Some(context) = analysis_output.context_at_break {
@@ -434,10 +447,6 @@ impl LspServer {
                         "Analyzer did not capture context at break position {}",
                         byte_offset
                     );
-                    // 即使没有捕获到精确位置的上下文，也可以考虑使用全局上下文（如果需要）
-                    // let full_analysis = analyzer::analyze_ast(&ast, None);
-                    // // ... process full_analysis.context_at_break (which should be None)
-                    // // or potentially analyze without break point to get final context?
                 }
             } else {
                 warn!("Could not convert position {:?} to byte offset", position);

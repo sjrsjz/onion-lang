@@ -2,6 +2,7 @@ use crate::dir_stack::DirStack;
 use crate::ir_generator::ir_generator;
 use crate::parser::analyzer::analyze_ast;
 use crate::parser::analyzer::auto_capture_and_rebuild;
+use crate::parser::analyzer::expand_macro;
 use crate::parser::ast::ast_token_stream;
 use crate::parser::ast::build_ast;
 use crate::parser::lexer::lexer;
@@ -12,7 +13,6 @@ use onion_vm::types::lambda::vm_instructions::ir::Functions;
 use onion_vm::types::lambda::vm_instructions::ir::IRPackage;
 use onion_vm::types::lambda::vm_instructions::ir::IR;
 use onion_vm::types::lambda::vm_instructions::ir_translator::IRTranslator;
-
 
 // Compile code and generate intermediate representation
 pub fn build_code(code: &str, dir_stack: &mut DirStack) -> Result<IRPackage, String> {
@@ -25,7 +25,22 @@ pub fn build_code(code: &str, dir_stack: &mut DirStack) -> Result<IRPackage, Str
             return Err(err_token.format(&tokens, code.to_string()).to_string());
         }
     };
-    let ast = auto_capture_and_rebuild(&ast).1;
+    let macro_result = expand_macro(&ast);
+
+    let mut errors = "".to_string();
+    for error in &macro_result.errors {
+        //println!("{}", error.format(code.to_string()).bright_red());
+        errors.push_str(&error.format(code.to_string()));
+        errors.push_str("\n");
+    }
+    if !macro_result.errors.is_empty() {
+        return Err(format!("{}AST analysis failed", errors));
+    }
+    for warn in &macro_result.warnings {
+        println!("{}", warn.format(code.to_string()).bright_yellow());
+    }
+
+    let ast = auto_capture_and_rebuild(&macro_result.result_node).1;
 
     let analyse_result = analyze_ast(&ast, None, dir_stack);
 

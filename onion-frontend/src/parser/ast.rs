@@ -534,6 +534,12 @@ pub struct ASTNode<'t> {
     pub children: Vec<ASTNode<'t>>,         // Children of the node
 }
 
+impl PartialEq for ASTNode<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.node_type == other.node_type && self.children == other.children
+    }
+}
+
 impl ASTNode<'_> {
     pub fn new<'t>(
         node_type: ASTNodeType,

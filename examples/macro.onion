@@ -1,0 +1,7 @@
+@required stdlib;
+
+@macro A := (
+    add(_A, _B)
+) : _A + _B;
+
+@A stdlib.io.println(add(1, 2));

@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+};
 
 use crate::{
     compile::{build_code, compile_to_bytecode},
@@ -33,25 +36,38 @@ pub struct Variable {
 
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
-pub struct ASTDefinition<'t> {
+pub struct ASTMacro<'t> {
     pub name: String,
     pub matcher: ASTNode<'t>,
     pub replacement: ASTNode<'t>,
 }
 
-impl ASTDefinition<'_> {
-    pub fn if_matches(matcher: &ASTNode, node: &ASTNode) -> bool {
+impl<'node_ref> ASTMacro<'node_ref> {
+    pub fn if_matches(
+        matcher: &ASTNode<'node_ref>,
+        node: &ASTNode<'node_ref>,
+        matched: &mut HashMap<String, ASTNode<'node_ref>>,
+    ) -> bool {
         // 检查 matcher 是否与 node 匹配
-        if ASTNodeType::String("_".to_string()) == matcher.node_type {
-            // 如果 matcher 是一个通配符字符串，直接匹配
-            return true;
+        if let ASTNodeType::Variable(name) = &matcher.node_type {
+            if name.starts_with('_') {
+                // 如果是变量名，检查是否已经匹配过
+                if let Some(existing_node) = matched.get(name) {
+                    // 如果已经匹配过，检查是否与当前节点相同
+                    return existing_node == node;
+                } else {
+                    // 如果没有匹配过，将当前节点记录下来
+                    matched.insert(name.clone(), node.clone());
+                    return true; // 匹配成功
+                }
+            }
         }
         if matcher.node_type == node.node_type {
             // 检查子节点数量是否相同
             if matcher.children.len() == node.children.len() {
                 // 递归检查每个子节点
                 for (m_child, n_child) in matcher.children.iter().zip(&node.children) {
-                    if !Self::if_matches(m_child, n_child) {
+                    if !Self::if_matches(m_child, n_child, matched) {
                         return false; // 如果任何子节点不匹配，则返回 false
                     }
                 }
@@ -61,19 +77,48 @@ impl ASTDefinition<'_> {
         false
     }
 
-    pub fn replace<'node_ref, 'pairs_lifetime>(
-        matcher: &'pairs_lifetime ASTNode,
-        replacement: &'pairs_lifetime ASTNode,
-        node: &'node_ref ASTNode<'pairs_lifetime>, // node 本身可以有自己的生命周期 'node_ref
-                                                   // 但其内部的 Token 等可能与 'pairs_lifetime 相关，如果它是从之前的替换产生的
-    ) -> Option<ASTNode<'pairs_lifetime>> {
+    pub fn fill_matched(
+        node: &ASTNode<'node_ref>,
+        matched: &mut HashMap<String, ASTNode<'node_ref>>,
+    ) -> ASTNode<'node_ref> {
+        // 检查 matcher 是否与 node 匹配
+        if let ASTNodeType::Variable(name) = &node.node_type {
+            if name.starts_with('_') {
+                // 如果是变量名，检查是否已经匹配过
+                if let Some(existing_node) = matched.get(name) {
+                    // 如果已经获得了匹配的节点，返回它
+                    return existing_node.clone();
+                } else {
+                    return node.clone(); // 返回当前节点
+                }
+            }
+        }
+
+        let mut new_children = Vec::new();
+        // 递归处理子节点
+        for child in &node.children {
+            let filled_child = Self::fill_matched(child, matched);
+            new_children.push(filled_child);
+        }
+        ASTNode {
+            node_type: node.node_type.clone(),
+            start_token: node.start_token.clone(),
+            end_token: node.end_token.clone(),
+            children: new_children,
+        }
+    }
+
+    pub fn replace(
+        matcher: &ASTNode<'node_ref>,
+        replacement: &ASTNode<'node_ref>,
+        node: &ASTNode<'node_ref>, // node 本身可以有自己的生命周期 'node_ref
+                                   // 但其内部的 Token 等可能与 'pairs_lifetime 相关，如果它是从之前的替换产生的
+    ) -> Option<ASTNode<'node_ref>> {
+        let mut matched: HashMap<String, ASTNode<'node_ref>> = HashMap::new();
         // 遍历所有匹配对
-        if Self::if_matches(matcher, node) {
+        if Self::if_matches(matcher, node, &mut matched) {
             // 如果匹配成功，返回替换后的节点
-            let mut new_node = replacement.clone();
-            // 替换匹配的节点
-            new_node.start_token = node.start_token.clone();
-            new_node.end_token = node.end_token.clone();
+            let new_node = Self::fill_matched(replacement, &mut matched);
             return Some(new_node);
         }
 
@@ -101,11 +146,11 @@ impl ASTDefinition<'_> {
         None
     }
 
-    pub fn replace_all<'t>(
-        matcher: &'t ASTNode,
-        replacement: &'t ASTNode,
-        node: &'t ASTNode,
-    ) -> ASTNode<'t> {
+    pub fn replace_all(
+        matcher: &ASTNode<'node_ref>,
+        replacement: &ASTNode<'node_ref>,
+        node: &ASTNode<'node_ref>,
+    ) -> ASTNode<'node_ref> {
         let mut current_node = node.clone();
         loop {
             // 尝试替换节点
@@ -121,7 +166,9 @@ impl ASTDefinition<'_> {
         }
     }
 
-    pub fn build_from<'t>(node: &'t ASTNode) -> Result<ASTDefinition<'t>, AnalyzeError<'t>> {
+    pub fn build_from(
+        node: &ASTNode<'node_ref>,
+    ) -> Result<ASTMacro<'node_ref>, AnalyzeError<'node_ref>> {
         // 强制要求为 ASTNodeType::Let
         if let ASTNodeType::Let(var_name) = &node.node_type {
             // 解析 ASTNodeType::Let 的子节点
@@ -132,8 +179,8 @@ impl ASTDefinition<'_> {
                 )
             })?;
 
-            // 确保子节点是 ASTNodeType::NamedTo
-            if let ASTNodeType::NamedTo = &ast_def.node_type {
+            // 确保子节点是 ASTNodeType::KeyValue
+            if let ASTNodeType::KeyValue = &ast_def.node_type {
                 // node[0] 作为匹配节点，node[1] 作为替换节点
                 let matcher = ast_def.children.get(0).ok_or_else(|| {
                     AnalyzeError::InvalidMacroDefinition(
@@ -148,7 +195,7 @@ impl ASTDefinition<'_> {
                     )
                 })?;
                 // 返回 ASTDefinition 实例
-                return Ok(ASTDefinition {
+                return Ok(ASTMacro {
                     name: var_name.clone(),
                     matcher: matcher.clone(),
                     replacement: replacement.clone(),
@@ -157,7 +204,10 @@ impl ASTDefinition<'_> {
         }
         Err(AnalyzeError::InvalidMacroDefinition(
             node.clone(),
-            "Expected ASTNodeType::Let with a variable name".to_string(),
+            format!(
+                "Except ASTNodeType::Let with KeyValue child, found: {:?}",
+                node
+            ),
         ))
     }
 }
@@ -165,7 +215,34 @@ impl ASTDefinition<'_> {
 #[derive(Debug, Clone)] // Added Clone
 pub struct VariableFrame<'t> {
     pub variables: Vec<Variable>,
-    pub ast_definitions: HashMap<String, ASTDefinition<'t>>, // 存储 AST 定义
+    pub ast_macros: Vec<ASTMacro<'t>>, // 存储 AST 定义
+}
+
+impl<'t> VariableFrame<'t> {
+    pub fn define_variable(&mut self, var: Variable) -> Result<(), String> {
+        if let Some(existing_var) = self.variables.iter_mut().find(|v| v.name == var.name) {
+            existing_var.assumed_type = var.assumed_type;
+        } else {
+            self.variables.push(var);
+        }
+        Ok(())
+    }
+
+    pub fn define_macro(&mut self, macro_def: ASTMacro<'t>) -> Result<(), String> {
+        if let Some(existing_macro) = self
+            .ast_macros
+            .iter_mut()
+            .find(|m| m.name == macro_def.name)
+        {
+            // 如果宏已存在，更新其内容
+            existing_macro.matcher = macro_def.matcher;
+            existing_macro.replacement = macro_def.replacement;
+        } else {
+            // 否则添加新的宏定义
+            self.ast_macros.push(macro_def);
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)] // Added Clone
@@ -174,19 +251,44 @@ pub struct VariableContext<'t> {
     contexts: Vec<Vec<VariableFrame<'t>>>,
 }
 
-impl VariableContext<'_> {
-    pub fn last_context(&self) -> Option<&Vec<VariableFrame>> {
+impl<'t> VariableContext<'t> {
+    pub fn last_context(&self) -> Option<&Vec<VariableFrame<'t>>> {
         self.contexts.last()
     }
-    pub fn all_contexts(&self) -> &Vec<Vec<VariableFrame>> {
+    pub fn all_contexts(&self) -> &Vec<Vec<VariableFrame<'t>>> {
         &self.contexts
     }
 }
 
 #[derive(Debug)]
 pub enum AnalyzeError<'t> {
-    UndefinedVariable(&'t ASTNode<'t>),
+    UndefinedVariable(ASTNode<'t>),
     InvalidMacroDefinition(ASTNode<'t>, String), // 添加宏定义错误
+    DetailedError(ASTNode<'t>, String),          // 用于其他类型的错误
+}
+
+impl Display for AnalyzeError<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AnalyzeError::UndefinedVariable(node) => {
+                write!(f, "Undefined variable at node: {:?}", node)
+            }
+            AnalyzeError::InvalidMacroDefinition(node, message) => {
+                write!(
+                    f,
+                    "Invalid macro definition at node: {:?}, message: {}",
+                    node, message
+                )
+            }
+            AnalyzeError::DetailedError(node, message) => {
+                write!(
+                    f,
+                    "Detailed error at node: {:?}, message: {}",
+                    node, message
+                )
+            }
+        }
+    }
 }
 
 impl AnalyzeError<'_> {
@@ -325,13 +427,64 @@ impl AnalyzeError<'_> {
 
                 error_msg
             }
+            AnalyzeError::DetailedError(node, message) => {
+                let (line_num, col) = find_position(match node.start_token {
+                    Some(token) => token.position,
+                    None => 0,
+                });
+                let line = if line_num < lines.len() {
+                    lines[line_num]
+                } else {
+                    ""
+                };
+
+                let mut error_msg = format!(
+                    "{}: {}\n\n",
+                    "Analysis Error".bright_red().bold(),
+                    message.red() // 使用传入的 message
+                );
+                error_msg.push_str(&format!(
+                    "{} {}:{}\n",
+                    "Position".bright_blue(),
+                    (line_num + 1).to_string().bright_cyan(),
+                    (col + 1).to_string().bright_cyan()
+                ));
+                error_msg.push_str(&format!("{}\n", line.white()));
+
+                // 计算节点在源代码中的长度
+                let start_index = node.start_token.as_ref().map_or(0, |token| token.position);
+                let end_index = node.end_token.as_ref().map_or(
+                    node.start_token
+                        .as_ref()
+                        .map_or(0, |token| token.position + token.origin_token.len()),
+                    |token| token.position + token.origin_token.len(),
+                );
+                let node_length = end_index - start_index;
+                error_msg.push_str(&format!(
+                    "{}{}\n",
+                    " ".repeat(col),
+                    "^".repeat(node_length).bright_red().bold() // 至少一个 ^
+                ));
+
+                error_msg
+            }
         }
     }
 }
 
 #[derive(Debug)]
 pub enum AnalyzeWarn<'t> {
-    CompileError(&'t ASTNode<'t>, String),
+    CompileError(ASTNode<'t>, String),
+}
+
+impl Display for AnalyzeWarn<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AnalyzeWarn::CompileError(node, message) => {
+                write!(f, "Compile error at node: {:?}, message: {}", node, message)
+            }
+        }
+    }
 }
 
 impl AnalyzeWarn<'_> {
@@ -421,12 +574,18 @@ impl AnalyzeWarn<'_> {
     }
 }
 
-// New struct to hold analysis results including context at break point
 #[derive(Debug)]
 pub struct AnalysisOutput<'t> {
     pub errors: Vec<AnalyzeError<'t>>,
     pub warnings: Vec<AnalyzeWarn<'t>>,
     pub context_at_break: Option<VariableContext<'t>>,
+}
+
+#[derive(Debug)]
+pub struct MacroAnalysisOutput<'t> {
+    pub errors: Vec<AnalyzeError<'t>>,
+    pub warnings: Vec<AnalyzeWarn<'t>>,
+    pub result_node: ASTNode<'t>,
 }
 
 impl<'c> VariableContext<'c> {
@@ -435,7 +594,7 @@ impl<'c> VariableContext<'c> {
             // 初始化时包含一个全局上下文，该上下文包含一个初始帧
             contexts: vec![vec![VariableFrame {
                 variables: Vec::new(),
-                ast_definitions: HashMap::new(), // 初始化 AST 定义的 HashMap
+                ast_macros: Vec::new(),
             }]],
         }
     }
@@ -457,11 +616,22 @@ impl<'c> VariableContext<'c> {
     pub fn define_variable(&mut self, var: &Variable) -> Result<(), String> {
         // 在当前上下文的最后一个（即当前）帧中定义变量
         if let Some(frame) = self.current_context_mut().last_mut() {
-            if let Some(existing_var) = frame.variables.iter_mut().find(|v| v.name == var.name) {
-                existing_var.assumed_type = var.assumed_type.clone();
-            } else {
-                frame.variables.push(var.clone());
-            }
+            frame
+                .define_variable(var.clone())
+                .map_err(|e| format!("Failed to define variable '{}': {}", var.name, e))?;
+        } else {
+            // This case should ideally not happen if a context always has at least one frame
+            return Err("No frame available in the current context to define variable".to_string());
+        }
+        Ok(())
+    }
+
+    pub fn define_macro(&mut self, macro_def: &ASTMacro<'c>) -> Result<(), String> {
+        // 在当前上下文的最后一个（即当前）帧中定义 AST 宏
+        if let Some(frame) = self.current_context_mut().last_mut() {
+            frame
+                .define_macro(macro_def.clone())
+                .map_err(|e| format!("Failed to define macro '{}': {}", macro_def.name, e))?;
         } else {
             // This case should ideally not happen if a context always has at least one frame
             return Err("No frame available in the current context to define variable".to_string());
@@ -495,11 +665,24 @@ impl<'c> VariableContext<'c> {
         None
     }
 
+    pub fn get_marco(&self, name: &str) -> Option<&ASTMacro<'c>> {
+        // 在当前上下文的最后一个帧中查找 AST 宏
+        let frame = self.current_context();
+        for macro_def in frame.iter() {
+            for m in macro_def.ast_macros.iter() {
+                if m.name == name {
+                    return Some(m);
+                }
+            }
+        }
+        None
+    }
+
     // 在当前上下文中推入一个新的帧
     pub fn push_frame(&mut self) {
         self.current_context_mut().push(VariableFrame {
             variables: Vec::new(),
-            ast_definitions: HashMap::new(), // 初始化 AST 定义的 HashMap
+            ast_macros: Vec::new(),
         });
     }
 
@@ -519,7 +702,7 @@ impl<'c> VariableContext<'c> {
         // 新上下文从一个空帧开始
         self.contexts.push(vec![VariableFrame {
             variables: Vec::new(),
-            ast_definitions: HashMap::new(), // 初始化 AST 定义的 HashMap
+            ast_macros: Vec::new(),
         }]);
     }
 
@@ -534,12 +717,230 @@ impl<'c> VariableContext<'c> {
     }
 }
 
-// Modified function signature and return type
-pub fn analyze_ast<'t>(
-    ast: &'t ASTNode,
+pub fn expand_macro<'n: 't, 't>(node: &'n ASTNode<'n>) -> MacroAnalysisOutput<'n> {
+    // 遍历所有宏定义，尝试应用到当前节点
+    let mut context = VariableContext::new();
+    context.push_context();
+
+    let mut errors = Vec::new();
+    let mut warnings = Vec::new();
+    let result_node = expand_macros_to_node(node, &mut errors, &mut warnings, &mut context);
+    MacroAnalysisOutput {
+        errors,
+        warnings,
+        result_node,
+    }
+}
+
+pub fn expand_macros_to_node<'n: 't, 't>(
+    node: &'t ASTNode<'n>,
+    errors: &mut Vec<AnalyzeError<'n>>,
+    warnings: &mut Vec<AnalyzeWarn<'n>>,
+    context: &mut VariableContext<'n>,
+) -> ASTNode<'n> {
+    match &node.node_type {
+        ASTNodeType::Annotation(annotation) => {
+            match annotation.as_str() {
+                "macro" => {
+                    let def = match node.children.get(0) {
+                        Some(v) => v,
+                        None => {
+                            errors.push(AnalyzeError::InvalidMacroDefinition(
+                                node.clone(),
+                                "Macro has no child".to_string(),
+                            ));
+                            return ASTNode {
+                                node_type: ASTNodeType::Undefined,
+                                start_token: None,
+                                end_token: None,
+                                children: Vec::new(),
+                            };
+                        }
+                    };
+                    match ASTMacro::build_from(def) {
+                        Ok(ast_def) => {
+                            // 将 AST 定义添加到当前上下文的最后一个帧中
+                            if let Err(e) = context.define_macro(&ast_def) {
+                                // 使用 errors Vec 记录宏定义错误
+                                errors.push(AnalyzeError::InvalidMacroDefinition(node.clone(), e));
+                            }
+                        }
+                        Err(e) => {
+                            errors.push(e); // 使用 errors Vec
+                        }
+                    }
+                    return ASTNode {
+                        node_type: ASTNodeType::Undefined,
+                        start_token: None,
+                        end_token: None,
+                        children: Vec::new(),
+                    };
+                }
+                "compile" | "dynamic" | "static" | "required" => {}
+                _ => {
+                    // 对于其他注解，应用宏
+                    let sub_node = match node.children.first() {
+                        Some(v) => v,
+                        None => {
+                            errors.push(AnalyzeError::DetailedError(
+                                node.clone(),
+                                format!("Annotation '{}' has no child", annotation),
+                            ));
+                            return ASTNode {
+                                node_type: ASTNodeType::Undefined,
+                                start_token: None,
+                                end_token: None,
+                                children: Vec::new(),
+                            };
+                        }
+                    };
+                    // 默认认定为macro应用
+                    match context.get_marco(annotation) {
+                        Some(ast_macro) => {
+                            // 使用 ASTMacro 替换当前节点
+                            let replaced_node = ASTMacro::replace_all(
+                                &ast_macro.matcher,
+                                &ast_macro.replacement,
+                                sub_node,
+                            );
+                            return expand_macros_to_node(
+                                &replaced_node,
+                                errors,
+                                warnings,
+                                context,
+                            );
+                        }
+                        None => {
+                            // 如果没有找到宏定义，记录警告
+                            let error_message = format!(
+                                "Macro '{}' not defined in the current context",
+                                annotation
+                            );
+                            errors.push(AnalyzeError::InvalidMacroDefinition(
+                                node.clone(),
+                                error_message,
+                            ));
+                            return ASTNode {
+                                node_type: ASTNodeType::Undefined,
+                                start_token: None,
+                                end_token: None,
+                                children: Vec::new(),
+                            };
+                        }
+                    }
+                }
+            }
+            // 其他情况，正常处理
+            let mut new_children = Vec::new();
+            for child in &node.children {
+                let applied_child = expand_macros_to_node(child, errors, warnings, context);
+                new_children.push(applied_child);
+            }
+            return ASTNode {
+                node_type: node.node_type.clone(),
+                start_token: node.start_token.clone(),
+                end_token: node.end_token.clone(),
+                children: new_children,
+            };
+        }
+        ASTNodeType::Body => {
+            context.push_frame(); // 进入新的上下文帧
+            let mut new_children = Vec::new();
+            for child in &node.children {
+                let applied_child = expand_macros_to_node(child, errors, warnings, context);
+                new_children.push(applied_child);
+            }
+            context.pop_frame().unwrap_or_else(|e| {
+                errors.push(AnalyzeError::DetailedError(node.clone(), e.to_string()));
+            });
+            return ASTNode {
+                node_type: ASTNodeType::Body,
+                start_token: node.start_token.clone(),
+                end_token: node.end_token.clone(),
+                children: new_children,
+            };
+        }
+        ASTNodeType::LambdaDef(is_dynamic_gen, is_capture, is_dynamic_params) => {
+            let mut capture_node = None;
+            if *is_capture {
+                // 检查 child[1]
+                if let Some(func_node) = node.children.get(1) {
+                    capture_node = Some(expand_macros_to_node(
+                        func_node, errors,   // Pass errors
+                        warnings, // Pass warnings
+                        context,
+                    ));
+                }
+            }
+            // 在新的上下文中处理参数（参数定义在第一个帧中）
+            let mut args_node = None;
+            if let Some(params) = node.children.first() {
+                args_node = Some(expand_macros_to_node(
+                    params, errors,   // Pass errors
+                    warnings, // Pass warnings
+                    context,
+                ));
+            }
+            let body_node;
+            if *is_dynamic_gen {
+                body_node = expand_macros_to_node(
+                    node.children.last().unwrap(),
+                    errors,   // Pass errors
+                    warnings, // Pass warnings
+                    context,
+                );
+            } else {
+                context.push_context();
+                body_node = expand_macros_to_node(
+                    node.children.last().unwrap(),
+                    errors,   // Pass errors
+                    warnings, // Pass warnings
+                    context,
+                );
+                context.pop_context().unwrap_or_else(|e| {
+                    errors.push(AnalyzeError::DetailedError(node.clone(), e.to_string()));
+                });
+            }
+
+            // 创建新的 LambdaDef 节点
+            let mut new_children = Vec::new();
+            if let Some(args) = args_node {
+                new_children.push(args);
+            }
+            if let Some(capture) = capture_node {
+                new_children.push(capture);
+            }
+            new_children.push(body_node);
+
+            return ASTNode {
+                node_type: ASTNodeType::LambdaDef(*is_dynamic_gen, *is_capture, *is_dynamic_params),
+                start_token: node.start_token.clone(),
+                end_token: node.end_token.clone(),
+                children: new_children,
+            };
+        }
+        _ => {
+            // 对于其他节点类型，递归应用宏
+            let mut new_children = Vec::new();
+            for child in &node.children {
+                let applied_child = expand_macros_to_node(child, errors, warnings, context);
+                new_children.push(applied_child);
+            }
+            return ASTNode {
+                node_type: node.node_type.clone(),
+                start_token: node.start_token.clone(),
+                end_token: node.end_token.clone(),
+                children: new_children,
+            };
+        }
+    }
+}
+
+pub fn analyze_ast<'n>(
+    ast: &'n ASTNode<'n>,
     break_at_position: Option<usize>,
     dir_stack: &mut DirStack,
-) -> AnalysisOutput<'t> {
+) -> AnalysisOutput<'n> {
     let mut context = VariableContext::new();
     // 向context里初始化内置函数
     context.push_context();
@@ -557,9 +958,9 @@ pub fn analyze_ast<'t>(
         assumed_type: AssumedType::Tuple,
     });
 
-    let mut errors = Vec::new(); // 重命名 warnings 为 errors 以匹配 AnalysisOutput 字段
-    let mut warnings = Vec::new(); // 添加一个新的 Vec 用于存储 AnalyzeWarn
-    let mut context_at_break: Option<VariableContext> = None; // Store context here
+    let mut errors = Vec::new();
+    let mut warnings = Vec::new();
+    let mut context_at_break: Option<VariableContext> = None;
 
     analyze_node(
         ast,
@@ -573,21 +974,20 @@ pub fn analyze_ast<'t>(
     );
 
     AnalysisOutput {
-        errors,   // 使用更新后的名称
-        warnings, // 添加 warnings 字段
+        errors,
+        warnings,
         context_at_break: context_at_break,
     }
 }
 
-// Modified function signature
-fn analyze_node<'t, 'n>(
-    node: &'n ASTNode,
-    context: &mut VariableContext<'t>,
-    errors: &mut Vec<AnalyzeError<'n>>, // 重命名 warnings 为 errors
-    warnings: &mut Vec<AnalyzeWarn<'n>>, // 添加 warnings 参数
+fn analyze_node<'n: 't, 't>(
+    node: &'t ASTNode<'n>,
+    context: &mut VariableContext<'n>,
+    errors: &mut Vec<AnalyzeError<'n>>,
+    warnings: &mut Vec<AnalyzeWarn<'n>>,
     dynamic: bool,
     break_at_position: Option<usize>,
-    context_at_break: &mut Option<VariableContext<'t>>,
+    context_at_break: &mut Option<VariableContext<'n>>,
     dir_stack: &mut DirStack,
 ) -> AssumedType {
     // 1. Check if analysis should stop globally (break point already found)
@@ -643,6 +1043,13 @@ fn analyze_node<'t, 'n>(
             let is_dynamic = match annotation.as_str() {
                 "dynamic" => true,
                 "static" => false,
+                _ => dynamic,
+            };
+
+            match annotation.as_str() {
+                "macro" => {
+                    return AssumedType::Unknown; // @macro 注解本身不贡献类型，并且不会继续分析子节点
+                }
                 "compile" => {
                     if break_at_position.is_none() {
                         // 特殊处理 @compile 注解 (当非断点分析时)
@@ -654,7 +1061,10 @@ fn analyze_node<'t, 'n>(
                                     // 使用 AnalyzeWarn::CompileError 记录读取错误
                                     let error_message =
                                         format!("Failed to read file '{}': {}", file_path, e);
-                                    warnings.push(AnalyzeWarn::CompileError(child, error_message));
+                                    warnings.push(AnalyzeWarn::CompileError(
+                                        child.clone(),
+                                        error_message,
+                                    ));
                                 // 使用 child 作为错误关联的节点
                                 } else {
                                     let parent_dir = std::path::Path::new(file_path)
@@ -672,41 +1082,45 @@ fn analyze_node<'t, 'n>(
 
                                     match compile_result {
                                         Ok(ir_package) => {
-                                            // 替换文件扩展名为onionc
-                                            let onionc_file_path =
-                                                if let Some(pos) = file_path.rfind('.') {
-                                                    format!("{}.onionc", &file_path[..pos])
-                                                } else {
-                                                    format!("{}.onionc", file_path)
-                                                };
-                                            let byte_code = compile_to_bytecode(&ir_package);
-                                            match byte_code {
-                                                Ok(byte_code) => {
-                                                    // 将字节码写入文件
-                                                    if let Err(e) =
-                                                        byte_code.write_to_file(&onionc_file_path)
-                                                    {
-                                                        // 使用 AnalyzeWarn::CompileError 记录写入错误
-                                                        let error_message = format!(
+                                            if context_at_break.is_none() {
+                                                // 替换文件扩展名为onionc
+                                                let onionc_file_path =
+                                                    if let Some(pos) = file_path.rfind('.') {
+                                                        format!("{}.onionc", &file_path[..pos])
+                                                    } else {
+                                                        format!("{}.onionc", file_path)
+                                                    };
+                                                let byte_code = compile_to_bytecode(&ir_package);
+                                                match byte_code {
+                                                    Ok(byte_code) => {
+                                                        // 将字节码写入文件
+                                                        if let Err(e) = byte_code
+                                                            .write_to_file(&onionc_file_path)
+                                                        {
+                                                            // 使用 AnalyzeWarn::CompileError 记录写入错误
+                                                            let error_message = format!(
                                                         "Failed to write bytecode to file '{}': {}",
                                                         onionc_file_path, e
                                                     );
+                                                            warnings.push(
+                                                                AnalyzeWarn::CompileError(
+                                                                    child.clone(),
+                                                                    error_message,
+                                                                ),
+                                                            ); // 使用 child 作为错误关联的节点
+                                                        }
+                                                    }
+                                                    Err(e) => {
+                                                        // 使用 AnalyzeWarn::CompileError 记录编译错误
+                                                        let error_message = format!(
+                                                            "Compilation failed for file '{}': {}",
+                                                            file_path, e
+                                                        );
                                                         warnings.push(AnalyzeWarn::CompileError(
-                                                            child,
+                                                            child.clone(),
                                                             error_message,
                                                         )); // 使用 child 作为错误关联的节点
                                                     }
-                                                }
-                                                Err(e) => {
-                                                    // 使用 AnalyzeWarn::CompileError 记录编译错误
-                                                    let error_message = format!(
-                                                        "Compilation failed for file '{}': {}",
-                                                        file_path, e
-                                                    );
-                                                    warnings.push(AnalyzeWarn::CompileError(
-                                                        child,
-                                                        error_message,
-                                                    )); // 使用 child 作为错误关联的节点
                                                 }
                                             }
                                         }
@@ -717,7 +1131,7 @@ fn analyze_node<'t, 'n>(
                                                 file_path, e
                                             );
                                             warnings.push(AnalyzeWarn::CompileError(
-                                                child,
+                                                child.clone(),
                                                 error_message,
                                             ));
                                             // 使用 child 作为错误关联的节点
@@ -727,7 +1141,8 @@ fn analyze_node<'t, 'n>(
                             } else {
                                 // @compile 后面应该跟一个字符串字面量
                                 let error_message = format!("@compile annotation expects a string literal file path, found: {:?}", child.node_type);
-                                warnings.push(AnalyzeWarn::CompileError(child, error_message));
+                                warnings
+                                    .push(AnalyzeWarn::CompileError(child.clone(), error_message));
                                 // 使用 child 作为错误关联的节点
                             }
                             // 仍然分析子节点本身，即使它是 @compile 的参数
@@ -756,13 +1171,17 @@ fn analyze_node<'t, 'n>(
                                         "File specified in @compile not found: '{}'",
                                         file_path
                                     );
-                                    warnings.push(AnalyzeWarn::CompileError(child, error_message));
+                                    warnings.push(AnalyzeWarn::CompileError(
+                                        child.clone(),
+                                        error_message,
+                                    ));
                                     // 使用 child 作为错误关联的节点
                                 }
                             } else {
                                 // @compile 后面应该跟一个字符串字面量
                                 let error_message = format!("@compile annotation expects a string literal file path, found: {:?}", child.node_type);
-                                warnings.push(AnalyzeWarn::CompileError(child, error_message));
+                                warnings
+                                    .push(AnalyzeWarn::CompileError(child.clone(), error_message));
                                 // 使用 child 作为错误关联的节点
                             }
                             // 仍然分析子节点，以允许在路径字符串内部设置断点
@@ -784,31 +1203,47 @@ fn analyze_node<'t, 'n>(
                         return AssumedType::Unknown;
                     }
                 }
-                _ => dynamic, // Inherit dynamic status for other annotations
-            };
 
-            if annotation == "required" {
-                // 处理 @required 注解的特殊情况，如果变量不存在，添加占位符
-                if let Some(first_child) = node.children.first() {
-                    if let ASTNodeType::Variable(var_name) = &first_child.node_type {
-                        if context.get_variable_current_context(var_name).is_none() {
-                            // 如果变量不存在，添加一个占位符
-                            let var = Variable {
-                                name: var_name.clone(),
-                                assumed_type: AssumedType::Unknown,
-                            };
-                            let _ = context.define_variable(&var);
-                            return AssumedType::Unknown; // @required 注解本身不贡献类型
+                "required" => {
+                    // 处理 @required 注解的特殊情况，如果变量不存在，添加占位符
+                    if let Some(first_child) = node.children.first() {
+                        if let ASTNodeType::Variable(var_name) = &first_child.node_type {
+                            if context.get_variable_current_context(var_name).is_none() {
+                                // 如果变量不存在，添加一个占位符
+                                let var = Variable {
+                                    name: var_name.clone(),
+                                    assumed_type: AssumedType::Unknown,
+                                };
+                                let _ = context.define_variable(&var);
+                                return AssumedType::Unknown; // @required 注解本身不贡献类型
+                            }
+                        } else {
+                            // @required 后面应该跟一个变量名
+                            let error_message = format!(
+                                "@required annotation expects a variable name, found: {:?}",
+                                first_child.node_type
+                            );
+                            warnings.push(AnalyzeWarn::CompileError(
+                                first_child.clone(),
+                                error_message,
+                            ));
+                            // 使用 first_child 作为错误关联的节点
                         }
-                    } else {
-                        // @required 后面应该跟一个变量名
-                        let error_message = format!(
-                            "@required annotation expects a variable name, found: {:?}",
-                            first_child.node_type
-                        );
-                        warnings.push(AnalyzeWarn::CompileError(first_child, error_message));
-                        // 使用 first_child 作为错误关联的节点
                     }
+                }
+
+                "dynamic" | "static" => {}
+
+                _ => {
+                    // 对于其他注解，记录警告
+                    let error_message = format!(
+                        "Unsolved macro '{}' in node {:?}",
+                        annotation, node.node_type
+                    );
+                    errors.push(AnalyzeError::InvalidMacroDefinition(
+                        node.clone(),
+                        error_message,
+                    ));
                 }
             }
 
@@ -836,7 +1271,7 @@ fn analyze_node<'t, 'n>(
             // Check definition before potentially breaking
             if context.get_variable_current_context(var_name).is_none() {
                 if !dynamic {
-                    errors.push(AnalyzeError::UndefinedVariable(node)); // 使用 errors Vec
+                    errors.push(AnalyzeError::UndefinedVariable(node.clone())); // 使用 errors Vec
                 }
             }
             // Return variable type or Unknown
@@ -891,11 +1326,10 @@ fn analyze_node<'t, 'n>(
                     }
                 }
             }
-            // 进入 Lambda 定义，创建一个全新的、隔离的上下文
-            context.push_frame();
             // 在新的上下文中处理参数（参数定义在第一个帧中）
+            let mut args_frame = None;
             if let Some(params) = node.children.first() {
-                analyze_tuple_params(
+                args_frame = analyze_tuple_params(
                     params,
                     context,
                     errors,   // Pass errors
@@ -909,11 +1343,6 @@ fn analyze_node<'t, 'n>(
                     // 如果在参数分析中中断，不弹出上下文
                     return AssumedType::Lambda;
                 }
-            }
-            let args = context.last_context().unwrap().last().unwrap().clone();
-            if context.pop_frame().is_err() {
-                // 弹出 Lambda 定义的帧
-                panic!("Failed to pop frame after Lambda definition");
             }
             if *is_dynamic_gen {
                 context.push_frame();
@@ -937,6 +1366,15 @@ fn analyze_node<'t, 'n>(
                 }
                 return AssumedType::Lambda;
             } else {
+                if args_frame.is_none() {
+                    // 如果没有参数定义，仍然需要创建一个空的参数帧
+                    errors.push(AnalyzeError::DetailedError(
+                        node.clone(),
+                        "LambdaDef without parameters".to_string(),
+                    ));
+                    return AssumedType::Lambda;
+                }
+                let args = args_frame.unwrap();
                 context.push_context();
                 // 将参数添加到新的上下文中
                 for arg in args.variables {
@@ -1492,43 +1930,47 @@ fn analyze_node<'t, 'n>(
     }
 }
 
-// Modified function signature
-fn analyze_tuple_params<'t>(
-    params: &'t ASTNode,
-    context: &mut VariableContext,
-    errors: &mut Vec<AnalyzeError<'t>>,  // Renamed
-    warnings: &mut Vec<AnalyzeWarn<'t>>, // Added
+fn analyze_tuple_params<'n: 't, 't>(
+    params: &'t ASTNode<'n>,
+    context: &mut VariableContext<'n>,
+    errors: &mut Vec<AnalyzeError<'n>>,  // Renamed
+    warnings: &mut Vec<AnalyzeWarn<'n>>, // Added
     dynamic: bool,
     break_at_position: Option<usize>,
-    context_at_break: &mut Option<VariableContext>,
+    context_at_break: &mut Option<VariableContext<'n>>,
     dir_stack: &mut DirStack,
-) {
+) -> Option<VariableFrame<'n>> {
     // Check break condition before processing parameters
     if context_at_break.is_some() {
-        return;
+        return None;
     }
     if let Some(break_pos) = break_at_position {
         if let Some(token) = params.start_token {
             if token.position >= break_pos {
                 *context_at_break = Some(context.clone());
-                return;
+                return None;
             }
         }
     }
 
     use super::ast::ASTNodeType;
 
+    let mut args_frame = VariableFrame {
+        variables: Vec::new(),
+        ast_macros: Vec::new(),
+    };
+
     if let ASTNodeType::Tuple = params.node_type {
         for param in &params.children {
             if context_at_break.is_some() {
-                return;
+                return None;
             } // Check before each param
             if let Some(break_pos) = break_at_position {
                 // Check start of individual param node
                 if let Some(token) = param.start_token {
                     if token.position >= break_pos {
                         *context_at_break = Some(context.clone());
-                        return;
+                        return None;
                     }
                 }
             }
@@ -1548,7 +1990,7 @@ fn analyze_tuple_params<'t>(
                             dir_stack,
                         );
                         if context_at_break.is_some() {
-                            return;
+                            return None;
                         }
 
                         // Define parameter variable
@@ -1557,7 +1999,7 @@ fn analyze_tuple_params<'t>(
                                 name: var_name.clone(),
                                 assumed_type,
                             };
-                            let _ = context.define_variable(&var);
+                            let _ = args_frame.define_variable(var);
                         } else {
                             // Analyze complex parameter structure (e.g., destructuring) - might need specific handling
                             analyze_node(
@@ -1571,7 +2013,7 @@ fn analyze_tuple_params<'t>(
                                 dir_stack,
                             );
                             if context_at_break.is_some() {
-                                return;
+                                return None;
                             }
                         }
                     }
@@ -1589,12 +2031,13 @@ fn analyze_tuple_params<'t>(
                         dir_stack,
                     );
                     if context_at_break.is_some() {
-                        return;
+                        return None;
                     }
                 }
             }
         }
     }
+    Some(args_frame)
 }
 
 pub fn auto_capture_and_rebuild<'t>(node: &'t ASTNode<'t>) -> (HashSet<String>, ASTNode<'t>) {

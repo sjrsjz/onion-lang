@@ -127,7 +127,10 @@ impl<'t> IRGenerator<'t> {
                 instructions.push((self.generate_debug_info(ast_node), IR::PopFrame));
                 Ok(instructions)
             }
-            ASTNodeType::Annotation(_) => {
+            ASTNodeType::Annotation(annotation) => {
+                if !vec!["static", "dynamic", "compile", "required"].contains(&annotation.as_str()) {
+                    return Ok(vec![])
+                }
                 let mut instructions = Vec::new();
                 for child in &ast_node.children {
                     instructions.extend(self.generate_without_redirect(child)?);
