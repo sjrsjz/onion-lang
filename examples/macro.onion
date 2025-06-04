@@ -4,7 +4,7 @@
     add(_A, _B)
 ) : _A + _B;
 
-@A stdlib.io.println(add(1, 2));
+@A stdlib.io.println(add(1, 2) + add(3, add(1,2)));
 
 @macro combine := (
     _A, _B
@@ -12,18 +12,17 @@
 
 @combine stdlib.io.println, "Hello, World!";
 
-@macro interface := (
-    _def
-) : (struct?, interface => mut _def) -> struct : interface;
+@macro if := (
+    _condition, _then, _else
+) : if (_condition) { _then } else { _else };
 
-@interface A := {
-    method => () -> {
-        return self.data
-    },
-};
+@if false, stdlib.io.println("Condition is true"), stdlib.io.println("Condition is false", (@if true, "This is true", "This is false"));
 
-// obj1 := #A {
-//     data => "Hello World!",
-// };
+@macro Pair := (
+    pair(_A, _B)
+): _A : _B;
+@macro Named := (
+    named(_A, _B)
+): {_A} => _B;
 
-stdlib.io.println(A)
+@Named @Pair pair(1, named("A", "B"))

@@ -114,38 +114,27 @@ impl<'node_ref> ASTMacro<'node_ref> {
         node: &ASTNode<'node_ref>, // node 本身可以有自己的生命周期 'node_ref
                                    // 但其内部的 Token 等可能与 'pairs_lifetime 相关，如果它是从之前的替换产生的
     ) -> Option<ASTNode<'node_ref>> {
-        let mut matched: HashMap<String, ASTNode<'node_ref>> = HashMap::new();
-        // 遍历所有匹配对
-        if Self::if_matches(matcher, node, &mut matched) {
-            // 如果匹配成功，返回替换后的节点
-            let new_node = Self::fill_matched(replacement, &mut matched);
-            if new_node != *node {
-                return Some(new_node);
-            }
-            return None;
-        }
-
         // 检查子节点
+        let mut new_node = node.clone();
         let mut new_children = Vec::new();
-        let mut is_replaced = false;
         for child in &node.children {
             if let Some(replaced_child) = Self::replace(matcher, replacement, child) {
                 new_children.push(replaced_child);
-                is_replaced = true; // 标记有子节点被替换
             } else {
                 new_children.push(child.clone());
             }
         }
-        // 如果有子节点被替换，创建一个新的节点
-        if is_replaced {
-            let mut new_node = node.clone();
-            new_node.children = new_children;
-            // 保留原始的 start_token 和 end_token
-            new_node.start_token = node.start_token.clone();
-            new_node.end_token = node.end_token.clone();
+        new_node.children = new_children;
+
+        let mut matched: HashMap<String, ASTNode<'node_ref>> = HashMap::new();
+        // 遍历所有匹配对
+        if Self::if_matches(matcher, &new_node, &mut matched) {
+            // 如果匹配成功，返回替换后的节点
+            new_node = Self::fill_matched(replacement, &mut matched);            
+        }
+        if new_node != *node {
             return Some(new_node);
         }
-        // 如果没有匹配成功，返回 None
         None
     }
 
