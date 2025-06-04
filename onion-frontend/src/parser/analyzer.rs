@@ -1,8 +1,9 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     compile::{build_code, compile_to_bytecode},
     dir_stack::DirStack,
+    parser::ast::ASTNodeType,
 };
 
 use super::ast::ASTNode;
@@ -30,18 +31,150 @@ pub struct Variable {
     pub assumed_type: AssumedType,
 }
 
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct ASTDefinition<'t> {
+    pub name: String,
+    pub matcher: ASTNode<'t>,
+    pub replacement: ASTNode<'t>,
+}
+
+impl ASTDefinition<'_> {
+    pub fn if_matches(matcher: &ASTNode, node: &ASTNode) -> bool {
+        // 检查 matcher 是否与 node 匹配
+        if ASTNodeType::String("_".to_string()) == matcher.node_type {
+            // 如果 matcher 是一个通配符字符串，直接匹配
+            return true;
+        }
+        if matcher.node_type == node.node_type {
+            // 检查子节点数量是否相同
+            if matcher.children.len() == node.children.len() {
+                // 递归检查每个子节点
+                for (m_child, n_child) in matcher.children.iter().zip(&node.children) {
+                    if !Self::if_matches(m_child, n_child) {
+                        return false; // 如果任何子节点不匹配，则返回 false
+                    }
+                }
+                return true; // 所有子节点都匹配
+            }
+        }
+        false
+    }
+
+    pub fn replace<'node_ref, 'pairs_lifetime>(
+        matcher: &'pairs_lifetime ASTNode,
+        replacement: &'pairs_lifetime ASTNode,
+        node: &'node_ref ASTNode<'pairs_lifetime>, // node 本身可以有自己的生命周期 'node_ref
+                                                   // 但其内部的 Token 等可能与 'pairs_lifetime 相关，如果它是从之前的替换产生的
+    ) -> Option<ASTNode<'pairs_lifetime>> {
+        // 遍历所有匹配对
+        if Self::if_matches(matcher, node) {
+            // 如果匹配成功，返回替换后的节点
+            let mut new_node = replacement.clone();
+            // 替换匹配的节点
+            new_node.start_token = node.start_token.clone();
+            new_node.end_token = node.end_token.clone();
+            return Some(new_node);
+        }
+
+        // 检查子节点
+        let mut new_children = Vec::new();
+        let mut is_replaced = false;
+        for child in &node.children {
+            if let Some(replaced_child) = Self::replace(matcher, replacement, child) {
+                new_children.push(replaced_child);
+                is_replaced = true; // 标记有子节点被替换
+            } else {
+                new_children.push(child.clone());
+            }
+        }
+        // 如果有子节点被替换，创建一个新的节点
+        if is_replaced {
+            let mut new_node = node.clone();
+            new_node.children = new_children;
+            // 保留原始的 start_token 和 end_token
+            new_node.start_token = node.start_token.clone();
+            new_node.end_token = node.end_token.clone();
+            return Some(new_node);
+        }
+        // 如果没有匹配成功，返回 None
+        None
+    }
+
+    pub fn replace_all<'t>(
+        matcher: &'t ASTNode,
+        replacement: &'t ASTNode,
+        node: &'t ASTNode,
+    ) -> ASTNode<'t> {
+        let mut current_node = node.clone();
+        loop {
+            // 尝试替换节点
+            let replacement = Self::replace(matcher, replacement, &current_node);
+            match replacement {
+                Some(replaced_node) => {
+                    current_node = replaced_node; // 更新为替换后的节点
+                }
+                None => {
+                    break current_node; // 如果没有更多的替换，退出循环
+                }
+            }
+        }
+    }
+
+    pub fn build_from<'t>(node: &'t ASTNode) -> Result<ASTDefinition<'t>, AnalyzeError<'t>> {
+        // 强制要求为 ASTNodeType::Let
+        if let ASTNodeType::Let(var_name) = &node.node_type {
+            // 解析 ASTNodeType::Let 的子节点
+            let ast_def = node.children.get(0).ok_or_else(|| {
+                AnalyzeError::InvalidMacroDefinition(
+                    node.clone(),
+                    "Expected a child node for ASTDefinition".to_string(),
+                )
+            })?;
+
+            // 确保子节点是 ASTNodeType::NamedTo
+            if let ASTNodeType::NamedTo = &ast_def.node_type {
+                // node[0] 作为匹配节点，node[1] 作为替换节点
+                let matcher = ast_def.children.get(0).ok_or_else(|| {
+                    AnalyzeError::InvalidMacroDefinition(
+                        node.clone(),
+                        "Expected a matching node in ASTDefinition".to_string(),
+                    )
+                })?;
+                let replacement = ast_def.children.get(1).ok_or_else(|| {
+                    AnalyzeError::InvalidMacroDefinition(
+                        node.clone(),
+                        "Expected a replacement node in ASTDefinition".to_string(),
+                    )
+                })?;
+                // 返回 ASTDefinition 实例
+                return Ok(ASTDefinition {
+                    name: var_name.clone(),
+                    matcher: matcher.clone(),
+                    replacement: replacement.clone(),
+                });
+            }
+        }
+        Err(AnalyzeError::InvalidMacroDefinition(
+            node.clone(),
+            "Expected ASTNodeType::Let with a variable name".to_string(),
+        ))
+    }
+}
+
 #[derive(Debug, Clone)] // Added Clone
-pub struct VariableFrame {
+pub struct VariableFrame<'t> {
     pub variables: Vec<Variable>,
+    pub ast_definitions: HashMap<String, ASTDefinition<'t>>, // 存储 AST 定义
 }
 
 #[derive(Debug, Clone)] // Added Clone
-pub struct VariableContext {
+pub struct VariableContext<'t> {
     // 改为上下文堆栈，每个上下文包含其自己的帧堆栈
-    contexts: Vec<Vec<VariableFrame>>,
+    contexts: Vec<Vec<VariableFrame<'t>>>,
 }
 
-impl VariableContext {
+impl VariableContext<'_> {
     pub fn last_context(&self) -> Option<&Vec<VariableFrame>> {
         self.contexts.last()
     }
@@ -53,6 +186,7 @@ impl VariableContext {
 #[derive(Debug)]
 pub enum AnalyzeError<'t> {
     UndefinedVariable(&'t ASTNode<'t>),
+    InvalidMacroDefinition(ASTNode<'t>, String), // 添加宏定义错误
 }
 
 impl AnalyzeError<'_> {
@@ -149,6 +283,47 @@ impl AnalyzeError<'_> {
                 ));
 
                 warning_msg
+            }
+            AnalyzeError::InvalidMacroDefinition(node, message) => {
+                let (line_num, col) = find_position(match node.start_token {
+                    Some(token) => token.position,
+                    None => 0,
+                });
+                let line = if line_num < lines.len() {
+                    lines[line_num]
+                } else {
+                    ""
+                };
+
+                let mut error_msg = format!(
+                    "{}: {}\n\n",
+                    "Analysis Error".bright_red().bold(),
+                    message.red() // 使用传入的 message
+                );
+                error_msg.push_str(&format!(
+                    "{} {}:{}\n",
+                    "Position".bright_blue(),
+                    (line_num + 1).to_string().bright_cyan(),
+                    (col + 1).to_string().bright_cyan()
+                ));
+                error_msg.push_str(&format!("{}\n", line.white()));
+
+                // 计算节点在源代码中的长度
+                let start_index = node.start_token.as_ref().map_or(0, |token| token.position);
+                let end_index = node.end_token.as_ref().map_or(
+                    node.start_token
+                        .as_ref()
+                        .map_or(0, |token| token.position + token.origin_token.len()),
+                    |token| token.position + token.origin_token.len(),
+                );
+                let node_length = end_index - start_index;
+                error_msg.push_str(&format!(
+                    "{}{}\n",
+                    " ".repeat(col),
+                    "^".repeat(node_length).bright_red().bold() // 至少一个 ^
+                ));
+
+                error_msg
             }
         }
     }
@@ -251,28 +426,29 @@ impl AnalyzeWarn<'_> {
 pub struct AnalysisOutput<'t> {
     pub errors: Vec<AnalyzeError<'t>>,
     pub warnings: Vec<AnalyzeWarn<'t>>,
-    pub context_at_break: Option<VariableContext>,
+    pub context_at_break: Option<VariableContext<'t>>,
 }
 
-impl VariableContext {
+impl<'c> VariableContext<'c> {
     pub fn new() -> Self {
         VariableContext {
             // 初始化时包含一个全局上下文，该上下文包含一个初始帧
             contexts: vec![vec![VariableFrame {
                 variables: Vec::new(),
+                ast_definitions: HashMap::new(), // 初始化 AST 定义的 HashMap
             }]],
         }
     }
 
     // Helper to get the current context stack mutably
-    fn current_context_mut(&mut self) -> &mut Vec<VariableFrame> {
+    fn current_context_mut<'t>(&'t mut self) -> &'t mut Vec<VariableFrame<'c>> {
         self.contexts
             .last_mut()
             .expect("Context stack should never be empty")
     }
 
     // Helper to get the current context stack immutably
-    fn current_context(&self) -> &Vec<VariableFrame> {
+    fn current_context<'t>(&'t self) -> &'t Vec<VariableFrame<'c>> {
         self.contexts
             .last()
             .expect("Context stack should never be empty")
@@ -323,6 +499,7 @@ impl VariableContext {
     pub fn push_frame(&mut self) {
         self.current_context_mut().push(VariableFrame {
             variables: Vec::new(),
+            ast_definitions: HashMap::new(), // 初始化 AST 定义的 HashMap
         });
     }
 
@@ -342,6 +519,7 @@ impl VariableContext {
         // 新上下文从一个空帧开始
         self.contexts.push(vec![VariableFrame {
             variables: Vec::new(),
+            ast_definitions: HashMap::new(), // 初始化 AST 定义的 HashMap
         }]);
     }
 
@@ -397,19 +575,19 @@ pub fn analyze_ast<'t>(
     AnalysisOutput {
         errors,   // 使用更新后的名称
         warnings, // 添加 warnings 字段
-        context_at_break,
+        context_at_break: context_at_break,
     }
 }
 
 // Modified function signature
-fn analyze_node<'t>(
-    node: &'t ASTNode,
-    context: &mut VariableContext,
-    errors: &mut Vec<AnalyzeError<'t>>, // 重命名 warnings 为 errors
-    warnings: &mut Vec<AnalyzeWarn<'t>>, // 添加 warnings 参数
+fn analyze_node<'t, 'n>(
+    node: &'n ASTNode,
+    context: &mut VariableContext<'t>,
+    errors: &mut Vec<AnalyzeError<'n>>, // 重命名 warnings 为 errors
+    warnings: &mut Vec<AnalyzeWarn<'n>>, // 添加 warnings 参数
     dynamic: bool,
     break_at_position: Option<usize>,
-    context_at_break: &mut Option<VariableContext>,
+    context_at_break: &mut Option<VariableContext<'t>>,
     dir_stack: &mut DirStack,
 ) -> AssumedType {
     // 1. Check if analysis should stop globally (break point already found)
