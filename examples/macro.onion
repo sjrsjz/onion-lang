@@ -5,3 +5,25 @@
 ) : _A + _B;
 
 @A stdlib.io.println(add(1, 2));
+
+@macro combine := (
+    _A, _B
+) : _A(_B);
+
+@combine stdlib.io.println, "Hello, World!";
+
+@macro interface := (
+    _def
+) : (struct?, interface => mut _def) -> struct : interface;
+
+@interface A := {
+    method => () -> {
+        return self.data
+    },
+};
+
+// obj1 := #A {
+//     data => "Hello World!",
+// };
+
+stdlib.io.println(A)

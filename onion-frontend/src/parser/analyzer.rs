@@ -119,7 +119,10 @@ impl<'node_ref> ASTMacro<'node_ref> {
         if Self::if_matches(matcher, node, &mut matched) {
             // 如果匹配成功，返回替换后的节点
             let new_node = Self::fill_matched(replacement, &mut matched);
-            return Some(new_node);
+            if new_node != *node {
+                return Some(new_node);
+            }
+            return None;
         }
 
         // 检查子节点
@@ -151,19 +154,7 @@ impl<'node_ref> ASTMacro<'node_ref> {
         replacement: &ASTNode<'node_ref>,
         node: &ASTNode<'node_ref>,
     ) -> ASTNode<'node_ref> {
-        let mut current_node = node.clone();
-        loop {
-            // 尝试替换节点
-            let replacement = Self::replace(matcher, replacement, &current_node);
-            match replacement {
-                Some(replaced_node) => {
-                    current_node = replaced_node; // 更新为替换后的节点
-                }
-                None => {
-                    break current_node; // 如果没有更多的替换，退出循环
-                }
-            }
-        }
+        Self::replace(matcher, replacement, &node).unwrap_or(node.clone())
     }
 
     pub fn build_from(
