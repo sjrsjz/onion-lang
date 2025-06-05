@@ -128,8 +128,9 @@ impl<'t> IRGenerator<'t> {
                 Ok(instructions)
             }
             ASTNodeType::Annotation(annotation) => {
-                if !vec!["static", "dynamic", "compile", "required"].contains(&annotation.as_str()) {
-                    return Ok(vec![])
+                if !vec!["static", "dynamic", "compile", "required"].contains(&annotation.as_str())
+                {
+                    return Ok(vec![]);
                 }
                 let mut instructions = Vec::new();
                 for child in &ast_node.children {
@@ -155,7 +156,10 @@ impl<'t> IRGenerator<'t> {
                         self.generate_debug_info(ast_node),
                         IR::LoadLambda(
                             "__main__".to_string(),
-                            ast_node.start_token.unwrap().position,
+                            match ast_node.start_token {
+                                Some(token) => token.position,
+                                None => 0,
+                            },
                             *is_capture,
                             *is_dynamic_params,
                         ),
@@ -184,7 +188,10 @@ impl<'t> IRGenerator<'t> {
                         self.generate_debug_info(ast_node),
                         IR::LoadLambda(
                             full_signature,
-                            ast_node.start_token.unwrap().position,
+                            match ast_node.start_token {
+                                Some(token) => token.position,
+                                None => 0,
+                            },
                             *is_capture,
                             *is_dynamic_params,
                         ),
@@ -763,7 +770,7 @@ impl<'t> IRGenerator<'t> {
                 instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                 instructions.extend(self.generate_without_redirect(&ast_node.children[1])?);
                 instructions.push((self.generate_debug_info(ast_node), IR::MapTo));
-                Ok(instructions)                
+                Ok(instructions)
             }
         }
     }

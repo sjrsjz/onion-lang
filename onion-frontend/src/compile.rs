@@ -25,7 +25,7 @@ pub fn build_code(code: &str, dir_stack: &mut DirStack) -> Result<IRPackage, Str
             return Err(err_token.format(&tokens, code.to_string()).to_string());
         }
     };
-    let macro_result = expand_macro(&ast);
+    let macro_result = expand_macro(&ast, dir_stack);
 
     let mut errors = "".to_string();
     for error in &macro_result.errors {

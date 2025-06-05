@@ -353,7 +353,7 @@ impl LspServer {
                     }
                 };
                 let mut dir_stack = DirStack::new(Some(&parent_dir)).unwrap();
-                let macro_result = analyzer::expand_macro(&ast);
+                let macro_result = analyzer::expand_macro(&ast, &mut dir_stack);
                 if !macro_result.errors.is_empty() {
                     error!(
                         "Macro expansion errors: {}",

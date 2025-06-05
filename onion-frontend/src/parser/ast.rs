@@ -534,6 +534,88 @@ pub struct ASTNode<'t> {
     pub children: Vec<ASTNode<'t>>,         // Children of the node
 }
 
+#[derive(Debug, Clone)]
+pub struct ASTContextLessNode {
+    pub node_type: ASTNodeType,             // Type of the node
+    pub children: Vec<ASTContextLessNode>,         // Children of the node
+}
+
+impl<'t> From<ASTNode<'t>> for ASTContextLessNode {
+    fn from(node: ASTNode<'t>) -> Self {
+        ASTContextLessNode {
+            node_type: node.node_type,
+            children: node.children.into_iter().map(|child| child.into()).collect(),
+        }
+    }
+}
+
+impl<'t> From<&ASTNode<'t>> for ASTContextLessNode {
+    fn from(node: &ASTNode<'t>) -> Self {
+        ASTContextLessNode {
+            node_type: node.node_type.clone(),
+            children: node.children.iter().map(|child| child.into()).collect(),
+        }
+    }
+}
+
+impl ASTContextLessNode {
+    /// 将 ASTContextLessNode 转换为 ASTNode，但所有 token 引用都将为 None
+    pub fn into_ast_node<'t>(self) -> ASTNode<'t> {
+        ASTNode {
+            node_type: self.node_type,
+            start_token: None,
+            end_token: None,
+            children: self.children.into_iter().map(|child| child.into_ast_node()).collect(),
+        }
+    }
+
+    /// 将 ASTContextLessNode 转换为 ASTNode 的引用版本
+    pub fn to_ast_node<'t>(&self) -> ASTNode<'t> {
+        ASTNode {
+            node_type: self.node_type.clone(),
+            start_token: None,
+            end_token: None,
+            children: self.children.iter().map(|child| child.to_ast_node()).collect(),
+        }
+    }
+}
+
+impl<'t> Into<ASTNode<'t>> for ASTContextLessNode {
+    fn into(self) -> ASTNode<'t> {
+        self.into_ast_node()
+    }
+}
+
+impl<'t> Into<ASTNode<'t>> for &ASTContextLessNode {
+    fn into(self) -> ASTNode<'t> {
+        self.to_ast_node()
+    }
+}
+
+impl<'t> ASTNode<'t> {
+    /// 移除所有 token 上下文信息，转换为 ASTContextLessNode
+    pub fn into_contextless(self) -> ASTContextLessNode {
+        self.into()
+    }
+
+    /// 克隆并移除所有 token 上下文信息
+    pub fn to_contextless(&self) -> ASTContextLessNode {
+        self.into()
+    }
+
+    /// 从 ASTContextLessNode 创建 ASTNode，但不包含 token 信息
+    pub fn from_contextless(contextless: ASTContextLessNode) -> ASTNode<'t> {
+        contextless.into()
+    }
+}
+
+impl PartialEq for ASTContextLessNode {
+    fn eq(&self, other: &Self) -> bool {
+        self.node_type == other.node_type && self.children == other.children
+    }
+}
+
+
 impl PartialEq for ASTNode<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.node_type == other.node_type && self.children == other.children
@@ -553,6 +635,10 @@ impl ASTNode<'_> {
             end_token,
             children: children.unwrap_or_default(),
         }
+    }
+
+    pub fn undefined<'t>() -> ASTNode<'t> {
+        ASTNode::new(ASTNodeType::Undefined, None, None, None)
     }
 
     pub fn _formatted_print(&self, indent: usize) {

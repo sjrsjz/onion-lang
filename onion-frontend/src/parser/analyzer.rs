@@ -6,7 +6,10 @@ use std::{
 use crate::{
     compile::{build_code, compile_to_bytecode},
     dir_stack::DirStack,
-    parser::ast::ASTNodeType,
+    parser::{
+        ast::{ast_token_stream, build_ast, ASTContextLessNode, ASTNodeType},
+        lexer::lexer,
+    },
 };
 
 use super::ast::ASTNode;
@@ -130,7 +133,7 @@ impl<'node_ref> ASTMacro<'node_ref> {
         // 遍历所有匹配对
         if Self::if_matches(matcher, &new_node, &mut matched) {
             // 如果匹配成功，返回替换后的节点
-            new_node = Self::fill_matched(replacement, &mut matched);            
+            new_node = Self::fill_matched(replacement, &mut matched);
         }
         if new_node != *node {
             return Some(new_node);
@@ -245,6 +248,7 @@ pub enum AnalyzeError<'t> {
     UndefinedVariable(ASTNode<'t>),
     InvalidMacroDefinition(ASTNode<'t>, String), // 添加宏定义错误
     DetailedError(ASTNode<'t>, String),          // 用于其他类型的错误
+    DetailedContextLessError(ASTContextLessNode, String), // 用于上下文无关的错误
 }
 
 impl Display for AnalyzeError<'_> {
@@ -264,6 +268,13 @@ impl Display for AnalyzeError<'_> {
                 write!(
                     f,
                     "Detailed error at node: {:?}, message: {}",
+                    node, message
+                )
+            }
+            AnalyzeError::DetailedContextLessError(node, message) => {
+                write!(
+                    f,
+                    "Detailed context-less error at node: {:?}, message: {}",
                     node, message
                 )
             }
@@ -447,6 +458,10 @@ impl AnalyzeError<'_> {
                 ));
 
                 error_msg
+            }
+            AnalyzeError::DetailedContextLessError(_, message) => {
+                // 处理上下文无关的错误, contextless不包含语法信息
+                message.bright_red().to_string()
             }
         }
     }
@@ -697,14 +712,30 @@ impl<'c> VariableContext<'c> {
     }
 }
 
-pub fn expand_macro<'n: 't, 't>(node: &'n ASTNode<'n>) -> MacroAnalysisOutput<'n> {
+pub fn expand_macro<'n: 't, 't>(
+    node: &'n ASTNode<'n>,
+    dir_stack: &mut DirStack,
+) -> MacroAnalysisOutput<'n> {
+    let new_node = match expand_import_to_node(node, dir_stack) {
+        Ok(n) => n,
+        Err(e) => {
+            return MacroAnalysisOutput {
+                errors: vec![AnalyzeError::DetailedContextLessError(
+                    ASTContextLessNode::from(node),
+                    e.to_string(),
+                )],
+                warnings: Vec::new(),
+                result_node: node.clone(),
+            };
+        }
+    };
     // 遍历所有宏定义，尝试应用到当前节点
     let mut context = VariableContext::new();
     context.push_context();
 
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
-    let result_node = expand_macros_to_node(node, &mut errors, &mut warnings, &mut context);
+    let result_node = expand_macros_to_node(&new_node, &mut errors, &mut warnings, &mut context);
     MacroAnalysisOutput {
         errors,
         warnings,
@@ -2414,6 +2445,100 @@ pub fn auto_capture<'t>(
                 new_node.children.push(new_child_node);
             }
             (required_vars, new_node)
+        }
+    }
+}
+
+fn import_ast_node(code: &str, dir_stack: &mut DirStack) -> Result<ASTContextLessNode, String> {
+    let tokens = lexer::tokenize(code);
+    let tokens = lexer::reject_comment(&tokens);
+    let gathered = ast_token_stream::from_stream(&tokens);
+    let ast = match build_ast(gathered) {
+        Ok(ast) => ast,
+        Err(err_token) => {
+            return Err(err_token.format(&tokens, code.to_string()).to_string());
+        }
+    };
+    let new_ast = expand_import_to_node(&ast, dir_stack)?;
+    return Ok(new_ast.into());
+}
+
+pub fn expand_import_to_node<'n: 't, 't>(
+    node: &'t ASTNode<'n>,
+    dir_stack: &mut DirStack,
+) -> Result<ASTNode<'n>, String> {
+    match &node.node_type {
+        ASTNodeType::Annotation(annotation) => {
+            match annotation.as_str() {
+                "import" => {
+                    // 处理 import 注解
+                    if node.children.len() != 1 {
+                        return Err("Import annotation requires one argument".to_string());
+                    }
+                    let import_path = &node.children[0];
+                    if let ASTNodeType::String(path) = &import_path.node_type {
+                        let read_file = std::fs::read_to_string(path);
+                        if let Err(e) = read_file {
+                            return Err(format!("Failed to read import file '{}': {}", path, e));
+                        }
+                        let code_str = read_file.unwrap();
+                        // 尝试解析导入路径
+                        let parent_dir = std::path::Path::new(path)
+                            .parent()
+                            .unwrap_or_else(|| std::path::Path::new("."))
+                            .to_str()
+                            .unwrap_or("");
+                        dir_stack.push(&parent_dir).map_err(|err| {
+                            format!("Failed to push import path '{}': {}", path, err)
+                        })?;
+                        let node = match import_ast_node(&code_str, dir_stack) {
+                            Ok(imported_node) => {
+                                // 将导入的 ASTNode 添加到当前节点的子节点中
+                                imported_node.into()
+                            }
+                            Err(err) => {
+                                return Err(format!("Failed to import '{}': {}", path, err));
+                            }
+                        };
+                        dir_stack.pop().map_err(|err| {
+                            format!("Failed to pop import path '{}': {}", path, err)
+                        })?;
+                        return Ok(node);
+                    } else {
+                        return Err(format!(
+                            "Import path must be a string, found: {:?}",
+                            import_path.node_type
+                        ));
+                    }
+                }
+                _ => {}
+            }
+            // 其他情况，正常处理
+            let mut new_children = Vec::new();
+            for child in &node.children {
+                let applied_child = expand_import_to_node(child, dir_stack)?;
+                new_children.push(applied_child);
+            }
+            return Ok(ASTNode {
+                node_type: node.node_type.clone(),
+                start_token: node.start_token.clone(),
+                end_token: node.end_token.clone(),
+                children: new_children,
+            });
+        }
+        _ => {
+            // 对于其他节点类型，递归应用宏
+            let mut new_children = Vec::new();
+            for child in &node.children {
+                let applied_child = expand_import_to_node(child, dir_stack)?;
+                new_children.push(applied_child);
+            }
+            return Ok(ASTNode {
+                node_type: node.node_type.clone(),
+                start_token: node.start_token.clone(),
+                end_token: node.end_token.clone(),
+                children: new_children,
+            });
         }
     }
 }

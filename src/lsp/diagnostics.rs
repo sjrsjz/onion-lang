@@ -156,7 +156,7 @@ pub fn validate_document(
                 );
             }
             let mut dir_stack = dir_stack.unwrap();
-            let macro_result = expand_macro(&ast);
+            let macro_result = expand_macro(&ast, &mut dir_stack);
             for error in macro_result.errors {
                 match error {
                     onion_frontend::parser::analyzer::AnalyzeError::UndefinedVariable(var) => {
@@ -198,6 +198,27 @@ pub fn validate_document(
                             continue;
                         }
                         let range = get_token_range(node.start_token.unwrap(), &document.content);
+                        diagnostics.push(Diagnostic {
+                            range,
+                            severity: Some(DiagnosticSeverity::Error),
+                            code: Some(serde_json::Value::String("AST-E001".to_string())),
+                            source: Some("onion-lsp".to_string()),
+                            message: format!("错误: {}", msg),
+                            related_information: None,
+                        });
+                    }
+                    onion_frontend::parser::analyzer::AnalyzeError::DetailedContextLessError(_, msg) => {
+                        // 没有range信息
+                        let range = Range {
+                            start: Position {
+                                line: 0,
+                                character: 0,
+                            },
+                            end: Position {
+                                line: 0,
+                                character: 1,
+                            },
+                        };
                         diagnostics.push(Diagnostic {
                             range,
                             severity: Some(DiagnosticSeverity::Error),
@@ -270,6 +291,27 @@ pub fn validate_document(
                             continue;
                         }
                         let range = get_token_range(node.start_token.unwrap(), &document.content);
+                        diagnostics.push(Diagnostic {
+                            range,
+                            severity: Some(DiagnosticSeverity::Error),
+                            code: Some(serde_json::Value::String("AST-E001".to_string())),
+                            source: Some("onion-lsp".to_string()),
+                            message: format!("错误: {}", msg),
+                            related_information: None,
+                        });
+                    }
+                    onion_frontend::parser::analyzer::AnalyzeError::DetailedContextLessError(_, msg) => {
+                        // 没有range信息
+                        let range = Range {
+                            start: Position {
+                                line: 0,
+                                character: 0,
+                            },
+                            end: Position {
+                                line: 0,
+                                character: 1,
+                            },
+                        };
                         diagnostics.push(Diagnostic {
                             range,
                             severity: Some(DiagnosticSeverity::Error),
