@@ -303,7 +303,9 @@ impl LspServer {
             });
         }
 
-        let annotations = vec!["dynamic", "static", "compile", "required", "macro"];
+        let annotations = vec![
+            "dynamic", "static", "compile", "required", "macro", "import",
+        ];
         for annotation in annotations {
             items.push(CompletionItem {
                 label: annotation.to_string(),

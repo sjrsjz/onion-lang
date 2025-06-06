@@ -169,6 +169,40 @@ module := module();
 stdlib.io.println("Module version:", module.get_version());
 ```
 
+### Macro System
+
+```onion
+@required stdlib;
+
+@macro A := (
+    add(_A, _B)
+) : _A + _B;
+
+@A stdlib.io.println(add(1, 2) + add(3, add(1,2)));
+
+@macro combine := (
+    _A, _B
+) : _A(_B);
+
+@combine stdlib.io.println, "Hello, World!";
+
+@macro if := (
+    _condition, _then, _else
+) : if (_condition) { _then } else { _else };
+
+@if false, stdlib.io.println("Condition is true"), stdlib.io.println("Condition is false", (@if true, "This is true", "This is false"));
+
+@macro Pair := (
+    pair(_A, _B)
+): _A : _B;
+@macro Named := (
+    named(_A, _B)
+): {_A} => _B;
+
+@Named @Pair pair(1, named("A", "B"))
+```
+
+
 ## 🛠️ Command Line Tools
 
 Onion provides a complete set of command line tools:
@@ -222,7 +256,8 @@ This is an experimental programming language project, currently including:
 - ✅ Basic syntax and type system
 - ✅ Functional programming features
 - ✅ Asynchronous execution model
-- ✅ Module system
+- ✅ Module system (static and dynamic imports)
+- ✅ Simple macro system
 - ✅ Language Server Protocol support
 - 🚧 REPL and command line tools
 - 🚧 Standard library extensions
