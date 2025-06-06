@@ -279,7 +279,7 @@ pub(super) fn encode_semantic_tokens(tokens: &[SemanticTokenTypes], text: &str) 
     let get_token_type_index = |token_type: &SemanticTokenTypes| -> Option<u32> {
         match token_type {
             SemanticTokenTypes::Null => Some(22),
-            SemanticTokenTypes::Undefined => Some(21),
+            SemanticTokenTypes::Undefined => Some(22),
             SemanticTokenTypes::String => Some(18),
             SemanticTokenTypes::Boolean => Some(23),
             SemanticTokenTypes::Number => Some(19),

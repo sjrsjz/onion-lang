@@ -1,7 +1,7 @@
-use std::collections::{HashMap, HashSet}; // 添加 HashSet
+use std::collections::{HashMap, HashSet}; // Add HashSet
 use std::io::{BufRead, Write};
 use std::panic;
-use std::sync::{Arc, Mutex}; // 添加 panic 模块
+use std::sync::{Arc, Mutex}; // Add panic module
 
 use log::{debug, error, info, warn};
 use onion_frontend::utils::cycle_detector;
@@ -19,7 +19,7 @@ use super::document::TextDocument;
 use super::protocol::*;
 use super::semantic::SemanticTokenTypes;
 
-/// LSP 服务器状态
+/// LSP Server State
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ServerState {
     Uninitialized,
@@ -28,20 +28,20 @@ pub enum ServerState {
     ShutDown,
 }
 
-/// LSP 服务器数据结构
+/// LSP Server data structure
 pub struct LspServer {
-    /// 服务器当前状态
+    /// Server's current state
     state: ServerState,
-    /// 打开的文档映射
+    /// Opened document map
     documents: HashMap<String, TextDocument>,
-    /// 客户端能力
+    /// Client capabilities
     client_capabilities: Option<ClientCapabilities>,
-    /// 工作空间根目录
+    /// Workspace root directory
     root_uri: Option<String>,
 }
 
 impl LspServer {
-    /// 创建新的LSP服务器实例
+    /// Creates a new LSP server instance
     pub fn new() -> Self {
         Self {
             state: ServerState::Uninitialized,
@@ -51,7 +51,7 @@ impl LspServer {
         }
     }
 
-    /// 处理初始化请求
+    /// Handles initialization request
     pub fn initialize(
         &mut self,
         params: InitializeParams,
@@ -77,23 +77,23 @@ impl LspServer {
         })
     }
 
-    /// 处理初始化完成通知
+    /// Handles initialized notification
     pub fn initialized(&mut self) {
         self.state = ServerState::Initialized;
     }
 
-    /// 处理关闭请求
+    /// Handles shutdown request
     pub fn shutdown(&mut self) -> Result<Value, ResponseError> {
         self.state = ServerState::ShutDown;
         Ok(Value::Null)
     }
 
-    /// 处理退出通知
+    /// Handles exit notification
     pub fn exit(&mut self) -> bool {
         self.state == ServerState::ShutDown
     }
 
-    /// 处理文档打开通知
+    /// Handles document open notification
     pub fn did_open(&mut self, params: DidOpenTextDocumentParams) {
         let uri = params.text_document.uri.clone();
         let document = TextDocument::new(
@@ -104,23 +104,23 @@ impl LspServer {
         );
         self.documents.insert(uri.clone(), document);
 
-        // 触发文档验证
+        // Trigger document validation
         self.validate_document(&uri);
         info!("Document opened: {}", uri);
     }
 
-    /// 处理文档变更通知
+    /// Handles document change notification
     pub fn did_change(&mut self, params: DidChangeTextDocumentParams) {
         let uri = params.text_document.uri.clone();
-        info!("文档变更: {} (版本 {})", uri, params.text_document.version);
+        info!("Document changed: {} (version {})", uri, params.text_document.version);
 
-        // 获取或创建文档
+        // Get or create document
         let document = if let Some(doc) = self.documents.get_mut(&uri) {
-            info!("更新现有文档");
+            info!("Updating existing document");
             doc
         } else {
-            info!("文档不存在，创建新文档: {}", uri);
-            // 确定初始内容
+            info!("Document not found, creating new document: {}", uri);
+            // Determine initial content
             let initial_content = if !params.content_changes.is_empty() {
                 match &params.content_changes[0] {
                     TextDocumentContentChangeEvent::Full { text } => text.clone(),
@@ -132,7 +132,7 @@ impl LspServer {
 
             let doc = TextDocument::new(
                 uri.clone(),
-                "onion".to_string(), // 假设语言为 onion
+                "onion".to_string(), // Assuming language is onion
                 params.text_document.version,
                 initial_content,
             );
@@ -141,16 +141,16 @@ impl LspServer {
             self.documents.get_mut(&uri).unwrap()
         };
 
-        // 应用所有变更
+        // Apply all changes
         for (i, change) in params.content_changes.iter().enumerate() {
             match change {
                 TextDocumentContentChangeEvent::Full { text } => {
-                    info!("应用全量变更 #{}: 内容长度 {} 字节", i, text.len());
+                    info!("Applying full change #{}: content length {} bytes", i, text.len());
                     document.update_content(text.clone());
                 }
                 TextDocumentContentChangeEvent::Incremental { range, text } => {
                     info!(
-                        "应用增量变更 #{}: 范围 [{},{}]-[{},{}], 文本长度 {} 字节",
+                        "Applying incremental change #{}: range [{},{}]-[{},{}], text length {} bytes",
                         i,
                         range.start.line,
                         range.start.character,
@@ -163,18 +163,18 @@ impl LspServer {
             }
         }
 
-        // 更新文档版本
+        // Update document version
         let old_version = document.version;
         document.version = params.text_document.version;
-        info!("文档版本从 {} 更新到 {}", old_version, document.version);
+        info!("Document version updated from {} to {}", old_version, document.version);
 
-        // 打印当前文档内容 (调试用)
+        // Print current document content (for debugging)
         debug!(
-            "更新后的文档内容 (前100字符): {}",
+            "Updated document content (first 100 chars): {}",
             &document.content.chars().take(100).collect::<String>()
         );
     }
-    /// 处理文档关闭通知
+    /// Handles document close notification
     pub fn did_close(&mut self, params: DidCloseTextDocumentParams) {
         info!("Document closed: {}", params.text_document.uri);
         let uri = params.text_document.uri.clone();
@@ -183,41 +183,41 @@ impl LspServer {
         }
     }
 
-    // 验证文档并发送诊断消息
+    // Validates document and sends diagnostic messages
     fn validate_document(
         &self,
         uri: &str,
     ) -> Option<(Vec<Diagnostic>, Option<Vec<SemanticTokenTypes>>)> {
-        info!("验证文档: {} 开始", uri);
+        info!("Validating document: {} started", uri);
         if let Some(document) = self.documents.get(uri) {
             info!(
-                "找到文档，版本 {}, 内容长度 {} 字节",
+                "Found document, version {}, content length {} bytes",
                 document.version,
                 document.content.len()
             );
 
-            // 生成诊断信息和语义着色
+            // Generate diagnostics and semantic tokens
             match std::panic::catch_unwind(|| super::diagnostics::validate_document(document)) {
                 Ok((diagnostics, semantic_tokens)) => {
-                    info!("诊断完成: 生成了 {} 个诊断信息", diagnostics.len());
+                    info!("Validation complete: {} diagnostics generated", diagnostics.len());
                     if let Some(tokens) = &semantic_tokens {
-                        info!("语义着色: 生成了 {} 个标记", tokens.len());
+                        info!("Semantic highlighting: {} tokens generated", tokens.len());
                     } else {
-                        info!("语义着色: 未能生成标记");
+                        info!("Semantic highlighting: Failed to generate tokens");
                     }
                     Some((diagnostics, semantic_tokens))
                 }
                 Err(e) => {
-                    error!("诊断过程中发生崩溃: {:?}", e);
-                    Some((vec![], None)) // 返回空诊断列表和无语义标记
+                    error!("Panic during validation: {:?}", e);
+                    Some((vec![], None)) // Return empty diagnostics list and no semantic tokens
                 }
             }
         } else {
-            warn!("找不到要验证的文档: {}", uri);
+            warn!("Document not found for validation: {}", uri);
             None
         }
     }
-    /// 处理自动完成请求
+    /// Handles auto-completion request
     pub fn completion(
         &self,
         params: CompletionParams,
@@ -225,7 +225,7 @@ impl LspServer {
         let uri = params.text_document.uri.clone();
 
         if let Some(document) = self.documents.get(&uri) {
-            // 从文档内容和位置计算补全项
+            // Calculate completion items from document content and position
             let items = self.calculate_completions(document, params.position);
 
             Ok(CompletionResponse::List(items))
@@ -238,17 +238,17 @@ impl LspServer {
         }
     }
 
-    /// 计算给定位置的补全项
+    /// Calculates completion items for the given position
     fn calculate_completions(
         &self,
         document: &TextDocument,
         position: Position,
     ) -> Vec<CompletionItem> {
-        // 基于Onion语法，提供关键字、运算符等的完成项
+        // Provide completion items for keywords, operators, etc., based on Onion syntax
         let mut items = Vec::new();
-        let mut unique_vars = HashSet::new(); // 用于存储唯一的变量名
+        let mut unique_vars = HashSet::new(); // Used to store unique variable names
 
-        // 添加Onion关键字
+        // Add Onion keywords
         let keywords = vec![
             "if",
             "else",
@@ -290,12 +290,12 @@ impl LspServer {
             });
         }
 
-        // 添加常量
+        // Add constants
         let constants = vec!["true", "false", "null", "undefined"];
         for constant in constants {
             items.push(CompletionItem {
                 label: constant.to_string(),
-                kind: Some(CompletionItemKind::Constant), // 使用 Constant 类型
+                kind: Some(CompletionItemKind::Constant), // Use Constant type
                 detail: Some("Onion constant".to_string()),
                 documentation: None,
                 insert_text: Some(constant.to_string()),
@@ -317,34 +317,33 @@ impl LspServer {
             });
         }
 
-        // --- 使用分析器获取变量上下文 ---
-        // 1. 解析 AST
+        // --- Use analyzer to get variable context ---
+        // 1. Parse AST
         let lex_result = lexer::lexer::tokenize(&document.content);
         let lex_result = lexer::lexer::reject_comment(&lex_result);
         let parse_result = build_ast(&lex_result);
         if let Ok(ast) = parse_result {
-            let ast = auto_capture_and_rebuild(&ast).1;
-            // 2. 将 LSP Position 转换为字节偏移
+            // 2. Convert LSP Position to byte offset
             if let Some(byte_offset) = position_to_byte_offset(&document.content, position.clone())
             {
-                // 1. 解析 URI
+                // 1. Parse URI
                 let file_path = match Url::parse(&document.uri) {
                     Ok(url) if url.scheme() == "file" => {
                         match url.to_file_path() {
                             Ok(path) => path,
                             Err(_) => {
                                 error!("Failed to convert URI to file path: {}", document.uri);
-                                return vec![]; // 返回空列表
+                                return vec![]; // Return empty list
                             }
                         }
                     }
                     _ => {
                         error!("Invalid URI scheme: {}", document.uri);
-                        return vec![]; // 返回空列表
+                        return vec![]; // Return empty list
                     }
                 };
 
-                // 2. 获取父目录
+                // 2. Get parent directory
                 let parent_dir = match file_path.parent() {
                     Some(dir) => dir.to_path_buf(),
                     None => {
@@ -352,7 +351,7 @@ impl LspServer {
                             "Failed to get parent directory for file: {}",
                             file_path.display()
                         );
-                        return vec![]; // 返回空列表
+                        return vec![]; // Return empty list
                     }
                 };
                 let mut dir_stack = DirStack::new(Some(&parent_dir)).unwrap();
@@ -366,13 +365,13 @@ impl LspServer {
                                 "Failed to convert file path to string: {}",
                                 file_path.display()
                             );
-                            return vec![]; // 返回空列表
+                            return vec![]; // Return empty list
                         }
                     }) {
                         Ok(path) => path.to_str().unwrap_or("").to_string(),
                         Err(e) => {
                             error!("Failed to get absolute path: {}", e);
-                            return vec![]; // 返回空列表
+                            return vec![]; // Return empty list
                         }
                     }
                     .to_string(),
@@ -380,10 +379,11 @@ impl LspServer {
                     Ok(result) => result,
                     Err(e) => {
                         error!("Cycle detection failed: {}", e);
-                        return vec![]; // 返回空列表
+                        return vec![]; // Return empty list
                     }
                 };
 
+                
                 let macro_result =
                     analyzer::expand_macro(&ast, visit_result.get_detector_mut(), &mut dir_stack);
                 if !macro_result.errors.is_empty() {
@@ -408,24 +408,25 @@ impl LspServer {
                             .join(", ")
                     );
                 }
+                let ast = auto_capture_and_rebuild(&macro_result.result_node).1;
 
-                // 3. 调用分析器获取特定位置的上下文
+                // 3. Call analyzer to get context at specific position
                 let analysis_output = analyzer::analyze_ast(
-                    &macro_result.result_node,
+                    &ast,
                     Some(byte_offset),
                     visit_result.get_detector_mut(),
                     &mut dir_stack,
                 );
 
-                // 4. 如果分析器在断点处捕获了上下文，则提取变量
+                // 4. If analyzer captured context at breakpoint, extract variables
                 if let Some(context) = analysis_output.context_at_break {
-                    // 从内到外遍历作用域帧
+                    // Iterate scope frames from inner to outer
                     for context in context.all_contexts().iter().rev() {
                         for frame in context.iter().rev() {
                             for var in &frame.variables {
-                                // 添加到 HashSet 以确保唯一性
+                                // Add to HashSet to ensure uniqueness
                                 if unique_vars.insert(var.name.clone()) {
-                                    // 根据变量类型确定 CompletionItemKind 和 detail
+                                    // Determine CompletionItemKind and detail based on variable type
                                     let (kind, detail) = match var.assumed_type {
                                         analyzer::AssumedType::Lambda => (
                                             CompletionItemKind::Function,
@@ -467,7 +468,7 @@ impl LspServer {
                                             CompletionItemKind::Interface,
                                             format!("NamedArgument: {}", var.name),
                                         ),
-                                        // 可以为其他类型添加更多分支
+                                        // Add more branches for other types
                                         _ => (
                                             CompletionItemKind::Variable,
                                             format!(
@@ -481,8 +482,8 @@ impl LspServer {
                                         label: var.name.clone(),
                                         kind: Some(kind),
                                         detail: Some(detail),
-                                        documentation: None, // 可以考虑未来添加基于类型的文档
-                                        insert_text: Some(var.name.clone()), // 对于函数，可能需要添加 '()'
+                                        documentation: None, // Consider adding type-based documentation in the future
+                                        insert_text: Some(var.name.clone()), // For functions, might need to add '()'
                                         other: HashMap::new(),
                                     });
                                 }
@@ -500,74 +501,74 @@ impl LspServer {
             }
         } else {
             warn!("Failed to parse document for completion: {}", document.uri);
-            // 解析失败，仅返回关键字和内置函数
+            // Parsing failed, return only keywords and built-in functions
         }
 
         items
     }
 }
 
-/// 将 LSP 的 Position (0-based line, 0-based UTF-16 character offset) 转换为字节偏移量
+/// Converts LSP Position (0-based line, 0-based UTF-16 character offset) to byte offset
 fn position_to_byte_offset(text: &str, position: Position) -> Option<usize> {
     let mut byte_offset = 0;
     let mut current_line = 0;
 
     for line in text.lines() {
         if current_line == position.line {
-            // 找到目标行，计算字符偏移对应的字节偏移
+            // Found target line, calculate byte offset for character offset
             let mut char_offset = 0;
             for (i, ch) in line.char_indices() {
                 if char_offset == position.character {
                     return Some(byte_offset + i);
                 }
-                // LSP 使用 UTF-16 编码单位计数，Rust 字符串迭代器使用 Unicode 标量值 (char)
-                // 对于 BMP 字符，两者长度相同。对于代理对，UTF-16 长度为 2，char 长度为 1。
-                // 这里简化处理，假设大部分是 BMP 字符，或者不严格要求精确处理代理对。
-                // 更精确的方法需要处理 UTF-16 编码。
-                char_offset += ch.len_utf16() as u32; // 使用 UTF-16 长度计数
+                // LSP uses UTF-16 code units, Rust string iterators use Unicode scalar values (char)
+                // For BMP characters, both lengths are the same. For surrogate pairs, UTF-16 length is 2, char length is 1.
+                // Simplified handling here, assuming most are BMP characters, or precise handling of surrogate pairs is not strictly required.
+                // A more precise method needs to handle UTF-16 encoding.
+                char_offset += ch.len_utf16() as u32; // Count using UTF-16 length
                 if char_offset > position.character {
-                    // 如果超过了目标字符偏移，说明位置在字符内部或无效，返回当前字节偏移
+                    // If target character offset is exceeded, position is inside character or invalid, return current byte offset
                     return Some(byte_offset + i);
                 }
             }
-            // 如果循环结束还没找到，说明位置在行尾
+            // If loop ends and not found, position is at end of line
             return Some(byte_offset + line.len());
         }
-        // 加上行内容和换行符的字节长度
-        // 需要处理 \n 和 \r\n 两种情况
+        // Add byte length of line content and newline character
+        // Need to handle both \n and \r\n cases
         byte_offset += line.len();
         if text[byte_offset..].starts_with("\r\n") {
             byte_offset += 2;
         } else if text[byte_offset..].starts_with('\n') {
             byte_offset += 1;
         } else {
-            // 文件末尾没有换行符
+            // No newline character at end of file
             if current_line == position.line {
-                // 如果是最后一行且位置在行尾
+                // If it's the last line and position is at end of line
                 return Some(byte_offset);
             }
-            // 否则可能 position.line 超出范围
+            // Otherwise, position.line might be out of range
             break;
         }
         current_line += 1;
     }
 
-    // 如果行号超出范围，或者文本为空
+    // If line number is out of range, or text is empty
     if current_line == position.line && position.character == 0 {
-        return Some(byte_offset); // 可能是空文件或最后一行之后的位置
+        return Some(byte_offset); // Might be an empty file or position after the last line
     }
 
-    None // 位置无效
+    None // Position invalid
 }
 
-/// 运行LSP服务器
+/// Runs the LSP server
 pub fn run_lsp_server<R: BufRead, W: Write>(
     server: Arc<Mutex<LspServer>>,
     mut reader: R,
     mut writer: W,
 ) -> Result<(), String> {
     loop {
-        // 读取消息头
+        // Read message header
         let mut header = String::new();
         let mut content_length = 0;
 
@@ -575,15 +576,15 @@ pub fn run_lsp_server<R: BufRead, W: Write>(
             header.clear();
             if reader.read_line(&mut header).map_err(|e| e.to_string())? == 0 {
                 debug!("Connection closed by client");
-                return Ok(()); // 连接已关闭
+                return Ok(()); // Connection closed
             }
 
             header = header.trim().to_string();
             if header.is_empty() {
-                break; // 头部结束
+                break; // Header end
             }
 
-            // 解析Content-Length头
+            // Parse Content-Length header
             if header.to_lowercase().starts_with("content-length: ") {
                 content_length = header[16..]
                     .parse::<usize>()
@@ -595,7 +596,7 @@ pub fn run_lsp_server<R: BufRead, W: Write>(
             return Err("Missing Content-Length header".to_string());
         }
 
-        // 读取消息体
+        // Read message body
         let mut buffer = vec![0; content_length];
         reader
             .read_exact(&mut buffer)
@@ -604,12 +605,12 @@ pub fn run_lsp_server<R: BufRead, W: Write>(
         let message =
             String::from_utf8(buffer).map_err(|e| format!("Invalid UTF-8 in message: {}", e))?;
 
-        // 解析消息类型并处理
+        // Parse message type and handle
         if message.contains("\"id\":") {
-            // 请求
+            // Request
             match serde_json::from_str::<RequestMessage>(&message) {
                 Ok(request) => {
-                    // 使用 catch_unwind 包裹请求处理
+                    // Wrap request handling with catch_unwind
                     let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
                         handle_request(server.clone(), request.clone())
                     }));
@@ -621,7 +622,7 @@ pub fn run_lsp_server<R: BufRead, W: Write>(
                                 // Consider breaking or returning error if sending fails critically
                             }
 
-                            // 如果是退出请求并且服务器状态是关闭，则退出循环
+                            // If it's an exit request and server state is shutdown, exit loop
                             if request.method == "exit" {
                                 let server_guard = server.lock().unwrap();
                                 if server_guard.state == ServerState::ShutDown {
@@ -635,7 +636,7 @@ pub fn run_lsp_server<R: BufRead, W: Write>(
                                 "Panic occurred while handling request (ID: {:?} Method: {}): {:?}",
                                 request.id, request.method, panic_payload
                             );
-                            // 发送内部错误响应
+                            // Send internal error response
                             let error_response = ResponseMessage {
                                 jsonrpc: "2.0".to_string(),
                                 id: request.id.clone(),
@@ -655,16 +656,16 @@ pub fn run_lsp_server<R: BufRead, W: Write>(
                 }
                 Err(e) => {
                     error!("Failed to parse request: {}", e);
-                    // 尝试从原始 JSON 中提取 ID
+                    // Try to extract ID from raw JSON
                     let id = serde_json::from_str::<Value>(&message)
                         .ok()
                         .and_then(|v| v.get("id").cloned())
                         .and_then(|id_val| serde_json::from_value::<RequestId>(id_val).ok())
-                        .unwrap_or(RequestId::Null); // 如果无法解析ID，则使用 Null
+                        .unwrap_or(RequestId::Null); // Use Null if ID cannot be parsed
 
                     let error_response = ResponseMessage {
                         jsonrpc: "2.0".to_string(),
-                        id, // 使用提取的或默认的 ID
+                        id, // Use extracted or default ID
                         result: None,
                         error: Some(ResponseError {
                             code: error_codes::PARSE_ERROR,
@@ -678,52 +679,52 @@ pub fn run_lsp_server<R: BufRead, W: Write>(
                 }
             }
         } else {
-            // 通知
+            // Notification
             match serde_json::from_str::<NotificationMessage>(&message) {
                 Ok(notification) => {
-                    // 使用 catch_unwind 包裹通知处理
+                    // Wrap notification handling with catch_unwind
                     let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-                        // 需要传递 writer 的可变引用，但 catch_unwind 要求闭包是 FnOnce
-                        // 解决方案：克隆 Arc<Mutex<LspServer>>，但在闭包外部处理 writer
-                        // 或者，如果 handle_notification 不需要 writer，则移除它
-                        // 假设 handle_notification 可能需要 writer 发送诊断等，我们需要一种方法
-                        // 暂时将 writer 移出闭包，如果 handle_notification 确实需要，需要重构
+                        // Need to pass mutable reference of writer, but catch_unwind requires closure to be FnOnce
+                        // Solution: Clone Arc<Mutex<LspServer>>, but handle writer outside the closure
+                        // Or, if handle_notification doesn't need writer, remove it
+                        // Assuming handle_notification might need writer to send diagnostics etc., we need a way
+                        // Temporarily move writer out of closure, if handle_notification indeed needs it, refactor
                         handle_notification(server.clone(), notification.clone(), &mut writer)
                     }));
 
                     match result {
                         Ok(Ok(())) => {
-                            // 通知处理成功
+                            // Notification handled successfully
                         }
                         Ok(Err(e)) => {
-                            // 通知处理函数返回错误
+                            // Notification handler returned error
                             error!(
                                 "Error handling notification (Method: {}): {}",
                                 notification.method, e
                             );
                         }
                         Err(panic_payload) => {
-                            // 通知处理函数发生 Panic
+                            // Notification handler panicked
                             error!(
                                 "Panic occurred while handling notification (Method: {}): {:?}",
                                 notification.method, panic_payload
                             );
-                            // 通知没有响应，所以只记录错误
+                            // Notifications don't have responses, so just log error
                         }
                     }
                 }
                 Err(e) => {
                     error!("Failed to parse notification: {}", e);
-                    // 通知解析失败，只记录日志
+                    // Notification parsing failed, just log
                 }
             }
         }
     }
-    // 注意：原始代码的 loop 永不退出，除非 read_line 返回 0 或 exit 请求被正确处理。
-    // 添加 catch_unwind 后，即使发生 panic，循环也会继续。
+    // Note: Original code's loop never exits unless read_line returns 0 or exit request is handled correctly.
+    // After adding catch_unwind, loop continues even if panic occurs.
 }
 
-/// 处理LSP请求
+/// Handles LSP request
 fn handle_request(server: Arc<Mutex<LspServer>>, request: RequestMessage) -> ResponseMessage {
     let mut response = ResponseMessage {
         jsonrpc: "2.0".to_string(),
@@ -799,27 +800,27 @@ fn handle_request(server: Arc<Mutex<LspServer>>, request: RequestMessage) -> Res
                     let server = server.lock().unwrap();
 
                     if let Some(document) = server.documents.get(&uri) {
-                        // 生成语义标记
+                        // Generate semantic tokens
                         if let Some((_, semantic_tokens)) = server.validate_document(&uri) {
                             if let Some(tokens) = semantic_tokens {
-                                // 编码标记
+                                // Encode tokens
                                 let encoded_tokens =
                                     encode_semantic_tokens(&tokens, &document.content);
 
-                                // 创建结果
+                                // Create result
                                 let result = serde_json::json!({
                                     "data": encoded_tokens
                                 });
 
                                 response.result = Some(result);
                             } else {
-                                // 如果没有标记，返回空数组
+                                // If no tokens, return empty array
                                 response.result = Some(serde_json::json!({
                                     "data": []
                                 }));
                             }
                         } else {
-                            // 如果没有验证结果，返回空数组
+                            // If no validation result, return empty array
                             response.result = Some(serde_json::json!({
                                 "data": []
                             }));
@@ -853,7 +854,7 @@ fn handle_request(server: Arc<Mutex<LspServer>>, request: RequestMessage) -> Res
     response
 }
 
-/// 处理LSP通知
+/// Handles LSP notification
 fn handle_notification<W: Write>(
     server: Arc<Mutex<LspServer>>,
     notification: NotificationMessage,
@@ -879,25 +880,25 @@ fn handle_notification<W: Write>(
                     let mut server_locked = server.lock().unwrap();
                     server_locked.did_open(params);
 
-                    // 发送诊断通知和语义着色信息
+                    // Send diagnostic notification and semantic highlighting information
                     if let Some((diagnostics, semantic_tokens)) =
                         server_locked.validate_document(&uri)
                     {
-                        // 获取文档内容
+                        // Get document content
                         let content = if let Some(doc) = server_locked.documents.get(&uri) {
                             doc.content.clone()
                         } else {
                             String::new()
                         };
 
-                        drop(server_locked); // 释放锁
+                        drop(server_locked); // Release lock
 
-                        // 发送诊断信息
+                        // Send diagnostics
                         send_diagnostics(writer, &uri, diagnostics)?;
 
-                        // 如果有语义着色信息，则发送语义着色通知
+                        // If semantic highlighting information exists, send semantic highlighting notification
                         if let Some(tokens) = semantic_tokens {
-                            // 编码标记并发送
+                            // Encode tokens and send
                             let encoded_tokens = encode_semantic_tokens(&tokens, &content);
                             send_semantic_tokens_encoded(writer, &uri, encoded_tokens)?;
                         }
@@ -915,13 +916,13 @@ fn handle_notification<W: Write>(
                     let mut server = server.lock().unwrap();
                     server.did_change(params);
 
-                    // 发送诊断通知和语义着色信息
+                    // Send diagnostic notification and semantic highlighting information
                     if let Some((diagnostics, _)) = server.validate_document(&uri) {
-                        // 获取文档内容
+                        // Get document content
 
-                        drop(server); // 释放锁
+                        drop(server); // Release lock
 
-                        // 发送诊断信息
+                        // Send diagnostics
                         send_diagnostics(writer, &uri, diagnostics)?;
                     }
                 }
@@ -941,38 +942,38 @@ fn handle_notification<W: Write>(
                 }
             }
         }
-        // 添加对 setTrace 通知的处理
+        // Add handling for setTrace notification
         "$/setTrace" => {
-            // 仅记录日志，不需要其他操作
+            // Log only, no other action needed
             debug!("Trace level set to: {}", notification.params);
         }
-        // 添加对 cancelRequest 通知的处理
+        // Add handling for cancelRequest notification
         "$/cancelRequest" => {
             debug!("Request cancellation received: {}", notification.params);
-            // 未实现请求取消逻辑，因为当前实现是同步的
+            // Request cancellation logic not implemented as current implementation is synchronous
         }
-        // 添加对 progress 通知的处理
+        // Add handling for progress notification
         "$/progress" => {
             debug!("Progress notification: {}", notification.params);
         }
-        // 添加对 logTrace 通知的处理
+        // Add handling for logTrace notification
         "$/logTrace" => {
             debug!("Log trace notification: {}", notification.params);
         }
-        // 添加对 telemetry/event 通知的处理
+        // Add handling for telemetry/event notification
         "telemetry/event" => {
             debug!("Telemetry event: {}", notification.params);
         }
-        // 添加对 workspace/didChangeConfiguration 通知的处理
+        // Add handling for workspace/didChangeConfiguration notification
         "workspace/didChangeConfiguration" => {
             debug!("Configuration changed: {}", notification.params);
         }
-        // 添加对 workspace/didChangeWatchedFiles 通知的处理
+        // Add handling for workspace/didChangeWatchedFiles notification
         "workspace/didChangeWatchedFiles" => {
             debug!("Watched files changed: {}", notification.params);
         }
         _ => {
-            // 改为 info 级别，减少错误日志
+            // Change to info level to reduce error logs
             info!("Unhandled notification: {}", notification.method);
         }
     }
@@ -980,7 +981,7 @@ fn handle_notification<W: Write>(
     Ok(())
 }
 
-/// 发送诊断通知
+/// Sends diagnostic notification
 fn send_diagnostics<W: Write>(
     writer: &mut W,
     uri: &str,
@@ -1000,7 +1001,7 @@ fn send_diagnostics<W: Write>(
     send_message(writer, &notification)
 }
 
-/// 发送已编码的语义着色通知
+/// Sends semantic highlighting notification (encoded)
 fn send_semantic_tokens_encoded<W: Write>(
     writer: &mut W,
     uri: &str,

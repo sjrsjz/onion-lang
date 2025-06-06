@@ -472,17 +472,16 @@ pub fn index_of(
     let container_obj = runnable.context.get_object_rev(1)?;
 
     // Extract the integer index value
-    let index_value = {
-        let index_ref = index_obj.weak().try_borrow()?;
+    let index_value = index_obj.weak().try_borrow()?.with_data(|index_ref| {
         if let OnionObject::Integer(index) = &*index_ref {
-            *index
+            Ok(*index)
         } else {
-            return Err(RuntimeError::DetailedError(format!(
+            Err(RuntimeError::DetailedError(format!(
                 "Index must be an integer, but found {}",
                 index_obj
-            )));
+            )))
         }
-    };
+    })?;
 
     // Get the element at the index
     let element = {

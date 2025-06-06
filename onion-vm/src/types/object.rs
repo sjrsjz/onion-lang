@@ -1069,6 +1069,7 @@ impl OnionObject {
             OnionObject::Named(_) => Ok("Named".to_string()),
             OnionObject::LazySet(_) => Ok("LazySet".to_string()),
             OnionObject::InstructionPackage(_) => Ok("InstructionPackage".to_string()),
+            OnionObject::Lambda(_) => Ok("Lambda".to_string()),
             _ => Err(RuntimeError::InvalidOperation(format!(
                 "type_of() not supported for {:?}",
                 obj

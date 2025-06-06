@@ -982,6 +982,28 @@ pub fn analyze_ast<'n>(
     }
 }
 
+// Helper function for post-order traversal break check
+fn check_postorder_break<'n>(
+    node: &ASTNode<'n>,
+    break_at_position: Option<usize>,
+    context: &VariableContext<'n>,
+    context_at_break: &mut Option<VariableContext<'n>>,
+) {
+    // Post-order traversal check: After analyzing the current node and its children,
+    // check if we've reached or passed the break position
+    if let Some(break_pos) = break_at_position {
+        if let Some(token) = node.start_token {
+            // 使用 token.position (开始字节偏移)
+            // 检查断点是否在 token 的范围内 [start, end)
+            if token.position + token.origin_token.len() >= break_pos {
+                // 我们已经到达或超过了目标位置。在完成此节点分析之后捕获上下文。
+                *context_at_break = Some(context.clone()); // 克隆上下文状态
+            }
+        }
+        // 可选：如果需要，处理没有 start_token 的节点，尽管大多数相关节点应该有它。
+    }
+}
+
 fn analyze_node<'n: 't, 't>(
     node: &'t ASTNode<'n>,
     context: &mut VariableContext<'n>,
@@ -998,24 +1020,8 @@ fn analyze_node<'n: 't, 't>(
         return AssumedType::Unknown;
     }
 
-    // 2. Check if the *start* of the current node is at or beyond the break position
-    if let Some(break_pos) = break_at_position {
-        if let Some(token) = node.start_token {
-            // 使用 token.position (开始字节偏移)
-            // 检查断点是否在 token 的范围内 [start, end)
-            if token.position + token.origin_token.len() >= break_pos {
-                // 我们已经到达或超过了目标位置。在分析此节点之前捕获上下文。
-                *context_at_break = Some(context.clone()); // 克隆上下文状态
-                return AssumedType::Unknown; // 停止此分支的分析
-            }
-        }
-        // 可选：如果需要，处理没有 start_token 的节点，尽管大多数相关节点应该有它。
-    }
-
-    use super::ast::ASTNodeType;
-    // Removed old auto_break check
-    match &node.node_type {
-        ASTNodeType::Let(var_name) => {
+    use super::ast::ASTNodeType;    // Removed old auto_break check
+    match &node.node_type {        ASTNodeType::Let(var_name) => {
             if let Some(value_node) = node.children.first() {
                 // Analyze the value expression first
                 let assumed_type = analyze_node(
@@ -1038,9 +1044,14 @@ fn analyze_node<'n: 't, 't>(
                 };
                 let _ = context.define_variable(&var);
 
-                return assumed_type;
+                // Post-order check after processing the let statement
+                check_postorder_break(node, break_at_position, context, context_at_break);
+                assumed_type
+            } else {
+                // Post-order check for incomplete let statements
+                check_postorder_break(node, break_at_position, context, context_at_break);
+                AssumedType::Unknown
             }
-            return AssumedType::Unknown;
         }
         ASTNodeType::Annotation(annotation) => {
             let mut assumed_type = AssumedType::Unknown;
@@ -1290,9 +1301,7 @@ fn analyze_node<'n: 't, 't>(
                         error_message,
                     ));
                 }
-            }
-
-            // 对非 @compile 注解或在断点分析时的 @compile 注解执行常规分析
+            }            // 对非 @compile 注解或在断点分析时的 @compile 注解执行常规分析
             for child in &node.children {
                 assumed_type = analyze_node(
                     child,
@@ -1310,24 +1319,26 @@ fn analyze_node<'n: 't, 't>(
                 }
             }
 
+            check_postorder_break(node, break_at_position, context, context_at_break);
             return assumed_type;
-        }
-
-        ASTNodeType::Variable(var_name) => {
+        }        ASTNodeType::Variable(var_name) => {
             // Check definition before potentially breaking
             if context.get_variable_current_context(var_name).is_none() {
                 if !dynamic {
                     errors.push(AnalyzeError::UndefinedVariable(node.clone())); // 使用 errors Vec
                 }
             }
+            
+            // Post-order check after processing the variable
+            check_postorder_break(node, break_at_position, context, context_at_break);
+            
             // Return variable type or Unknown
             if let Some(var) = context.get_variable_current_context(var_name) {
-                return var.assumed_type.clone();
+                var.assumed_type.clone()
             } else {
-                return AssumedType::Unknown;
+                AssumedType::Unknown
             }
-        }
-        ASTNodeType::Body => {
+        }        ASTNodeType::Body => {
             // Body 和 Boundary 在当前上下文中创建新的作用域（帧）
             context.push_frame();
             let mut assumed_type = AssumedType::Unknown;
@@ -1351,6 +1362,7 @@ fn analyze_node<'n: 't, 't>(
             // Only pop frame if break didn't happen inside this scope
             if context_at_break.is_none() {
                 let _ = context.pop_frame(); // 弹出当前上下文的帧
+                check_postorder_break(node, break_at_position, context, context_at_break);
             }
             return assumed_type;
         }
@@ -1392,8 +1404,7 @@ fn analyze_node<'n: 't, 't>(
                     // 如果在参数分析中中断，不弹出上下文
                     return AssumedType::Lambda;
                 }
-            }
-            if *is_dynamic_gen {
+            }            if *is_dynamic_gen {
                 context.push_frame();
                 analyze_node(
                     &node.children.last().unwrap(),
@@ -1414,6 +1425,7 @@ fn analyze_node<'n: 't, 't>(
                 if context.pop_frame().is_err() {
                     panic!("Failed to pop frame after Lambda definition");
                 }
+                check_postorder_break(node, break_at_position, context, context_at_break);
                 return AssumedType::Lambda;
             } else {
                 if args_frame.is_none() {
@@ -1422,6 +1434,7 @@ fn analyze_node<'n: 't, 't>(
                         node.clone(),
                         "LambdaDef without parameters".to_string(),
                     ));
+                    check_postorder_break(node, break_at_position, context, context_at_break);
                     return AssumedType::Lambda;
                 }
                 let args = args_frame.unwrap();
@@ -1466,12 +1479,12 @@ fn analyze_node<'n: 't, 't>(
                 // 只有在没有中断的情况下才弹出 Lambda 的上下文
                 if context_at_break.is_none() {
                     let _ = context.pop_context(); // 退出 Lambda，恢复到父上下文
+                    check_postorder_break(node, break_at_position, context, context_at_break);
                 }
             }
 
             return AssumedType::Lambda;
-        }
-        ASTNodeType::Expressions => {
+        }        ASTNodeType::Expressions => {
             let mut last_type = AssumedType::Unknown;
             for child in &node.children {
                 last_type = analyze_node(
@@ -1489,9 +1502,9 @@ fn analyze_node<'n: 't, 't>(
                     return AssumedType::Unknown;
                 }
             }
+            check_postorder_break(node, break_at_position, context, context_at_break);
             return last_type;
-        }
-        ASTNodeType::Assign => {
+        }        ASTNodeType::Assign => {
             if node.children.len() >= 2 {
                 // Analyze RHS first
                 let assumed_type = analyze_node(
@@ -1529,11 +1542,12 @@ fn analyze_node<'n: 't, 't>(
                 // This requires LHS analysis to return info about what was assigned to.
                 // For now, assignment doesn't update context type info here.
 
+                check_postorder_break(node, break_at_position, context, context_at_break);
                 return assumed_type;
             }
+            check_postorder_break(node, break_at_position, context, context_at_break);
             return AssumedType::Unknown;
-        }
-        ASTNodeType::KeyValue => {
+        }        ASTNodeType::KeyValue => {
             let _ = analyze_node(
                 &node.children[0],
                 context,
@@ -1562,9 +1576,9 @@ fn analyze_node<'n: 't, 't>(
             if context_at_break.is_some() {
                 return AssumedType::KeyVal; // Return KeyVal even if break occurred inside
             }
+            check_postorder_break(node, break_at_position, context, context_at_break);
             return AssumedType::KeyVal; // Return KeyVal type
-        }
-        ASTNodeType::Set => {
+        }        ASTNodeType::Set => {
             for child in &node.children {
                 // Iterate through all children for Set
                 analyze_node(
@@ -1582,9 +1596,9 @@ fn analyze_node<'n: 't, 't>(
                     return AssumedType::Set; // Return Set even if break occurred inside
                 }
             }
+            check_postorder_break(node, break_at_position, context, context_at_break);
             return AssumedType::Set; // Return Set type
-        }
-        ASTNodeType::NamedTo => {
+        }        ASTNodeType::NamedTo => {
             let _ = analyze_node(
                 &node.children[0],
                 context,
@@ -1613,18 +1627,41 @@ fn analyze_node<'n: 't, 't>(
             if context_at_break.is_some() {
                 return AssumedType::NamedArgument; // Return NamedArgument even if break occurred inside
             }
+            check_postorder_break(node, break_at_position, context, context_at_break);
             return AssumedType::NamedArgument; // Return NamedArgument type
+        }// Simple types don't have children to analyze recursively
+        ASTNodeType::String(_) => {
+            check_postorder_break(node, break_at_position, context, context_at_break);
+            AssumedType::String
         }
-        // Simple types don't have children to analyze recursively
-        ASTNodeType::String(_) => AssumedType::String,
-        ASTNodeType::Boolean(_) => AssumedType::Boolean,
-        ASTNodeType::Number(_) => AssumedType::Number,
-        ASTNodeType::Base64(_) => AssumedType::Base64,
-        ASTNodeType::Null => AssumedType::Null,
-        ASTNodeType::Undefined => AssumedType::Undefined,
-        ASTNodeType::Range => AssumedType::Range,
-        ASTNodeType::None => AssumedType::Undefined,
-        ASTNodeType::Is => {
+        ASTNodeType::Boolean(_) => {
+            check_postorder_break(node, break_at_position, context, context_at_break);
+            AssumedType::Boolean
+        }
+        ASTNodeType::Number(_) => {
+            check_postorder_break(node, break_at_position, context, context_at_break);
+            AssumedType::Number
+        }
+        ASTNodeType::Base64(_) => {
+            check_postorder_break(node, break_at_position, context, context_at_break);
+            AssumedType::Base64
+        }
+        ASTNodeType::Null => {
+            check_postorder_break(node, break_at_position, context, context_at_break);
+            AssumedType::Null
+        }
+        ASTNodeType::Undefined => {
+            check_postorder_break(node, break_at_position, context, context_at_break);
+            AssumedType::Undefined
+        }
+        ASTNodeType::Range => {
+            check_postorder_break(node, break_at_position, context, context_at_break);
+            AssumedType::Range
+        }
+        ASTNodeType::None => {
+            check_postorder_break(node, break_at_position, context, context_at_break);
+            AssumedType::Undefined
+        }        ASTNodeType::Is => {
             for child in &node.children {
                 let _ = analyze_node(
                     child,
@@ -1641,9 +1678,9 @@ fn analyze_node<'n: 't, 't>(
                     return AssumedType::Unknown;
                 }
             }
+            check_postorder_break(node, break_at_position, context, context_at_break);
             return AssumedType::Boolean; // 'is' checks return a boolean
-        }
-        // Default case for other node types
+        }        // Default case for other node types
         _ => {
             let mut last_type = AssumedType::Unknown;
             for child in &node.children {
@@ -1660,8 +1697,8 @@ fn analyze_node<'n: 't, 't>(
                 );
                 if context_at_break.is_some() {
                     return AssumedType::Unknown;
-                }
-            }
+                }            }
+            check_postorder_break(node, break_at_position, context, context_at_break);
             return last_type;
         }
     }
@@ -1682,14 +1719,6 @@ fn analyze_tuple_params<'n: 't, 't>(
     if context_at_break.is_some() {
         return None;
     }
-    if let Some(break_pos) = break_at_position {
-        if let Some(token) = params.start_token {
-            if token.position >= break_pos {
-                *context_at_break = Some(context.clone());
-                return None;
-            }
-        }
-    }
 
     use super::ast::ASTNodeType;
 
@@ -1703,15 +1732,6 @@ fn analyze_tuple_params<'n: 't, 't>(
             if context_at_break.is_some() {
                 return None;
             } // Check before each param
-            if let Some(break_pos) = break_at_position {
-                // Check start of individual param node
-                if let Some(token) = param.start_token {
-                    if token.position >= break_pos {
-                        *context_at_break = Some(context.clone());
-                        return None;
-                    }
-                }
-            }
 
             match &param.node_type {
                 ASTNodeType::NamedTo => {
@@ -1776,8 +1796,21 @@ fn analyze_tuple_params<'n: 't, 't>(
                     }
                 }
             }
+            
+            // Post-order check after processing each parameter
+            check_postorder_break(param, break_at_position, context, context_at_break);
+            if context_at_break.is_some() {
+                return None;
+            }
         }
     }
+    
+    // Post-order check after processing all parameters
+    check_postorder_break(params, break_at_position, context, context_at_break);
+    if context_at_break.is_some() {
+        return None;
+    }
+    
     Some(args_frame)
 }
 
@@ -2121,19 +2154,19 @@ pub fn auto_capture<'t>(
                             ASTNode {
                                 node_type: ASTNodeType::String(var.clone()),
                                 children: Vec::new(),
-                                start_token: node.end_token,
-                                end_token: node.end_token,
+                                start_token: None,
+                                end_token: None,
                             },
                             ASTNode {
                                 // This represents reading the captured var from the outer scope
                                 node_type: ASTNodeType::Variable(var.clone()),
                                 children: Vec::new(),
-                                start_token: node.end_token,
-                                end_token: node.end_token,
+                                start_token: None,
+                                end_token: None,
                             },
                         ],
-                        start_token: node.end_token,
-                        end_token: node.end_token,
+                        start_token: node.start_token,
+                        end_token: node.start_token,
                     });
                 }
 

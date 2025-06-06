@@ -15,27 +15,27 @@ use onion_frontend::parser::ast::build_ast;
 use onion_frontend::parser::ast::ParserError;
 use onion_frontend::parser::lexer::lexer;
 use onion_frontend::parser::lexer::Token;
-/// 验证文档并生成诊断信息
-/// 返回诊断信息和可选的语义着色结果
+/// Validates the document and generates diagnostics.
+/// Returns diagnostics and optional semantic highlighting results.
 pub fn validate_document(
     document: &TextDocument,
 ) -> (Vec<Diagnostic>, Option<Vec<SemanticTokenTypes>>) {
     let mut diagnostics = Vec::new();
     let mut semantic_tokens = None;
 
-    // 检查文档是否为空
+    // Check if the document is empty
     if document.content.is_empty() {
-        info!("文档内容为空，跳过验证: {}", document.uri);
+        info!("Document content is empty, skipping validation: {}", document.uri);
         return (diagnostics, semantic_tokens);
     }
 
-    info!("正在进行词法分析: {}", document.uri);
+    info!("Performing lexical analysis: {}", document.uri);
 
-    // 进行词法分析
+    // Perform lexical analysis
     let tokens = match std::panic::catch_unwind(|| lexer::tokenize(&document.content)) {
         Ok(tokens) => tokens,
         Err(e) => {
-            error!("词法分析过程中发生错误: {:?}", e);
+            error!("Error during lexical analysis: {:?}", e);
             return (
                 vec![Diagnostic {
                     range: Range {
@@ -51,7 +51,7 @@ pub fn validate_document(
                     severity: Some(DiagnosticSeverity::Error),
                     code: None,
                     source: Some("onion-lsp".to_string()),
-                    message: "词法分析失败: 可能包含无法识别的标记".to_string(),
+                    message: "Lexical analysis failed: May contain unrecognized tokens".to_string(),
                     related_information: None,
                 }],
                 None,
@@ -59,23 +59,23 @@ pub fn validate_document(
         }
     };
 
-    info!("词法分析完成，获得 {} 个标记", tokens.len());
+    info!("Lexical analysis complete, {} tokens found", tokens.len());
 
     let filtered_tokens = lexer::reject_comment(&tokens);
-    debug!("过滤注释后有 {} 个标记", filtered_tokens.len());
+    debug!("{} tokens after filtering comments", filtered_tokens.len());
 
     if filtered_tokens.is_empty() {
-        info!("过滤后无有效标记，可能只有注释或空白: {}", document.uri);
+        info!("No valid tokens after filtering, possibly only comments or whitespace: {}", document.uri);
         return (diagnostics, semantic_tokens);
     }
 
-    // 尝试解析AST
-    info!("开始语法分析");
+    // Try to parse AST
+    info!("Starting syntax analysis");
     let gathered =
         match std::panic::catch_unwind(|| ast_token_stream::from_stream(&filtered_tokens)) {
             Ok(gathered) => gathered,
             Err(e) => {
-                error!("标记流处理失败: {:?}", e);
+                error!("Token stream processing failed: {:?}", e);
                 return (
                     vec![Diagnostic {
                         range: Range {
@@ -91,7 +91,7 @@ pub fn validate_document(
                         severity: Some(DiagnosticSeverity::Error),
                         code: None,
                         source: Some("onion-lsp".to_string()),
-                        message: "处理标记流时发生错误".to_string(),
+                        message: "Error processing token stream".to_string(),
                         related_information: None,
                     }],
                     None,
@@ -101,10 +101,10 @@ pub fn validate_document(
 
     match build_ast(gathered) {
         Ok(ast) => {
-            // 解析成功，没有错误
-            info!("文档解析成功: {}", document.uri);
-            info!("分析变量定义: {}", document.uri);
-            // 1. 解析 URI
+            // Parsing successful, no errors
+            info!("Document parsed successfully: {}", document.uri);
+            info!("Analyzing variable definitions: {}", document.uri);
+            // 1. Parse URI
             let file_path = match Url::parse(&document.uri) {
                 Ok(url) if url.scheme() == "file" => match url.to_file_path() {
                     Ok(path) => path,
@@ -119,7 +119,7 @@ pub fn validate_document(
                 }
             };
 
-            // 2. 获取父目录
+            // 2. Get parent directory
             let parent_dir = match file_path.parent() {
                 Some(dir) => dir.to_path_buf(),
                 None => {
@@ -133,7 +133,7 @@ pub fn validate_document(
             let dir_stack = DirStack::new(Some(&parent_dir));
             if let Err(err) = &dir_stack {
                 let err_msg = err.to_string();
-                error!("目录栈初始化失败: {}", err_msg);
+                error!("Directory stack initialization failed: {}", err_msg);
                 return (
                     vec![Diagnostic {
                         range: Range {
@@ -149,7 +149,7 @@ pub fn validate_document(
                         severity: Some(DiagnosticSeverity::Error),
                         code: None,
                         source: Some("onion-lsp".to_string()),
-                        message: format!("目录栈初始化失败: {}", err_msg),
+                        message: format!("Directory stack initialization failed: {}", err_msg),
                         related_information: None,
                     }],
                     None,
@@ -175,7 +175,7 @@ pub fn validate_document(
                             code: Some(serde_json::Value::String("VAR-E001".to_string())),
                             source: Some("onion-lsp".to_string()),
                             message: format!(
-                                "变量 '{}' 未明确定义",
+                                "Variable '{}' is not explicitly defined",
                                 var.start_token.unwrap().token
                             ),
                             related_information: None,
@@ -194,7 +194,7 @@ pub fn validate_document(
                             severity: Some(DiagnosticSeverity::Error),
                             code: Some(serde_json::Value::String("MACRO-E001".to_string())),
                             source: Some("onion-lsp".to_string()),
-                            message: format!("宏定义错误: {}", msg),
+                            message: format!("Macro definition error: {}", msg),
                             related_information: None,
                         });
                     }
@@ -208,7 +208,7 @@ pub fn validate_document(
                             severity: Some(DiagnosticSeverity::Error),
                             code: Some(serde_json::Value::String("AST-E001".to_string())),
                             source: Some("onion-lsp".to_string()),
-                            message: format!("错误: {}", msg),
+                            message: format!("Error: {}", msg),
                             related_information: None,
                         });
                     }
@@ -216,7 +216,7 @@ pub fn validate_document(
                         _,
                         msg,
                     ) => {
-                        // 没有range信息
+                        // No range information
                         let range = Range {
                             start: Position {
                                 line: 0,
@@ -232,7 +232,7 @@ pub fn validate_document(
                             severity: Some(DiagnosticSeverity::Error),
                             code: Some(serde_json::Value::String("AST-E001".to_string())),
                             source: Some("onion-lsp".to_string()),
-                            message: format!("错误: {}", msg),
+                            message: format!("Error: {}", msg),
                             related_information: None,
                         });
                     }
@@ -276,7 +276,7 @@ pub fn validate_document(
                             code: Some(serde_json::Value::String("VAR-E001".to_string())),
                             source: Some("onion-lsp".to_string()),
                             message: format!(
-                                "变量 '{}' 未明确定义",
+                                "Variable '{}' is not explicitly defined",
                                 var.start_token.unwrap().token
                             ),
                             related_information: None,
@@ -295,7 +295,7 @@ pub fn validate_document(
                             severity: Some(DiagnosticSeverity::Error),
                             code: Some(serde_json::Value::String("MACRO-E001".to_string())),
                             source: Some("onion-lsp".to_string()),
-                            message: format!("宏定义错误: {}", msg),
+                            message: format!("Macro definition error: {}", msg),
                             related_information: None,
                         });
                     }
@@ -309,7 +309,7 @@ pub fn validate_document(
                             severity: Some(DiagnosticSeverity::Error),
                             code: Some(serde_json::Value::String("AST-E001".to_string())),
                             source: Some("onion-lsp".to_string()),
-                            message: format!("错误: {}", msg),
+                            message: format!("Error: {}", msg),
                             related_information: None,
                         });
                     }
@@ -317,7 +317,7 @@ pub fn validate_document(
                         _,
                         msg,
                     ) => {
-                        // 没有range信息
+                        // No range information
                         let range = Range {
                             start: Position {
                                 line: 0,
@@ -333,7 +333,7 @@ pub fn validate_document(
                             severity: Some(DiagnosticSeverity::Error),
                             code: Some(serde_json::Value::String("AST-E001".to_string())),
                             source: Some("onion-lsp".to_string()),
-                            message: format!("错误: {}", msg),
+                            message: format!("Error: {}", msg),
                             related_information: None,
                         });
                     }
@@ -362,21 +362,21 @@ pub fn validate_document(
                         }
                     }
 
-                    // 进行语义着色处理
-                    info!("开始进行语义着色分析");
+                    // Perform semantic highlighting
+                    info!("Starting semantic highlighting analysis");
                     match do_semantic(&document.content, ast, &tokens) {
                         Ok(tokens) => {
-                            info!("语义着色处理成功，生成了 {} 个标记", tokens.len());
+                            info!("Semantic highlighting successful, {} tokens generated", tokens.len());
                             semantic_tokens = Some(tokens);
                         }
                         Err(e) => {
-                            error!("语义着色处理失败: {}", e);
-                            // 语义着色失败不应该影响诊断结果
+                            error!("Semantic highlighting failed: {}", e);
+                            // Semantic highlighting failure should not affect diagnostic results
                         }
                     }
                 }
                 Err(err) => {
-                    error!("宏展开或AST分析失败: {:?}", err);
+                    error!("Macro expansion or AST analysis failed: {:?}", err);
                     diagnostics.push(Diagnostic {
                         range: Range {
                             start: Position {
@@ -391,28 +391,28 @@ pub fn validate_document(
                         severity: Some(DiagnosticSeverity::Error),
                         code: None,
                         source: Some("onion-lsp".to_string()),
-                        message: "宏展开或AST分析失败".to_string(),
+                        message: "Macro expansion or AST analysis failed".to_string(),
                         related_information: None,
                     });
                 }
             }
         }
         Err(parse_error) => {
-            // 解析失败，创建诊断信息
-            info!("文档解析失败: {}", document.uri);
+            // Parsing failed, create diagnostic information
+            info!("Document parsing failed: {}", document.uri);
 
-            // 获取错误消息
+            // Get error message
             let error_message = match std::panic::catch_unwind(|| {
                 parse_error.format(&filtered_tokens, document.content.clone())
             }) {
                 Ok(msg) => {
-                    // 移除ANSI颜色代码以获得纯文本
+                    // Remove ANSI color codes to get plain text
                     strip_ansi_codes(&msg)
                 }
-                Err(_) => "解析错误，无法生成具体信息".to_string(),
+                Err(_) => "Parsing error, cannot generate specific information".to_string(),
             };
 
-            // 根据不同类型的解析错误获取相应的位置信息
+            // Get corresponding position information based on different types of parsing errors
             let diagnostic = create_diagnostic_from_parser_error(
                 &parse_error,
                 &filtered_tokens,
@@ -421,7 +421,7 @@ pub fn validate_document(
             );
 
             info!(
-                "添加诊断信息: 范围[{},{}]-[{},{}], 消息: {}",
+                "Adding diagnostic: Range[{},{}]-[{},{}], Message: {}",
                 diagnostic.range.start.line,
                 diagnostic.range.start.character,
                 diagnostic.range.end.line,
@@ -434,18 +434,18 @@ pub fn validate_document(
     }
 
     info!(
-        "诊断完成，生成了 {} 个诊断信息，语义着色: {}",
+        "Diagnostics complete, {} diagnostics generated, semantic highlighting: {}",
         diagnostics.len(),
         if semantic_tokens.is_some() {
-            "成功"
+            "Success"
         } else {
-            "无"
+            "None"
         }
     );
 
     (diagnostics, semantic_tokens)
 }
-/// 根据解析错误类型创建诊断信息
+/// Create diagnostic information based on parsing error type
 fn create_diagnostic_from_parser_error<'t>(
     parse_error: &ParserError<'t>,
     _tokens: &Vec<Token<'t>>,
@@ -454,23 +454,23 @@ fn create_diagnostic_from_parser_error<'t>(
 ) -> Diagnostic {
     match parse_error {
         ParserError::UnexpectedToken(token) => {
-            // 意外标记错误
+            // Unexpected token error
             let range = get_token_range(token, source_code);
             Diagnostic {
                 range,
                 severity: Some(DiagnosticSeverity::Error),
                 code: Some(serde_json::Value::String("AST-E001".to_string())),
                 source: Some("onion-lsp".to_string()),
-                message: format!("意外标记: '{}'", token.token),
+                message: format!("Unexpected token: '{}'", token.token),
                 related_information: None,
             }
         }
         ParserError::UnmatchedParenthesis(opening, closing) => {
-            // 不匹配的括号错误
+            // Unmatched parenthesis error
             let opening_range = get_token_range(opening, source_code);
             let closing_range = get_token_range(closing, source_code);
 
-            // 创建主诊断信息
+            // Create main diagnostic information
             let main_range = if closing.position > opening.position {
                 Range {
                     start: opening_range.clone().start,
@@ -480,21 +480,21 @@ fn create_diagnostic_from_parser_error<'t>(
                 closing_range.clone()
             };
 
-            // 创建相关诊断信息
+            // Create related diagnostic information
             let related = vec![
                 DiagnosticRelatedInformation {
                     location: Location {
-                        uri: "".to_string(), // 需要设置正确的URI
+                        uri: "".to_string(), // Needs to be set to the correct URI
                         range: opening_range,
                     },
-                    message: format!("开始括号: '{}'", opening.token),
+                    message: format!("Opening parenthesis: '{}'", opening.token),
                 },
                 DiagnosticRelatedInformation {
                     location: Location {
-                        uri: "".to_string(), // 需要设置正确的URI
+                        uri: "".to_string(), // Needs to be set to the correct URI
                         range: closing_range,
                     },
-                    message: format!("结束括号: '{}'", closing.token),
+                    message: format!("Closing parenthesis: '{}'", closing.token),
                 },
             ];
 
@@ -503,28 +503,28 @@ fn create_diagnostic_from_parser_error<'t>(
                 severity: Some(DiagnosticSeverity::Error),
                 code: Some(serde_json::Value::String("AST-E002".to_string())),
                 source: Some("onion-lsp".to_string()),
-                message: "括号不匹配".to_string(),
+                message: "Unmatched parentheses".to_string(),
                 related_information: Some(related),
             }
         }
         ParserError::InvalidSyntax(token) => {
-            // 无效语法错误
+            // Invalid syntax error
             let range = get_token_range(token, source_code);
             Diagnostic {
                 range,
                 severity: Some(DiagnosticSeverity::Error),
                 code: Some(serde_json::Value::String("AST-E003".to_string())),
                 source: Some("onion-lsp".to_string()),
-                message: "无效的语法结构".to_string(),
+                message: "Invalid syntax structure".to_string(),
                 related_information: None,
             }
         }
         ParserError::NotFullyMatched(start, end) => {
-            // 表达式未完全匹配错误
+            // Expression not fully matched error
             let start_range = get_token_range(start, source_code);
             let end_range = get_token_range(end, source_code);
 
-            // 创建包含整个表达式的范围
+            // Create a range that includes the entire expression
             let range = Range {
                 start: start_range.start,
                 end: end_range.end,
@@ -535,62 +535,62 @@ fn create_diagnostic_from_parser_error<'t>(
                 severity: Some(DiagnosticSeverity::Error),
                 code: Some(serde_json::Value::String("AST-E004".to_string())),
                 source: Some("onion-lsp".to_string()),
-                message: "表达式未完全匹配".to_string(),
+                message: "Expression not fully matched".to_string(),
                 related_information: None,
             }
         }
         ParserError::InvalidVariableName(token) => {
-            // 无效变量名错误
+            // Invalid variable name error
             let range = get_token_range(token, source_code);
             Diagnostic {
                 range,
                 severity: Some(DiagnosticSeverity::Error),
                 code: Some(serde_json::Value::String("AST-E005".to_string())),
                 source: Some("onion-lsp".to_string()),
-                message: format!("无效的变量名: '{}'", token.token),
+                message: format!("Invalid variable name: '{}'", token.token),
                 related_information: None,
             }
         }
         ParserError::UnsupportedStructure(token) => {
-            // 不支持的结构错误
+            // Unsupported structure error
             let range = get_token_range(token, source_code);
             Diagnostic {
                 range,
                 severity: Some(DiagnosticSeverity::Error),
                 code: Some(serde_json::Value::String("AST-E006".to_string())),
                 source: Some("onion-lsp".to_string()),
-                message: "不支持的语法结构".to_string(),
+                message: "Unsupported syntax structure".to_string(),
                 related_information: None,
             }
         }
         ParserError::MissingStructure(token, expected) => {
-            // 缺失结构错误
+            // Missing structure error
             let range = get_token_range(token, source_code);
             Diagnostic {
                 range,
                 severity: Some(DiagnosticSeverity::Error),
                 code: Some(serde_json::Value::String("AST-E007".to_string())),
                 source: Some("onion-lsp".to_string()),
-                message: format!("缺失的结构: '{}'", expected),
+                message: format!("Missing structure: '{}'", expected),
                 related_information: None,
             }
         }
         ParserError::ErrorStructure(token, err) => {
-            // 错误结构错误
+            // Error structure error
             let range = get_token_range(token, source_code);
             Diagnostic {
                 range,
                 severity: Some(DiagnosticSeverity::Error),
                 code: Some(serde_json::Value::String("AST-E008".to_string())),
                 source: Some("onion-lsp".to_string()),
-                message: format!("错误的结构: '{}'", err),
+                message: format!("Erroneous structure: '{}'", err),
                 related_information: None,
             }
         }
     }
 }
 
-/// 从token位置获取Range
+/// Get Range from token position
 fn get_token_range(token: &Token, source_code: &str) -> Range {
     let (line, column) = get_line_col(source_code, token.position);
     let token_length = token.origin_token.len();
@@ -607,10 +607,10 @@ fn get_token_range(token: &Token, source_code: &str) -> Range {
     }
 }
 
-/// 获取字节位置对应的行列号
+/// Get line and column number for a byte position
 fn get_line_col(text: &str, byte_pos: usize) -> (usize, usize) {
     if byte_pos >= text.len() {
-        // 如果位置超出文本范围，返回最后位置
+        // If position is out of text bounds, return the last position
         let lines: Vec<&str> = text.lines().collect();
         if lines.is_empty() {
             return (0, 0);
@@ -640,10 +640,10 @@ fn get_line_col(text: &str, byte_pos: usize) -> (usize, usize) {
     (line, col)
 }
 
-/// 从字符串中移除ANSI颜色代码
+/// Remove ANSI color codes from a string
 fn strip_ansi_codes(s: &str) -> String {
-    // 简单的正则表达式匹配ANSI颜色代码
-    // 这是一个基本实现，可能需要使用专门的库如 strip_ansi_escapes
+    // Simple regex to match ANSI color codes
+    // This is a basic implementation, might need a dedicated library like strip_ansi_escapes
     let ansi_re = regex::Regex::new(r"\x1b\[\d+(;\d+)*m").unwrap();
     ansi_re.replace_all(s, "").to_string()
 }
