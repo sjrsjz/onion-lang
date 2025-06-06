@@ -89,6 +89,18 @@ impl DirStack {
         Ok(())
     }
 
+    pub fn push_file(&mut self, file: &str) -> io::Result<()> {
+        // Use the parent directory of the file to push onto the stack
+        let target_dir = if let Some(current) = self.stack.last() {
+            current.join(file).parent().unwrap_or(current).to_path_buf()
+        } else {
+            PathBuf::from(file)
+        };
+
+        // Call push with the directory of the file
+        self.push(target_dir.to_str().unwrap_or(""))
+    }
+
     /// Pops the current directory from the stack and changes the working directory
     /// back to the previous one. Returns the directory popped, or None if only
     /// the initial directory remains.
@@ -114,6 +126,35 @@ impl DirStack {
         Ok(popped_dir)
     }
 
+    /// 根据给定的文件路径获得绝对路径
+    /// 如果路径是相对路径，则相对于栈顶目录解析
+    /// 如果路径已经是绝对路径，则直接返回规范化后的路径
+    pub fn get_absolute_path(&self, path: &str) -> io::Result<PathBuf> {
+        let target_path = PathBuf::from(path);
+        
+        let resolved_path = if target_path.is_absolute() {
+            // 已经是绝对路径，直接使用
+            target_path
+        } else {
+            // 相对路径，基于栈顶目录解析
+            if let Some(current) = self.stack.last() {
+                current.join(path)
+            } else {
+                // 栈为空时（不应该发生），使用当前工作目录
+                env::current_dir()
+                    .map_err(|e| io::Error::new(e.kind(), format!("Failed to get current directory: {}", e)))?
+                    .join(path)
+            }
+        };
+
+        // 规范化路径并验证存在性
+        resolved_path.canonicalize().map_err(|e| {
+            io::Error::new(
+                e.kind(),
+                format!("Failed to resolve path '{}': {}", resolved_path.display(), e),
+            )
+        })
+    }
 }
 
 // Optional: Add a default implementation

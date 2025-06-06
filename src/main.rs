@@ -3,7 +3,10 @@ use colored::*;
 use std::path::{Path, PathBuf};
 
 // Import necessary modules
-use onion_frontend::compile::{build_code, compile_to_bytecode};
+use onion_frontend::{
+    compile::{build_code, compile_to_bytecode},
+    utils::cycle_detector::{self, CycleDetector},
+};
 use onion_vm::{
     lambda::{
         runnable::{Runnable, RuntimeError, StepResult},
@@ -120,11 +123,22 @@ fn cmd_compile(file: PathBuf, output: Option<PathBuf>, bytecode: bool) -> Result
         std::env::current_dir().map_err(|e| format!("Failed to get current directory: {}", e))?;
 
     let mut dir_stack = create_dir_stack(file.parent())?;
-
+    let absolute_path = dir_stack
+        .get_absolute_path(file.to_str().ok_or("Invalid file path")?)
+        .map_err(|e| format!("Failed to get absolute path: {}", e))?;
+    let mut cycle_detector = CycleDetector::new();
+    let mut visit_result = cycle_detector
+        .visit(
+            absolute_path
+                .to_str()
+                .ok_or("Invalid file path")?
+                .to_string(),
+        )
+        .map_err(|e| format!("Cycle detection failed: {}", e))?;
     if bytecode {
         // Compile to IR first, then to bytecode
-        let ir_package =
-            build_code(&code, &mut dir_stack).map_err(|e| format!("Compilation failed: {}", e))?;
+        let ir_package = build_code(&code, visit_result.get_detector_mut(), &mut dir_stack)
+            .map_err(|e| format!("Compilation failed: {}", e))?;
         let bytecode_package = compile_to_bytecode(&ir_package)
             .map_err(|e| format!("Bytecode compilation failed: {}", e))?;
         // Restore working directory before writing output
@@ -157,8 +171,8 @@ fn cmd_compile(file: PathBuf, output: Option<PathBuf>, bytecode: bool) -> Result
         }
     } else {
         // Compile to IR
-        let ir_package =
-            build_code(&code, &mut dir_stack).map_err(|e| format!("Compilation failed: {}", e))?;
+        let ir_package = build_code(&code, visit_result.get_detector_mut(), &mut dir_stack)
+            .map_err(|e| format!("Compilation failed: {}", e))?;
 
         // Restore working directory before writing output
         std::env::set_current_dir(&current_dir)
@@ -201,8 +215,21 @@ fn cmd_display_ir(file: PathBuf) -> Result<(), String> {
         .map_err(|e| format!("Failed to read file '{}': {}", file.display(), e))?;
 
     let mut dir_stack = create_dir_stack(file.parent())?;
-    let ir_package =
-        build_code(&code, &mut dir_stack).map_err(|e| format!("Compilation failed: {}", e))?;
+
+    let absolute_path = dir_stack
+        .get_absolute_path(file.to_str().ok_or("Invalid file path")?)
+        .map_err(|e| format!("Failed to get absolute path: {}", e))?;
+    let mut cycle_detector = CycleDetector::new();
+    let mut visit_result = cycle_detector
+        .visit(
+            absolute_path
+                .to_str()
+                .ok_or("Invalid file path")?
+                .to_string(),
+        )
+        .map_err(|e| format!("Cycle detection failed: {}", e))?;
+    let ir_package = build_code(&code, visit_result.get_detector_mut(), &mut dir_stack)
+        .map_err(|e| format!("Compilation failed: {}", e))?;
 
     println!("\n{}", "IR Code:".cyan().bold());
     println!("{}", format!("{:#?}", ir_package).dimmed());
@@ -247,7 +274,19 @@ fn run_source_file(file: &Path) -> Result<(), String> {
         .map_err(|e| format!("Failed to read file '{}': {}", file.display(), e))?;
 
     let mut dir_stack = create_dir_stack(file.parent())?;
-    execute_code(&code, &mut dir_stack)
+    let absolute_path = dir_stack
+        .get_absolute_path(file.to_str().ok_or("Invalid file path")?)
+        .map_err(|e| format!("Failed to get absolute path: {}", e))?;
+    let mut cycle_detector = CycleDetector::new();
+    let mut visit_result = cycle_detector
+        .visit(
+            absolute_path
+                .to_str()
+                .ok_or("Invalid file path")?
+                .to_string(),
+        )
+        .map_err(|e| format!("Cycle detection failed: {}", e))?;
+    execute_code(&code, visit_result.get_detector_mut(), &mut dir_stack)
 }
 
 fn run_ir_file(file: &Path) -> Result<(), String> {
@@ -274,10 +313,11 @@ fn create_dir_stack(
 
 fn execute_code(
     code: &str,
+    cycle_detector: &mut cycle_detector::CycleDetector<String>,
     dir_stack: &mut onion_frontend::dir_stack::DirStack,
 ) -> Result<(), String> {
-    let ir_package =
-        build_code(code, dir_stack).map_err(|e| format!("Compilation failed: {}", e))?;
+    let ir_package = build_code(code, cycle_detector, dir_stack)
+        .map_err(|e| format!("Compilation failed: {}", e))?;
 
     execute_ir_package(&ir_package)
 }

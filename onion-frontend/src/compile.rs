@@ -6,6 +6,7 @@ use crate::parser::analyzer::expand_macro;
 use crate::parser::ast::ast_token_stream;
 use crate::parser::ast::build_ast;
 use crate::parser::lexer::lexer;
+use crate::utils::cycle_detector::CycleDetector;
 use colored::Colorize;
 use onion_vm::types::lambda::vm_instructions::instruction_set::VMInstructionPackage;
 use onion_vm::types::lambda::vm_instructions::ir::DebugInfo;
@@ -15,7 +16,11 @@ use onion_vm::types::lambda::vm_instructions::ir::IR;
 use onion_vm::types::lambda::vm_instructions::ir_translator::IRTranslator;
 
 // Compile code and generate intermediate representation
-pub fn build_code(code: &str, dir_stack: &mut DirStack) -> Result<IRPackage, String> {
+pub fn build_code(
+    code: &str,
+    cycle_detector: &mut CycleDetector<String>,
+    dir_stack: &mut DirStack,
+) -> Result<IRPackage, String> {
     let tokens = lexer::tokenize(code);
     let tokens = lexer::reject_comment(&tokens);
     let gathered = ast_token_stream::from_stream(&tokens);
@@ -25,7 +30,7 @@ pub fn build_code(code: &str, dir_stack: &mut DirStack) -> Result<IRPackage, Str
             return Err(err_token.format(&tokens, code.to_string()).to_string());
         }
     };
-    let macro_result = expand_macro(&ast, dir_stack);
+    let macro_result = expand_macro(&ast, cycle_detector, dir_stack);
 
     let mut errors = "".to_string();
     for error in &macro_result.errors {
@@ -42,7 +47,7 @@ pub fn build_code(code: &str, dir_stack: &mut DirStack) -> Result<IRPackage, Str
 
     let ast = auto_capture_and_rebuild(&macro_result.result_node).1;
 
-    let analyse_result = analyze_ast(&ast, None, dir_stack);
+    let analyse_result = analyze_ast(&ast, None, cycle_detector, dir_stack);
 
     let mut errors = "".to_string();
     for error in &analyse_result.errors {

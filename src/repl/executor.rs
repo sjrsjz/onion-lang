@@ -18,7 +18,7 @@ use onion_vm::{
     unwrap_object, GC,
 };
 
-use onion_frontend::compile::build_code;
+use onion_frontend::{compile::build_code, utils::cycle_detector};
 
 /// REPL专用执行器
 pub struct ReplExecutor {
@@ -53,10 +53,11 @@ impl ReplExecutor {
     pub fn execute_code(
         &mut self,
         code: &str,
+        cycle_detector: &mut cycle_detector::CycleDetector<String>,
         dir_stack: &mut onion_frontend::dir_stack::DirStack,
     ) -> Result<(), String> {
         let ir_package =
-            build_code(code, dir_stack).map_err(|e| format!("Compilation failed: {}", e))?;
+            build_code(code, cycle_detector, dir_stack).map_err(|e| format!("Compilation failed: {}", e))?;
 
         self.execute_ir_package(&ir_package)
     }

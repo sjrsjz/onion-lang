@@ -10,6 +10,7 @@ use crate::{
         ast::{ast_token_stream, build_ast, ASTContextLessNode, ASTNodeType},
         lexer::lexer,
     },
+    utils::cycle_detector::CycleDetector,
 };
 
 use super::ast::ASTNode;
@@ -714,9 +715,10 @@ impl<'c> VariableContext<'c> {
 
 pub fn expand_macro<'n: 't, 't>(
     node: &'n ASTNode<'n>,
+    cycle_detector: &mut CycleDetector<String>,
     dir_stack: &mut DirStack,
 ) -> MacroAnalysisOutput<'n> {
-    let new_node = match expand_import_to_node(node, dir_stack) {
+    let new_node = match expand_import_to_node(node, cycle_detector, dir_stack) {
         Ok(n) => n,
         Err(e) => {
             return MacroAnalysisOutput {
@@ -841,18 +843,6 @@ pub fn expand_macros_to_node<'n: 't, 't>(
                     }
                 }
             }
-            // 其他情况，正常处理
-            let mut new_children = Vec::new();
-            for child in &node.children {
-                let applied_child = expand_macros_to_node(child, errors, warnings, context);
-                new_children.push(applied_child);
-            }
-            return ASTNode {
-                node_type: node.node_type.clone(),
-                start_token: node.start_token.clone(),
-                end_token: node.end_token.clone(),
-                children: new_children,
-            };
         }
         ASTNodeType::Body => {
             context.push_frame(); // 进入新的上下文帧
@@ -930,26 +920,26 @@ pub fn expand_macros_to_node<'n: 't, 't>(
                 children: new_children,
             };
         }
-        _ => {
-            // 对于其他节点类型，递归应用宏
-            let mut new_children = Vec::new();
-            for child in &node.children {
-                let applied_child = expand_macros_to_node(child, errors, warnings, context);
-                new_children.push(applied_child);
-            }
-            return ASTNode {
-                node_type: node.node_type.clone(),
-                start_token: node.start_token.clone(),
-                end_token: node.end_token.clone(),
-                children: new_children,
-            };
-        }
+        _ => {}
     }
+    // 对于其他节点类型，递归应用宏
+    let mut new_children = Vec::new();
+    for child in &node.children {
+        let applied_child = expand_macros_to_node(child, errors, warnings, context);
+        new_children.push(applied_child);
+    }
+    return ASTNode {
+        node_type: node.node_type.clone(),
+        start_token: node.start_token.clone(),
+        end_token: node.end_token.clone(),
+        children: new_children,
+    };
 }
 
 pub fn analyze_ast<'n>(
     ast: &'n ASTNode<'n>,
     break_at_position: Option<usize>,
+    cycle_detector: &mut CycleDetector<String>,
     dir_stack: &mut DirStack,
 ) -> AnalysisOutput<'n> {
     let mut context = VariableContext::new();
@@ -981,6 +971,7 @@ pub fn analyze_ast<'n>(
         false,
         break_at_position,
         &mut context_at_break,
+        cycle_detector,
         dir_stack,
     );
 
@@ -999,6 +990,7 @@ fn analyze_node<'n: 't, 't>(
     dynamic: bool,
     break_at_position: Option<usize>,
     context_at_break: &mut Option<VariableContext<'n>>,
+    cycle_detector: &mut CycleDetector<String>,
     dir_stack: &mut DirStack,
 ) -> AssumedType {
     // 1. Check if analysis should stop globally (break point already found)
@@ -1034,6 +1026,7 @@ fn analyze_node<'n: 't, 't>(
                     dynamic,
                     break_at_position,
                     context_at_break,
+                    cycle_detector,
                     dir_stack,
                 );
                 if context_at_break.is_some() {
@@ -1067,86 +1060,125 @@ fn analyze_node<'n: 't, 't>(
                         for child in &node.children {
                             // 检查子节点是否为字符串
                             if let ASTNodeType::String(file_path) = &child.node_type {
-                                let read_file = std::fs::read_to_string(file_path);
-                                if let Err(e) = read_file {
-                                    // 使用 AnalyzeWarn::CompileError 记录读取错误
-                                    let error_message =
-                                        format!("Failed to read file '{}': {}", file_path, e);
+                                let absolute_path = dir_stack.get_absolute_path(file_path);
+                                let Ok(absolute_path) = absolute_path else {
+                                    // 使用 AnalyzeWarn::CompileError 记录路径解析错误
+                                    let error_message = format!(
+                                        "Failed to resolve path '{}': Invalid path",
+                                        file_path
+                                    );
                                     warnings.push(AnalyzeWarn::CompileError(
                                         child.clone(),
                                         error_message,
                                     ));
-                                // 使用 child 作为错误关联的节点
-                                } else {
-                                    let parent_dir = std::path::Path::new(file_path)
-                                        .parent()
-                                        .unwrap_or_else(|| std::path::Path::new("."))
-                                        .to_str()
-                                        .unwrap_or("");
-                                    let _ = dir_stack.push(&parent_dir);
+                                    continue; // 跳过此子节点
+                                };
 
-                                    let code = read_file.unwrap();
-                                    // 调用 build_code 函数编译代码
-                                    let compile_result = build_code(&code, dir_stack);
-                                    // 弹出目录栈
-                                    let _ = dir_stack.pop();
-
-                                    match compile_result {
-                                        Ok(ir_package) => {
-                                            if context_at_break.is_none() {
-                                                // 替换文件扩展名为onionc
-                                                let onionc_file_path =
-                                                    if let Some(pos) = file_path.rfind('.') {
-                                                        format!("{}.onionc", &file_path[..pos])
-                                                    } else {
-                                                        format!("{}.onionc", file_path)
-                                                    };
-                                                let byte_code = compile_to_bytecode(&ir_package);
-                                                match byte_code {
-                                                    Ok(byte_code) => {
-                                                        // 将字节码写入文件
-                                                        if let Err(e) = byte_code
-                                                            .write_to_file(&onionc_file_path)
-                                                        {
-                                                            // 使用 AnalyzeWarn::CompileError 记录写入错误
-                                                            let error_message = format!(
-                                                        "Failed to write bytecode to file '{}': {}",
-                                                        onionc_file_path, e
-                                                    );
-                                                            warnings.push(
-                                                                AnalyzeWarn::CompileError(
-                                                                    child.clone(),
-                                                                    error_message,
-                                                                ),
-                                                            ); // 使用 child 作为错误关联的节点
-                                                        }
-                                                    }
-                                                    Err(e) => {
-                                                        // 使用 AnalyzeWarn::CompileError 记录编译错误
-                                                        let error_message = format!(
-                                                            "Compilation failed for file '{}': {}",
-                                                            file_path, e
-                                                        );
-                                                        warnings.push(AnalyzeWarn::CompileError(
-                                                            child.clone(),
-                                                            error_message,
-                                                        )); // 使用 child 作为错误关联的节点
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        Err(e) => {
-                                            // 使用 AnalyzeWarn::CompileError 记录编译错误
+                                match cycle_detector
+                                    .visit(absolute_path.to_str().unwrap_or("").to_string())
+                                {
+                                    Ok(mut guard) => {
+                                        let read_file = std::fs::read_to_string(file_path);
+                                        if let Err(e) = read_file {
+                                            // 使用 AnalyzeWarn::CompileError 记录读取错误
                                             let error_message = format!(
-                                                "Compilation failed for file '{}': {}",
+                                                "Failed to read file '{}': {}",
                                                 file_path, e
                                             );
                                             warnings.push(AnalyzeWarn::CompileError(
                                                 child.clone(),
                                                 error_message,
                                             ));
-                                            // 使用 child 作为错误关联的节点
+                                        // 使用 child 作为错误关联的节点
+                                        } else {
+                                            let _ = dir_stack.push_file(&file_path);
+
+                                            let code = read_file.unwrap();
+                                            // 调用 build_code 函数编译代码
+                                            let compile_result = build_code(
+                                                &code,
+                                                guard.get_detector_mut(),
+                                                dir_stack,
+                                            );
+                                            // 弹出目录栈
+                                            let _ = dir_stack.pop();
+
+                                            match compile_result {
+                                                Ok(ir_package) => {
+                                                    if context_at_break.is_none() {
+                                                        // 替换文件扩展名为onionc
+                                                        let onionc_file_path = if let Some(pos) =
+                                                            file_path.rfind('.')
+                                                        {
+                                                            format!("{}.onionc", &file_path[..pos])
+                                                        } else {
+                                                            format!("{}.onionc", file_path)
+                                                        };
+                                                        let byte_code =
+                                                            compile_to_bytecode(&ir_package);
+                                                        match byte_code {
+                                                            Ok(byte_code) => {
+                                                                // 将字节码写入文件
+                                                                if let Err(e) = byte_code
+                                                                    .write_to_file(
+                                                                        &onionc_file_path,
+                                                                    )
+                                                                {
+                                                                    // 使用 AnalyzeWarn::CompileError 记录写入错误
+                                                                    let error_message = format!(
+                                                                "Failed to write bytecode to file '{}': {}",
+                                                                onionc_file_path, e
+                                                            );
+                                                                    warnings.push(
+                                                                        AnalyzeWarn::CompileError(
+                                                                            child.clone(),
+                                                                            error_message,
+                                                                        ),
+                                                                    ); // 使用 child 作为错误关联的节点
+                                                                }
+                                                            }
+                                                            Err(e) => {
+                                                                // 使用 AnalyzeWarn::CompileError 记录编译错误
+                                                                let error_message = format!(
+                                                                    "Compilation failed for file '{}': {}",
+                                                                    file_path, e
+                                                                );
+                                                                warnings.push(
+                                                                    AnalyzeWarn::CompileError(
+                                                                        child.clone(),
+                                                                        error_message,
+                                                                    ),
+                                                                ); // 使用 child 作为错误关联的节点
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    // 使用 AnalyzeWarn::CompileError 记录编译错误
+                                                    let error_message = format!(
+                                                        "Compilation failed for file '{}': {}",
+                                                        file_path, e
+                                                    );
+                                                    warnings.push(AnalyzeWarn::CompileError(
+                                                        child.clone(),
+                                                        error_message,
+                                                    ));
+                                                    // 使用 child 作为错误关联的节点
+                                                }
+                                            }
                                         }
+                                    }
+                                    Err(e) => {
+                                        // 使用 AnalyzeWarn::CompileError 记录循环检测错误
+                                        let error_message = format!(
+                                            "Cycle detected in file '{}': {}",
+                                            file_path, e
+                                        );
+                                        warnings.push(AnalyzeWarn::CompileError(
+                                            child.clone(),
+                                            error_message,
+                                        ));
+                                        continue;
                                     }
                                 }
                             } else {
@@ -1165,6 +1197,7 @@ fn analyze_node<'n: 't, 't>(
                                 dynamic,  // 继承 dynamic 状态或根据需要调整
                                 break_at_position,
                                 context_at_break,
+                                cycle_detector,
                                 dir_stack,
                             );
                             if context_at_break.is_some() {
@@ -1204,6 +1237,7 @@ fn analyze_node<'n: 't, 't>(
                                 dynamic, // 继承 dynamic 状态
                                 break_at_position,
                                 context_at_break,
+                                cycle_detector,
                                 dir_stack,
                             );
                             if context_at_break.is_some() {
@@ -1268,6 +1302,7 @@ fn analyze_node<'n: 't, 't>(
                     is_dynamic, // 使用计算出的 dynamic 状态
                     break_at_position,
                     context_at_break,
+                    cycle_detector,
                     dir_stack,
                 );
                 if context_at_break.is_some() {
@@ -1305,6 +1340,7 @@ fn analyze_node<'n: 't, 't>(
                     dynamic,
                     break_at_position,
                     context_at_break,
+                    cycle_detector,
                     dir_stack,
                 );
                 if context_at_break.is_some() {
@@ -1330,6 +1366,7 @@ fn analyze_node<'n: 't, 't>(
                         dynamic,
                         break_at_position,
                         context_at_break,
+                        cycle_detector,
                         dir_stack,
                     );
                     if context_at_break.is_some() {
@@ -1348,6 +1385,7 @@ fn analyze_node<'n: 't, 't>(
                     dynamic,
                     break_at_position,
                     context_at_break,
+                    cycle_detector,
                     dir_stack,
                 );
                 if context_at_break.is_some() {
@@ -1365,6 +1403,7 @@ fn analyze_node<'n: 't, 't>(
                     dynamic,
                     break_at_position,
                     context_at_break,
+                    cycle_detector,
                     dir_stack,
                 );
                 if context_at_break.is_some() {
@@ -1415,6 +1454,7 @@ fn analyze_node<'n: 't, 't>(
                         dynamic,
                         break_at_position,
                         context_at_break,
+                        cycle_detector,
                         dir_stack,
                     );
                     if context_at_break.is_some() {
@@ -1431,111 +1471,6 @@ fn analyze_node<'n: 't, 't>(
 
             return AssumedType::Lambda;
         }
-        ASTNodeType::LambdaCall => {
-            if let Some(func_node) = node.children.first() {
-                analyze_node(
-                    func_node,
-                    context,
-                    errors,   // Pass errors
-                    warnings, // Pass warnings
-                    dynamic,
-                    break_at_position,
-                    context_at_break,
-                    dir_stack,
-                );
-                if context_at_break.is_some() {
-                    return AssumedType::Unknown;
-                }
-            }
-
-            if node.children.len() > 1 {
-                analyze_node(
-                    &node.children[1],
-                    context,
-                    errors,   // Pass errors
-                    warnings, // Pass warnings
-                    dynamic,
-                    break_at_position,
-                    context_at_break,
-                    dir_stack,
-                );
-                if context_at_break.is_some() {
-                    return AssumedType::Unknown;
-                }
-            }
-
-            return AssumedType::Unknown;
-        }
-        ASTNodeType::AsyncLambdaCall => {
-            if let Some(func_node) = node.children.first() {
-                analyze_node(
-                    func_node,
-                    context,
-                    errors,   // Pass errors
-                    warnings, // Pass warnings
-                    dynamic,
-                    break_at_position,
-                    context_at_break,
-                    dir_stack,
-                );
-                if context_at_break.is_some() {
-                    return AssumedType::Unknown;
-                }
-            }
-
-            if node.children.len() > 1 {
-                analyze_node(
-                    &node.children[1],
-                    context,
-                    errors,   // Pass errors
-                    warnings, // Pass warnings
-                    dynamic,
-                    break_at_position,
-                    context_at_break,
-                    dir_stack,
-                );
-                if context_at_break.is_some() {
-                    return AssumedType::Unknown;
-                }
-            }
-
-            return AssumedType::Unknown;
-        }
-        ASTNodeType::SyncLambdaCall => {
-            if let Some(func_node) = node.children.first() {
-                analyze_node(
-                    func_node,
-                    context,
-                    errors,   // Pass errors
-                    warnings, // Pass warnings
-                    dynamic,
-                    break_at_position,
-                    context_at_break,
-                    dir_stack,
-                );
-                if context_at_break.is_some() {
-                    return AssumedType::Unknown;
-                }
-            }
-
-            if node.children.len() > 1 {
-                analyze_node(
-                    &node.children[1],
-                    context,
-                    errors,   // Pass errors
-                    warnings, // Pass warnings
-                    dynamic,
-                    break_at_position,
-                    context_at_break,
-                    dir_stack,
-                );
-                if context_at_break.is_some() {
-                    return AssumedType::Unknown;
-                }
-            }
-
-            return AssumedType::Unknown;
-        }
         ASTNodeType::Expressions => {
             let mut last_type = AssumedType::Unknown;
             for child in &node.children {
@@ -1547,6 +1482,7 @@ fn analyze_node<'n: 't, 't>(
                     dynamic,
                     break_at_position,
                     context_at_break,
+                    cycle_detector,
                     dir_stack,
                 );
                 if context_at_break.is_some() {
@@ -1566,6 +1502,7 @@ fn analyze_node<'n: 't, 't>(
                     dynamic,
                     break_at_position,
                     context_at_break,
+                    cycle_detector,
                     dir_stack,
                 );
                 if context_at_break.is_some() {
@@ -1581,6 +1518,7 @@ fn analyze_node<'n: 't, 't>(
                     dynamic,
                     break_at_position,
                     context_at_break,
+                    cycle_detector,
                     dir_stack,
                 );
                 if context_at_break.is_some() {
@@ -1595,225 +1533,6 @@ fn analyze_node<'n: 't, 't>(
             }
             return AssumedType::Unknown;
         }
-        ASTNodeType::If => {
-            if let Some(condition) = node.children.first() {
-                analyze_node(
-                    condition,
-                    context,
-                    errors,   // Pass errors
-                    warnings, // Pass warnings
-                    dynamic,
-                    break_at_position,
-                    context_at_break,
-                    dir_stack,
-                );
-                if context_at_break.is_some() {
-                    return AssumedType::Unknown;
-                }
-            }
-
-            let mut then_type = AssumedType::Unknown;
-            if node.children.len() > 1 {
-                then_type = analyze_node(
-                    &node.children[1],
-                    context,
-                    errors,   // Pass errors
-                    warnings, // Pass warnings
-                    dynamic,
-                    break_at_position,
-                    context_at_break,
-                    dir_stack,
-                );
-                if context_at_break.is_some() {
-                    return AssumedType::Unknown;
-                }
-            }
-
-            if node.children.len() > 2 {
-                analyze_node(
-                    &node.children[2],
-                    context,
-                    errors,   // Pass errors
-                    warnings, // Pass warnings
-                    dynamic,
-                    break_at_position,
-                    context_at_break,
-                    dir_stack,
-                );
-                if context_at_break.is_some() {
-                    return AssumedType::Unknown;
-                }
-                // TODO: Type could be union of then/else, for now just return then type
-            }
-
-            return then_type;
-        }
-        ASTNodeType::While => {
-            if let Some(condition) = node.children.first() {
-                analyze_node(
-                    condition,
-                    context,
-                    errors,   // Pass errors
-                    warnings, // Pass warnings
-                    dynamic,
-                    break_at_position,
-                    context_at_break,
-                    dir_stack,
-                );
-                if context_at_break.is_some() {
-                    return AssumedType::Unknown;
-                }
-            }
-
-            let mut body_type = AssumedType::Unknown;
-            if node.children.len() > 1 {
-                body_type = analyze_node(
-                    &node.children[1],
-                    context,
-                    errors,   // Pass errors
-                    warnings, // Pass warnings
-                    dynamic,
-                    break_at_position,
-                    context_at_break,
-                    dir_stack,
-                );
-                if context_at_break.is_some() {
-                    return AssumedType::Unknown;
-                }
-            }
-
-            return body_type; // Or Null/Unknown?
-        }
-        ASTNodeType::Return | ASTNodeType::Emit => {
-            if let Some(value) = node.children.first() {
-                let ret_type = analyze_node(
-                    value,
-                    context,
-                    errors,   // Pass errors
-                    warnings, // Pass warnings
-                    dynamic,
-                    break_at_position,
-                    context_at_break,
-                    dir_stack,
-                );
-                if context_at_break.is_some() {
-                    return AssumedType::Unknown;
-                }
-                return ret_type;
-            }
-            return AssumedType::Unknown; // Or Null?
-        }
-        ASTNodeType::Operation(_) => {
-            let mut last_type = AssumedType::Unknown;
-            for child in &node.children {
-                last_type = analyze_node(
-                    child,
-                    context,
-                    errors,   // Pass errors
-                    warnings, // Pass warnings
-                    dynamic,
-                    break_at_position,
-                    context_at_break,
-                    dir_stack,
-                );
-                if context_at_break.is_some() {
-                    return AssumedType::Unknown;
-                }
-            }
-            // TODO: Infer operation result type based on operator and operand types
-            return last_type;
-        }
-        ASTNodeType::Tuple => {
-            for child in &node.children {
-                analyze_node(
-                    child,
-                    context,
-                    errors,   // Pass errors
-                    warnings, // Pass warnings
-                    dynamic,
-                    break_at_position,
-                    context_at_break,
-                    dir_stack,
-                );
-                if context_at_break.is_some() {
-                    return AssumedType::Tuple;
-                } // Return Tuple type even if break occurred inside
-            }
-            return AssumedType::Tuple;
-        }
-        ASTNodeType::GetAttr => {
-            if node.children.len() >= 2 {
-                analyze_node(
-                    &node.children[0],
-                    context,
-                    errors,   // Pass errors
-                    warnings, // Pass warnings
-                    dynamic,
-                    break_at_position,
-                    context_at_break,
-                    dir_stack,
-                ); // Object
-                if context_at_break.is_some() {
-                    return AssumedType::Unknown;
-                }
-                // Don't analyze the attribute name itself as an expression usually
-                // analyze_node(&node.children[1], context, errors, warnings, dynamic, break_at_position, context_at_break); // Attribute
-                // if context_at_break.is_some() { return AssumedType::Unknown; }
-            }
-            // TODO: Could try to infer attribute type if object type is known
-            return AssumedType::Unknown;
-        }
-        ASTNodeType::IndexOf => {
-            if node.children.len() >= 2 {
-                analyze_node(
-                    &node.children[0],
-                    context,
-                    errors,   // Pass errors
-                    warnings, // Pass warnings
-                    dynamic,
-                    break_at_position,
-                    context_at_break,
-                    dir_stack,
-                ); // Object
-                if context_at_break.is_some() {
-                    return AssumedType::Unknown;
-                }
-                analyze_node(
-                    &node.children[1],
-                    context,
-                    errors,   // Pass errors
-                    warnings, // Pass warnings
-                    dynamic,
-                    break_at_position,
-                    context_at_break,
-                    dir_stack,
-                ); // Index
-                if context_at_break.is_some() {
-                    return AssumedType::Unknown;
-                }
-            }
-            // TODO: Could try to infer element type if object type is known (e.g., Tuple, String)
-            return AssumedType::Unknown;
-        }
-        ASTNodeType::Modifier(_) => {
-            if let Some(target) = node.children.first() {
-                let target_type = analyze_node(
-                    target,
-                    context,
-                    errors,   // Pass errors
-                    warnings, // Pass warnings
-                    dynamic,
-                    break_at_position,
-                    context_at_break,
-                    dir_stack,
-                );
-                if context_at_break.is_some() {
-                    return AssumedType::Unknown;
-                }
-                return target_type; // Modifier usually doesn't change the type
-            }
-            return AssumedType::Unknown;
-        }
         ASTNodeType::KeyValue => {
             let _ = analyze_node(
                 &node.children[0],
@@ -1823,6 +1542,7 @@ fn analyze_node<'n: 't, 't>(
                 dynamic,
                 break_at_position,
                 context_at_break,
+                cycle_detector,
                 dir_stack,
             ); // Key
             if context_at_break.is_some() {
@@ -1836,6 +1556,7 @@ fn analyze_node<'n: 't, 't>(
                 dynamic,
                 break_at_position,
                 context_at_break,
+                cycle_detector,
                 dir_stack,
             ); // Value
             if context_at_break.is_some() {
@@ -1854,6 +1575,7 @@ fn analyze_node<'n: 't, 't>(
                     dynamic,
                     break_at_position,
                     context_at_break,
+                    cycle_detector,
                     dir_stack,
                 );
                 if context_at_break.is_some() {
@@ -1871,6 +1593,7 @@ fn analyze_node<'n: 't, 't>(
                 dynamic,
                 break_at_position,
                 context_at_break,
+                cycle_detector,
                 dir_stack,
             ); // Name (usually string/identifier, not analyzed as variable)
             if context_at_break.is_some() {
@@ -1884,6 +1607,7 @@ fn analyze_node<'n: 't, 't>(
                 dynamic,
                 break_at_position,
                 context_at_break,
+                cycle_detector,
                 dir_stack,
             ); // Value
             if context_at_break.is_some() {
@@ -1910,6 +1634,7 @@ fn analyze_node<'n: 't, 't>(
                     dynamic,
                     break_at_position,
                     context_at_break,
+                    cycle_detector,
                     dir_stack,
                 );
                 if context_at_break.is_some() {
@@ -1930,6 +1655,7 @@ fn analyze_node<'n: 't, 't>(
                     dynamic,
                     break_at_position,
                     context_at_break,
+                    cycle_detector,
                     dir_stack,
                 );
                 if context_at_break.is_some() {
@@ -1949,6 +1675,7 @@ fn analyze_tuple_params<'n: 't, 't>(
     dynamic: bool,
     break_at_position: Option<usize>,
     context_at_break: &mut Option<VariableContext<'n>>,
+    cycle_detector: &mut CycleDetector<String>,
     dir_stack: &mut DirStack,
 ) -> Option<VariableFrame<'n>> {
     // Check break condition before processing parameters
@@ -1998,6 +1725,7 @@ fn analyze_tuple_params<'n: 't, 't>(
                             dynamic,
                             break_at_position,
                             context_at_break,
+                            cycle_detector,
                             dir_stack,
                         );
                         if context_at_break.is_some() {
@@ -2021,6 +1749,7 @@ fn analyze_tuple_params<'n: 't, 't>(
                                 dynamic,
                                 break_at_position,
                                 context_at_break,
+                                cycle_detector,
                                 dir_stack,
                             );
                             if context_at_break.is_some() {
@@ -2039,6 +1768,7 @@ fn analyze_tuple_params<'n: 't, 't>(
                         dynamic,
                         break_at_position,
                         context_at_break,
+                        cycle_detector,
                         dir_stack,
                     );
                     if context_at_break.is_some() {
@@ -2449,7 +2179,11 @@ pub fn auto_capture<'t>(
     }
 }
 
-fn import_ast_node(code: &str, dir_stack: &mut DirStack) -> Result<ASTContextLessNode, String> {
+fn import_ast_node(
+    code: &str,
+    cycle_detector: &mut CycleDetector<String>,
+    dir_stack: &mut DirStack,
+) -> Result<ASTContextLessNode, String> {
     let tokens = lexer::tokenize(code);
     let tokens = lexer::reject_comment(&tokens);
     let gathered = ast_token_stream::from_stream(&tokens);
@@ -2459,12 +2193,13 @@ fn import_ast_node(code: &str, dir_stack: &mut DirStack) -> Result<ASTContextLes
             return Err(err_token.format(&tokens, code.to_string()).to_string());
         }
     };
-    let new_ast = expand_import_to_node(&ast, dir_stack)?;
+    let new_ast = expand_import_to_node(&ast, cycle_detector, dir_stack)?;
     return Ok(new_ast.into());
 }
 
 pub fn expand_import_to_node<'n: 't, 't>(
     node: &'t ASTNode<'n>,
+    cycle_detector: &mut CycleDetector<String>,
     dir_stack: &mut DirStack,
 ) -> Result<ASTNode<'n>, String> {
     match &node.node_type {
@@ -2477,33 +2212,51 @@ pub fn expand_import_to_node<'n: 't, 't>(
                     }
                     let import_path = &node.children[0];
                     if let ASTNodeType::String(path) = &import_path.node_type {
-                        let read_file = std::fs::read_to_string(path);
-                        if let Err(e) = read_file {
-                            return Err(format!("Failed to read import file '{}': {}", path, e));
+                        let absolute_path = dir_stack.get_absolute_path(path).map_err(|err| {
+                            format!("Failed to get absolute path for import '{}': {}", path, err)
+                        })?;
+                        match cycle_detector.visit(absolute_path.to_str().ok_or("Failed to convert path to string")?.to_string()) {
+                            Ok(mut guard) => {
+                                let read_file = std::fs::read_to_string(path);
+                                if let Err(e) = read_file {
+                                    return Err(format!(
+                                        "Failed to read import file '{}': {}",
+                                        path, e
+                                    ));
+                                }
+                                let code_str = read_file.unwrap();
+
+                                dir_stack.push_file(&path).map_err(|err| {
+                                    format!("Failed to push import path '{}': {}", path, err)
+                                })?;
+                                let node = match import_ast_node(
+                                    &code_str,
+                                    guard.get_detector_mut(),
+                                    dir_stack,
+                                ) {
+                                    Ok(imported_node) => {
+                                        // 将导入的 ASTNode 添加到当前节点的子节点中
+                                        imported_node.into()
+                                    }
+                                    Err(err) => {
+                                        return Err(format!(
+                                            "Failed to import '{}': {}",
+                                            path, err
+                                        ));
+                                    }
+                                };
+                                dir_stack.pop().map_err(|err| {
+                                    format!("Failed to pop import path '{}': {}", path, err)
+                                })?;
+                                return Ok(node);
+                            }
+                            Err(cycle_node) => {
+                                return Err(format!(
+                                    "Cycle detected while importing '{}': {}",
+                                    path, cycle_node
+                                ));
+                            }
                         }
-                        let code_str = read_file.unwrap();
-                        // 尝试解析导入路径
-                        let parent_dir = std::path::Path::new(path)
-                            .parent()
-                            .unwrap_or_else(|| std::path::Path::new("."))
-                            .to_str()
-                            .unwrap_or("");
-                        dir_stack.push(&parent_dir).map_err(|err| {
-                            format!("Failed to push import path '{}': {}", path, err)
-                        })?;
-                        let node = match import_ast_node(&code_str, dir_stack) {
-                            Ok(imported_node) => {
-                                // 将导入的 ASTNode 添加到当前节点的子节点中
-                                imported_node.into()
-                            }
-                            Err(err) => {
-                                return Err(format!("Failed to import '{}': {}", path, err));
-                            }
-                        };
-                        dir_stack.pop().map_err(|err| {
-                            format!("Failed to pop import path '{}': {}", path, err)
-                        })?;
-                        return Ok(node);
                     } else {
                         return Err(format!(
                             "Import path must be a string, found: {:?}",
@@ -2513,32 +2266,18 @@ pub fn expand_import_to_node<'n: 't, 't>(
                 }
                 _ => {}
             }
-            // 其他情况，正常处理
-            let mut new_children = Vec::new();
-            for child in &node.children {
-                let applied_child = expand_import_to_node(child, dir_stack)?;
-                new_children.push(applied_child);
-            }
-            return Ok(ASTNode {
-                node_type: node.node_type.clone(),
-                start_token: node.start_token.clone(),
-                end_token: node.end_token.clone(),
-                children: new_children,
-            });
         }
-        _ => {
-            // 对于其他节点类型，递归应用宏
-            let mut new_children = Vec::new();
-            for child in &node.children {
-                let applied_child = expand_import_to_node(child, dir_stack)?;
-                new_children.push(applied_child);
-            }
-            return Ok(ASTNode {
-                node_type: node.node_type.clone(),
-                start_token: node.start_token.clone(),
-                end_token: node.end_token.clone(),
-                children: new_children,
-            });
-        }
+        _ => {}
     }
+    let mut new_children = Vec::new();
+    for child in &node.children {
+        let applied_child = expand_import_to_node(child, cycle_detector, dir_stack)?;
+        new_children.push(applied_child);
+    }
+    return Ok(ASTNode {
+        node_type: node.node_type.clone(),
+        start_token: node.start_token.clone(),
+        end_token: node.end_token.clone(),
+        children: new_children,
+    });
 }

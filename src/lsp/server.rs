@@ -4,6 +4,7 @@ use std::panic;
 use std::sync::{Arc, Mutex}; // 添加 panic 模块
 
 use log::{debug, error, info, warn};
+use onion_frontend::utils::cycle_detector;
 use serde_json::Value;
 use url::Url;
 
@@ -353,22 +354,66 @@ impl LspServer {
                     }
                 };
                 let mut dir_stack = DirStack::new(Some(&parent_dir)).unwrap();
-                let macro_result = analyzer::expand_macro(&ast, &mut dir_stack);
+
+                let mut cycle_detector = cycle_detector::CycleDetector::new();
+                let mut visit_result = match cycle_detector.visit(
+                    match dir_stack.get_absolute_path(match file_path.to_str() {
+                        Some(path) => path,
+                        None => {
+                            error!(
+                                "Failed to convert file path to string: {}",
+                                file_path.display()
+                            );
+                            return vec![]; // 返回空列表
+                        }
+                    }) {
+                        Ok(path) => path.to_str().unwrap_or("").to_string(),
+                        Err(e) => {
+                            error!("Failed to get absolute path: {}", e);
+                            return vec![]; // 返回空列表
+                        }
+                    }
+                    .to_string(),
+                ) {
+                    Ok(result) => result,
+                    Err(e) => {
+                        error!("Cycle detection failed: {}", e);
+                        return vec![]; // 返回空列表
+                    }
+                };
+
+                let macro_result =
+                    analyzer::expand_macro(&ast, visit_result.get_detector_mut(), &mut dir_stack);
                 if !macro_result.errors.is_empty() {
                     error!(
                         "Macro expansion errors: {}",
-                        macro_result.errors.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(", ")
+                        macro_result
+                            .errors
+                            .iter()
+                            .map(|e| e.to_string())
+                            .collect::<Vec<_>>()
+                            .join(", ")
                     );
                 }
                 if !macro_result.warnings.is_empty() {
                     warn!(
                         "Macro expansion warnings: {}",
-                        macro_result.warnings.iter().map(|w| w.to_string()).collect::<Vec<_>>().join(", ")
+                        macro_result
+                            .warnings
+                            .iter()
+                            .map(|w| w.to_string())
+                            .collect::<Vec<_>>()
+                            .join(", ")
                     );
                 }
+
                 // 3. 调用分析器获取特定位置的上下文
-                let analysis_output =
-                    analyzer::analyze_ast(&macro_result.result_node, Some(byte_offset), &mut dir_stack);
+                let analysis_output = analyzer::analyze_ast(
+                    &macro_result.result_node,
+                    Some(byte_offset),
+                    visit_result.get_detector_mut(),
+                    &mut dir_stack,
+                );
 
                 // 4. 如果分析器在断点处捕获了上下文，则提取变量
                 if let Some(context) = analysis_output.context_at_break {

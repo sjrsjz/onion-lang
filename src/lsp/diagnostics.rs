@@ -1,6 +1,7 @@
 use log::{debug, error, info};
 use onion_frontend::parser::analyzer::auto_capture_and_rebuild;
 use onion_frontend::parser::analyzer::expand_macro;
+use onion_frontend::utils::cycle_detector;
 use url::Url;
 
 use super::document::TextDocument;
@@ -156,9 +157,14 @@ pub fn validate_document(
                 );
             }
             let mut dir_stack = dir_stack.unwrap();
-            let macro_result = expand_macro(&ast, &mut dir_stack);
-            for error in macro_result.errors {
-                match error {
+
+            let mut cycle_detector = cycle_detector::CycleDetector::new();
+            let visit_result = cycle_detector.visit(file_path.to_str().unwrap_or("").to_string());
+            match visit_result {
+                Ok(mut guard) => {
+                    let macro_result = expand_macro(&ast, guard.get_detector_mut(), &mut dir_stack);
+                    for error in macro_result.errors {
+                        match error {
                     onion_frontend::parser::analyzer::AnalyzeError::UndefinedVariable(var) => {
                         if var.start_token.is_none() {
                             continue;
@@ -207,7 +213,10 @@ pub fn validate_document(
                             related_information: None,
                         });
                     }
-                    onion_frontend::parser::analyzer::AnalyzeError::DetailedContextLessError(_, msg) => {
+                    onion_frontend::parser::analyzer::AnalyzeError::DetailedContextLessError(
+                        _,
+                        msg,
+                    ) => {
                         // 没有range信息
                         let range = Range {
                             start: Position {
@@ -229,29 +238,38 @@ pub fn validate_document(
                         });
                     }
                 }
-            }
-            for warn in macro_result.warnings {
-                match warn {
-                    onion_frontend::parser::analyzer::AnalyzeWarn::CompileError(node, warn) => {
-                        if node.start_token.is_none() {
-                            continue;
-                        }
-                        let range = get_token_range(node.start_token.unwrap(), &document.content);
-                        diagnostics.push(Diagnostic {
-                            range,
-                            severity: Some(DiagnosticSeverity::Warning),
-                            code: Some(serde_json::Value::String("COMP-W001".to_string())),
-                            source: Some("onion-lsp".to_string()),
-                            message: format!("@compile: {}", warn),
-                            related_information: None,
-                        });
                     }
-                }
-            }
+                    for warn in macro_result.warnings {
+                        match warn {
+                            onion_frontend::parser::analyzer::AnalyzeWarn::CompileError(
+                                node,
+                                warn,
+                            ) => {
+                                if node.start_token.is_none() {
+                                    continue;
+                                }
+                                let range =
+                                    get_token_range(node.start_token.unwrap(), &document.content);
+                                diagnostics.push(Diagnostic {
+                                    range,
+                                    severity: Some(DiagnosticSeverity::Warning),
+                                    code: Some(serde_json::Value::String("COMP-W001".to_string())),
+                                    source: Some("onion-lsp".to_string()),
+                                    message: format!("@compile: {}", warn),
+                                    related_information: None,
+                                });
+                            }
+                        }
+                    }
 
-            let result = analyze_ast(&macro_result.result_node, None, &mut dir_stack);
-            for error in result.errors {
-                match error {
+                    let result = analyze_ast(
+                        &macro_result.result_node,
+                        None,
+                        guard.get_detector_mut(),
+                        &mut dir_stack,
+                    );
+                    for error in result.errors {
+                        match error {
                     onion_frontend::parser::analyzer::AnalyzeError::UndefinedVariable(var) => {
                         if var.start_token.is_none() {
                             continue;
@@ -300,7 +318,10 @@ pub fn validate_document(
                             related_information: None,
                         });
                     }
-                    onion_frontend::parser::analyzer::AnalyzeError::DetailedContextLessError(_, msg) => {
+                    onion_frontend::parser::analyzer::AnalyzeError::DetailedContextLessError(
+                        _,
+                        msg,
+                    ) => {
                         // 没有range信息
                         let range = Range {
                             start: Position {
@@ -322,36 +343,62 @@ pub fn validate_document(
                         });
                     }
                 }
-            }
-            for warn in result.warnings {
-                match warn {
-                    onion_frontend::parser::analyzer::AnalyzeWarn::CompileError(node, warn) => {
-                        if node.start_token.is_none() {
-                            continue;
+                    }
+                    for warn in result.warnings {
+                        match warn {
+                            onion_frontend::parser::analyzer::AnalyzeWarn::CompileError(
+                                node,
+                                warn,
+                            ) => {
+                                if node.start_token.is_none() {
+                                    continue;
+                                }
+                                let range =
+                                    get_token_range(node.start_token.unwrap(), &document.content);
+                                diagnostics.push(Diagnostic {
+                                    range,
+                                    severity: Some(DiagnosticSeverity::Warning),
+                                    code: Some(serde_json::Value::String("COMP-W001".to_string())),
+                                    source: Some("onion-lsp".to_string()),
+                                    message: format!("@compile: {}", warn),
+                                    related_information: None,
+                                });
+                            }
                         }
-                        let range = get_token_range(node.start_token.unwrap(), &document.content);
-                        diagnostics.push(Diagnostic {
-                            range,
-                            severity: Some(DiagnosticSeverity::Warning),
-                            code: Some(serde_json::Value::String("COMP-W001".to_string())),
-                            source: Some("onion-lsp".to_string()),
-                            message: format!("@compile: {}", warn),
-                            related_information: None,
-                        });
+                    }
+
+                    // 进行语义着色处理
+                    info!("开始进行语义着色分析");
+                    match do_semantic(&document.content, ast, &tokens) {
+                        Ok(tokens) => {
+                            info!("语义着色处理成功，生成了 {} 个标记", tokens.len());
+                            semantic_tokens = Some(tokens);
+                        }
+                        Err(e) => {
+                            error!("语义着色处理失败: {}", e);
+                            // 语义着色失败不应该影响诊断结果
+                        }
                     }
                 }
-            }
-
-            // 进行语义着色处理
-            info!("开始进行语义着色分析");
-            match do_semantic(&document.content, ast, &tokens) {
-                Ok(tokens) => {
-                    info!("语义着色处理成功，生成了 {} 个标记", tokens.len());
-                    semantic_tokens = Some(tokens);
-                }
-                Err(e) => {
-                    error!("语义着色处理失败: {}", e);
-                    // 语义着色失败不应该影响诊断结果
+                Err(err) => {
+                    error!("宏展开或AST分析失败: {:?}", err);
+                    diagnostics.push(Diagnostic {
+                        range: Range {
+                            start: Position {
+                                line: 0,
+                                character: 0,
+                            },
+                            end: Position {
+                                line: 0,
+                                character: 1,
+                            },
+                        },
+                        severity: Some(DiagnosticSeverity::Error),
+                        code: None,
+                        source: Some("onion-lsp".to_string()),
+                        message: "宏展开或AST分析失败".to_string(),
+                        related_information: None,
+                    });
                 }
             }
         }
