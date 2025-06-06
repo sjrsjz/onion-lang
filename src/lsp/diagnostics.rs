@@ -101,7 +101,6 @@ pub fn validate_document(
 
     match build_ast(gathered) {
         Ok(ast) => {
-            let ast = auto_capture_and_rebuild(&ast).1;
             // 解析成功，没有错误
             info!("文档解析成功: {}", document.uri);
             info!("分析变量定义: {}", document.uri);
@@ -261,13 +260,9 @@ pub fn validate_document(
                             }
                         }
                     }
+                    let ast = auto_capture_and_rebuild(&macro_result.result_node).1;
 
-                    let result = analyze_ast(
-                        &macro_result.result_node,
-                        None,
-                        guard.get_detector_mut(),
-                        &mut dir_stack,
-                    );
+                    let result = analyze_ast(&ast, None, guard.get_detector_mut(), &mut dir_stack);
                     for error in result.errors {
                         match error {
                     onion_frontend::parser::analyzer::AnalyzeError::UndefinedVariable(var) => {

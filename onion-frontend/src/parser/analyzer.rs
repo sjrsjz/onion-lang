@@ -2236,7 +2236,10 @@ pub fn expand_import_to_node<'n: 't, 't>(
                                 ) {
                                     Ok(imported_node) => {
                                         // 将导入的 ASTNode 添加到当前节点的子节点中
-                                        imported_node.into()
+                                        let mut new_node: ASTNode<'_> = imported_node.into();
+                                        new_node.start_token = node.start_token.clone();
+                                        new_node.end_token = node.end_token.clone();
+                                        new_node
                                     }
                                     Err(err) => {
                                         return Err(format!(
