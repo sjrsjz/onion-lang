@@ -34,20 +34,20 @@ impl OnionObjectCell {
     where
         F: FnOnce(&OnionObject) -> Result<T, RuntimeError>,
     {
-        match self.0.try_borrow() {
-            Ok(obj) => obj.with_data(f),
-            Err(_) => Err(RuntimeError::BrokenReference),
-        }
+        self.0
+            .try_borrow()
+            .map_err(|_| RuntimeError::BrokenReference)?
+            .with_data(f)
     }
     #[inline(always)]
     pub fn with_data_mut<T, F>(&self, f: F) -> Result<T, RuntimeError>
     where
         F: FnOnce(&mut OnionObject) -> Result<T, RuntimeError>,
     {
-        match self.0.try_borrow_mut() {
-            Ok(mut obj) => obj.with_data_mut(f),
-            Err(_) => Err(RuntimeError::BrokenReference),
-        }
+        self.0
+            .try_borrow_mut()
+            .map_err(|_| RuntimeError::BrokenReference)?
+            .with_data_mut(f)
     }
 
     #[inline(always)]
@@ -55,10 +55,10 @@ impl OnionObjectCell {
     where
         F: FnOnce(&mut OnionObject) -> Result<T, RuntimeError>,
     {
-        match self.0.try_borrow_mut() {
-            Ok(mut obj) => obj.with_data_ref_mut(f),
-            Err(_) => Err(RuntimeError::BrokenReference),
-        }
+        self.0
+            .try_borrow_mut()
+            .map_err(|_| RuntimeError::BrokenReference)?
+            .with_data_ref_mut(f)
     }
 
     #[inline(always)]
@@ -66,10 +66,10 @@ impl OnionObjectCell {
     where
         F: Fn(&OnionObject) -> Result<T, RuntimeError>,
     {
-        match self.0.try_borrow() {
-            Ok(obj) => obj.with_attribute(key, f),
-            Err(_) => Err(RuntimeError::BrokenReference),
-        }
+        self.0
+            .try_borrow()
+            .map_err(|_| RuntimeError::BrokenReference)?
+            .with_attribute(key, f)
     }
 
     #[inline(always)]
@@ -77,18 +77,15 @@ impl OnionObjectCell {
     where
         F: Fn(&mut OnionObject) -> Result<T, RuntimeError>,
     {
-        match self.0.try_borrow_mut() {
-            Ok(mut obj) => obj.with_attribute_mut(key, f),
-            Err(_) => Err(RuntimeError::BrokenReference),
-        }
+        self.0
+            .try_borrow_mut()
+            .map_err(|_| RuntimeError::BrokenReference)?
+            .with_attribute_mut(key, f)
     }
 
     #[inline(always)]
     pub fn upgrade(&self) -> Option<Vec<GCArc<OnionObjectCell>>> {
-        match self.0.try_borrow() {
-            Ok(obj) => obj.upgrade(),
-            Err(_) => None,
-        }
+        self.0.try_borrow().map(|obj| obj.upgrade()).unwrap_or(None)
     }
 
     #[inline(always)]
@@ -1045,9 +1042,9 @@ impl OnionObject {
         self.with_data(|obj| match obj {
             OnionObject::Named(named) => Ok(named.get_value().clone().stabilize()),
             OnionObject::Pair(pair) => Ok(pair.get_value().clone().stabilize()),
-            OnionObject::Undefined(s) => {
-                Ok(OnionStaticObject::new(OnionObject::String(s.clone().unwrap_or_else(|| "".to_string()))))
-            }
+            OnionObject::Undefined(s) => Ok(OnionStaticObject::new(OnionObject::String(
+                s.clone().unwrap_or_else(|| "".to_string()),
+            ))),
             _ => Err(RuntimeError::InvalidOperation(format!(
                 "value_of() not supported for {:?}",
                 obj
