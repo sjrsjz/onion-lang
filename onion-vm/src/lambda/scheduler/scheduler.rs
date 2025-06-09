@@ -42,6 +42,11 @@ impl Runnable for Scheduler {
                     self.runnable_stack.push(new_runnable);
                     Ok(StepResult::Continue)
                 }
+                StepResult::ReplaceRunnable(new_runnable) => {
+                    self.runnable_stack.pop();
+                    self.runnable_stack.push(new_runnable);
+                    Ok(StepResult::Continue)
+                }
                 StepResult::Return(result) => {
                     self.runnable_stack.pop();
                     if let Some(top_runnable) = self.runnable_stack.last_mut() {

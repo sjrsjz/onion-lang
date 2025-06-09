@@ -3,6 +3,7 @@ use arc_gc::gc::GC;
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
     types::{
+        lambda::launcher::OnionLambdaRunnableLauncher,
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         tuple::OnionTuple,
     },
@@ -51,7 +52,7 @@ impl Runnable for Mapping {
         }
     }
 
-    fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
+    fn step(&mut self, _gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
         self.container
             .weak()
             .with_data(|container| match container {
@@ -60,19 +61,27 @@ impl Runnable for Mapping {
                     if let Some(element) = tuple.elements.get(self.current_index) {
                         let element_clone = element.clone();
                         self.mapper.weak().with_data(|mapper_obj| match mapper_obj {
-                            OnionObject::Lambda(lambda) => {
-                                let OnionObject::Tuple(params) = &*lambda.parameter.try_borrow()?
-                                else {
-                                    return Err(RuntimeError::InvalidType(format!(
-                                        "Map's parameter must be a tuple, got {:?}",
-                                        lambda.parameter
-                                    )));
-                                };
+                            OnionObject::Lambda(_) => {
+                                // let OnionObject::Tuple(params) = &*lambda.parameter.try_borrow()?
+                                // else {
+                                //     return Err(RuntimeError::InvalidType(format!(
+                                //         "Map's parameter must be a tuple, got {:?}",
+                                //         lambda.parameter
+                                //     )));
+                                // };
+                                // let argument =
+                                //     params.clone_and_named_assignment(&OnionTuple::new(vec![
+                                //         element_clone,
+                                //     ]))?;
+                                // let runnable = lambda.create_runnable(argument, &self.mapper, gc)?;
                                 let argument =
-                                    params.clone_and_named_assignment(&OnionTuple::new(vec![
-                                        element_clone,
-                                    ]))?;
-                                let runnable = lambda.create_runnable(argument, &self.mapper, gc)?;
+                                    OnionObject::Tuple(OnionTuple::new(vec![element_clone]))
+                                        .stabilize();
+                                let runnable = Box::new(OnionLambdaRunnableLauncher::new_static(
+                                    &self.mapper,
+                                    &argument,
+                                    |r| Ok(r),
+                                )?);
                                 Ok(StepResult::NewRunnable(runnable))
                             }
                             OnionObject::Boolean(false) => Ok(StepResult::Continue),

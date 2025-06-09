@@ -2782,7 +2782,7 @@ fn match_quick_named_to<'t>(
                 Some(&tokens.last().unwrap().last().unwrap()),
                 Some(vec![
                     node,
-                    ASTNode::new(ASTNodeType::Null, None, None, None),
+                    ASTNode::new(ASTNodeType::Undefined, None, None, None),
                 ]),
             )),
             node_offset + 1,

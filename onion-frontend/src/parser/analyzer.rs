@@ -1020,8 +1020,9 @@ fn analyze_node<'n: 't, 't>(
         return AssumedType::Unknown;
     }
 
-    use super::ast::ASTNodeType;    // Removed old auto_break check
-    match &node.node_type {        ASTNodeType::Let(var_name) => {
+    use super::ast::ASTNodeType; // Removed old auto_break check
+    match &node.node_type {
+        ASTNodeType::Let(var_name) => {
             if let Some(value_node) = node.children.first() {
                 // Analyze the value expression first
                 let assumed_type = analyze_node(
@@ -1301,7 +1302,7 @@ fn analyze_node<'n: 't, 't>(
                         error_message,
                     ));
                 }
-            }            // 对非 @compile 注解或在断点分析时的 @compile 注解执行常规分析
+            } // 对非 @compile 注解或在断点分析时的 @compile 注解执行常规分析
             for child in &node.children {
                 assumed_type = analyze_node(
                     child,
@@ -1321,24 +1322,26 @@ fn analyze_node<'n: 't, 't>(
 
             check_postorder_break(node, break_at_position, context, context_at_break);
             return assumed_type;
-        }        ASTNodeType::Variable(var_name) => {
+        }
+        ASTNodeType::Variable(var_name) => {
             // Check definition before potentially breaking
             if context.get_variable_current_context(var_name).is_none() {
                 if !dynamic {
                     errors.push(AnalyzeError::UndefinedVariable(node.clone())); // 使用 errors Vec
                 }
             }
-            
+
             // Post-order check after processing the variable
             check_postorder_break(node, break_at_position, context, context_at_break);
-            
+
             // Return variable type or Unknown
             if let Some(var) = context.get_variable_current_context(var_name) {
                 var.assumed_type.clone()
             } else {
                 AssumedType::Unknown
             }
-        }        ASTNodeType::Body => {
+        }
+        ASTNodeType::Body => {
             // Body 和 Boundary 在当前上下文中创建新的作用域（帧）
             context.push_frame();
             let mut assumed_type = AssumedType::Unknown;
@@ -1404,7 +1407,8 @@ fn analyze_node<'n: 't, 't>(
                     // 如果在参数分析中中断，不弹出上下文
                     return AssumedType::Lambda;
                 }
-            }            if *is_dynamic_gen {
+            }
+            if *is_dynamic_gen {
                 context.push_frame();
                 analyze_node(
                     &node.children.last().unwrap(),
@@ -1484,7 +1488,8 @@ fn analyze_node<'n: 't, 't>(
             }
 
             return AssumedType::Lambda;
-        }        ASTNodeType::Expressions => {
+        }
+        ASTNodeType::Expressions => {
             let mut last_type = AssumedType::Unknown;
             for child in &node.children {
                 last_type = analyze_node(
@@ -1504,7 +1509,8 @@ fn analyze_node<'n: 't, 't>(
             }
             check_postorder_break(node, break_at_position, context, context_at_break);
             return last_type;
-        }        ASTNodeType::Assign => {
+        }
+        ASTNodeType::Assign => {
             if node.children.len() >= 2 {
                 // Analyze RHS first
                 let assumed_type = analyze_node(
@@ -1547,7 +1553,8 @@ fn analyze_node<'n: 't, 't>(
             }
             check_postorder_break(node, break_at_position, context, context_at_break);
             return AssumedType::Unknown;
-        }        ASTNodeType::KeyValue => {
+        }
+        ASTNodeType::KeyValue => {
             let _ = analyze_node(
                 &node.children[0],
                 context,
@@ -1578,7 +1585,8 @@ fn analyze_node<'n: 't, 't>(
             }
             check_postorder_break(node, break_at_position, context, context_at_break);
             return AssumedType::KeyVal; // Return KeyVal type
-        }        ASTNodeType::Set => {
+        }
+        ASTNodeType::Set => {
             for child in &node.children {
                 // Iterate through all children for Set
                 analyze_node(
@@ -1598,7 +1606,8 @@ fn analyze_node<'n: 't, 't>(
             }
             check_postorder_break(node, break_at_position, context, context_at_break);
             return AssumedType::Set; // Return Set type
-        }        ASTNodeType::NamedTo => {
+        }
+        ASTNodeType::NamedTo => {
             let _ = analyze_node(
                 &node.children[0],
                 context,
@@ -1629,7 +1638,7 @@ fn analyze_node<'n: 't, 't>(
             }
             check_postorder_break(node, break_at_position, context, context_at_break);
             return AssumedType::NamedArgument; // Return NamedArgument type
-        }// Simple types don't have children to analyze recursively
+        } // Simple types don't have children to analyze recursively
         ASTNodeType::String(_) => {
             check_postorder_break(node, break_at_position, context, context_at_break);
             AssumedType::String
@@ -1661,7 +1670,8 @@ fn analyze_node<'n: 't, 't>(
         ASTNodeType::None => {
             check_postorder_break(node, break_at_position, context, context_at_break);
             AssumedType::Undefined
-        }        ASTNodeType::Is => {
+        }
+        ASTNodeType::Is => {
             for child in &node.children {
                 let _ = analyze_node(
                     child,
@@ -1680,7 +1690,7 @@ fn analyze_node<'n: 't, 't>(
             }
             check_postorder_break(node, break_at_position, context, context_at_break);
             return AssumedType::Boolean; // 'is' checks return a boolean
-        }        // Default case for other node types
+        } // Default case for other node types
         _ => {
             let mut last_type = AssumedType::Unknown;
             for child in &node.children {
@@ -1697,7 +1707,8 @@ fn analyze_node<'n: 't, 't>(
                 );
                 if context_at_break.is_some() {
                     return AssumedType::Unknown;
-                }            }
+                }
+            }
             check_postorder_break(node, break_at_position, context, context_at_break);
             return last_type;
         }
@@ -1778,6 +1789,94 @@ fn analyze_tuple_params<'n: 't, 't>(
                         }
                     }
                 }
+                ASTNodeType::Set => {
+                    let first_child = param.children.first();
+                    if let Some(first) = first_child {
+                        match &first.node_type {
+                            ASTNodeType::NamedTo => {
+                                // NamedTo in Set, analyze it
+                                if first.children.len() >= 2 {
+                                    // Analyze default value first
+                                    let assumed_type = analyze_node(
+                                        &first.children[1],
+                                        context,
+                                        errors,   // Pass errors
+                                        warnings, // Pass warnings
+                                        dynamic,
+                                        break_at_position,
+                                        context_at_break,
+                                        cycle_detector,
+                                        dir_stack,
+                                    );
+                                    if context_at_break.is_some() {
+                                        return None;
+                                    }
+
+                                    // Define parameter variable
+                                    if let ASTNodeType::String(var_name) =
+                                        &first.children[0].node_type
+                                    {
+                                        let var = Variable {
+                                            name: var_name.clone(),
+                                            assumed_type,
+                                        };
+                                        let _ = args_frame.define_variable(var);
+                                    } else {
+                                        // Analyze complex parameter structure (e.g., destructuring)
+                                        analyze_node(
+                                            &first.children[0],
+                                            context,
+                                            errors,   // Pass errors
+                                            warnings, // Pass warnings
+                                            dynamic,
+                                            break_at_position,
+                                            context_at_break,
+                                            cycle_detector,
+                                            dir_stack,
+                                        );
+                                        if context_at_break.is_some() {
+                                            return None;
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {
+                                // If first child is not NamedTo, analyze it directly
+                                analyze_node(
+                                    first,
+                                    context,
+                                    errors,   // Pass errors
+                                    warnings, // Pass warnings
+                                    dynamic,
+                                    break_at_position,
+                                    context_at_break,
+                                    cycle_detector,
+                                    dir_stack,
+                                );
+                                if context_at_break.is_some() {
+                                    return None;
+                                }
+                            }
+                        }
+                        // 分析剩下的节点
+                        for child in &param.children[1..] {
+                            analyze_node(
+                                child,
+                                context,
+                                errors,   // Pass errors
+                                warnings, // Pass warnings
+                                dynamic,
+                                break_at_position,
+                                context_at_break,
+                                cycle_detector,
+                                dir_stack,
+                            );
+                            if context_at_break.is_some() {
+                                return None;
+                            }
+                        }
+                    }
+                }
                 // Handle other param types if necessary
                 _ => {
                     analyze_node(
@@ -1796,7 +1895,7 @@ fn analyze_tuple_params<'n: 't, 't>(
                     }
                 }
             }
-            
+
             // Post-order check after processing each parameter
             check_postorder_break(param, break_at_position, context, context_at_break);
             if context_at_break.is_some() {
@@ -1804,13 +1903,13 @@ fn analyze_tuple_params<'n: 't, 't>(
             }
         }
     }
-    
+
     // Post-order check after processing all parameters
     check_postorder_break(params, break_at_position, context, context_at_break);
     if context_at_break.is_some() {
         return None;
     }
-    
+
     Some(args_frame)
 }
 
@@ -1857,7 +1956,6 @@ pub fn auto_capture<'t>(
                 match &param.node_type {
                     ASTNodeType::NamedTo => {
                         if param.children.len() >= 2 {
-                            // Analyze default value first
                             let (default_vars, default_node) =
                                 auto_capture(context, &param.children[1], dynamic);
                             required_vars.extend(default_vars);
@@ -1869,30 +1967,77 @@ pub fn auto_capture<'t>(
                                     assumed_type: AssumedType::Unknown, // Type doesn't matter much for capture
                                 };
                                 let _ = context.define_variable(&var);
-
-                                // Reconstruct NamedTo node
-                                let mut new_param = param.clone();
-                                new_param.children = vec![param.children[0].clone(), default_node];
-                                new_params_node.children.push(new_param);
-                            } else {
-                                // Handle potential complex destructuring in param name (might need more logic)
-                                // For now, just clone and add - might miss defining vars
-                                new_params_node.children.push(param.clone());
                             }
+
+                            new_params_node.children.push(ASTNode {
+                                node_type: ASTNodeType::NamedTo,
+                                children: vec![param.children[0].clone(), default_node],
+                                start_token: param.start_token,
+                                end_token: param.end_token,
+                            });
                         } else {
-                            // NamedTo without default value? Clone for now.
-                            new_params_node.children.push(param.clone());
+                            let (param_req_vars, new_param_node) =
+                                auto_capture(context, param, dynamic);
+                            required_vars.extend(param_req_vars);
+                            new_params_node.children.push(new_param_node);
                         }
                     }
-                    ASTNodeType::String(var_name) => {
-                        // Simple parameter name
-                        let var = Variable {
-                            name: var_name.clone(),
-                            assumed_type: AssumedType::Unknown,
-                        };
-                        let _ = context.define_variable(&var);
-                        new_params_node.children.push(param.clone());
+                    ASTNodeType::Set => {
+                        // Handle Set parameters, which might contain NamedTo or other nodes
+                        let first_child = param.children.first();
+
+                        let mut new_set_node_children = Vec::new();
+
+                        if let Some(first) = first_child {
+                            match &first.node_type {
+                                ASTNodeType::NamedTo => {
+                                    let (default_vars, default_node) =
+                                        auto_capture(context, &first.children[1], dynamic);
+                                    required_vars.extend(default_vars);
+
+                                    if let ASTNodeType::String(var_name) =
+                                        &first.children[0].node_type
+                                    {
+                                        let var = Variable {
+                                            name: var_name.clone(),
+                                            assumed_type: AssumedType::Unknown, // Type doesn't matter much for capture
+                                        };
+                                        let _ = context.define_variable(&var);
+                                    }
+
+                                    new_set_node_children.push(ASTNode {
+                                        node_type: ASTNodeType::NamedTo,
+                                        children: vec![first.children[0].clone(), default_node],
+                                        start_token: first.start_token,
+                                        end_token: first.end_token,
+                                    });
+                                }
+                                _ => {
+                                    // If first child is not NamedTo, analyze it directly
+                                    let (param_req_vars, new_param_node) =
+                                        auto_capture(context, first, dynamic);
+                                    required_vars.extend(param_req_vars);
+                                    new_set_node_children.push(new_param_node);
+                                }
+                            }
+                        }
+                        // 分析剩下的节点
+                        for child in &param.children[1..] {
+                            let (child_req_vars, new_child_node) =
+                                auto_capture(context, child, dynamic);
+                            required_vars.extend(child_req_vars);
+                            new_set_node_children.push(new_child_node);
+                        }
+
+                        // Reconstruct the Set node with new children
+                        new_params_node.children.push(ASTNode {
+                            node_type: ASTNodeType::Set,
+                            children: new_set_node_children,
+                            start_token: param.start_token,
+                            end_token: param.end_token,
+                        });
                     }
+
                     // Potentially handle other node types if parameters can be complex (e.g., destructuring tuples)
                     _ => {
                         // If param is not a simple name or NamedTo, analyze it recursively
@@ -2248,7 +2393,12 @@ pub fn expand_import_to_node<'n: 't, 't>(
                         let absolute_path = dir_stack.get_absolute_path(path).map_err(|err| {
                             format!("Failed to get absolute path for import '{}': {}", path, err)
                         })?;
-                        match cycle_detector.visit(absolute_path.to_str().ok_or("Failed to convert path to string")?.to_string()) {
+                        match cycle_detector.visit(
+                            absolute_path
+                                .to_str()
+                                .ok_or("Failed to convert path to string")?
+                                .to_string(),
+                        ) {
                             Ok(mut guard) => {
                                 let read_file = std::fs::read_to_string(path);
                                 if let Err(e) = read_file {

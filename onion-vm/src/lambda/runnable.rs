@@ -31,6 +31,7 @@ impl Display for RuntimeError {
 pub enum StepResult {
     Continue,
     NewRunnable(Box<dyn Runnable>),
+    ReplaceRunnable(Box<dyn Runnable>),
     Return(OnionStaticObject),
     Error(RuntimeError),
 }

@@ -1,0 +1,47 @@
+
+colors := {
+    // 前景色
+    'black': "\u001b[30m",
+    'red': "\u001b[31m",
+    'green': "\u001b[32m",
+    'yellow': "\u001b[33m",
+    'blue': "\u001b[34m",
+    'magenta': "\u001b[35m",
+    'cyan': "\u001b[36m",
+    'white': "\u001b[37m",
+    'bright_black': "\u001b[90m",
+    'bright_red': "\u001b[91m",
+    'bright_green': "\u001b[92m",
+    'bright_yellow': "\u001b[93m",
+    'bright_blue': "\u001b[94m",
+    'bright_magenta': "\u001b[95m",
+    'bright_cyan': "\u001b[96m",
+    'bright_white': "\u001b[97m",
+
+    // 背景色
+    'bg_black': "\u001b[40m",
+    'bg_red': "\u001b[41m",
+    'bg_green': "\u001b[42m",
+    'bg_yellow': "\u001b[43m",
+    'bg_blue': "\u001b[44m",
+    'bg_magenta': "\u001b[45m",
+    'bg_cyan': "\u001b[46m",
+    'bg_white': "\u001b[47m",
+    'bg_bright_black': "\u001b[100m",
+    'bg_bright_red': "\u001b[101m",
+    'bg_bright_green': "\u001b[102m",
+    'bg_bright_yellow': "\u001b[103m",
+    'bg_bright_blue': "\u001b[104m",
+    'bg_bright_magenta': "\u001b[105m",
+    'bg_bright_cyan': "\u001b[106m",
+    'bg_bright_white': "\u001b[107m",
+
+    // 重置
+    'reset': "\u001b[0m"
+};
+
+colorize := (text => "", fg => "white", bg => "bg_black") -> {
+    fg_color := colors.{fg};
+    bg_color := colors.{bg};
+    return fg_color + bg_color + text + colors.reset;
+};

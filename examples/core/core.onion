@@ -1,10 +1,11 @@
-Ok := (v?, Result => mut undefined) -> Result(true : v);
-Err := (v?, Result => mut undefined) -> Result(false : v);
+Result := mut undefined;
 
 
-Result := (result_pair?,
-    Result => mut undefined,
-) -> (
+Ok := (v?) -> Result(true : v);
+Err := (v?) -> Result(false : v);
+
+
+Result = (result_pair?) -> ( // use `=` to redefine Result
     result_pair : {
         is_ok => () -> keyof keyof self,
         is_err => () -> not keyof keyof self,
@@ -52,20 +53,18 @@ Result := (result_pair?,
         },
     }
 );
-Result.parameter.Result = Result;
-Ok.parameter.Result = Result;
-Err.parameter.Result = Result;
+
 
 try := (f?) -> {
     Result(sync f())
 };
 
-Some := (v?, Option => mut undefined) -> Option(true : v);
-None := (Option => mut undefined) -> Option(false : undefined);
+Option := mut undefined;
 
-Option := (option_pair?,
-    Option => mut undefined,
-) -> (
+Some := (v?) -> Option(true : v);
+None := () -> Option(false : undefined);
+
+Option := (option_pair?) -> (
     option_pair : {
         is_some => () -> keyof keyof self,
         is_none => () -> not keyof keyof self,
@@ -120,9 +119,7 @@ Option := (option_pair?,
         },
     }
 );
-Option.parameter.Option = Option;
-Some.parameter.Option = Option;
-None.parameter.Option = Option;
+
 
 @compile "./prototype.onion";
 @required __lib_root;

@@ -1,0 +1,74 @@
+// Onion Test Framework
+@required stdlib;
+
+// Assert 函数
+assert := (condition?, message?) -> {
+    if (not condition) {
+        raise "Assertion failed: " + message;
+    }
+};
+
+assert_eq := (expected?, actual?, message?) -> {
+    if (expected != actual) {
+        raise "Assertion failed: " + message + " (expected: " + stdlib.types.to_string(expected) + ", actual: " + stdlib.types.to_string(actual) + ")";
+    }
+};
+
+assert_ne := (expected?, actual?, message?) -> {
+    if (expected == actual) {
+        raise "Assertion failed: " + message + " (values should not be equal: " + stdlib.types.to_string(expected) + ")";
+    }
+};
+
+assert_true := (condition?, message?) -> {
+    assert(condition == true, message);
+};
+
+assert_false := (condition?, message?) -> {
+    assert(condition == false, message);
+};
+
+Test := (tests => ()) -> {
+    @import "result.onion";
+    @import "logging.onion";
+    writter := (level?, msg?) -> {
+        color := {
+            @import "tui_colors.onion";
+            DEBUG: colors.blue,
+            INFO: colors.green,
+            WARN: colors.yellow,
+            ERROR: colors.red,
+            FATAL: colors.magenta,
+            "reset": colors.reset
+        };
+        stdlib.io.println(
+            color.{level} + level + color.reset + ": " + msg
+        );
+    };
+    logger := logger(writter);
+    if (typeof tests != "Tuple") {
+        raise "Test expects a tuple of Named";
+    };
+    n := lengthof tests;
+    logger(INFO, "Running tests: " + stdlib.types.to_string(n));
+    i := mut 0;
+    while (i < n) {
+        test := tests[i];
+        if (typeof test != "Named") {
+            raise "Test expects a tuple of Named";
+        };
+        test_name := keyof test;
+        test_func := valueof test;
+        if (typeof test_func != "Lambda") {
+            raise "Test expects a tuple of Named with Function values";
+        };
+        logger(INFO, "Running test: " + test_name);
+        result := try(test_func);
+        if (result.is_err()) {
+            logger(ERROR, "Test " + test_name + " failed: " + stdlib.types.to_string(result.unwrap_err()));
+        } else {
+            logger(INFO, "Test " + test_name + " passed: " + stdlib.types.to_string(result.unwrap()));
+        };
+        i = i + 1;
+    };
+};

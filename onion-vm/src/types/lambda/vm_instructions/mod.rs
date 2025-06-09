@@ -8,15 +8,11 @@ use crate::{
     lambda::{
         runnable::{RuntimeError, StepResult},
         scheduler::{
-            async_scheduler::AsyncScheduler, map_scheduler::Mapping, scheduler::Scheduler,
+            map_scheduler::Mapping, scheduler::Scheduler,
         },
     },
     types::{
-        lazy_set::OnionLazySet,
-        named::OnionNamed,
-        object::{OnionObject, OnionObjectCell},
-        pair::OnionPair,
-        tuple::OnionTuple,
+        lambda::launcher::OnionLambdaRunnableLauncher, lazy_set::OnionLazySet, named::OnionNamed, object::{OnionObject, OnionObjectCell}, pair::OnionPair, tuple::OnionTuple
     },
 };
 
@@ -1086,44 +1082,11 @@ pub fn is_in(
 pub fn call_lambda(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    gc: &mut GC<OnionObjectCell>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let lambda = runnable.context.get_object_rev(1)?;
     let args = runnable.context.get_object_rev(0)?;
-    let new_runnable = lambda.weak().with_data(|lambda_ref| {
-        if let OnionObject::Lambda(lambda_ref) = lambda_ref {
-            let assigned = lambda_ref.parameter.with_data(|parameter| {
-                let OnionObject::Tuple(parameters) = parameter else {
-                    return Err(RuntimeError::InvalidType(format!(
-                        "Lambda parameters must be a Tuple, but found {:?}",
-                        lambda_ref
-                    )));
-                };
-
-                let OnionObject::Tuple(args_tuple) = &*args.weak().try_borrow()? else {
-                    return Err(RuntimeError::InvalidType(format!(
-                        "Function arguments must be a Tuple, but found {}",
-                        args
-                    )));
-                };
-                parameters.clone_and_named_assignment(args_tuple)
-            })?;
-            lambda_ref
-                .create_runnable(assigned, lambda, gc)
-                .map_err(|e| {
-                    RuntimeError::InvalidType(format!(
-                        "Failed to create runnable from lambda: {}",
-                        e
-                    ))
-                })
-        } else {
-            Err(RuntimeError::InvalidType(format!(
-                "Object is not a Lambda: {:?}",
-                lambda_ref
-            )))
-        }
-    })?;
-
+    let new_runnable = Box::new(OnionLambdaRunnableLauncher::new_static(lambda, args, |r| Ok(r))?);
     runnable.context.discard_objects(2)?;
     Ok(StepResult::NewRunnable(new_runnable))
 }
@@ -1210,47 +1173,13 @@ pub fn import(
 pub fn sync_call(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    gc: &mut GC<OnionObjectCell>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let lambda = runnable.context.get_object_rev(1)?;
     let args = runnable.context.get_object_rev(0)?;
-    let new_runnable = lambda.weak().with_data(|lambda_ref| {
-        if let OnionObject::Lambda(lambda_ref) = lambda_ref {
-            let assigned = lambda_ref.parameter.with_data(|parameter| {
-                let OnionObject::Tuple(parameters) = parameter else {
-                    return Err(RuntimeError::InvalidType(format!(
-                        "Lambda parameters must be a Tuple, but found {:?}",
-                        lambda_ref
-                    )));
-                };
-
-                let OnionObject::Tuple(args_tuple) = &*args.weak().try_borrow()? else {
-                    return Err(RuntimeError::InvalidType(format!(
-                        "Function arguments must be a Tuple, but found {}",
-                        args
-                    )));
-                };
-                parameters.clone_and_named_assignment(args_tuple)
-            })?;
-            lambda_ref
-                .create_runnable(assigned, lambda, gc)
-                .map_err(|e| {
-                    RuntimeError::InvalidType(format!(
-                        "Failed to create runnable from lambda: {}",
-                        e
-                    ))
-                })
-        } else {
-            Err(RuntimeError::InvalidType(format!(
-                "Object is not a Lambda: {:?}",
-                lambda_ref
-            )))
-        }
-    })?;
-
+    let new_runnable = Box::new(OnionLambdaRunnableLauncher::new_static(lambda, args, |r| Ok(Box::new(Scheduler::new(vec![r]))))?);
     runnable.context.discard_objects(2)?;
-    let async_scheduler = Scheduler::new(vec![new_runnable]);
-    Ok(StepResult::NewRunnable(Box::new(async_scheduler)))
+    Ok(StepResult::NewRunnable(new_runnable))
 }
 
 pub fn map_to(
@@ -1273,47 +1202,13 @@ pub fn map_to(
 pub fn async_call(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    gc: &mut GC<OnionObjectCell>,
+    _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let lambda = runnable.context.get_object_rev(1)?;
     let args = runnable.context.get_object_rev(0)?;
-    let new_runnable = lambda.weak().with_data(|lambda_ref| {
-        if let OnionObject::Lambda(lambda_ref) = lambda_ref {
-            let assigned = lambda_ref.parameter.with_data(|parameter| {
-                let OnionObject::Tuple(parameters) = parameter else {
-                    return Err(RuntimeError::InvalidType(format!(
-                        "Lambda parameters must be a Tuple, but found {:?}",
-                        lambda_ref
-                    )));
-                };
-
-                let OnionObject::Tuple(args_tuple) = &*args.weak().try_borrow()? else {
-                    return Err(RuntimeError::InvalidType(format!(
-                        "Function arguments must be a Tuple, but found {}",
-                        args
-                    )));
-                };
-                parameters.clone_and_named_assignment(args_tuple)
-            })?;
-            lambda_ref
-                .create_runnable(assigned, lambda, gc)
-                .map_err(|e| {
-                    RuntimeError::InvalidType(format!(
-                        "Failed to create runnable from lambda: {}",
-                        e
-                    ))
-                })
-        } else {
-            Err(RuntimeError::InvalidType(format!(
-                "Object is not a Lambda: {:?}",
-                lambda_ref
-            )))
-        }
-    })?;
-
+    let new_runnable = Box::new(OnionLambdaRunnableLauncher::new_static(lambda, args, |r| Ok(Box::new(Scheduler::new(vec![r]))))?);
     runnable.context.discard_objects(2)?;
-    let async_scheduler = AsyncScheduler::new(vec![new_runnable]);
-    Ok(StepResult::NewRunnable(Box::new(async_scheduler)))
+    Ok(StepResult::NewRunnable(new_runnable))
 }
 
 pub fn raise(

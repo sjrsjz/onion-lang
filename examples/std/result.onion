@@ -1,0 +1,57 @@
+Result := mut undefined;
+Ok := (v?) -> Result(true : v);
+Err := (v?) -> Result(false : v);
+Result = {
+    @import "prototype.onion";
+    Result := #interface {
+        is_ok => () -> keyof keyof self,
+        is_err => () -> not keyof keyof self,
+        map => (f?, Result => mut undefined) -> {
+            if (self.is_ok()) {
+                return Ok(f(valueof keyof self));
+            } else {
+                return Result(keyof self);
+            }
+        },
+        map_err => (f?, Result => mut undefined) -> {
+            if (self.is_err()) {
+                return Err(f(valueof keyof self));
+            } else {
+                return Result(keyof self);
+            }
+        },
+        unwrap => () -> {
+            if (self.is_ok()) {
+                return valueof keyof self;
+            } else {
+                raise Err("Result is an error");
+            }
+        },
+        unwrap_or => (default?) -> {
+            if (self.is_ok()) {
+                return valueof keyof self;
+            } else {
+                return default;
+            }
+        },
+        unwrap_or_else => (f?) -> {
+            if (self.is_ok()) {
+                return valueof keyof self;
+            } else {
+                return f(valueof keyof self);
+            }
+        },
+        unwrap_err => () -> {
+            if (self.is_err()) {
+                return valueof keyof self;
+            } else {
+                raise Err("Result is not an error");
+            }
+        }
+    };
+    Result    
+};
+
+try := (f?) -> {
+    Result(sync f())
+};

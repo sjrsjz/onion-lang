@@ -7,6 +7,7 @@ use onion_vm::{
     types::{
         lambda::{
             definition::{LambdaBody, OnionLambdaDefinition},
+            launcher::OnionLambdaRunnableLauncher,
             vm_instructions::{
                 instruction_set::VMInstructionPackage, ir::IRPackage, ir_translator::IRTranslator,
             },
@@ -56,8 +57,8 @@ impl ReplExecutor {
         cycle_detector: &mut cycle_detector::CycleDetector<String>,
         dir_stack: &mut onion_frontend::dir_stack::DirStack,
     ) -> Result<(), String> {
-        let ir_package =
-            build_code(code, cycle_detector, dir_stack).map_err(|e| format!("Compilation failed: {}", e))?;
+        let ir_package = build_code(code, cycle_detector, dir_stack)
+            .map_err(|e| format!("Compilation failed: {}", e))?;
 
         self.execute_ir_package(&ir_package)
     }
@@ -99,31 +100,38 @@ impl ReplExecutor {
             "__main__".to_string(),
         );
 
-        let OnionObject::Lambda(lambda_ref) = &*lambda
-            .weak()
-            .try_borrow()
-            .map_err(|e| format!("Failed to borrow Lambda definition: {:?}", e))?
-        else {
-            return Err("Failed to create Lambda definition".to_string());
-        };
+        // let OnionObject::Lambda(lambda_ref) = &*lambda
+        //     .weak()
+        //     .try_borrow()
+        //     .map_err(|e| format!("Failed to borrow Lambda definition: {:?}", e))?
+        // else {
+        //     return Err("Failed to create Lambda definition".to_string());
+        // };
 
         let args = OnionTuple::new_static(vec![]);
 
         // 绑定参数
-        let assigned_argument = lambda_ref
-            .with_parameter(|param| {
-                unwrap_object!(param, OnionObject::Tuple)?.clone_and_named_assignment(
-                    unwrap_object!(&*args.weak().try_borrow()?, OnionObject::Tuple)?,
-                )
-            })
-            .map_err(|e| format!("Failed to assign arguments to Lambda: {:?}", e))?;
+        // let assigned_argument: OnionStaticObject = lambda_ref
+        //     .with_parameter(|param| {
+        //         unwrap_object!(param, OnionObject::Tuple)?.clone_and_named_assignment(
+        //             unwrap_object!(&*args.weak().try_borrow()?, OnionObject::Tuple)?,
+        //         )
+        //     })
+        //     .map_err(|e| format!("Failed to assign arguments to Lambda: {:?}", e))?;
 
-        let lambda = lambda_ref
-            .create_runnable(assigned_argument, &lambda, &mut GC::new())
-            .map_err(|e| format!("Failed to create runnable Lambda: {:?}", e))?;
+        // let lambda = lambda_ref
+        //     .create_runnable(assigned_argument, &lambda, &mut GC::new())
+        //     .map_err(|e| format!("Failed to create runnable Lambda: {:?}", e))?;
 
         // 初始化调度器和GC
-        let mut scheduler = Scheduler::new(vec![lambda]);
+        // let mut scheduler = Scheduler::new(vec![lambda]);
+        let mut scheduler: Box<dyn Runnable> = Box::new(
+            OnionLambdaRunnableLauncher::new_static(&lambda, &args, |r| {
+                Ok(Box::new(Scheduler::new(vec![r])))
+            })
+            .map_err(|e| format!("Failed to create runnable Lambda: {:?}", e))?,
+        );
+
         let mut gc = GC::new();
 
         // 执行代码
@@ -137,36 +145,31 @@ impl ReplExecutor {
                         // 添加新的可执行对象到调度器
                         unreachable!()
                     }
+                    StepResult::ReplaceRunnable(r) => {
+                        scheduler = r;
+                    }
                     StepResult::Return(result) => {
                         let result_borrowed = result
                             .weak()
                             .try_borrow()
                             .map_err(|e| format!("Failed to borrow result: {:?}", e))?;
-                        let result = unwrap_object!(
-                            &*result_borrowed,
-                            OnionObject::Pair
-                        )
-                        .map_err(|e| format!("Failed to unwrap result: {:?}", e))?;
+                        let result = unwrap_object!(&*result_borrowed, OnionObject::Pair)
+                            .map_err(|e| format!("Failed to unwrap result: {:?}", e))?;
                         let key = result.get_key();
                         let key_borrowed = key
                             .try_borrow()
                             .map_err(|e| format!("Failed to borrow key: {:?}", e))?;
-                        let success = *unwrap_object!(
-                            &*key_borrowed,
-                            OnionObject::Boolean
-                        )
-                        .map_err(|e| format!("Failed to get success key: {:?}", e))?;
+                        let success = *unwrap_object!(&*key_borrowed, OnionObject::Boolean)
+                            .map_err(|e| format!("Failed to get success key: {:?}", e))?;
 
                         if !success {
                             let value_borrowed = result
                                 .get_value()
                                 .try_borrow()
                                 .map_err(|e| format!("Failed to borrow value: {:?}", e))?;
-                            let error_msg = unwrap_object!(
-                                &*value_borrowed,
-                                OnionObject::String
-                            )
-                            .map_err(|e| format!("Failed to get error message: {:?}", e))?;
+                            let error_msg =
+                                unwrap_object!(&*value_borrowed, OnionObject::String)
+                                    .map_err(|e| format!("Failed to get error message: {:?}", e))?;
                             println!("{} {}", "Error:".red().bold(), error_msg);
                             return Err("Execution failed".to_string());
                         }

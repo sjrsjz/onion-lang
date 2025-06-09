@@ -8,7 +8,7 @@ use arc_gc::{
 
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
-    onion_tuple,
+    onion_tuple, types::lambda::launcher::OnionLambdaRunnableLauncher,
 };
 
 use super::{
@@ -192,7 +192,7 @@ impl Runnable for OnionLazySetCollector {
         }
     }
 
-    fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
+    fn step(&mut self, _gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
         self.container
             .weak()
             .with_data(|container| match container {
@@ -202,20 +202,28 @@ impl Runnable for OnionLazySetCollector {
                         let item_clone = item.clone();
                         self.current_index += 1; // 移动到下一个元素
 
-                        self.filter.weak().with_data(|filter| match filter {
-                            OnionObject::Lambda(func) => {
-                                let OnionObject::Tuple(params) = &*func.parameter.try_borrow()?
-                                else {
-                                    return Err(RuntimeError::InvalidType(format!(
-                                        "Filter's parameter must be a tuple, got {:?}",
-                                        func.parameter
-                                    )));
-                                };
+                        self.filter.weak().with_data(|filter: &OnionObject| match filter {
+                            OnionObject::Lambda(_) => {
+                                // let OnionObject::Tuple(params) = &*func.parameter.try_borrow()?
+                                // else {
+                                //     return Err(RuntimeError::InvalidType(format!(
+                                //         "Filter's parameter must be a tuple, got {:?}",
+                                //         func.parameter
+                                //     )));
+                                // };
+                                // let argument =
+                                //     params.clone_and_named_assignment(&OnionTuple::new(vec![
+                                //         item_clone,
+                                //     ]))?;
+                                // let runnable = func.create_runnable(argument, &self.filter, gc)?;
                                 let argument =
-                                    params.clone_and_named_assignment(&OnionTuple::new(vec![
-                                        item_clone,
-                                    ]))?;
-                                let runnable = func.create_runnable(argument, &self.filter, gc)?;
+                                    OnionObject::Tuple(OnionTuple::new(vec![item_clone]))
+                                        .stabilize();
+                                let runnable = Box::new(OnionLambdaRunnableLauncher::new_static(
+                                    &self.filter,
+                                    &argument,
+                                    |r| Ok(r),
+                                )?);
                                 Ok(StepResult::NewRunnable(runnable))
                             }
                             OnionObject::Boolean(false) => Ok(StepResult::Continue),

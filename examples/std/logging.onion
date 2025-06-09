@@ -1,0 +1,19 @@
+DEBUG := "debug";
+INFO := "info";
+WARN := "warn";
+ERROR := "error";
+FATAL := "fatal";
+logger := (writter?) -> 
+    if (typeof writter != "Lambda") {
+        raise "Logger expects a function as the first argument";
+    } else (level?, msg?) -> {
+        if (
+            not level in {(DEBUG, INFO, WARN, ERROR, FATAL) | true}
+        ) {
+            raise "Logger expects a valid log level";
+        };
+        if (typeof msg != "String") {
+            raise "Logger expects a message of type String";
+        };
+        writter(level!, msg!);
+    };

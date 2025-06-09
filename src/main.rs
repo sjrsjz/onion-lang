@@ -14,10 +14,9 @@ use onion_vm::{
     },
     types::{
         lambda::{
-            definition::{LambdaBody, OnionLambdaDefinition},
-            vm_instructions::{
+            definition::{LambdaBody, OnionLambdaDefinition}, launcher::OnionLambdaRunnableLauncher, vm_instructions::{
                 instruction_set::VMInstructionPackage, ir::IRPackage, ir_translator::IRTranslator,
-            },
+            }
         },
         named::OnionNamed,
         object::OnionObject,
@@ -272,11 +271,10 @@ fn cmd_repl() -> Result<(), String> {
 fn run_source_file(file: &Path) -> Result<(), String> {
     let code = std::fs::read_to_string(file)
         .map_err(|e| format!("Failed to read file '{}': {}", file.display(), e))?;
-
-    let mut dir_stack = create_dir_stack(file.parent())?;
-    let absolute_path = dir_stack
-        .get_absolute_path(file.to_str().ok_or("Invalid file path")?)
+    let absolute_path = file
+        .canonicalize()
         .map_err(|e| format!("Failed to get absolute path: {}", e))?;
+    let mut dir_stack = create_dir_stack(absolute_path.parent())?;
     let mut cycle_detector = CycleDetector::new();
     let mut visit_result = cycle_detector
         .visit(
@@ -358,33 +356,38 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
         "__main__".to_string(),
     );
 
-    let OnionObject::Lambda(lambda_ref) = &*lambda
-        .weak()
-        .try_borrow()
-        .map_err(|e| format!("Failed to borrow Lambda definition: {:?}", e))?
-    else {
-        return Err("Failed to create Lambda definition".to_string());
-    };
 
-    let args = OnionTuple::new_static(vec![]);
+        // let OnionObject::Lambda(lambda_ref) = &*lambda
+        //     .weak()
+        //     .try_borrow()
+        //     .map_err(|e| format!("Failed to borrow Lambda definition: {:?}", e))?
+        // else {
+        //     return Err("Failed to create Lambda definition".to_string());
+        // };
 
-    // Bind arguments
-    let assigned_argument = lambda_ref
-        .with_parameter(|param| {
-            unwrap_object!(param, OnionObject::Tuple)?.clone_and_named_assignment(unwrap_object!(
-                &*args.weak().try_borrow()?,
-                OnionObject::Tuple
-            )?)
-        })
-        .map_err(|e| format!("Failed to assign arguments to Lambda: {:?}", e))?;
+        let args = OnionTuple::new_static(vec![]);
 
-    let lambda = lambda_ref
-        .create_runnable(assigned_argument, &lambda, &mut GC::new())
-        .map_err(|e| format!("Failed to create runnable Lambda: {:?}", e))?;
+        // 绑定参数
+        // let assigned_argument: OnionStaticObject = lambda_ref
+        //     .with_parameter(|param| {
+        //         unwrap_object!(param, OnionObject::Tuple)?.clone_and_named_assignment(
+        //             unwrap_object!(&*args.weak().try_borrow()?, OnionObject::Tuple)?,
+        //         )
+        //     })
+        //     .map_err(|e| format!("Failed to assign arguments to Lambda: {:?}", e))?;
 
-    // Initialize scheduler and GC
-    let mut scheduler = Scheduler::new(vec![lambda]);
+        // let lambda = lambda_ref
+        //     .create_runnable(assigned_argument, &lambda, &mut GC::new())
+        //     .map_err(|e| format!("Failed to create runnable Lambda: {:?}", e))?;
 
+        // 初始化调度器和GC
+        // let mut scheduler = Scheduler::new(vec![lambda]);
+        let mut scheduler: Box<dyn Runnable> = Box::new(
+            OnionLambdaRunnableLauncher::new_static(&lambda, &args, |r| {
+                Ok(Box::new(Scheduler::new(vec![r])))
+            })
+            .map_err(|e| format!("Failed to create runnable Lambda: {:?}", e))?,
+        );
     // Execute code
     loop {
         match scheduler.step(&mut gc) {
@@ -396,6 +399,9 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
                     StepResult::NewRunnable(_) => {
                         // Add new runnable to scheduler
                         unreachable!()
+                    }
+                    StepResult::ReplaceRunnable(r) => {
+                        scheduler = r;
                     }
                     StepResult::Return(result) => {
                         let result_borrowed = result

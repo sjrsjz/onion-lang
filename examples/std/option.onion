@@ -1,0 +1,64 @@
+Option := mut undefined;
+Some := (v?) -> Option(true : v);
+None := () -> Option(false : undefined);
+
+Option = {
+    @import "result.onion";
+    @import "prototype.onion";
+    Option := #interface {
+        is_some => () -> keyof keyof self,
+        is_none => () -> not keyof keyof self,
+        map => (f?, Option => mut undefined) -> {
+            if (self.is_some()) {
+                return Some(f(valueof keyof self));
+            } else {
+                return None();
+            }
+        },
+        filter => (predicate?, Option => mut undefined) -> {
+            if (self.is_some() and predicate(valueof keyof self)) {
+                return Some(valueof keyof self);
+            } else {
+                return None();
+            }
+        },
+        unwrap => () -> {
+            if (self.is_some()) {
+                return valueof keyof self;
+            } else {
+                raise Err("Option is None");
+            }
+        },
+        unwrap_or => (default?) -> {
+            if (self.is_some()) {
+                return valueof keyof self;
+            } else {
+                return default;
+            }
+        },
+        unwrap_or_else => (f?) -> {
+            if (self.is_some()) {
+                return valueof keyof self;
+            } else {
+                return f();
+            }
+        },
+        and_then => (f?, Option => mut undefined) -> {
+            if (self.is_some()) {
+                return f(valueof keyof self);
+            } else {
+                return None();
+            }
+        },
+        or_else => (f?, Option => mut undefined) -> {
+            if (self.is_some()) {
+                return Option(keyof self);
+            } else {
+                return f();
+            }
+        }
+    };
+    Option
+};
+
+OptionType := (x?) -> (valueof x) is Option.parameter.interface;

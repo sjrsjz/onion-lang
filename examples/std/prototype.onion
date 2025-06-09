@@ -1,0 +1,20 @@
+isinstance := (x?, interface?) -> (valueof x) is interface.parameter.interface;
+
+interface := (interface?) -> (struct?, interface => mut interface) -> struct : interface;
+
+instance_of_interface := (interface?) -> interface.parameter.interface;
+
+chain := (prototype?) -> {
+    // chain((A:B):C) => (A, B, C)
+    flat := mut ();
+    v := mut prototype;
+    while true {
+        if (typeof v == 'Pair') {
+            flat = (valueof v,) + flat;
+            v = keyof v;
+        } else break;
+    };
+    return (v,) + flat
+};
+
+has := (obj?, interface?) -> interface in chain(obj);

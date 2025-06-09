@@ -211,94 +211,94 @@ impl OnionTuple {
     }
 }
 
-impl OnionTuple {
-    pub fn clone_and_named_assignment(
-        &self,
-        other: &OnionTuple,
-    ) -> Result<OnionStaticObject, RuntimeError> {
-        let mut new_elements = self.elements.clone();
-        let mut assigned = vec![false; new_elements.len()];
+// impl OnionTuple {
+//     pub fn clone_and_named_assignment(
+//         &self,
+//         other: &OnionTuple,
+//     ) -> Result<OnionStaticObject, RuntimeError> {
+//         let mut new_elements = self.elements.clone();
+//         let mut assigned = vec![false; new_elements.len()];
 
-        for other_element in &other.elements {
-            match &*other_element.try_borrow()? {
-                OnionObject::Named(named) => {
-                    let key = named.key.as_ref();
-                    let mut found = false;
+//         for other_element in &other.elements {
+//             match &*other_element.try_borrow()? {
+//                 OnionObject::Named(named) => {
+//                     let key = named.key.as_ref();
+//                     let mut found = false;
 
-                    // 查找是否有相同的key
-                    for (i, element) in new_elements.iter_mut().enumerate() {
-                        let should_replace = {
-                            match &*element.try_borrow()? {
-                                OnionObject::Named(existing_named) => {
-                                    existing_named.key.equals(key)?
-                                }
-                                _ => false,
-                            }
-                        };
+//                     // 查找是否有相同的key
+//                     for (i, element) in new_elements.iter_mut().enumerate() {
+//                         let should_replace = {
+//                             match &*element.try_borrow()? {
+//                                 OnionObject::Named(existing_named) => {
+//                                     existing_named.key.equals(key)?
+//                                 }
+//                                 _ => false,
+//                             }
+//                         };
 
-                        if should_replace {
-                            // Now we can replace it since the borrow is dropped
-                            *element = other_element.clone();
-                            assigned[i] = true;
-                            found = true;
-                            break;
-                        }
-                    }
+//                         if should_replace {
+//                             // Now we can replace it since the borrow is dropped
+//                             *element = other_element.clone();
+//                             assigned[i] = true;
+//                             found = true;
+//                             break;
+//                         }
+//                     }
 
-                    if !found {
-                        // 如果没有相同的key，则添加到新的元素中
-                        new_elements.push(other_element.clone());
-                        assigned.push(true);
-                    }
-                }
-                _ => {}
-            }
-        }
+//                     if !found {
+//                         // 如果没有相同的key，则添加到新的元素中
+//                         new_elements.push(other_element.clone());
+//                         assigned.push(true);
+//                     }
+//                 }
+//                 _ => {}
+//             }
+//         }
 
-        // 处理未赋值的元素
-        for other_element in &other.elements {
-            match &*other_element.try_borrow()? {
-                OnionObject::Named(_) => {}
-                _ => {
-                    // 找到第一个未赋值的元素，并赋值
-                    let mut found = false;
-                    for (i, assigned_flag) in assigned.iter_mut().enumerate() {
-                        if !*assigned_flag {
-                            let should_replace_with_clone = {
-                                match &mut *new_elements[i].try_borrow_mut()? {
-                                    OnionObject::Named(v) => {
-                                        *v.get_value_mut() = other_element.clone();
-                                        false
-                                    }
-                                    _ => {
-                                        // 如果是其他类型的元素，需要直接赋值
-                                        true
-                                    }
-                                }
-                            };
+//         // 处理未赋值的元素
+//         for other_element in &other.elements {
+//             match &*other_element.try_borrow()? {
+//                 OnionObject::Named(_) => {}
+//                 _ => {
+//                     // 找到第一个未赋值的元素，并赋值
+//                     let mut found = false;
+//                     for (i, assigned_flag) in assigned.iter_mut().enumerate() {
+//                         if !*assigned_flag {
+//                             let should_replace_with_clone = {
+//                                 match &mut *new_elements[i].try_borrow_mut()? {
+//                                     OnionObject::Named(v) => {
+//                                         *v.get_value_mut() = other_element.clone();
+//                                         false
+//                                     }
+//                                     _ => {
+//                                         // 如果是其他类型的元素，需要直接赋值
+//                                         true
+//                                     }
+//                                 }
+//                             };
 
-                            if should_replace_with_clone {
-                                new_elements[i] = other_element.clone();
-                            }
-                            *assigned_flag = true;
-                            found = true;
-                            break;
-                        }
-                    }
-                    if !found {
-                        // 如果没有未赋值的元素，则添加到新的元素中
-                        new_elements.push(other_element.clone());
-                        assigned.push(true);
-                    }
-                }
-            }
-        }
+//                             if should_replace_with_clone {
+//                                 new_elements[i] = other_element.clone();
+//                             }
+//                             *assigned_flag = true;
+//                             found = true;
+//                             break;
+//                         }
+//                     }
+//                     if !found {
+//                         // 如果没有未赋值的元素，则添加到新的元素中
+//                         new_elements.push(other_element.clone());
+//                         assigned.push(true);
+//                     }
+//                 }
+//             }
+//         }
 
-        Ok(OnionStaticObject::new(OnionObject::Tuple(OnionTuple {
-            elements: new_elements,
-        })))
-    }
-}
+//         Ok(OnionStaticObject::new(OnionObject::Tuple(OnionTuple {
+//             elements: new_elements,
+//         })))
+//     }
+// }
 
 impl OnionTuple {
     pub fn push(&mut self, element: OnionObjectCell) {

@@ -42,6 +42,16 @@ impl Runnable for AsyncScheduler {
                             )?;
                             i += 1; // 继续处理下一个runnable
                         }
+                        StepResult::ReplaceRunnable(new_runnable) => {
+                            self.runnables.push(new_runnable);
+                            self.runnables[i].receive(
+                                StepResult::Return(
+                                    OnionObject::Undefined(Some("Task Launched".to_string())).stabilize(),
+                                ),
+                                gc,
+                            )?;
+                            i += 1; // 继续处理下一个runnable
+                        }
                         StepResult::Return(_) => {
                             // 移除已完成的runnable
                             self.runnables.remove(i);
