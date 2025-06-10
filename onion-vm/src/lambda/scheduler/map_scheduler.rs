@@ -45,7 +45,6 @@ impl Runnable for Mapping {
                 self.current_index += 1; // 移动到下一个元素
                 Ok(())
             }
-            StepResult::Error(err) => Err(err),
             _ => Err(RuntimeError::DetailedError(
                 "Unexpected step result in mapping".to_string(),
             )),

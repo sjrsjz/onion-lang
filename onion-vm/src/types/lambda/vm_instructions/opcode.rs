@@ -68,6 +68,11 @@ impl BitOr<OperandFlag> for u8 {
     }
 }
 
+const FLAG_VALID: u8 = OperandFlag::Valid as u8;
+const FLAG_USE_CONST_POOL: u8 = OperandFlag::UseConstPool as u8;
+const FLAG_ARG_SIZE_64: u8 = OperandFlag::ArgSize64 as u8;
+const FLAG_SHIFT_TYPE: u8 = OperandFlag::ShiftType as u8;
+
 pub struct DecodedOpcode {
     instruction: u8,
     operand1: u8, // const pool idx/constant (1bit)
@@ -165,9 +170,9 @@ impl<'t> Instruction32<'t> {
         let operand3_arg = self.get_operand_arg(decoded_opcode.operand3)?;
 
         // 构建操作数
-        let operand1 = self.build_operand_argument(decoded_opcode.operand1, operand1_arg);
-        let operand2 = self.build_operand_argument(decoded_opcode.operand2, operand2_arg);
-        let operand3 = self.build_operand_argument(decoded_opcode.operand3, operand3_arg);
+        let operand1 = Self::build_operand_argument(decoded_opcode.operand1, operand1_arg);
+        let operand2 = Self::build_operand_argument(decoded_opcode.operand2, operand2_arg);
+        let operand3 = Self::build_operand_argument(decoded_opcode.operand3, operand3_arg);
 
         Some(ProcessedOpcode {
             instruction: decoded_opcode.instruction,
@@ -179,16 +184,16 @@ impl<'t> Instruction32<'t> {
 
     // 根据操作数标志和原始值构建具体的操作数类型
     #[inline]
-    fn build_operand_argument(&self, operand_flags: u8, arg_value: u64) -> OpcodeArgument {
+    fn build_operand_argument(operand_flags: u8, arg_value: u64) -> OpcodeArgument {
         // 如果操作数无效，返回None
-        if (operand_flags & OperandFlag::Valid as u8) == 0 {
+        if (operand_flags & FLAG_VALID) == 0 {
             return OpcodeArgument::None;
         }
 
         // 处理常量池引用
-        if (operand_flags & OperandFlag::UseConstPool as u8) != 0 {
+        if (operand_flags & FLAG_USE_CONST_POOL) != 0 {
             // 根据常量类型决定返回字符串引用或字节数组引用
-            return if (operand_flags & OperandFlag::ShiftType as u8) == 0 {
+            return if (operand_flags & FLAG_SHIFT_TYPE) == 0 {
                 OpcodeArgument::String(arg_value)
             } else {
                 OpcodeArgument::ByteArray(arg_value)
@@ -196,9 +201,9 @@ impl<'t> Instruction32<'t> {
         }
 
         // 处理直接值
-        if (operand_flags & OperandFlag::ShiftType as u8) != 0 {
+        if (operand_flags & FLAG_SHIFT_TYPE) != 0 {
             // 浮点数值
-            return if (operand_flags & OperandFlag::ArgSize64 as u8) != 0 {
+            return if (operand_flags & FLAG_ARG_SIZE_64) != 0 {
                 // 64位浮点数
                 OpcodeArgument::Float64(f64::from_bits(arg_value))
             } else {
@@ -208,7 +213,7 @@ impl<'t> Instruction32<'t> {
         }
 
         // 整数值
-        if (operand_flags & OperandFlag::ArgSize64 as u8) != 0 {
+        if (operand_flags & FLAG_ARG_SIZE_64) != 0 {
             // 64位整数
             OpcodeArgument::Int64(arg_value as i64)
         } else {
@@ -233,18 +238,16 @@ impl<'t> Instruction32<'t> {
     }
 
     #[inline]
-    fn get_operand_arg(&mut self, operand: u8) -> Option<u64> {
-        if (operand & OperandFlag::Valid as u8) == 0 {
+    fn get_operand_arg(&mut self, operand_flags: u8) -> Option<u64> {
+        if (operand_flags & FLAG_VALID) == 0 {
             return Some(0);
         }
-        if (operand & OperandFlag::ArgSize64 as u8) != 0 {
+        if (operand_flags & FLAG_ARG_SIZE_64) != 0 {
             // 64 bit
-            let arg = self.take_u64()?;
-            Some(arg)
+            self.take_u64()
         } else {
             // 32 bit
-            let arg = self.take_u32()?;
-            Some(arg as u64)
+            self.take_u32().map(|val| val as u64)
         }
     }
 }

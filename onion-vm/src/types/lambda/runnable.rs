@@ -27,7 +27,6 @@ pub struct OnionLambdaRunnable {
     pub(crate) self_object: OnionStaticObject,
     pub(crate) this_lambda: OnionStaticObject,
     pub(crate) context: Context,
-    pub(crate) error: Option<RuntimeError>,
     pub(crate) ip: isize, // Instruction pointer
     pub(crate) instruction: Box<VMInstructionPackage>,
 
@@ -246,7 +245,6 @@ impl OnionLambdaRunnable {
             this_lambda,
             result: OnionStaticObject::default(),
             context: new_context,
-            error: None,
             ip,
             instruction,
             instruction_table,
@@ -270,48 +268,61 @@ impl Runnable for OnionLambdaRunnable {
         }
     }
     fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
-        if let Some(error) = &self.error {
-            return Ok(StepResult::Error(error.clone()));
+        const MAX_INLINE_STEPS: usize = 1024;
+
+        for _ in 0..MAX_INLINE_STEPS {
+            let (code, raw, new_ip) = {
+                let code = self.instruction.get_code();
+                if self.ip < 0 || self.ip as usize >= code.len() {
+                    return Err(RuntimeError::DetailedError(
+                        "Instruction pointer out of bounds".to_string(),
+                    ));
+                }
+                let opcode = code[self.ip as usize];
+                let mut ip = self.ip as usize;
+                let mut instruction32 = Instruction32::new(code, &mut ip);
+                let code = instruction32.get_processed_opcode();
+                (code, opcode, ip)
+            };
+
+            match code {
+                Some(opcode) => {
+                    let handler = self
+                        .instruction_table
+                        .get(opcode.instruction as usize)
+                        .ok_or_else(|| {
+                            RuntimeError::DetailedError(format!(
+                                "No handler for opcode: {}",
+                                opcode.instruction
+                            ))
+                        })?;
+                    self.ip = new_ip as isize;
+                    let result = handler(self, &opcode, gc)?;
+
+                    // 检查是否需要中断循环
+                    match result {
+                        StepResult::Continue => {
+                            // 继续下一步
+                            continue;
+                        }
+                        _ => {
+                            // 返回结果或错误
+                            return Ok(result);
+                        }
+                    }
+                }
+                None => {
+                    return Err(RuntimeError::DetailedError(format!(
+                        "Invalid opcode at IP {}: {:?}",
+                        self.ip, raw
+                    )));
+                }
+            }
         }
 
-        let (code, raw, new_ip) = {
-            let code = self.instruction.get_code();
-            if self.ip < 0 || self.ip as usize >= code.len() {
-                return Err(RuntimeError::DetailedError(
-                    "Instruction pointer out of bounds".to_string(),
-                ));
-            }
-            let opcode = code[self.ip as usize];
-            let mut ip = self.ip as usize;
-            let mut instruction32 = Instruction32::new(code, &mut ip);
-            let code = instruction32.get_processed_opcode();
-            (code, opcode, ip)
-        };
-        match code {
-            Some(opcode) => {
-                let handler = self
-                    .instruction_table
-                    .get(opcode.instruction as usize)
-                    .ok_or_else(|| {
-                        RuntimeError::DetailedError(format!(
-                            "No handler for opcode: {}",
-                            opcode.instruction
-                        ))
-                    })?;
-                self.ip = new_ip as isize;
-                let result = handler(self, &opcode, gc)?;
-                return Ok(result);
-            }
-            None => {
-                self.error = Some(RuntimeError::DetailedError(format!(
-                    "Invalid instruction format at IP {}: {}",
-                    self.ip, raw
-                )));
-                return Err(self.error.clone().unwrap());
-            }
-        }
+        // 如果执行了最大步数仍未完成，返回 Continue 让外部继续调用
+        Ok(StepResult::Continue)
     }
-
     fn copy(&self, _gc: &mut GC<OnionObjectCell>) -> Box<dyn Runnable> {
         Box::new(OnionLambdaRunnable {
             argument: self.argument.clone(),
@@ -320,7 +331,6 @@ impl Runnable for OnionLambdaRunnable {
             this_lambda: self.this_lambda.clone(),
             result: self.result.clone(),
             context: self.context.clone(),
-            error: self.error.clone(),
             ip: self.ip,
             instruction: self.instruction.clone(),
             instruction_table: self.instruction_table.clone(),

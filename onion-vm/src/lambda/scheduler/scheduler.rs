@@ -68,13 +68,6 @@ impl Runnable for Scheduler {
                         )))
                     }
                 }
-                StepResult::Error(error) => Ok(StepResult::Return(OnionPair::new_static(
-                    &OnionObject::Boolean(false).stabilize(),
-                    &match error {
-                        RuntimeError::CustomValue(v) => v,
-                        _ => OnionObject::Undefined(Some(error.to_string())).stabilize(),
-                    },
-                ))),
             }
         } else {
             Ok(StepResult::Return(OnionPair::new_static(

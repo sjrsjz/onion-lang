@@ -8,7 +8,7 @@ use crate::{
     lambda::{
         runnable::{RuntimeError, StepResult},
         scheduler::{
-            map_scheduler::Mapping, scheduler::Scheduler,
+            async_scheduler::AsyncScheduler, map_scheduler::Mapping, scheduler::Scheduler
         },
     },
     types::{
@@ -1206,7 +1206,7 @@ pub fn async_call(
 ) -> Result<StepResult, RuntimeError> {
     let lambda = runnable.context.get_object_rev(1)?;
     let args = runnable.context.get_object_rev(0)?;
-    let new_runnable = Box::new(OnionLambdaRunnableLauncher::new_static(lambda, args, |r| Ok(Box::new(Scheduler::new(vec![r]))))?);
+    let new_runnable = Box::new(OnionLambdaRunnableLauncher::new_static(lambda, args, |r| Ok(Box::new(AsyncScheduler::new(vec![r]))))?);
     runnable.context.discard_objects(2)?;
     Ok(StepResult::NewRunnable(new_runnable))
 }

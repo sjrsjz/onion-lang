@@ -125,7 +125,6 @@ impl Runnable for OnionLambdaRunnableLauncher {
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         match step_result {
-            StepResult::Error(err) => Err(err),
             StepResult::Continue => Ok(()),
             StepResult::NewRunnable(_) => {
                 // This should not happen, as this launcher is not designed to yield new runnables.
@@ -244,10 +243,6 @@ impl Runnable for OnionLambdaRunnableLauncher {
                     })?;
                     // 如果约束成功并通过 (上面返回 Ok(()) 但没有实际 return)，则会继续到下面的 phase 处理。
                     // 如果约束失败或 panic (上面返回 Err)，则整个 step 会在这里结束。
-                }
-                // 约束执行过程中发生其他错误
-                StepResult::Error(err) => {
-                    return Err(err);
                 }
             }
         } // 结束 `if let Some(constrain_runnable)`

@@ -67,7 +67,12 @@ where
         let argument = self.argument.clone();
         match &self.function.borrow_mut()(argument, gc) {
             Ok(result) => Ok(StepResult::Return(result.clone())),
-            Err(err) => Ok(StepResult::Error(err.clone())),
+            Err(err) => {
+                Err(RuntimeError::DetailedError(format!(
+                    "Native function execution failed: {}",
+                    err
+                )))
+            }
         }
     }
 

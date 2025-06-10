@@ -203,9 +203,6 @@ impl ReplExecutor {
                         println!("{} {}", "Result:".cyan(), result_str);
                         break;
                     }
-                    StepResult::Error(err) => {
-                        return Err(format!("Runtime error: {}", err));
-                    }
                 },
                 Err(e) => {
                     return Err(format!("Execution error: {}", e));

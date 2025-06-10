@@ -662,12 +662,14 @@ impl<'c> VariableContext<'c> {
     }
 
     pub fn get_marco(&self, name: &str) -> Option<&ASTMacro<'c>> {
-        // 在当前上下文的最后一个帧中查找 AST 宏
-        let frame = self.current_context();
-        for macro_def in frame.iter() {
-            for m in macro_def.ast_macros.iter() {
-                if m.name == name {
-                    return Some(m);
+        // 反向遍历所有上下文
+        for context_frames in self.contexts.iter().rev() {
+            // 在每个上下文中反向遍历所有帧
+            for frame in context_frames.iter().rev() {
+                for macro_def in frame.ast_macros.iter() {
+                    if macro_def.name == name {
+                        return Some(macro_def);
+                    }
                 }
             }
         }

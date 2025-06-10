@@ -20,8 +20,8 @@ task2 := () -> {
 };
 
 main := () -> {
-    sync task1();
     sync task2();
+    sync task1();
 };
 
 async main()

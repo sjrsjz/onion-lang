@@ -454,15 +454,6 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
                         );
                         break;
                     }
-                    StepResult::Error(err) => {
-                        return Err(format!(
-                            "Runtime error: {}\nContext:\n{}",
-                            err,
-                            scheduler
-                                .format_context()
-                                .map_err(|e| format!("Failed to format context: {}", e))?
-                        ));
-                    }
                 }
             }
             Err(e) => {

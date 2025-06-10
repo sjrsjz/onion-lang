@@ -33,7 +33,6 @@ pub enum StepResult {
     NewRunnable(Box<dyn Runnable>),
     ReplaceRunnable(Box<dyn Runnable>),
     Return(OnionStaticObject),
-    Error(RuntimeError),
 }
 
 #[allow(unused_variables)]

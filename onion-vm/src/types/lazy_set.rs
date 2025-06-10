@@ -185,7 +185,6 @@ impl Runnable for OnionLazySetCollector {
                     }
                 }
             }
-            StepResult::Error(err) => Err(err),
             _ => Err(RuntimeError::DetailedError(
                 "Unexpected step result in lazy set collector".to_string(),
             )),
