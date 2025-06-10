@@ -2093,7 +2093,9 @@ pub fn auto_capture<'t>(
                                 name: var_name_str.clone(),
                                 assumed_type: AssumedType::Unknown, // Type doesn't matter much for capture
                             });
-                            return (HashSet::new(), node.clone()); // Return empty required_vars and the node itself
+                            let mut required_vars = HashSet::new();
+                            required_vars.insert(var_name_str.clone());
+                            return (required_vars, node.clone()); // Still return required_vars because it's required
                         }
                     }
                 }
