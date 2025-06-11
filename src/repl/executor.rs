@@ -98,9 +98,7 @@ impl ReplExecutor {
         // 创建Lambda定义，包含stdlib和Out两个参数
         let lambda = OnionLambdaDefinition::new_static(
             &OnionTuple::new_static(vec![&stdlib_pair, &out_pair]),
-            LambdaBody::Instruction(Box::new(OnionObject::InstructionPackage(
-                Box::new(vm_instructions_package.clone()),
-            ))),
+            LambdaBody::Instruction(Arc::new(vm_instructions_package.clone())),
             None,
             None,
             "__main__".to_string(),
@@ -132,7 +130,7 @@ impl ReplExecutor {
         // 初始化调度器和GC
         // let mut scheduler = Scheduler::new(vec![lambda]);
         let mut scheduler: Box<dyn Runnable> = Box::new(
-            OnionLambdaRunnableLauncher::new_static(&lambda, &args, |r| {
+            OnionLambdaRunnableLauncher::new_static(&lambda, &args, &|r| {
                 Ok(Box::new(Scheduler::new(vec![r])))
             })
             .map_err(|e| format!("Failed to create runnable Lambda: {:?}", e))?,

@@ -53,7 +53,7 @@ pub trait Runnable {
         panic!("copy_with_gc is not implemented for this Runnable")
     }
     fn copy(&self) -> Box<dyn Runnable> {
-        panic!("copy_no_gc is not implemented for this Runnable")
+        panic!("copy is not implemented for this Runnable")
     }
 
     fn format_context(&self) -> Result<Value, RuntimeError>;

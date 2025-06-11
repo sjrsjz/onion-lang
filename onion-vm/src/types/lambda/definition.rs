@@ -1,6 +1,7 @@
 use std::{
     collections::VecDeque,
     fmt::{Debug, Display},
+    sync::Arc,
 };
 
 use arc_gc::{
@@ -11,13 +12,16 @@ use arc_gc::{
 
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
-    types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
+    types::{
+        lambda::vm_instructions::instruction_set::VMInstructionPackage,
+        object::{OnionObject, OnionObjectCell, OnionStaticObject},
+    },
 };
 
 use super::runnable::OnionLambdaRunnable;
 
 pub enum LambdaBody {
-    Instruction(Box<OnionObject>),
+    Instruction(Arc<VMInstructionPackage>),
     NativeFunction(Box<dyn Runnable>),
 }
 
@@ -91,29 +95,22 @@ impl OnionLambdaDefinition {
     ) -> Result<Box<dyn Runnable>, RuntimeError> {
         match &self.body {
             LambdaBody::Instruction(instruction) => {
-                let runnable = instruction.with_data(|instruction| match instruction {
-                    OnionObject::InstructionPackage(package) => OnionLambdaRunnable::new(
-                        argument,
-                        self.capture.clone().stabilize(),
-                        self.self_object.clone().stabilize(),
-                        this_lambda.clone(),
-                        package.clone(),
-                        match package.get_table().get(&self.signature) {
-                            Some(ip) => *ip as isize,
-                            None => {
-                                return Err(RuntimeError::InvalidOperation(format!(
-                                    "Signature '{}' not found in instruction package",
-                                    self.signature
-                                )));
-                            }
-                        },
-                    ),
-                    _ => {
-                        return Err(RuntimeError::InvalidOperation(
-                            "Lambda body must be an instruction package".to_string(),
-                        ));
-                    }
-                })?;
+                let runnable = OnionLambdaRunnable::new(
+                    argument,
+                    self.capture.clone().stabilize(),
+                    self.self_object.clone().stabilize(),
+                    this_lambda.clone(),
+                    instruction.clone(),
+                    match instruction.get_table().get(&self.signature) {
+                        Some(ip) => *ip as isize,
+                        None => {
+                            return Err(RuntimeError::InvalidOperation(format!(
+                                "Signature '{}' not found in instruction package",
+                                self.signature
+                            )));
+                        }
+                    },
+                )?;
                 Ok(Box::new(runnable))
             }
             LambdaBody::NativeFunction(native_function) => {
@@ -135,14 +132,10 @@ impl OnionLambdaDefinition {
         if let Some(self_object_arcs) = self.self_object.upgrade() {
             arcs.extend(self_object_arcs);
         }
-        match &self.body {
-            LambdaBody::Instruction(instruction) => {
-                if let Some(instruction_arcs) = instruction.upgrade() {
-                    arcs.extend(instruction_arcs);
-                }
-            }
-            LambdaBody::NativeFunction(_) => {}
-        }
+        // match &self.body {
+        //     LambdaBody::Instruction(_) => {}
+        //     LambdaBody::NativeFunction(_) => {}
+        // }
         if arcs.is_empty() {
             None
         } else {
@@ -202,10 +195,10 @@ impl OnionLambdaDefinition {
 impl GCTraceable<OnionObjectCell> for OnionLambdaDefinition {
     fn collect(&self, queue: &mut VecDeque<GCArcWeak<OnionObjectCell>>) {
         self.parameter.collect(queue);
-        match &self.body {
-            LambdaBody::Instruction(instruction) => instruction.collect(queue),
-            LambdaBody::NativeFunction(_) => {}
-        }
+        // match &self.body {
+        //     LambdaBody::Instruction(instruction) => _,
+        //     LambdaBody::NativeFunction(_) => {}
+        // }
         self.capture.collect(queue);
         self.self_object.collect(queue);
     }

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use instruction_set::VMInstructionPackage;
 use rustc_hash::FxHashMap as HashMap;
 
@@ -8,11 +10,16 @@ use crate::{
     lambda::{
         runnable::{RuntimeError, StepResult},
         scheduler::{
-            async_scheduler::AsyncScheduler, map_scheduler::Mapping, scheduler::Scheduler
+            async_scheduler::AsyncScheduler, map_scheduler::Mapping, scheduler::Scheduler,
         },
     },
     types::{
-        lambda::launcher::OnionLambdaRunnableLauncher, lazy_set::OnionLazySet, named::OnionNamed, object::{OnionObject, OnionObjectCell}, pair::OnionPair, tuple::OnionTuple
+        lambda::launcher::OnionLambdaRunnableLauncher,
+        lazy_set::OnionLazySet,
+        named::OnionNamed,
+        object::{OnionObject, OnionObjectCell},
+        pair::OnionPair,
+        tuple::OnionTuple,
     },
 };
 
@@ -313,7 +320,8 @@ pub fn load_lambda(
         .try_borrow()?
         .clone()
         .stabilize();
-    let OnionObject::InstructionPackage(_) = &*instruction_package.weak().try_borrow()? else {
+    let OnionObject::InstructionPackage(package) = &*instruction_package.weak().try_borrow()?
+    else {
         return Err(RuntimeError::DetailedError(format!(
             "Lambda instruction must be an InstructionPackage, but found {}",
             instruction_package
@@ -322,7 +330,7 @@ pub fn load_lambda(
 
     let lambda = OnionLambdaDefinition::new_static(
         &default_parameters,
-        LambdaBody::Instruction(Box::new(instruction_package.weak().try_borrow()?.clone())),
+        LambdaBody::Instruction(package.clone()),
         captured_value,
         None,
         signature,
@@ -1086,7 +1094,11 @@ pub fn call_lambda(
 ) -> Result<StepResult, RuntimeError> {
     let lambda = runnable.context.get_object_rev(1)?;
     let args = runnable.context.get_object_rev(0)?;
-    let new_runnable = Box::new(OnionLambdaRunnableLauncher::new_static(lambda, args, |r| Ok(r))?);
+    let new_runnable = Box::new(OnionLambdaRunnableLauncher::new_static(
+        lambda,
+        args,
+        &|r| Ok(r),
+    )?);
     runnable.context.discard_objects(2)?;
     Ok(StepResult::NewRunnable(new_runnable))
 }
@@ -1166,7 +1178,7 @@ pub fn import(
     runnable.context.discard_objects(1)?;
     runnable
         .context
-        .push_object(OnionObject::InstructionPackage(Box::new(package)).stabilize())?;
+        .push_object(OnionObject::InstructionPackage(Arc::new(package)).stabilize())?;
     Ok(StepResult::Continue)
 }
 
@@ -1177,7 +1189,11 @@ pub fn sync_call(
 ) -> Result<StepResult, RuntimeError> {
     let lambda = runnable.context.get_object_rev(1)?;
     let args = runnable.context.get_object_rev(0)?;
-    let new_runnable = Box::new(OnionLambdaRunnableLauncher::new_static(lambda, args, |r| Ok(Box::new(Scheduler::new(vec![r]))))?);
+    let new_runnable = Box::new(OnionLambdaRunnableLauncher::new_static(
+        lambda,
+        args,
+        &|r| Ok(Box::new(Scheduler::new(vec![r]))),
+    )?);
     runnable.context.discard_objects(2)?;
     Ok(StepResult::NewRunnable(new_runnable))
 }
@@ -1206,7 +1222,11 @@ pub fn async_call(
 ) -> Result<StepResult, RuntimeError> {
     let lambda = runnable.context.get_object_rev(1)?;
     let args = runnable.context.get_object_rev(0)?;
-    let new_runnable = Box::new(OnionLambdaRunnableLauncher::new_static(lambda, args, |r| Ok(Box::new(AsyncScheduler::new(vec![r]))))?);
+    let new_runnable = Box::new(OnionLambdaRunnableLauncher::new_static(
+        lambda,
+        args,
+        &|r| Ok(Box::new(AsyncScheduler::new(vec![r]))),
+    )?);
     runnable.context.discard_objects(2)?;
     Ok(StepResult::NewRunnable(new_runnable))
 }

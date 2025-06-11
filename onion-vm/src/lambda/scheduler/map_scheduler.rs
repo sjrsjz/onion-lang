@@ -72,7 +72,7 @@ impl Runnable for Mapping {
                                 let runnable = Box::new(OnionLambdaRunnableLauncher::new_static(
                                     &self.mapper,
                                     &argument,
-                                    |r| Ok(r),
+                                    &|r| Ok(r),
                                 )?);
                                 Ok(StepResult::NewRunnable(runnable))
                             }

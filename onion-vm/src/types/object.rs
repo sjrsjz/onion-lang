@@ -2,7 +2,7 @@ use std::{
     cell::RefCell,
     collections::VecDeque,
     fmt::{Debug, Display},
-    ptr::addr_eq,
+    ptr::addr_eq, sync::Arc,
 };
 
 use arc_gc::{
@@ -200,7 +200,7 @@ pub enum OnionObject {
     Pair(OnionPair),
     Named(OnionNamed),
     LazySet(OnionLazySet),
-    InstructionPackage(Box<VMInstructionPackage>),
+    InstructionPackage(Arc<VMInstructionPackage>),
     Lambda(Box<OnionLambdaDefinition>),
 
     // mutable types, DO NOT USE THIS TYPE DIRECTLY, use `mutablize` instead

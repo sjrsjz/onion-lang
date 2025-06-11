@@ -22,13 +22,13 @@ pub struct OnionLambdaRunnableLauncher {
     lambda: OnionStaticObject,         // The OnionObject::Lambda itself
     argument_tuple: OnionStaticObject, // The provided argument tuple object
 
-    pub collected_arguments: Vec<OnionStaticObject>, // Arguments collected during processing
-    pub assigned: Vec<bool>, // Tracks assignment for parameter slots, then for appended args
+    collected_arguments: Vec<OnionStaticObject>, // Arguments collected during processing
+    assigned: Vec<bool>, // Tracks assignment for parameter slots, then for appended args
 
     phase: ArgumentProcessingPhase,
     current_argument_index: usize, // Index into argument_elements for current phase
 
-    runnable_mapper: Box<dyn Fn(Box<dyn Runnable>) -> Result<Box<dyn Runnable>, RuntimeError>>,
+    runnable_mapper: &'static dyn Fn(Box<dyn Runnable>) -> Result<Box<dyn Runnable>, RuntimeError>,
 
     constrain_runnable: Option<Box<dyn Runnable>>,
 }
@@ -37,7 +37,7 @@ impl OnionLambdaRunnableLauncher {
     pub fn new_static<F: 'static>(
         lambda_obj: &OnionStaticObject,
         argument_tuple_obj: &OnionStaticObject,
-        runnable_mapper: F,
+        runnable_mapper: &'static F,
     ) -> Result<OnionLambdaRunnableLauncher, RuntimeError>
     where
         F: Fn(Box<dyn Runnable>) -> Result<Box<dyn Runnable>, RuntimeError>,
@@ -89,7 +89,7 @@ impl OnionLambdaRunnableLauncher {
             assigned,
             phase: ArgumentProcessingPhase::NamedArguments,
             current_argument_index: 0,
-            runnable_mapper: Box::new(runnable_mapper),
+            runnable_mapper: runnable_mapper,
             constrain_runnable: None,
         })
     }
@@ -325,7 +325,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
                                                                         OnionLambdaRunnableLauncher::new_static(
                                                                             &lazy_set.filter.clone().stabilize(),
                                                                             &argument_for_filter,
-                                                                            |r| Ok(r),
+                                                                            &|r| Ok(r),
                                                                         )?,
                                                                     );
                                                                     self.constrain_runnable = Some(Box::new(Scheduler::new(vec![runnable])));
@@ -487,7 +487,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
                                                         let runnable = Box::new(OnionLambdaRunnableLauncher::new_static(
                                                             &lazy_set_def.filter.clone().stabilize(),
                                                             &argument_for_filter,
-                                                            |r| Ok(r),
+                                                            &|r| Ok(r),
                                                         )?);
                                                         self.constrain_runnable = Some(Box::new(Scheduler::new(vec![runnable])));
                                                         Ok(())

@@ -1,6 +1,9 @@
 use clap::{Parser, Subcommand};
 use colored::*;
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 // Import necessary modules
 use onion_frontend::{
@@ -14,9 +17,11 @@ use onion_vm::{
     },
     types::{
         lambda::{
-            definition::{LambdaBody, OnionLambdaDefinition}, launcher::OnionLambdaRunnableLauncher, vm_instructions::{
+            definition::{LambdaBody, OnionLambdaDefinition},
+            launcher::OnionLambdaRunnableLauncher,
+            vm_instructions::{
                 instruction_set::VMInstructionPackage, ir::IRPackage, ir_translator::IRTranslator,
-            }
+            },
         },
         named::OnionNamed,
         object::OnionObject,
@@ -348,46 +353,43 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
     // Create Lambda definition
     let lambda = OnionLambdaDefinition::new_static(
         &OnionTuple::new_static(vec![&stdlib_pair]),
-        LambdaBody::Instruction(Box::new(OnionObject::InstructionPackage(
-            Box::new(vm_instructions_package.clone()),
-        ))),
+        LambdaBody::Instruction(Arc::new(vm_instructions_package.clone())),
         None,
         None,
         "__main__".to_string(),
     );
 
+    // let OnionObject::Lambda(lambda_ref) = &*lambda
+    //     .weak()
+    //     .try_borrow()
+    //     .map_err(|e| format!("Failed to borrow Lambda definition: {:?}", e))?
+    // else {
+    //     return Err("Failed to create Lambda definition".to_string());
+    // };
 
-        // let OnionObject::Lambda(lambda_ref) = &*lambda
-        //     .weak()
-        //     .try_borrow()
-        //     .map_err(|e| format!("Failed to borrow Lambda definition: {:?}", e))?
-        // else {
-        //     return Err("Failed to create Lambda definition".to_string());
-        // };
+    let args = OnionTuple::new_static(vec![]);
 
-        let args = OnionTuple::new_static(vec![]);
+    // 绑定参数
+    // let assigned_argument: OnionStaticObject = lambda_ref
+    //     .with_parameter(|param| {
+    //         unwrap_object!(param, OnionObject::Tuple)?.clone_and_named_assignment(
+    //             unwrap_object!(&*args.weak().try_borrow()?, OnionObject::Tuple)?,
+    //         )
+    //     })
+    //     .map_err(|e| format!("Failed to assign arguments to Lambda: {:?}", e))?;
 
-        // 绑定参数
-        // let assigned_argument: OnionStaticObject = lambda_ref
-        //     .with_parameter(|param| {
-        //         unwrap_object!(param, OnionObject::Tuple)?.clone_and_named_assignment(
-        //             unwrap_object!(&*args.weak().try_borrow()?, OnionObject::Tuple)?,
-        //         )
-        //     })
-        //     .map_err(|e| format!("Failed to assign arguments to Lambda: {:?}", e))?;
+    // let lambda = lambda_ref
+    //     .create_runnable(assigned_argument, &lambda, &mut GC::new())
+    //     .map_err(|e| format!("Failed to create runnable Lambda: {:?}", e))?;
 
-        // let lambda = lambda_ref
-        //     .create_runnable(assigned_argument, &lambda, &mut GC::new())
-        //     .map_err(|e| format!("Failed to create runnable Lambda: {:?}", e))?;
-
-        // 初始化调度器和GC
-        // let mut scheduler = Scheduler::new(vec![lambda]);
-        let mut scheduler: Box<dyn Runnable> = Box::new(
-            OnionLambdaRunnableLauncher::new_static(&lambda, &args, |r| {
-                Ok(Box::new(Scheduler::new(vec![r])))
-            })
-            .map_err(|e| format!("Failed to create runnable Lambda: {:?}", e))?,
-        );
+    // 初始化调度器和GC
+    // let mut scheduler = Scheduler::new(vec![lambda]);
+    let mut scheduler: Box<dyn Runnable> = Box::new(
+        OnionLambdaRunnableLauncher::new_static(&lambda, &args, &|r| {
+            Ok(Box::new(Scheduler::new(vec![r])))
+        })
+        .map_err(|e| format!("Failed to create runnable Lambda: {:?}", e))?,
+    );
     // Execute code
     loop {
         match scheduler.step(&mut gc) {

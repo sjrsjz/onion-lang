@@ -218,7 +218,7 @@ impl Runnable for OnionLazySetCollector {
                                         Box::new(OnionLambdaRunnableLauncher::new_static(
                                             &self.filter,
                                             &argument,
-                                            |r| Ok(r),
+                                            &|r| Ok(r),
                                         )?);
                                     Ok(StepResult::NewRunnable(runnable))
                                 }
