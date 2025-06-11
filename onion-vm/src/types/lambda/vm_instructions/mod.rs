@@ -1128,7 +1128,7 @@ pub fn fork_instruction(
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
-    let forked = OnionObject::InstructionPackage(*runnable.instruction.clone()).stabilize();
+    let forked = OnionObject::InstructionPackage(runnable.instruction.clone()).stabilize();
     runnable.context.push_object(forked)?;
     Ok(StepResult::Continue)
 }
@@ -1166,7 +1166,7 @@ pub fn import(
     runnable.context.discard_objects(1)?;
     runnable
         .context
-        .push_object(OnionObject::InstructionPackage(package).stabilize())?;
+        .push_object(OnionObject::InstructionPackage(Box::new(package)).stabilize())?;
     Ok(StepResult::Continue)
 }
 

@@ -349,7 +349,7 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
     let lambda = OnionLambdaDefinition::new_static(
         &OnionTuple::new_static(vec![&stdlib_pair]),
         LambdaBody::Instruction(Box::new(OnionObject::InstructionPackage(
-            vm_instructions_package.clone(),
+            Box::new(vm_instructions_package.clone()),
         ))),
         None,
         None,

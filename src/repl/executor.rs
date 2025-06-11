@@ -93,7 +93,7 @@ impl ReplExecutor {
         let lambda = OnionLambdaDefinition::new_static(
             &OnionTuple::new_static(vec![&stdlib_pair, &out_pair]),
             LambdaBody::Instruction(Box::new(OnionObject::InstructionPackage(
-                vm_instructions_package.clone(),
+                Box::new(vm_instructions_package.clone()),
             ))),
             None,
             None,

@@ -59,7 +59,7 @@ impl OnionLambdaDefinition {
         self_object: Option<&OnionStaticObject>,
         signature: String,
     ) -> OnionStaticObject {
-        OnionObject::Lambda(OnionLambdaDefinition {
+        OnionObject::Lambda(Box::new(OnionLambdaDefinition {
             parameter: Box::new(parameter.weak().clone()),
             body,
             capture: Box::new(match capture {
@@ -71,7 +71,7 @@ impl OnionLambdaDefinition {
                 None => OnionObject::Undefined(None).to_cell(),
             }),
             signature,
-        })
+        }))
         .stabilize()
     }
 
@@ -89,7 +89,7 @@ impl OnionLambdaDefinition {
                         self.capture.clone().stabilize(),
                         self.self_object.clone().stabilize(),
                         this_lambda.clone(),
-                        Box::new(package.clone()),
+                        package.clone(),
                         match package.get_table().get(&self.signature) {
                             Some(ip) => *ip as isize,
                             None => {

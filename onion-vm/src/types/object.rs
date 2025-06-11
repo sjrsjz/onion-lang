@@ -176,8 +176,8 @@ pub enum OnionObject {
     Pair(OnionPair),
     Named(OnionNamed),
     LazySet(OnionLazySet),
-    InstructionPackage(VMInstructionPackage),
-    Lambda(OnionLambdaDefinition),
+    InstructionPackage(Box<VMInstructionPackage>),
+    Lambda(Box<OnionLambdaDefinition>),
 
     // mutable types, DO NOT USE THIS TYPE DIRECTLY, use `mutablize` instead
     Mut(GCArcWeak<OnionObjectCell>),
@@ -1203,4 +1203,279 @@ macro_rules! unwrap_object {
             ))),
         }
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Instant;
+
+    #[test]
+    fn test_detailed_memory_sizes() {
+        println!("详细内存分析:");
+        println!("OnionObject: {} bytes", std::mem::size_of::<OnionObject>());
+        println!(
+            "OnionObjectCell: {} bytes",
+            std::mem::size_of::<OnionObjectCell>()
+        );
+        println!(
+            "OnionStaticObject: {} bytes",
+            std::mem::size_of::<OnionStaticObject>()
+        );
+        println!(
+            "GCArcStorage: {} bytes",
+            std::mem::size_of::<GCArcStorage>()
+        );
+
+        // 分析OnionObject各个变体的大小
+        println!("\nOnionObject变体分析:");
+        println!("String: {} bytes", std::mem::size_of::<String>());
+        println!("Vec<u8>: {} bytes", std::mem::size_of::<Vec<u8>>());
+        println!("OnionTuple: {} bytes", std::mem::size_of::<OnionTuple>());
+        println!("OnionPair: {} bytes", std::mem::size_of::<OnionPair>());
+        println!("OnionNamed: {} bytes", std::mem::size_of::<OnionNamed>());
+        println!(
+            "OnionLazySet: {} bytes",
+            std::mem::size_of::<OnionLazySet>()
+        );
+        println!(
+            "Box<VMInstructionPackage>: {} bytes",
+            std::mem::size_of::<Box<VMInstructionPackage>>()
+        );
+        println!(
+            "Box<OnionLambdaDefinition>: {} bytes",
+            std::mem::size_of::<Box<OnionLambdaDefinition>>()
+        );
+        println!(
+            "OnionMut: {} bytes",
+            std::mem::size_of::<GCArcWeak<OnionObjectCell>>()
+        );
+        println!(
+            "OnionObject::Undefined: {} bytes",
+            std::mem::size_of::<Option<String>>()
+        );
+        println!(
+            "OnionObject::Range: {} bytes",
+            std::mem::size_of::<(i64, i64)>()
+        );
+
+        // RefCell的开销
+        println!("\nRefCell开销:");
+        println!(
+            "RefCell<OnionObject>: {} bytes",
+            std::mem::size_of::<RefCell<OnionObject>>()
+        );
+        println!("基础类型对比:");
+        println!("i64: {} bytes", std::mem::size_of::<i64>());
+        println!("f64: {} bytes", std::mem::size_of::<f64>());
+        println!("bool: {} bytes", std::mem::size_of::<bool>());
+    }
+
+    #[test]
+    fn benchmark_realistic_vm_operations() {
+        println!("真实VM操作性能测试 (使用OnionStaticObject + clone):");
+
+        // 模拟VM中的整数运算
+        let start = Instant::now();
+        let mut result_sum = 0i64;
+
+        for i in 0..5_000_000 {
+            // 创建OnionStaticObject（模拟从栈或常量池加载）
+            let obj1 = OnionObject::Integer(i).stabilize();
+            let obj2 = OnionObject::Integer(i + 1).stabilize();
+
+            // 通过with_data访问（模拟VM的实际访问模式）
+            let result = obj1.weak().with_data(|data1| {
+                obj2.weak().with_data(|data2| {
+                    // 模拟binary_add操作
+                    match (data1, data2) {
+                        (OnionObject::Integer(a), OnionObject::Integer(b)) => {
+                            Ok(OnionObject::Integer(a + b).stabilize())
+                        }
+                        _ => Err(RuntimeError::InvalidOperation("Type error".to_string())),
+                    }
+                })
+            });
+
+            if let Ok(sum) = result {
+                // 提取结果值（模拟VM获取计算结果）
+                if let Ok(val) = sum.weak().with_data(|data| match data {
+                    OnionObject::Integer(v) => Ok(*v),
+                    _ => Err(RuntimeError::InvalidType("Not integer".to_string())),
+                }) {
+                    result_sum += val;
+                }
+            }
+        }
+
+        let duration = start.elapsed();
+        println!("500万次VM风格整数运算: {:.2}s", duration.as_secs_f64());
+        println!("每秒操作数: {:.0}", 5_000_000.0 / duration.as_secs_f64());
+        println!("结果校验: {}", result_sum);
+    }
+
+    #[test]
+    fn benchmark_vm_style_arithmetic() {
+        println!("VM风格算术运算性能测试:");
+
+        let start = Instant::now();
+        let mut final_result = 0i64;
+
+        for i in 0..2_000_000 {
+            // 创建操作数
+            let left = OnionObject::Integer(i).stabilize();
+            let right = OnionObject::Integer(i + 1).stabilize();
+
+            // 使用实际的binary_add方法
+            if let Ok(result) = left
+                .weak()
+                .with_data(|l_data| right.weak().with_data(|r_data| l_data.binary_add(r_data)))
+            {
+                // 继续进行乘法运算
+                let multiplier = OnionObject::Integer(2).stabilize();
+                if let Ok(mul_result) = result.weak().with_data(|add_data| {
+                    multiplier
+                        .weak()
+                        .with_data(|mul_data| add_data.binary_mul(mul_data))
+                }) {
+                    // 提取最终结果
+                    if let Ok(val) = mul_result.weak().with_data(|data| data.to_integer()) {
+                        final_result += val;
+                    }
+                }
+            }
+        }
+
+        let duration = start.elapsed();
+        println!("200万次复合运算: {:.2}s", duration.as_secs_f64());
+        println!("每秒操作数: {:.0}", 2_000_000.0 / duration.as_secs_f64());
+        println!("最终结果: {}", final_result);
+    }
+
+    #[test]
+    fn benchmark_object_creation_overhead() {
+        println!("对象创建开销测试:");
+
+        // 测试OnionStaticObject创建性能
+        let start = Instant::now();
+        let mut objects = Vec::with_capacity(1_000_000);
+
+        for i in 0..1_000_000 {
+            let obj = OnionObject::Integer(i).stabilize();
+            objects.push(obj);
+        }
+
+        let creation_time = start.elapsed();
+        println!(
+            "100万个OnionStaticObject创建: {:.2}s",
+            creation_time.as_secs_f64()
+        );
+
+        // 测试访问性能
+        let start = Instant::now();
+        let mut sum = 0i64;
+
+        for obj in &objects {
+            if let Ok(val) = obj.weak().with_data(|data| data.to_integer()) {
+                sum += val;
+            }
+        }
+
+        let access_time = start.elapsed();
+        println!("100万次对象访问: {:.2}s", access_time.as_secs_f64());
+        println!("访问校验和: {}", sum);
+
+        // 测试克隆性能
+        let start = Instant::now();
+        let mut cloned_objects = Vec::with_capacity(objects.len());
+
+        for obj in &objects[..100_000] {
+            // 只测试10万个避免内存不足
+            cloned_objects.push(obj.clone());
+        }
+
+        let clone_time = start.elapsed();
+        println!("10万个对象克隆: {:.2}s", clone_time.as_secs_f64());
+    }
+
+    #[test]
+    fn benchmark_string_operations_realistic() {
+        println!("真实字符串操作性能测试:");
+
+        let start = Instant::now();
+        let mut total_length = 0usize;
+
+        for i in 0..500_000 {
+            // 创建字符串对象
+            let str_obj = OnionObject::String(format!("string_{}", i)).stabilize();
+
+            // 获取字符串长度（模拟len()操作）
+            if let Ok(len_obj) = str_obj.weak().with_data(|data| data.len()) {
+                if let Ok(length) = len_obj.weak().with_data(|data| data.to_integer()) {
+                    total_length += length as usize;
+                }
+            }
+
+            // 字符串拼接操作
+            let suffix = OnionObject::String("_suffix".to_string()).stabilize();
+            if let Ok(concat_result) = str_obj.weak().with_data(|str_data| {
+                suffix
+                    .weak()
+                    .with_data(|suffix_data| str_data.binary_add(suffix_data))
+            }) {
+                // 模拟使用拼接结果
+                if let Ok(concat_str) = concat_result.weak().with_data(|data| data.to_string(&mut vec![])) {
+                    total_length += concat_str.len();
+                }
+            }
+        }
+
+        let duration = start.elapsed();
+        println!("50万次字符串操作: {:.2}s", duration.as_secs_f64());
+        println!("每秒操作数: {:.0}", 500_000.0 / duration.as_secs_f64());
+        println!("总字符串长度: {}", total_length);
+    }
+
+    #[test]
+    fn benchmark_refcell_overhead() {
+        println!("RefCell开销分析:");
+
+        // 测试直接访问vs RefCell访问的性能差异
+        let direct_integers: Vec<i64> = (0..1_000_000).collect();
+        let wrapped_integers: Vec<OnionStaticObject> = (0..1_000_000)
+            .map(|i| OnionObject::Integer(i).stabilize())
+            .collect();
+
+        // 直接访问基准
+        let start = Instant::now();
+        let mut sum1 = 0i64;
+        for &val in &direct_integers {
+            sum1 += val * 2;
+        }
+        let direct_time = start.elapsed();
+
+        // RefCell访问
+        let start = Instant::now();
+        let mut sum2 = 0i64;
+        for obj in &wrapped_integers {
+            if let Ok(val) = obj.weak().with_data(|data| match data {
+                OnionObject::Integer(i) => Ok(*i),
+                _ => Err(RuntimeError::InvalidType("Not integer".to_string())),
+            }) {
+                sum2 += val * 2;
+            }
+        }
+        let refcell_time = start.elapsed();
+
+        println!("直接访问100万个i64: {:.2}s", direct_time.as_secs_f64());
+        println!(
+            "RefCell访问100万个OnionObject: {:.2}s",
+            refcell_time.as_secs_f64()
+        );
+        println!(
+            "RefCell开销倍数: {:.1}x",
+            refcell_time.as_secs_f64() / direct_time.as_secs_f64()
+        );
+        println!("校验: {} vs {}", sum1, sum2);
+    }
 }
