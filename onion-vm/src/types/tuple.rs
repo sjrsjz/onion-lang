@@ -84,9 +84,10 @@ impl OnionTuple {
 
     pub fn at(&self, index: i64) -> Result<OnionStaticObject, RuntimeError> {
         if index < 0 || index >= self.elements.len() as i64 {
-            return Ok(OnionStaticObject::new(OnionObject::Undefined(Some(
-                "Index out of bounds".to_string(),
-            ))));
+            return Err(RuntimeError::InvalidOperation(format!(
+                "Index out of bounds: {}",
+                index
+            )));
         }
         Ok(OnionStaticObject::new(
             self.elements[index as usize].try_borrow()?.clone(),

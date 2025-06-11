@@ -5,16 +5,88 @@ pub use executor::ReplExecutor;
 use colored::*;
 use onion_frontend::utils::cycle_detector;
 use rustyline::error::ReadlineError;
-use rustyline::{DefaultEditor, Result};
+use std::sync::atomic::Ordering;
+use std::sync::{Arc, atomic::AtomicBool};
+// Updated imports for Editor, Config, Helper, and other traits
+use rustyline::{Editor, Config, Result, Helper, Completer, Hinter, Validator};
+use rustyline::highlight::{Highlighter, MatchingBracketHighlighter};
+// Imports for the fields in ReplHelper
+use rustyline::completion::FilenameCompleter;
+use rustyline::hint::HistoryHinter;
+use rustyline::validate::MatchingBracketValidator;
+
 
 use crate::create_dir_stack;
 
+// Add this use statement
+use ctrlc;
+
+#[derive(Helper, Completer, Hinter, Validator)]
+struct ReplHelper {
+    #[rustyline(Completer)]
+    completer: FilenameCompleter,
+    #[rustyline(Highlighter)]
+    highlighter: MatchingBracketHighlighter,
+    #[rustyline(Hinter)]
+    hinter: HistoryHinter,
+    #[rustyline(Validator)]
+    validator: MatchingBracketValidator,
+}
+
+impl Highlighter for ReplHelper {
+    fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
+        &'s self,
+        prompt: &'p str,
+        _default: bool, // We ignore _default as we have one main prompt style
+    ) -> std::borrow::Cow<'b, str> {
+        // Color the entire prompt string that was passed to readline()
+        std::borrow::Cow::Owned(prompt.cyan().bold().to_string())
+    }
+
+    fn highlight_hint<'h>(&self, hint: &'h str) -> std::borrow::Cow<'h, str> {
+        self.highlighter.highlight_hint(hint)
+    }
+
+    fn highlight<'l>(&self, line: &'l str, pos: usize) -> std::borrow::Cow<'l, str> {
+        self.highlighter.highlight(line, pos)
+    }
+
+    fn highlight_candidate<'c>(
+        &self,
+        candidate: &'c str,
+        completion: rustyline::CompletionType,
+    ) -> std::borrow::Cow<'c, str> {
+        self.highlighter.highlight_candidate(candidate, completion)
+    }
+
+    fn highlight_char(&self, line: &str, pos: usize, forced: bool) -> bool {
+        // Adhering to rustyline 14.0.0 Highlighter trait signature
+        self.highlighter.highlight_char(line, pos, forced)
+    }
+}
+
 pub fn start_repl() -> Result<()> {
-    println!("{}", "Onion Language REPL v0.1.0".cyan().bold());
-    println!("{}", "Type 'exit' or press Ctrl+C to quit".dimmed());
+    let version = env!("CARGO_PKG_VERSION");
+    println!("{}", format!("Onion Language REPL v{}", version).cyan().bold());
+    println!("{}", "Type \'exit\' or press Ctrl+C to quit".dimmed());
     println!();
 
-    let mut rl = DefaultEditor::new()?;
+    // Configure rustyline editor
+    let config = Config::builder()
+        .history_ignore_space(true)
+        .completion_type(rustyline::CompletionType::List)
+        .edit_mode(rustyline::EditMode::Emacs)
+        .build();
+
+    let helper = ReplHelper {
+        completer: FilenameCompleter::new(),
+        highlighter: MatchingBracketHighlighter::new(),
+        hinter: HistoryHinter::new(),
+        validator: MatchingBracketValidator::new(),
+    };
+    let mut rl = Editor::with_config(config)?;
+    rl.set_helper(Some(helper));
+
 
     // Load history from file
     let history_file = get_history_file();
@@ -22,16 +94,30 @@ pub fn start_repl() -> Result<()> {
         let _ = rl.load_history(path);
     }
 
-    let mut repl_executor = ReplExecutor::new();
+    let interrupted = Arc::new(AtomicBool::new(false));
+    // Clone for the Ctrl-C handler
+    let handler_interrupted = interrupted.clone();
+    ctrlc::set_handler(move || {
+        println!("{}", "Ctrl+C received, attempting to interrupt execution...".yellow());
+        handler_interrupted.store(true, Ordering::SeqCst);
+    })
+    .expect("Error setting Ctrl-C handler");
+
+    // Pass a clone to the executor
+    let mut repl_executor = ReplExecutor::new(interrupted.clone());
 
     loop {
-        let prompt = format!(
-            "{}[{}]:= ",
-            "Out".cyan().bold(),
+        // Reset the interrupted flag at the beginning of each command cycle
+        interrupted.store(false, Ordering::SeqCst);
+
+        // The prompt passed to readline is now plain text.
+        // The Highlighter will color it.
+        let plain_prompt = format!(
+            "Out[{}]:= ",
             repl_executor.history_count()
         );
 
-        match rl.readline(&prompt) {
+        match rl.readline(&plain_prompt) {
             Ok(line) => {
                 let trimmed = line.trim();
 
@@ -73,22 +159,26 @@ pub fn start_repl() -> Result<()> {
                 let mut dir_stack = match create_dir_stack(None) {
                     Ok(stack) => stack,
                     Err(e) => {
-                        eprintln!("{} {}", "error:".red().bold(), e);
+                        eprintln!("{} {}", "Error:".red().bold(), e);
                         continue;
                     }
                 };
 
                 let mut cycle_detector = cycle_detector::CycleDetector::new();
 
+                let line = "@required stdlib;\n@required Out;\n" .to_string() + &line;
+
                 match repl_executor.execute_code(&line, &mut cycle_detector, &mut dir_stack) {
                     Ok(_) => {}
                     Err(e) => {
-                        eprintln!("{} {}", "error:".red().bold(), e);
+                        eprintln!("{} {}", "Error:".red().bold(), e);
                     }
                 }
             }
             Err(ReadlineError::Interrupted) => {
                 println!("{}", "Interrupted".yellow());
+                // Ensure the flag is clear if REPL exits due to Ctrl+C during input
+                interrupted.store(false, Ordering::SeqCst);
                 break;
             }
             Err(ReadlineError::Eof) => {
@@ -96,7 +186,7 @@ pub fn start_repl() -> Result<()> {
                 break;
             }
             Err(err) => {
-                eprintln!("{} {:?}", "error:".red().bold(), err);
+                eprintln!("{} {:?}", "Error:".red().bold(), err);
                 break;
             }
         }
@@ -107,26 +197,17 @@ pub fn start_repl() -> Result<()> {
         let _ = rl.save_history(path);
     }
 
-    println!("{}", "Goodbye!".cyan());
+    println!("{}", "Exit".cyan());
     Ok(())
 }
 
 fn print_repl_help() {
     println!("{}", "Onion REPL Commands:".cyan().bold());
-    println!("  {}  - Show this help", "help".yellow());
-    println!("  {}  - Clear the screen", "clear".yellow());
-    println!("  {}  - Exit the REPL", "exit/quit".yellow());
-    println!("  {}  - Show history count", "history".yellow());
-    println!("  {}  - Show last execution result", "last".yellow());
-    println!("  {}  - Clear execution history", "clear_history".yellow());
-    println!();
-    println!("{}", "Language Features:".cyan().bold());
-    println!(
-        "  - Variables: {} or {}",
-        "let x = 5".green(),
-        "x := 5".green()
-    );
-    println!("  - Functions: {}", "fn add(a, b) { a + b }".green());
+    println!("  {}  \t\t- Show this help", "help".yellow());
+    println!("  {}  \t\t- Clear the screen", "clear".yellow());
+    println!("  {}  \t\t- Exit the REPL", "exit/quit".yellow());
+    println!("  {}  \t\t- Show history count", "history".yellow());
+    println!("  {}  \t- Clear execution history", "clear_history".yellow());
     println!("  - Standard library: {}", "@required stdlib".green());
     println!(
         "  - Output tuple: {} (contains execution results)",

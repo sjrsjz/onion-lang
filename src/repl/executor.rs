@@ -20,19 +20,25 @@ use onion_vm::{
 };
 
 use onion_frontend::{compile::build_code, utils::cycle_detector};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 /// REPL专用执行器
+#[derive(Clone)]
 pub struct ReplExecutor {
     /// 存储历史执行结果的元组
     out_tuple: OnionStaticObject,
+    /// 中断信号标志
+    interrupted: Arc<AtomicBool>,
 }
 
 impl ReplExecutor {
-    pub fn new() -> Self {
+    pub fn new(interrupted: Arc<AtomicBool>) -> Self {
         // 创建空的Out元组用于存储历史结果
         let empty_tuple = OnionTuple::new_static(vec![]);
         Self {
             out_tuple: empty_tuple,
+            interrupted,
         }
     }
 
@@ -136,6 +142,13 @@ impl ReplExecutor {
 
         // 执行代码
         loop {
+            // 检查中断信号
+            if self.interrupted.load(Ordering::SeqCst) {
+                // 重置中断标志，以便下次执行可以正常进行
+                // self.interrupted.store(false, Ordering::SeqCst); // 由 REPL 循环在每个命令开始时重置
+                return Err("Execution interrupted by Ctrl+C".to_string());
+            }
+
             match scheduler.step(&mut gc) {
                 Ok(step_result) => match step_result {
                     StepResult::Continue => {
@@ -167,9 +180,9 @@ impl ReplExecutor {
                                 .get_value()
                                 .try_borrow()
                                 .map_err(|e| format!("Failed to borrow value: {:?}", e))?;
-                            let error_msg =
-                                unwrap_object!(&*value_borrowed, OnionObject::String)
-                                    .map_err(|e| format!("Failed to get error message: {:?}", e))?;
+                            let error_msg = value_borrowed
+                                .to_string(&vec![])
+                                .map_err(|e| format!("Failed to get error message: {:?}", e))?;
                             println!("{} {}", "Error:".red().bold(), error_msg);
                             return Err("Execution failed".to_string());
                         }
@@ -205,6 +218,11 @@ impl ReplExecutor {
                     }
                 },
                 Err(e) => {
+                    // 检查是否因为中断而出错
+                    if self.interrupted.load(Ordering::SeqCst) {
+                        // self.interrupted.store(false, Ordering::SeqCst); // 由 REPL 循环在每个命令开始时重置
+                        return Err("Execution interrupted by Ctrl+C".to_string());
+                    }
                     return Err(format!("Execution error: {}", e));
                 }
             }
@@ -236,6 +254,6 @@ impl ReplExecutor {
 
 impl Default for ReplExecutor {
     fn default() -> Self {
-        Self::new()
+        Self::new(Arc::new(AtomicBool::new(false)))
     }
 }
