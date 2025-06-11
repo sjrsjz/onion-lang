@@ -8,7 +8,7 @@ use onion_vm::{
 use super::{build_named_dict, get_attr_direct, wrap_native_function};
 
 fn push(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -28,7 +28,7 @@ fn push(
 }
 
 fn pop(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -48,7 +48,7 @@ fn pop(
 }
 
 fn insert(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -74,7 +74,7 @@ fn insert(
 }
 
 fn remove(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -118,7 +118,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "tuple::push".to_string(),
-            push,
+            &push,
         ),
     );
 
@@ -134,7 +134,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "tuple::pop".to_string(),
-            pop,
+            &pop,
         ),
     );
 
@@ -158,7 +158,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "tuple::insert".to_string(),
-            insert,
+            &insert,
         ),
     );
 
@@ -178,7 +178,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "tuple::remove".to_string(),
-            remove,
+            &remove,
         ),
     );
 

@@ -9,7 +9,7 @@ use super::{build_named_dict, get_attr_direct, tuple, wrap_native_function};
 
 /// Convert object to string
 fn to_string(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -21,7 +21,7 @@ fn to_string(
 
 /// Convert object to integer
 fn to_int(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -48,7 +48,7 @@ fn to_int(
 
 /// Convert object to float
 fn to_float(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -77,7 +77,7 @@ fn to_float(
 
 /// Convert object to boolean
 fn to_bool(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -109,7 +109,7 @@ fn to_bool(
 
 /// Get object type name
 fn type_of(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -124,7 +124,7 @@ fn type_of(
 
 /// Check if object is an integer
 fn is_int(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -139,7 +139,7 @@ fn is_int(
 
 /// Check if object is a float
 fn is_float(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -154,7 +154,7 @@ fn is_float(
 
 /// Check if object is a string
 fn is_string(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -169,7 +169,7 @@ fn is_string(
 
 /// Check if object is a boolean
 fn is_bool(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -182,9 +182,48 @@ fn is_bool(
     })
 }
 
+/// Check if object is bytes
+fn is_bytes(
+    argument: &OnionStaticObject,
+    _gc: &mut GC<OnionObjectCell>,
+) -> Result<OnionStaticObject, RuntimeError> {
+    argument.weak().with_data(|data| {
+        let value = get_attr_direct(data, "value".to_string())?;
+
+        value.weak().with_data(|data| match data {
+            OnionObject::Bytes(_) => Ok(OnionObject::Boolean(true).stabilize()),
+            _ => Ok(OnionObject::Boolean(false).stabilize()),
+        })
+    })
+}
+
+/// Convert object to bytes
+fn to_bytes(
+    argument: &OnionStaticObject,
+    _gc: &mut GC<OnionObjectCell>,
+) -> Result<OnionStaticObject, RuntimeError> {
+    argument.weak().with_data(|data| {
+        let value = get_attr_direct(data, "value".to_string())?;
+
+        value.weak().with_data(|data| match data {
+            OnionObject::String(s) => Ok(OnionObject::Bytes(s.as_bytes().to_vec()).stabilize()),
+            OnionObject::Bytes(b) => Ok(OnionObject::Bytes(b.clone()).stabilize()),
+            OnionObject::Integer(i) => Ok(OnionObject::Bytes(i.to_string().into_bytes()).stabilize()),
+            OnionObject::Float(f) => Ok(OnionObject::Bytes(f.to_string().into_bytes()).stabilize()),
+            OnionObject::Boolean(b) => Ok(OnionObject::Bytes(
+                if *b { b"true".to_vec() } else { b"false".to_vec() }
+            ).stabilize()),
+            _ => Err(RuntimeError::InvalidOperation(format!(
+                "Cannot convert {:?} to bytes",
+                data
+            ))),
+        })
+    })
+}
+
 // get attr or undefined
 fn find(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -225,7 +264,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "types::to_string".to_string(),
-            to_string,
+            &to_string,
         ),
     );
 
@@ -241,7 +280,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "types::to_int".to_string(),
-            to_int,
+            &to_int,
         ),
     );
 
@@ -257,7 +296,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "types::to_float".to_string(),
-            to_float,
+            &to_float,
         ),
     );
 
@@ -265,15 +304,31 @@ pub fn build_module() -> OnionStaticObject {
     to_bool_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Value to convert to boolean".to_string())).stabilize(),
-    );
-    module.insert(
+    );    module.insert(
         "to_bool".to_string(),
         wrap_native_function(
             &build_named_dict(to_bool_params),
             None,
             None,
             "types::to_bool".to_string(),
-            to_bool,
+            &to_bool,
+        ),
+    );
+
+    // to_bytes 函数 - 转换为字节
+    let mut to_bytes_params = IndexMap::new();
+    to_bytes_params.insert(
+        "value".to_string(),
+        OnionObject::Undefined(Some("Value to convert to bytes".to_string())).stabilize(),
+    );
+    module.insert(
+        "to_bytes".to_string(),
+        wrap_native_function(
+            &build_named_dict(to_bytes_params),
+            None,
+            None,
+            "types::to_bytes".to_string(),
+            &to_bytes,
         ),
     );
 
@@ -290,7 +345,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "types::type_of".to_string(),
-            type_of,
+            &type_of,
         ),
     );
 
@@ -306,7 +361,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "types::is_int".to_string(),
-            is_int,
+            &is_int,
         ),
     );
 
@@ -322,7 +377,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "types::is_float".to_string(),
-            is_float,
+            &is_float,
         ),
     );
 
@@ -338,7 +393,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "types::is_string".to_string(),
-            is_string,
+            &is_string,
         ),
     );
 
@@ -346,15 +401,31 @@ pub fn build_module() -> OnionStaticObject {
     is_bool_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Value to check if is boolean".to_string())).stabilize(),
-    );
-    module.insert(
+    );    module.insert(
         "is_bool".to_string(),
         wrap_native_function(
             &build_named_dict(is_bool_params),
             None,
             None,
             "types::is_bool".to_string(),
-            is_bool,
+            &is_bool,
+        ),
+    );
+
+    // is_bytes 函数 - 检查是否是字节
+    let mut is_bytes_params = IndexMap::new();
+    is_bytes_params.insert(
+        "value".to_string(),
+        OnionObject::Undefined(Some("Value to check if is bytes".to_string())).stabilize(),
+    );
+    module.insert(
+        "is_bytes".to_string(),
+        wrap_native_function(
+            &build_named_dict(is_bytes_params),
+            None,
+            None,
+            "types::is_bytes".to_string(),
+            &is_bytes,
         ),
     );
 
@@ -375,7 +446,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "types::find".to_string(),
-            find,
+            &find,
         ),
     );
 

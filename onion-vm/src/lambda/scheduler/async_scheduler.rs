@@ -2,7 +2,10 @@ use arc_gc::gc::GC;
 
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
-    types::{object::{OnionObject, OnionObjectCell}, pair::OnionPair},
+    types::{
+        object::{OnionObject, OnionObjectCell},
+        pair::OnionPair,
+    },
 };
 
 pub struct AsyncScheduler {
@@ -36,7 +39,8 @@ impl Runnable for AsyncScheduler {
                             self.runnables.push(new_runnable);
                             self.runnables[i].receive(
                                 StepResult::Return(
-                                    OnionObject::Undefined(Some("Task Launched".to_string())).stabilize(),
+                                    OnionObject::Undefined(Some("Task Launched".to_string()))
+                                        .stabilize(),
                                 ),
                                 gc,
                             )?;
@@ -79,15 +83,13 @@ impl Runnable for AsyncScheduler {
         ))
     }
 
-    fn copy(&self, gc: &mut GC<OnionObjectCell>) -> Box<dyn Runnable> {
+    fn copy(&self) -> Box<dyn Runnable> {
         Box::new(AsyncScheduler {
-            runnables: self.runnables.iter().map(|r| r.copy(gc)).collect(),
+            runnables: self.runnables.iter().map(|r| r.copy()).collect(),
         })
     }
 
-    fn format_context(
-            &self,
-        ) -> Result<serde_json::Value, RuntimeError> {
+    fn format_context(&self) -> Result<serde_json::Value, RuntimeError> {
         let mut tasks_json_array = serde_json::Value::Array(vec![]);
         for runnable in &self.runnables {
             let frame_json = runnable.format_context()?;

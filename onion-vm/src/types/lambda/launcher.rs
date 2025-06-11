@@ -19,18 +19,16 @@ enum ArgumentProcessingPhase {
 }
 
 pub struct OnionLambdaRunnableLauncher {
-    lambda: OnionStaticObject, // The OnionObject::Lambda itself
-    parameter_elements: Vec<OnionStaticObject>, // Elements from lambda.parameter tuple (definitions)
-    argument_elements: Vec<OnionStaticObject>,  // Elements from the provided argument tuple
+    lambda: OnionStaticObject,         // The OnionObject::Lambda itself
+    argument_tuple: OnionStaticObject, // The provided argument tuple object
 
-    pub collected_arguments: Vec<OnionStaticObject>, // Starts as clone of parameter_elements, gets updated
-    pub assigned: Vec<bool>, // Tracks assignment for parameter_elements slots, then for appended args
+    pub collected_arguments: Vec<OnionStaticObject>, // Arguments collected during processing
+    pub assigned: Vec<bool>, // Tracks assignment for parameter slots, then for appended args
 
     phase: ArgumentProcessingPhase,
     current_argument_index: usize, // Index into argument_elements for current phase
 
-    runnable_mapper:
-        Option<Box<dyn FnOnce(Box<dyn Runnable>) -> Result<Box<dyn Runnable>, RuntimeError>>>,
+    runnable_mapper: Box<dyn Fn(Box<dyn Runnable>) -> Result<Box<dyn Runnable>, RuntimeError>>,
 
     constrain_runnable: Option<Box<dyn Runnable>>,
 }
@@ -42,11 +40,41 @@ impl OnionLambdaRunnableLauncher {
         runnable_mapper: F,
     ) -> Result<OnionLambdaRunnableLauncher, RuntimeError>
     where
-        F: FnOnce(Box<dyn Runnable>) -> Result<Box<dyn Runnable>, RuntimeError>,
+        F: Fn(Box<dyn Runnable>) -> Result<Box<dyn Runnable>, RuntimeError>,
     {
-        let lambda_definition = lambda_obj.weak().try_borrow()?.with_data(|obj_ref| {
+        // Initialize collected_arguments based on parameter count
+        let mut collected_arguments = Vec::new();
+        let mut assigned = Vec::new();
+
+        lambda_obj.weak().try_borrow()?.with_data(|obj_ref| {
             if let OnionObject::Lambda(definition) = obj_ref {
-                Ok(definition.clone())
+                definition.parameter.try_borrow()?.with_data(|p_obj| {
+                    if let OnionObject::Tuple(tuple) = p_obj {
+                        // Initialize collected_arguments and assigned based on parameter count
+                        for param in &tuple.elements {
+                            param.with_data(|param_obj| {
+                                match param_obj {
+                                    OnionObject::LazySet(lazy_set) => {
+                                        // If the parameter is a LazySet, we collect its container.
+                                        collected_arguments
+                                            .push(lazy_set.get_container().clone().stabilize());
+                                    }
+                                    _ => {
+                                        // For other types, we just clone the parameter as is.
+                                        collected_arguments.push(param.clone().stabilize());
+                                    }
+                                }
+                                Ok(())
+                            })?;
+                        }
+                        assigned = vec![false; tuple.elements.len()];
+                        Ok(())
+                    } else {
+                        Err(RuntimeError::DetailedError(
+                            "Lambda parameters must be a Tuple".to_string(),
+                        ))
+                    }
+                })
             } else {
                 Err(RuntimeError::DetailedError(
                     "Expected a Lambda definition object".to_string(),
@@ -54,65 +82,14 @@ impl OnionLambdaRunnableLauncher {
             }
         })?;
 
-        let parameter_elements: Vec<OnionStaticObject> = lambda_definition
-            .parameter
-            .try_borrow()?
-            .with_data(|p_obj| {
-                if let OnionObject::Tuple(tuple) = p_obj {
-                    Ok(tuple.elements.clone())
-                } else {
-                    Err(RuntimeError::DetailedError(
-                        "Lambda parameters must be a Tuple".to_string(),
-                    ))
-                }
-            })?
-            .into_iter()
-            .map(|o| o.stabilize())
-            .collect();
-
-        let argument_elements = argument_tuple_obj
-            .weak()
-            .try_borrow()?
-            .with_data(|arg_obj| {
-                if let OnionObject::Tuple(tuple) = arg_obj {
-                    Ok(tuple.elements.clone())
-                } else {
-                    Err(RuntimeError::DetailedError(
-                        "Lambda arguments must be a Tuple".to_string(),
-                    ))
-                }
-            })?
-            .into_iter()
-            .map(|o| o.stabilize())
-            .collect();
-
-        let mut collected_arguments = Vec::new();
-        for param in &parameter_elements {
-            param.weak().try_borrow()?.with_data(|param_obj| {
-                match param_obj {
-                    OnionObject::LazySet(lazy_set) => {
-                        // If the parameter is a LazySet, we collect its container.
-                        collected_arguments.push(lazy_set.get_container().clone().stabilize());
-                    }
-                    _ => {
-                        // For other types, we just clone the parameter as is.
-                        collected_arguments.push(param.clone());
-                    }
-                }
-                Ok(())
-            })?;
-        }
-        let assigned = vec![false; parameter_elements.len()];
-
         Ok(OnionLambdaRunnableLauncher {
             lambda: lambda_obj.clone(),
-            parameter_elements,
-            argument_elements,
+            argument_tuple: argument_tuple_obj.clone(),
             collected_arguments,
             assigned,
             phase: ArgumentProcessingPhase::NamedArguments,
             current_argument_index: 0,
-            runnable_mapper: Some(Box::new(runnable_mapper)),
+            runnable_mapper: Box::new(runnable_mapper),
             constrain_runnable: None,
         })
     }
@@ -218,7 +195,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
                                     // 如果这里直接返回，则当前 `step` 的参数处理逻辑会被跳过。
                                     // 为了与原逻辑最接近（即清除约束后继续本轮 step 的后续参数处理），
                                     // 我们不在这里 `return`，而是让代码流继续到下面的 `match self.phase`。
-                                    // 如果期望的是约束成功后立即开始下一轮 `step`，则应 `return Ok(StepResult::Continue)`。
+                                    // 如果期望的是约束成功后立即开始下一轮 `step`，則應 `return Ok(StepResult::Continue)`。
                                     // 鉴于后续代码会继续处理参数，这里不返回是合理的。
                                     Ok(()) // 标记约束已处理，但不立即返回，让后续的 phase match 执行
                                 } else {
@@ -251,206 +228,296 @@ impl Runnable for OnionLambdaRunnableLauncher {
         match self.phase {
             // 阶段 2.1: 处理命名参数
             ArgumentProcessingPhase::NamedArguments => {
+                // Get argument count using with_data to avoid storing Vec
+                let argument_count =
+                    self.argument_tuple
+                        .weak()
+                        .try_borrow()?
+                        .with_data(|arg_obj| {
+                            if let OnionObject::Tuple(tuple) = arg_obj {
+                                Ok(tuple.elements.len())
+                            } else {
+                                Err(RuntimeError::DetailedError(
+                                    "Lambda arguments must be a Tuple".to_string(),
+                                ))
+                            }
+                        })?;
+
                 // 如果当前参数索引超出了提供的参数列表的范围，
                 // 说明所有提供的参数都已在命名参数阶段被初步检查过。
                 // 切换到位置参数处理阶段。
-                if self.current_argument_index >= self.argument_elements.len() {
+                if self.current_argument_index >= argument_count {
                     self.phase = ArgumentProcessingPhase::PositionalArguments;
                     self.current_argument_index = 0; // 重置索引以供位置参数阶段使用
                     return Ok(StepResult::Continue); // 请求调度器再次调用 step
                 }
 
                 // 获取当前正在处理的由调用者提供的参数
-                let current_provided_arg_static =
-                    &self.argument_elements[self.current_argument_index];
+                let current_arg_index = self.current_argument_index;
                 self.current_argument_index += 1; // 移动到下一个提供的参数
 
-                // 尝试借用当前提供的参数对象
-                let arg_obj_view = current_provided_arg_static.weak().try_borrow()?;
+                self
+                    .argument_tuple
+                    .weak()
+                    .try_borrow()?
+                    .with_data(|arg_obj| {
+                        if let OnionObject::Tuple(tuple) = arg_obj {
+                            if current_arg_index < tuple.elements.len() {
+                                let arg_obj_view = tuple.elements[current_arg_index].try_borrow()?;
                 // 检查当前提供的参数是否是命名参数 (`OnionObject::Named`)
                 if let OnionObject::Named(named_arg) = &*arg_obj_view {
                     let key_to_match = &named_arg.key; // 获取命名参数的名称
 
-                    // 遍历 Lambda 定义中的参数 (`parameter_elements`)，尝试匹配名称
-                    for param_idx in 0..self.parameter_elements.len() {
-                        // 如果此参数槽已经被赋值，则跳过 (避免一个定义参数被多个命名参数赋值)
-                        // 注意：原代码没有这个检查，一个定义参数可以被后来的同名参数覆盖。
-                        // if self.assigned[param_idx] { continue; }
-
-                        let param_element_static = &self.parameter_elements[param_idx];
-                        let param_element_view = param_element_static.weak().try_borrow()?;
-
-                        match &*param_element_view {
-                            // 情况 A: Lambda 定义的参数也是一个命名参数 (`name: Type`)
-                            OnionObject::Named(param_named_def) => {
-                                if param_named_def.key.equals(key_to_match)? {
-                                    // 名称匹配成功！
-                                    // 将提供的命名参数存入 `collected_arguments` 的对应位置。
-                                    self.collected_arguments[param_idx] =
-                                        current_provided_arg_static.clone();
-                                    self.assigned[param_idx] = true; // 标记此参数槽已分配
-                                    return Ok(StepResult::Continue); // 处理了一个参数，继续下一步
-                                }
+                    // 遍历 Lambda 定义中的参数，使用 with_data 访问
+                    let parameter_count =
+                        self.lambda.weak().try_borrow()?.with_data(|obj_ref| {
+                            if let OnionObject::Lambda(definition) = obj_ref {
+                                definition.parameter.try_borrow()?.with_data(|p_obj| {
+                                    if let OnionObject::Tuple(tuple) = p_obj {
+                                        Ok(tuple.elements.len())
+                                    } else {
+                                        Err(RuntimeError::DetailedError(
+                                            "Lambda parameters must be a Tuple".to_string(),
+                                        ))
+                                    }
+                                })
+                            } else {
+                                Err(RuntimeError::DetailedError(
+                                    "Expected a Lambda definition object".to_string(),
+                                ))
                             }
-                            // 情况 B: Lambda 定义的参数是一个 LazySet (`name: {constraint}`)
-                            // LazySet 的 container 存储了参数名和类型，filter 存储了约束。
-                            OnionObject::LazySet(lazy_set) => {
-                                // 检查 LazySet 的 container 是否为 Named 对象，并匹配名称
-                                // `with_data` 用于安全访问 OnionObject 内部数据
-                                let matched_in_lazyset =
-                                    lazy_set.container.with_data(|container| {
-                                        if let OnionObject::Named(container_named) = container {
-                                            if container_named.key.equals(key_to_match)? {
-                                                // 名称匹配成功！
-                                                // 将提供的命名参数（其值部分）存入 `collected_arguments`。
-                                                // 注意：这里存的是整个 `current_provided_arg_static` (即 `name: value` 对)
-                                                self.collected_arguments[param_idx] =
-                                                    current_provided_arg_static.clone();
-                                                self.assigned[param_idx] = true; // 标记已分配
+                        })?;
 
-                                                // 设置约束：将 LazySet 的 filter (一个 Lambda) 设置为 `constrain_runnable`。
-                                                // 约束 Lambda 的参数是当前提供的命名参数的值。
-                                                let argument_for_filter =
-                                                    OnionObject::Tuple(OnionTuple::new(vec![
-                                                        named_arg.get_value().clone(), // 提取命名参数的值
-                                                    ]))
-                                                    .stabilize(); // 创建包含单个参数的元组
+                    for param_idx in 0..parameter_count {
+                        // 使用 with_data 访问参数定义
+                        let matched = self.lambda.weak().try_borrow()?.with_data(|obj_ref| {
+                            if let OnionObject::Lambda(definition) = obj_ref {
+                                definition.parameter.try_borrow()?.with_data(|p_obj| {
+                                    if let OnionObject::Tuple(tuple) = p_obj {
+                                        if param_idx < tuple.elements.len() {
+                                            tuple.elements[param_idx].with_data(|param_obj| {
+                                                match param_obj {
+                                                    // 情况 A: Lambda 定义的参数也是一个命名参数 (`name: Type`)
+                                                    OnionObject::Named(param_named_def) => {
+                                                        if param_named_def.key.equals(key_to_match)? {
+                                                            // 名称匹配成功！
+                                                            self.collected_arguments[param_idx] = arg_obj_view.clone().stabilize();
+                                                            self.assigned[param_idx] = true;
+                                                            return Ok(true);
+                                                        }
+                                                        Ok(false)
+                                                    }
+                                                    // 情况 B: Lambda 定义的参数是一个 LazySet (`name: {constraint}`)
+                                                    OnionObject::LazySet(lazy_set) => {
+                                                        let matched_in_lazyset = lazy_set.container.with_data(|container| {
+                                                            if let OnionObject::Named(container_named) = container {
+                                                                if container_named.key.equals(key_to_match)? {
+                                                                    // 名称匹配成功！
+                                                                    self.collected_arguments[param_idx] = arg_obj_view.clone().stabilize();
+                                                                    self.assigned[param_idx] = true;
 
-                                                // 为约束 Lambda 创建一个新的启动器
-                                                let runnable = Box::new(
-                                                    OnionLambdaRunnableLauncher::new_static(
-                                                        &lazy_set.filter.clone().stabilize(), // 约束 Lambda
-                                                        &argument_for_filter, // 约束 Lambda 的参数
-                                                        |r| Ok(r), // 简单的 runnable_mapper
-                                                    )?,
-                                                );
-                                                // 将约束启动器包装在 Scheduler 中并设置为 `constrain_runnable`
-                                                self.constrain_runnable =
-                                                    Some(Box::new(Scheduler::new(vec![runnable])));
-                                                return Ok(true); // 表示在 LazySet 中找到了匹配
-                                            }
+                                                                    // 设置约束
+                                                                    let argument_for_filter = OnionObject::Tuple(OnionTuple::new(vec![
+                                                                        named_arg.get_value().clone(),
+                                                                    ])).stabilize();
+
+                                                                    let runnable = Box::new(
+                                                                        OnionLambdaRunnableLauncher::new_static(
+                                                                            &lazy_set.filter.clone().stabilize(),
+                                                                            &argument_for_filter,
+                                                                            |r| Ok(r),
+                                                                        )?,
+                                                                    );
+                                                                    self.constrain_runnable = Some(Box::new(Scheduler::new(vec![runnable])));
+                                                                    return Ok(true);
+                                                                }
+                                                            }
+                                                            Ok(false)
+                                                        })?;
+                                                        Ok(matched_in_lazyset)
+                                                    }
+                                                    _ => Ok(false),
+                                                }
+                                            })
+                                        } else {
+                                            Ok(false)
                                         }
-                                        Ok(false) // 在 LazySet 的 container 中未找到匹配的 Named 对象或名称不匹配
-                                    })?;
-                                if matched_in_lazyset {
-                                    return Ok(StepResult::Continue); // 约束已设置，等待下一轮 step 执行约束
-                                }
+                                    } else {
+                                        Err(RuntimeError::DetailedError(
+                                            "Lambda parameters must be a Tuple".to_string(),
+                                        ))
+                                    }
+                                })
+                            } else {
+                                Err(RuntimeError::DetailedError(
+                                    "Expected a Lambda definition object".to_string(),
+                                ))
                             }
-                            _ => {} // Lambda 定义的参数不是 Named 或 LazySet，在命名参数阶段不直接匹配
+                        })?;
+
+                        if matched {
+                            return Ok(());
                         }
-                    } // 结束参数定义遍历
+                    }
 
                     // 如果遍历完所有 Lambda 定义的参数后，没有找到匹配的名称，
-                    // 说明这是一个额外的命名参数 (例如，用于可变参数或动态属性)。
-                    // 将其追加到 `collected_arguments` 的末尾。
+                    // 说明这是一个额外的命名参数。
                     self.collected_arguments
-                        .push(current_provided_arg_static.clone());
-                    self.assigned.push(true); // 标记这个追加的参数也已分配
-                }
-                // 如果当前提供的参数不是 OnionObject::Named，则在命名参数阶段被忽略。
-                // （例如，一个直接的位置参数混在命名参数列表中间，它会被留到位置参数阶段处理）
-                Ok(StepResult::Continue) // 无论是否处理了命名参数，都继续下一步
-            }
+                        .push(arg_obj_view.clone().stabilize());
+                    self.assigned.push(true);
+                };
+                                Ok(())
 
-            // 阶段 2.2: 处理位置参数
+                            } else {
+                                Err(RuntimeError::DetailedError(
+                                    "Argument index out of bounds".to_string(),
+                                ))
+                            }
+                        } else {
+                            Err(RuntimeError::DetailedError(
+                                "Lambda arguments must be a Tuple".to_string(),
+                            ))
+                        }
+                    })?;
+
+                // 如果当前提供的参数不是 OnionObject::Named，则在命名参数阶段被忽略。
+                Ok(StepResult::Continue)
+            } // 阶段 2.2: 处理位置参数
             ArgumentProcessingPhase::PositionalArguments => {
+                // Get argument count using with_data to avoid storing Vec
+                let argument_count =
+                    self.argument_tuple
+                        .weak()
+                        .try_borrow()?
+                        .with_data(|arg_obj| {
+                            if let OnionObject::Tuple(tuple) = arg_obj {
+                                Ok(tuple.elements.len())
+                            } else {
+                                Err(RuntimeError::DetailedError(
+                                    "Lambda arguments must be a Tuple".to_string(),
+                                ))
+                            }
+                        })?;
+
                 // 如果当前参数索引超出了提供的参数列表的范围，
                 // 说明所有提供的参数都已在位置参数阶段被处理。
                 // 切换到完成阶段。
-                if self.current_argument_index >= self.argument_elements.len() {
+                if self.current_argument_index >= argument_count {
                     self.phase = ArgumentProcessingPhase::Done;
                     return Ok(StepResult::Continue); // 请求调度器再次调用 step
                 }
 
                 // 获取当前正在处理的由调用者提供的参数
-                let current_provided_arg_static =
-                    &self.argument_elements[self.current_argument_index];
+                let current_processing_arg_idx = self.current_argument_index; // MODIFIED: was current_arg_index
                 self.current_argument_index += 1; // 移动到下一个提供的参数
 
-                let arg_obj_view = current_provided_arg_static.weak().try_borrow()?;
-                // 如果当前提供的参数是命名参数，则在位置参数阶段跳过。
-                // (命名参数应该已经在 NamedArguments 阶段处理完毕，或者作为额外参数追加了)
-                if let OnionObject::Named(_) = &*arg_obj_view {
-                    // Skip named arguments in this phase.
-                } else {
-                    // 当前提供的是一个位置参数。
-                    // 尝试找到第一个尚未被赋值的 Lambda 定义参数槽。
-                    if let Some(param_idx) = self.assigned.iter().position(|&assigned| !assigned) {
-                        // 找到了一个未分配的参数槽。
-                        let original_param_def_static = &self.parameter_elements[param_idx];
-                        let original_param_obj_view =
-                            original_param_def_static.weak().try_borrow()?;
-
-                        match &*original_param_obj_view {
-                            // 情况 A: Lambda 定义的参数是 `name: Type` (Named)
-                            // 此时，位置参数将被用于填充这个具名参数的值。
-                            OnionObject::Named(original_named_def) => {
-                                // 将位置参数包装成一个新的 Named 对象，使用原始定义的名称。
-                                let new_value_for_slot = OnionObject::Named(OnionNamed::new(
-                                    original_named_def.key.as_ref().clone(), // 使用原始参数定义的名称
-                                    current_provided_arg_static.weak().clone(), // 值是当前的位置参数
-                                ))
-                                .stabilize();
-                                self.collected_arguments[param_idx] = new_value_for_slot;
-                                self.assigned[param_idx] = true;
-                            }
-                            // 情况 B: Lambda 定义的参数是 `name: {constraint}` (LazySet)
-                            OnionObject::LazySet(lazy_set_def) => {
-                                // 检查 LazySet 的 container 是否为 Named 对象，以获取参数名。
-                                lazy_set_def.container.with_data(|container_obj| {
-                                    if let OnionObject::Named(container_named_def) = container_obj {
-                                        // 将位置参数包装成 Named 对象，使用 LazySet container 中定义的名称。
-                                        let new_value_for_slot =
-                                            OnionObject::Named(OnionNamed::new(
-                                                container_named_def.key.as_ref().clone(),
-                                                current_provided_arg_static.weak().clone(),
-                                            ))
-                                            .stabilize();
-                                        self.collected_arguments[param_idx] = new_value_for_slot;
-                                        self.assigned[param_idx] = true;
-
-                                        // 设置约束：将 LazySet 的 filter 设置为 `constrain_runnable`。
-                                        // 约束 Lambda 的参数是当前提供的位置参数本身。
-                                        let argument_for_filter =
-                                            OnionObject::Tuple(OnionTuple::new(vec![
-                                                current_provided_arg_static.weak().clone(),
-                                            ]))
-                                            .stabilize();
-                                        let runnable =
-                                            Box::new(OnionLambdaRunnableLauncher::new_static(
-                                                &lazy_set_def.filter.clone().stabilize(),
-                                                &argument_for_filter,
-                                                |r| Ok(r),
-                                            )?);
-                                        self.constrain_runnable =
-                                            Some(Box::new(Scheduler::new(vec![runnable])));
-                                        return Ok(()); // 成功设置约束
-                                    }
-                                    // 如果 LazySet 的 container 不是 Named，则无法确定参数名，这是一个错误。
-                                    Err(RuntimeError::DetailedError(
-                                        // 错误信息 "Constant's container must be a Named object" 似乎有误，应为 "LazySet's container..."
-                                        "LazySet's container must be a Named object for positional assignment".to_string(),
-                                    ))
-                                })?;
-                            }
-                            // 情况 C: Lambda 定义的参数是普通类型 (不是 Named 或 LazySet)
-                            // 直接将位置参数赋值给它。
-                            _ => {
-                                self.collected_arguments[param_idx] =
-                                    current_provided_arg_static.clone();
-                                self.assigned[param_idx] = true;
-                            }
-                        }
+                // Access the argument tuple and the specific argument within this closure
+                self.argument_tuple.weak().try_borrow()?.with_data(|arg_tuple_obj| {
+                    let tuple_elements = if let OnionObject::Tuple(t) = arg_tuple_obj {
+                        &t.elements
                     } else {
-                        // 所有 Lambda 定义的参数槽都已被填充，或者 Lambda 本身没有参数定义。
-                        // 将此位置参数作为额外参数追加到 `collected_arguments`。
-                        // (用于支持可变参数列表等情况)
-                        self.collected_arguments
-                            .push(current_provided_arg_static.clone());
-                        self.assigned.push(true); // 标记这个追加的参数也已分配
+                        return Err(RuntimeError::DetailedError("Lambda arguments must be a Tuple".to_string()));
+                    };
+
+                    if current_processing_arg_idx >= tuple_elements.len() {
+                        // This should ideally be caught by the argument_count check earlier,
+                        // but as a safeguard within the closure.
+                        return Err(RuntimeError::DetailedError("Argument index out of bounds during positional processing".to_string()));
                     }
-                }
-                Ok(StepResult::Continue) // 处理了一个参数或跳过了一个参数，继续下一步
+
+                    // Get a borrowed view of the current argument from the argument tuple
+                    let current_provided_arg_weak = &tuple_elements[current_processing_arg_idx];
+                    let current_provided_arg_view = current_provided_arg_weak.try_borrow()?; // This is GcRef<OnionObjectCell>
+
+                    // 如果当前提供的参数是命名参数，则在位置参数阶段跳过。
+                    if let OnionObject::Named(_) = &*current_provided_arg_view {
+                        // Skip named arguments in this phase.
+                    } else {
+                        // This is a positional argument.
+                        // We'll need its OnionStaticObject form for assignments or creating new objects.
+                        // We clone the weak reference and stabilize it.
+                        let current_provided_arg_static = current_provided_arg_weak.clone().stabilize();
+
+                        // 尝试找到第一个尚未被赋值的 Lambda 定义参数槽。
+                        if let Some(param_idx) = self.assigned.iter().position(|&assigned| !assigned) {
+                            // 找到了一个未分配的参数槽。 Access the lambda's parameter definition.
+                            self.lambda.weak().try_borrow()?.with_data(|lambda_obj_ref| {
+                                let lambda_def = if let OnionObject::Lambda(def) = lambda_obj_ref { def }
+                                else { return Err(RuntimeError::DetailedError("Expected a Lambda definition object".to_string())); };
+
+                                lambda_def.parameter.try_borrow()?.with_data(|param_tuple_obj_ref| {
+                                    let param_tuple_elements = if let OnionObject::Tuple(pt) = param_tuple_obj_ref { &pt.elements }
+                                    else { return Err(RuntimeError::DetailedError("Lambda parameters must be a Tuple".to_string())); };
+
+                                    if param_idx >= param_tuple_elements.len() {
+                                        return Err(RuntimeError::DetailedError("Parameter index out of bounds for assignment".to_string()));
+                                    }
+
+                                    param_tuple_elements[param_idx].with_data(|param_def_obj_ref| {
+                                        match param_def_obj_ref {
+                                            // 情况 A: Lambda 定义的参数是 `name: Type` (Named)
+                                            OnionObject::Named(original_named_def) => {
+                                                // 将位置参数包装成一个新的 Named 对象，使用原始定义的名称。
+                                                // For the value of the new Named object, we use the weak reference of the provided argument.
+                                                let new_value_for_slot = OnionObject::Named(OnionNamed::new(
+                                                    original_named_def.key.as_ref().clone(),
+                                                    current_provided_arg_weak.clone(), // Use weak ref here
+                                                )).stabilize();
+                                                self.collected_arguments[param_idx] = new_value_for_slot;
+                                                self.assigned[param_idx] = true;
+                                                Ok(())
+                                            }
+                                            // 情况 B: Lambda 定义的参数是 `name: {constraint}` (LazySet)
+                                            OnionObject::LazySet(lazy_set_def) => {
+                                                lazy_set_def.container.with_data(|container_obj_ref| {
+                                                    if let OnionObject::Named(container_named_def) = container_obj_ref {
+                                                        // 将位置参数包装成 Named 对象
+                                                        let new_value_for_slot = OnionObject::Named(OnionNamed::new(
+                                                            container_named_def.key.as_ref().clone(),
+                                                            current_provided_arg_weak.clone(), // Use weak ref here
+                                                        )).stabilize();
+                                                        self.collected_arguments[param_idx] = new_value_for_slot;
+                                                        self.assigned[param_idx] = true;
+
+                                                        // 设置约束
+                                                        // The argument to the filter lambda is the provided argument itself.
+                                                        let argument_for_filter = OnionObject::Tuple(OnionTuple::new(vec![
+                                                            current_provided_arg_weak.clone(), // Use weak ref here
+                                                        ])).stabilize();
+                                                        let runnable = Box::new(OnionLambdaRunnableLauncher::new_static(
+                                                            &lazy_set_def.filter.clone().stabilize(),
+                                                            &argument_for_filter,
+                                                            |r| Ok(r),
+                                                        )?);
+                                                        self.constrain_runnable = Some(Box::new(Scheduler::new(vec![runnable])));
+                                                        Ok(())
+                                                    } else {
+                                                        Err(RuntimeError::DetailedError(
+                                                            "LazySet\'s container must be a Named object for positional assignment".to_string(),
+                                                        ))
+                                                    }
+                                                }) // End of lazy_set_def.container.with_data
+                                            }
+                                            // 情况 C: Lambda 定义的参数是普通类型
+                                            _ => { 
+                                                self.collected_arguments[param_idx] = current_provided_arg_static; // Assign the stabilized positional argument
+                                                self.assigned[param_idx] = true;
+                                                Ok(())
+                                            }
+                                        }
+                                    }) // End of param_tuple_elements[param_idx].with_data
+                                }) // End of lambda_def.parameter.try_borrow()?.with_data
+                            })?; // End of self.lambda.weak().try_borrow()?.with_data
+                        } else {
+                            // 所有 Lambda 定义的参数槽都已被填充。 This is an extra positional argument.
+                            self.collected_arguments.push(current_provided_arg_static); // Add the stabilized argument
+                            self.assigned.push(true);
+                        }
+                    }
+                    Ok(()) // Return for the main with_data on argument_tuple
+                })?; // Propagate error from with_data
+
+                Ok(StepResult::Continue)
             }
 
             // 阶段 2.3: 完成参数处理，准备启动 Lambda
@@ -472,51 +539,30 @@ impl Runnable for OnionLambdaRunnableLauncher {
                     OnionTuple::new_static_no_ref(self.collected_arguments.clone());
 
                 // 获取原始 Lambda 定义对象。
-                let lambda_arc = self.lambda.weak().try_borrow()?.with_data(|obj| {
+                self.lambda.weak().try_borrow()?.with_data(|obj| {
                     if let OnionObject::Lambda(lambda_def) = obj {
-                        Ok(lambda_def.clone())
+                        // 使用最终的参数元组和 Lambda 定义来创建实际的 Lambda 可运行实例。
+                        let runnable = lambda_def
+                            .create_runnable(final_args_static, &self.lambda, gc)
+                            .map_err(|e| {
+                                RuntimeError::InvalidType(format!(
+                                    "Failed to create runnable from lambda: {}",
+                                    e
+                                ))
+                            })?;
+                        // 应用 mapper。
+                        // 成功映射，返回 ReplaceRunnable
+                        (self.runnable_mapper)(runnable)
+                            .map(|result_runnable| StepResult::ReplaceRunnable(result_runnable))
                     } else {
                         // 这是一个内部错误，启动器持有的 lambda 对象不是 Lambda 类型。
                         Err(RuntimeError::DetailedError(
                             "Launcher's lambda object is not OnionObject::Lambda".to_string(),
                         ))
                     }
-                })?;
-
-                // 使用最终的参数元组和 Lambda 定义来创建实际的 Lambda 可运行实例。
-                let runnable = lambda_arc
-                    .create_runnable(final_args_static, &self.lambda, gc)
-                    .map_err(|e| {
-                        RuntimeError::InvalidType(format!(
-                            "Failed to create runnable from lambda: {}",
-                            e
-                        ))
-                    })?;
-
-                // 获取 `runnable_mapper`。这是一个一次性的闭包，
-                // 用于在启动器完成其工作后，对新创建的 Lambda 可运行对象进行可能的转换或包装。
-                let mapper = self.runnable_mapper.take().ok_or_else(|| {
-                    RuntimeError::DetailedError(
-                        "Runnable mapper has already been consumed or was never set".to_string(),
-                    )
-                })?;
-
-                // 应用 mapper。
-                mapper(runnable)
-                    .map(|result_runnable| StepResult::ReplaceRunnable(result_runnable)) // 成功映射，返回 ReplaceRunnable
-                    .map_err(|e| {
-                        // mapper 执行失败
-                        RuntimeError::DetailedError(format!("Failed to map runnable: {}", e))
-                    })
+                })
             }
         }
-    }
-
-    fn copy(&self, _gc: &mut GC<OnionObjectCell>) -> Box<dyn Runnable> {
-        // 由于 `runnable_mapper` 是 `FnOnce`，它只能被调用一次，因此启动器不能被安全地复制。
-        panic!(
-            "OnionLambdaRunnableLauncher cannot be copied due to FnOnce closure in runnable_mapper"
-        )
     }
 
     fn format_context(&self) -> Result<serde_json::Value, RuntimeError> {

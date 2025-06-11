@@ -39,15 +39,6 @@ pub enum StepResult {
 
 #[allow(unused_variables)]
 pub trait Runnable {
-    fn set_argument(
-        &mut self,
-        argument: OnionStaticObject,
-        gc: &mut GC<OnionObjectCell>,
-    ) -> Result<(), RuntimeError> {
-        Err(RuntimeError::InvalidOperation(
-            "set_argument not implemented".to_string(),
-        ))
-    }
     fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError>;
     fn receive(
         &mut self,
@@ -58,7 +49,12 @@ pub trait Runnable {
             "receive not implemented".to_string(),
         ))
     }
-    fn copy(&self, gc: &mut GC<OnionObjectCell>) -> Box<dyn Runnable>;
+    fn copy_with_gc(&self, gc: &mut GC<OnionObjectCell>) -> Box<dyn Runnable> {
+        panic!("copy_with_gc is not implemented for this Runnable")
+    }
+    fn copy(&self) -> Box<dyn Runnable> {
+        panic!("copy_no_gc is not implemented for this Runnable")
+    }
 
     fn format_context(&self) -> Result<Value, RuntimeError>;
 }

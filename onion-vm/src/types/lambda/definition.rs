@@ -1,8 +1,6 @@
 use std::{
-    cell::RefCell,
     collections::VecDeque,
     fmt::{Debug, Display},
-    sync::Arc,
 };
 
 use arc_gc::{
@@ -12,16 +10,26 @@ use arc_gc::{
 };
 
 use crate::{
-    lambda::runnable::{Runnable, RuntimeError},
+    lambda::runnable::{Runnable, RuntimeError, StepResult},
     types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
 };
 
 use super::runnable::OnionLambdaRunnable;
 
-#[derive(Clone)]
 pub enum LambdaBody {
     Instruction(Box<OnionObject>),
-    NativeFunction(Arc<RefCell<dyn Runnable>>),
+    NativeFunction(Box<dyn Runnable>),
+}
+
+impl Clone for LambdaBody {
+    fn clone(&self) -> Self {
+        match self {
+            LambdaBody::Instruction(instruction) => LambdaBody::Instruction(instruction.clone()),
+            LambdaBody::NativeFunction(native_function) => {
+                LambdaBody::NativeFunction(native_function.copy())
+            }
+        }
+    }
 }
 
 impl Debug for LambdaBody {
@@ -109,8 +117,8 @@ impl OnionLambdaDefinition {
                 Ok(Box::new(runnable))
             }
             LambdaBody::NativeFunction(native_function) => {
-                let mut runnable = native_function.borrow().copy(gc);
-                runnable.set_argument(argument, gc)?;
+                let mut runnable = native_function.copy();
+                runnable.receive(StepResult::Return(argument), gc)?;
                 Ok(runnable)
             }
         }

@@ -1,5 +1,4 @@
 use std::{
-    cell::RefCell,
     sync::{Arc, Mutex},
     thread,
     time::Duration,
@@ -170,14 +169,6 @@ impl AsyncHttpRequest {
 }
 
 impl Runnable for AsyncHttpRequest {
-    fn set_argument(
-        &mut self,
-        _argument: OnionStaticObject,
-        _gc: &mut GC<OnionObjectCell>,
-    ) -> Result<(), RuntimeError> {
-        Ok(())
-    }
-
     fn step(&mut self, _gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
         let state = {
             let state_guard = self.state.lock().unwrap();
@@ -213,15 +204,21 @@ impl Runnable for AsyncHttpRequest {
 
     fn receive(
         &mut self,
-        _step_result: StepResult,
+        step_result: StepResult,
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
-        Err(RuntimeError::DetailedError(
-            "AsyncHttpRequest does not support receive".to_string(),
-        ))
+        if let StepResult::Return(_) = step_result {
+            // 这里可以处理返回结果，但在这个实现中，我们不需要处理返回值
+            // 因为请求的状态已经在内部管理
+            Ok(())
+        } else {
+            Err(RuntimeError::InvalidOperation(
+                "AsyncHttpRequest can only receive StepResult::Return".to_string(),
+            ))
+        }
     }
 
-    fn copy(&self, _gc: &mut GC<OnionObjectCell>) -> Box<dyn Runnable> {
+    fn copy(&self) -> Box<dyn Runnable> {
         Box::new(AsyncHttpRequest {
             url: self.url.clone(),
             method: self.method.clone(),
@@ -306,7 +303,7 @@ fn parse_request_params(
 
 /// 创建异步HTTP GET请求
 fn http_get(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let url = argument.weak().with_data(|data| {
@@ -321,7 +318,7 @@ fn http_get(
     let request = AsyncHttpRequest::new(url, "GET".to_string(), headers, None);
 
     // 将调度器包装成Lambda返回
-    let lambda_body = LambdaBody::NativeFunction(Arc::new(RefCell::new(request)));
+    let lambda_body = LambdaBody::NativeFunction(Box::new(request));
     let lambda_def = OnionLambdaDefinition::new_static(
         &onion_tuple!(),
         lambda_body,
@@ -335,7 +332,7 @@ fn http_get(
 
 /// 创建异步HTTP POST请求
 fn http_post(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let (url, body) = argument.weak().with_data(|data| {
@@ -355,7 +352,7 @@ fn http_post(
     let headers = IndexMap::new();
     let request = AsyncHttpRequest::new(url, "POST".to_string(), headers, body);
     // 将调度器包装成Lambda返回
-    let lambda_body = LambdaBody::NativeFunction(Arc::new(RefCell::new(request)));
+    let lambda_body = LambdaBody::NativeFunction(Box::new(request));
     let lambda_def = OnionLambdaDefinition::new_static(
         &onion_tuple!(),
         lambda_body,
@@ -369,7 +366,7 @@ fn http_post(
 
 /// 创建异步HTTP PUT请求
 fn http_put(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let (url, body) = argument.weak().with_data(|data| {
@@ -389,7 +386,7 @@ fn http_put(
     let headers = IndexMap::new();
     let request = AsyncHttpRequest::new(url, "PUT".to_string(), headers, body);
 
-    let lambda_body = LambdaBody::NativeFunction(Arc::new(RefCell::new(request)));
+    let lambda_body = LambdaBody::NativeFunction(Box::new(request));
     let lambda_def = OnionLambdaDefinition::new_static(
         &onion_tuple!(),
         lambda_body,
@@ -403,7 +400,7 @@ fn http_put(
 
 /// 创建异步HTTP DELETE请求
 fn http_delete(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let url = argument.weak().with_data(|data| {
@@ -417,7 +414,7 @@ fn http_delete(
     let headers = IndexMap::new();
     let request = AsyncHttpRequest::new(url, "DELETE".to_string(), headers, None);
 
-    let lambda_body = LambdaBody::NativeFunction(Arc::new(RefCell::new(request)));
+    let lambda_body = LambdaBody::NativeFunction(Box::new(request));
     let lambda_def = OnionLambdaDefinition::new_static(
         &onion_tuple!(),
         lambda_body,
@@ -431,7 +428,7 @@ fn http_delete(
 
 /// 创建异步HTTP PATCH请求
 fn http_patch(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let (url, body) = argument.weak().with_data(|data| {
@@ -451,7 +448,7 @@ fn http_patch(
     let headers = IndexMap::new();
     let request = AsyncHttpRequest::new(url, "PATCH".to_string(), headers, body);
 
-    let lambda_body = LambdaBody::NativeFunction(Arc::new(RefCell::new(request)));
+    let lambda_body = LambdaBody::NativeFunction(Box::new(request));
     let lambda_def = OnionLambdaDefinition::new_static(
         &onion_tuple!(),
         lambda_body,
@@ -463,7 +460,7 @@ fn http_patch(
     Ok(lambda_def)
 }
 fn http_request(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let (url, method, headers, body) = parse_request_params(&argument)?;
@@ -471,7 +468,7 @@ fn http_request(
     let request = AsyncHttpRequest::new(url, method, headers, body);
 
     // 将调度器包装成Lambda返回
-    let lambda_body = LambdaBody::NativeFunction(Arc::new(RefCell::new(request)));
+    let lambda_body = LambdaBody::NativeFunction(Box::new(request));
     let lambda_def = OnionLambdaDefinition::new_static(
         &onion_tuple!(),
         lambda_body,
@@ -485,7 +482,7 @@ fn http_request(
 
 /// 创建同步HTTP GET请求（用于简单测试）
 fn http_get_sync(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let url = argument.weak().with_data(|data| {
@@ -506,7 +503,7 @@ fn http_get_sync(
 
 /// 创建同步HTTP POST请求（用于简单测试）
 fn http_post_sync(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let (url, body) = argument.weak().with_data(|data| {
@@ -548,7 +545,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "http::get".to_string(),
-            http_get,
+            &http_get,
         ),
     );
 
@@ -570,7 +567,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "http::post".to_string(),
-            http_post,
+            &http_post,
         ),
     );
 
@@ -592,7 +589,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "http::put".to_string(),
-            http_put,
+            &http_put,
         ),
     );
 
@@ -610,7 +607,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "http::delete".to_string(),
-            http_delete,
+            &http_delete,
         ),
     ); // PATCH请求参数
     let mut patch_params = IndexMap::new();
@@ -630,7 +627,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "http::patch".to_string(),
-            http_patch,
+            &http_patch,
         ),
     );
 
@@ -648,7 +645,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "http::get_sync".to_string(),
-            http_get_sync,
+            &http_get_sync,
         ),
     );
 
@@ -670,7 +667,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "http::post_sync".to_string(),
-            http_post_sync,
+            &http_post_sync,
         ),
     );
 
@@ -697,7 +694,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "http::request".to_string(),
-            http_request,
+            &http_request,
         ),
     );
 

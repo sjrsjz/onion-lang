@@ -1,0 +1,20 @@
+// Simple test for new stdlib modules
+@required stdlib;
+
+// Test sys module
+stdlib.io.println("=== Testing sys module ===");
+platform := stdlib.sys.platform();
+stdlib.io.println("Platform: " + platform);
+
+// Test os module  
+stdlib.io.println("=== Testing os module ===");
+username := stdlib.os.username();
+stdlib.io.println("Username: " + username);
+
+// Test fs module
+stdlib.io.println("=== Testing fs module ===");
+stdlib.fs.write_file(path => "test.txt", content => "Hello World");
+content := stdlib.fs.read_file(path => "test.txt");
+stdlib.io.println("File content: " + content);
+stdlib.fs.remove_file(path => "test.txt");
+stdlib.io.println("Test completed");

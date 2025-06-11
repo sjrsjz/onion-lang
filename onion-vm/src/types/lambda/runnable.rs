@@ -323,7 +323,7 @@ impl Runnable for OnionLambdaRunnable {
         // 如果执行了最大步数仍未完成，返回 Continue 让外部继续调用
         Ok(StepResult::Continue)
     }
-    fn copy(&self, _gc: &mut GC<OnionObjectCell>) -> Box<dyn Runnable> {
+    fn copy(&self) -> Box<dyn Runnable> {
         Box::new(OnionLambdaRunnable {
             argument: self.argument.clone(),
             capture: self.capture.clone(),

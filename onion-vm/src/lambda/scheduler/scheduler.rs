@@ -90,9 +90,9 @@ impl Runnable for Scheduler {
         }
     }
 
-    fn copy(&self, gc: &mut GC<OnionObjectCell>) -> Box<dyn Runnable> {
+    fn copy(&self) -> Box<dyn Runnable> {
         Box::new(Scheduler {
-            runnable_stack: self.runnable_stack.iter().map(|r| r.copy(gc)).collect(),
+            runnable_stack: self.runnable_stack.iter().map(|r| r.copy()).collect(),
             result: self.result.clone(),
         })
     }

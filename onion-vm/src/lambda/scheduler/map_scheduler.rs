@@ -18,14 +18,7 @@ pub struct Mapping {
 }
 
 impl Runnable for Mapping {
-    fn set_argument(
-        &mut self,
-        _argument: OnionStaticObject,
-        _gc: &mut GC<OnionObjectCell>,
-    ) -> Result<(), RuntimeError> {
-        Ok(()) // This collector does not use an argument, so we can ignore it.
-    }
-    fn copy(&self, _gc: &mut GC<OnionObjectCell>) -> Box<dyn Runnable> {
+    fn copy(&self) -> Box<dyn Runnable> {
         Box::new(Mapping {
             container: self.container.clone(),
             mapper: self.mapper.clone(),

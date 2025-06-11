@@ -14,7 +14,7 @@ use onion_vm::{
 use super::{build_named_dict, get_attr_direct, wrap_native_function};
 
 fn println(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -37,7 +37,7 @@ fn println(
 }
 
 fn print(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -60,7 +60,7 @@ fn print(
 }
 
 fn input(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -89,12 +89,12 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "io::println".to_string(),
-            println,
+            &println,
         ),
     );
     module.insert(
         "print".to_string(),
-        wrap_native_function(&onion_tuple!(), None, None, "io::print".to_string(), print),
+        wrap_native_function(&onion_tuple!(), None, None, "io::print".to_string(), &print),
     );
 
     let mut input_params = IndexMap::new();
@@ -109,7 +109,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "io::input".to_string(),
-            input,
+            &input,
         ),
     );
 

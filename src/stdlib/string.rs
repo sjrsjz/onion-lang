@@ -8,7 +8,7 @@ use onion_vm::{
 use super::{build_named_dict, get_attr_direct, wrap_native_function};
 
 fn length(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -23,7 +23,7 @@ fn length(
 }
 
 fn trim(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -38,7 +38,7 @@ fn trim(
 }
 
 fn uppercase(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -53,7 +53,7 @@ fn uppercase(
 }
 
 fn lowercase(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -68,7 +68,7 @@ fn lowercase(
 }
 
 fn contains(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -91,7 +91,7 @@ fn contains(
 }
 
 fn concat(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -115,7 +115,7 @@ fn concat(
 
 /// Split string by delimiter
 fn split(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     use onion_vm::types::tuple::OnionTuple;
@@ -145,7 +145,7 @@ fn split(
 
 /// Replace all occurrences of a substring
 fn replace(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -176,7 +176,7 @@ fn replace(
 
 /// Get substring from start to end index
 fn substr(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -220,7 +220,7 @@ fn substr(
 
 /// Find the index of a substring
 fn index_of(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -245,7 +245,7 @@ fn index_of(
 
 /// Check if string starts with a prefix
 fn starts_with(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -269,7 +269,7 @@ fn starts_with(
 
 /// Check if string ends with a suffix
 fn ends_with(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -293,7 +293,7 @@ fn ends_with(
 
 /// Repeat string n times
 fn repeat(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -323,7 +323,7 @@ fn repeat(
 
 /// Pad string on the left with specified character
 fn pad_left(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -363,7 +363,7 @@ fn pad_left(
 
 /// Pad string on the right with specified character
 fn pad_right(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -403,7 +403,7 @@ fn pad_right(
 
 /// Check if string is empty
 fn is_empty(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -419,7 +419,7 @@ fn is_empty(
 
 /// Reverse a string
 fn reverse(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
@@ -452,7 +452,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "string::length".to_string(),
-            length,
+            &length,
         ),
     );
 
@@ -469,7 +469,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "string::trim".to_string(),
-            trim,
+            &trim,
         ),
     );
 
@@ -486,7 +486,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "string::uppercase".to_string(),
-            uppercase,
+            &uppercase,
         ),
     );
 
@@ -503,7 +503,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "string::lowercase".to_string(),
-            lowercase,
+            &lowercase,
         ),
     );
 
@@ -524,7 +524,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "string::contains".to_string(),
-            contains,
+            &contains,
         ),
     );
 
@@ -545,7 +545,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "string::concat".to_string(),
-            concat,
+            &concat,
         ),
     );
 
@@ -566,7 +566,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "string::split".to_string(),
-            split,
+            &split,
         ),
     );
 
@@ -591,7 +591,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "string::replace".to_string(),
-            replace,
+            &replace,
         ),
     );
 
@@ -616,7 +616,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "string::substr".to_string(),
-            substr,
+            &substr,
         ),
     );
 
@@ -637,7 +637,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "string::index_of".to_string(),
-            index_of,
+            &index_of,
         ),
     );
 
@@ -658,7 +658,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "string::starts_with".to_string(),
-            starts_with,
+            &starts_with,
         ),
     );
 
@@ -679,7 +679,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "string::ends_with".to_string(),
-            ends_with,
+            &ends_with,
         ),
     );
 
@@ -700,7 +700,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "string::repeat".to_string(),
-            repeat,
+            &repeat,
         ),
     );
 
@@ -725,7 +725,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "string::pad_left".to_string(),
-            pad_left,
+            &pad_left,
         ),
     );
 
@@ -750,7 +750,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "string::pad_right".to_string(),
-            pad_right,
+            &pad_right,
         ),
     );
 
@@ -767,7 +767,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "string::is_empty".to_string(),
-            is_empty,
+            &is_empty,
         ),
     );
 
@@ -784,7 +784,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "string::reverse".to_string(),
-            reverse,
+            &reverse,
         ),
     );
 

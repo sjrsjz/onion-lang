@@ -1,5 +1,3 @@
-use std::{cell::RefCell, sync::Arc};
-
 use indexmap::IndexMap;
 use onion_vm::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
@@ -13,15 +11,17 @@ use onion_vm::{
     GC,
 };
 
+mod fs;
 mod http;
 mod io;
 mod json;
 mod math;
+mod os;
 mod string;
+mod sys;
 mod time;
-mod types;
 mod tuple;
-
+mod types;
 
 pub fn build_named_dict(dict: IndexMap<String, OnionStaticObject>) -> OnionStaticObject {
     let mut pairs = vec![];
@@ -42,54 +42,41 @@ pub fn get_attr_direct(obj: &OnionObject, key: String) -> Result<OnionStaticObje
 
 pub struct NativeFunctionGenerator<F>
 where
-    F: Fn(OnionStaticObject, &mut GC<OnionObjectCell>) -> Result<OnionStaticObject, RuntimeError>
+    F: Fn(&OnionStaticObject, &mut GC<OnionObjectCell>) -> Result<OnionStaticObject, RuntimeError>
         + 'static,
 {
     argument: OnionStaticObject,
-    function: Arc<RefCell<F>>,
+    function: &'static F,
 }
 
 impl<F> Runnable for NativeFunctionGenerator<F>
 where
-    F: Fn(OnionStaticObject, &mut GC<OnionObjectCell>) -> Result<OnionStaticObject, RuntimeError>
+    F: Fn(&OnionStaticObject, &mut GC<OnionObjectCell>) -> Result<OnionStaticObject, RuntimeError>
         + 'static,
 {
-    fn set_argument(
-        &mut self,
-        argument: OnionStaticObject,
-        _gc: &mut GC<OnionObjectCell>,
-    ) -> Result<(), RuntimeError> {
-        self.argument = argument;
-        Ok(())
-    }
-
     fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
-        let argument = self.argument.clone();
-        match &self.function.borrow_mut()(argument, gc) {
-            Ok(result) => Ok(StepResult::Return(result.clone())),
-            Err(err) => {
-                Err(RuntimeError::DetailedError(format!(
-                    "Native function execution failed: {}",
-                    err
-                )))
-            }
-        }
+        (self.function)(&self.argument, gc).map(|result| StepResult::Return(result))
     }
 
     fn receive(
         &mut self,
-        _step_result: StepResult,
+        step_result: StepResult,
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
-        Err(RuntimeError::DetailedError(
-            "receive not implemented".to_string(),
-        ))
+        if let StepResult::Return(result) = step_result {
+            self.argument = result;
+            Ok(())
+        } else {
+            Err(RuntimeError::InvalidOperation(
+                "NativeFunctionGenerator can only receive StepResult::Return".to_string(),
+            ))
+        }
     }
 
-    fn copy(&self, _gc: &mut onion_vm::GC<OnionObjectCell>) -> Box<dyn Runnable> {
+    fn copy(&self) -> Box<dyn Runnable> {
         Box::new(NativeFunctionGenerator {
             argument: self.argument.clone(),
-            function: Arc::clone(&self.function),
+            function: self.function,
         })
     }
 
@@ -106,18 +93,18 @@ pub fn wrap_native_function<F>(
     capture: Option<&OnionStaticObject>,
     self_object: Option<&OnionStaticObject>,
     signature: String,
-    function: F,
+    function: &'static F,
 ) -> OnionStaticObject
 where
-    F: Fn(OnionStaticObject, &mut GC<OnionObjectCell>) -> Result<OnionStaticObject, RuntimeError>
+    F: Fn(&OnionStaticObject, &mut GC<OnionObjectCell>) -> Result<OnionStaticObject, RuntimeError>
         + 'static,
 {
     OnionLambdaDefinition::new_static(
         params,
-        LambdaBody::NativeFunction(Arc::new(RefCell::new(NativeFunctionGenerator {
+        LambdaBody::NativeFunction(Box::new(NativeFunctionGenerator {
             argument: onion_tuple!(),
-            function: Arc::new(RefCell::new(function)),
-        }))),
+            function: function,
+        })),
         capture,
         self_object,
         signature,
@@ -126,6 +113,7 @@ where
 
 pub fn build_module() -> OnionStaticObject {
     let mut module = IndexMap::new();
+    module.insert("fs".to_string(), fs::build_module());
     module.insert("io".to_string(), io::build_module());
     module.insert("types".to_string(), types::build_module());
     module.insert("math".to_string(), math::build_module());
@@ -133,5 +121,7 @@ pub fn build_module() -> OnionStaticObject {
     module.insert("http".to_string(), http::build_module());
     module.insert("time".to_string(), time::build_module());
     module.insert("json".to_string(), json::build_module());
+    module.insert("os".to_string(), os::build_module());
+    module.insert("sys".to_string(), sys::build_module());
     build_named_dict(module)
 }

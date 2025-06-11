@@ -9,7 +9,7 @@ use onion_vm::{
 use super::{build_named_dict, get_attr_direct, wrap_native_function};
 
 fn abs(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
@@ -28,7 +28,7 @@ fn abs(
 }
 
 fn sin(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
@@ -47,7 +47,7 @@ fn sin(
 }
 
 fn cos(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
@@ -66,7 +66,7 @@ fn cos(
 }
 
 fn tan(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
@@ -85,7 +85,7 @@ fn tan(
 }
 
 fn log(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
@@ -120,7 +120,7 @@ fn log(
 }
 
 fn sqrt(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
@@ -155,7 +155,7 @@ fn sqrt(
 }
 
 fn pow(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
@@ -197,7 +197,7 @@ fn pow(
 }
 
 fn exp(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
@@ -216,7 +216,7 @@ fn exp(
 }
 
 fn floor(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
@@ -235,7 +235,7 @@ fn floor(
 }
 
 fn ceil(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
@@ -254,7 +254,7 @@ fn ceil(
 }
 
 fn round(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
@@ -273,7 +273,7 @@ fn round(
 }
 
 fn asin(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
@@ -309,7 +309,7 @@ fn asin(
 }
 
 fn acos(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
@@ -345,7 +345,7 @@ fn acos(
 }
 
 fn atan(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument
@@ -389,7 +389,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "math::abs".to_string(),
-            abs,
+            &abs,
         ),
     ); // sin 函数
     let mut sin_params = IndexMap::new();
@@ -404,7 +404,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "math::sin".to_string(),
-            sin,
+            &sin,
         ),
     );
 
@@ -421,7 +421,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "math::cos".to_string(),
-            cos,
+            &cos,
         ),
     );
 
@@ -438,7 +438,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "math::tan".to_string(),
-            tan,
+            &tan,
         ),
     );
 
@@ -456,7 +456,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "math::log".to_string(),
-            log,
+            &log,
         ),
     );
 
@@ -473,7 +473,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "math::exp".to_string(),
-            exp,
+            &exp,
         ),
     );
 
@@ -490,7 +490,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "math::floor".to_string(),
-            floor,
+            &floor,
         ),
     );
 
@@ -507,7 +507,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "math::ceil".to_string(),
-            ceil,
+            &ceil,
         ),
     );
 
@@ -524,7 +524,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "math::round".to_string(),
-            round,
+            &round,
         ),
     );
 
@@ -541,7 +541,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "math::asin".to_string(),
-            asin,
+            &asin,
         ),
     );
 
@@ -558,7 +558,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "math::acos".to_string(),
-            acos,
+            &acos,
         ),
     );
 
@@ -575,7 +575,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "math::atan".to_string(),
-            atan,
+            &atan,
         ),
     );
 
@@ -592,7 +592,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "math::sqrt".to_string(),
-            sqrt,
+            &sqrt,
         ),
     );
 
@@ -613,7 +613,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "math::pow".to_string(),
-            pow,
+            &pow,
         ),
     );
 
@@ -630,7 +630,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "math::exp".to_string(),
-            exp,
+            &exp,
         ),
     );
 
@@ -647,7 +647,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "math::floor".to_string(),
-            floor,
+            &floor,
         ),
     );
 
@@ -664,7 +664,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "math::ceil".to_string(),
-            ceil,
+            &ceil,
         ),
     );
 
@@ -681,7 +681,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "math::round".to_string(),
-            round,
+            &round,
         ),
     );
 
@@ -698,7 +698,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "math::asin".to_string(),
-            asin,
+            &asin,
         ),
     );
 
@@ -715,7 +715,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "math::acos".to_string(),
-            acos,
+            &acos,
         ),
     );
 
@@ -732,7 +732,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "math::atan".to_string(),
-            atan,
+            &atan,
         ),
     );
 

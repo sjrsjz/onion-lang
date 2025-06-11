@@ -1,6 +1,4 @@
 use std::{
-    cell::RefCell,
-    sync::Arc,
     thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -21,7 +19,7 @@ use super::{build_named_dict, get_attr_direct, wrap_native_function};
 
 /// 获取当前时间戳（秒）
 fn timestamp(
-    _argument: OnionStaticObject,
+    _argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     match SystemTime::now().duration_since(UNIX_EPOCH) {
@@ -35,7 +33,7 @@ fn timestamp(
 
 /// 获取当前时间戳（毫秒）
 fn timestamp_millis(
-    _argument: OnionStaticObject,
+    _argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     match SystemTime::now().duration_since(UNIX_EPOCH) {
@@ -49,7 +47,7 @@ fn timestamp_millis(
 
 /// 获取当前时间戳（纳秒）
 fn timestamp_nanos(
-    _argument: OnionStaticObject,
+    _argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     match SystemTime::now().duration_since(UNIX_EPOCH) {
@@ -63,7 +61,7 @@ fn timestamp_nanos(
 
 /// 睡眠指定的秒数
 fn sleep_seconds(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let seconds = argument.weak().with_data(|data| {
@@ -86,7 +84,7 @@ fn sleep_seconds(
 
 /// 睡眠指定的毫秒数
 fn sleep_millis(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let millis = argument.weak().with_data(|data| {
@@ -109,7 +107,7 @@ fn sleep_millis(
 
 /// 睡眠指定的微秒数
 fn sleep_micros(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let micros = argument.weak().with_data(|data| {
@@ -132,7 +130,7 @@ fn sleep_micros(
 
 /// 获取格式化的当前时间字符串（UTC）
 fn now_utc(
-    _argument: OnionStaticObject,
+    _argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     match SystemTime::now().duration_since(UNIX_EPOCH) {
@@ -177,7 +175,7 @@ fn format_timestamp(timestamp: u64) -> String {
 
 /// 从时间戳格式化时间字符串
 fn format_time(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let timestamp = argument.weak().with_data(|data| {
@@ -200,7 +198,7 @@ fn format_time(
 
 /// 计算两个时间戳之间的差值（秒）
 fn time_diff(
-    argument: OnionStaticObject,
+    argument: &OnionStaticObject,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let (start, end) = argument.weak().with_data(|data| {
@@ -229,21 +227,6 @@ pub struct AsyncSleep {
     pub(crate) start_time: SystemTime,
 }
 
-impl AsyncSleep {
-    pub fn get() -> OnionStaticObject {
-        let params =
-            IndexMap::from([("millis".to_string(), OnionObject::Integer(1000).stabilize())]);
-        let params = build_named_dict(params);
-        OnionLambdaDefinition::new_static(
-            &params,
-            LambdaBody::NativeFunction(Arc::new(RefCell::new(AsyncSleep::default()))),
-            None,
-            None,
-            "time::AsyncSleep".to_string(),
-        )
-    }
-}
-
 impl Default for AsyncSleep {
     fn default() -> Self {
         AsyncSleep {
@@ -254,22 +237,6 @@ impl Default for AsyncSleep {
 }
 
 impl Runnable for AsyncSleep {
-    fn set_argument(
-        &mut self,
-        argument: OnionStaticObject,
-        _gc: &mut GC<OnionObjectCell>,
-    ) -> Result<(), RuntimeError> {
-        self.millis = argument.weak().with_data(|data| {
-            get_attr_direct(data, "millis".to_string())?
-                .weak()
-                .try_borrow()?
-                .to_integer()
-                .map_err(|e| RuntimeError::InvalidType(format!("Invalid millis: {}", e)))
-        })?;
-        self.start_time = SystemTime::now();
-        Ok(())
-    }
-
     fn step(&mut self, _gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
         let elapsed = self.start_time.elapsed().map_err(|e| {
             RuntimeError::DetailedError(format!("Failed to get elapsed time: {}", e))
@@ -286,12 +253,17 @@ impl Runnable for AsyncSleep {
         _step_result: StepResult,
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
-        Err(RuntimeError::DetailedError(
-            "receive not implemented".to_string(),
-        ))
+        if let StepResult::Return(_) = _step_result {
+            // 异步睡眠不需要处理返回值
+            Ok(())
+        } else {
+            Err(RuntimeError::InvalidOperation(
+                "AsyncSleep can only receive StepResult::Return".to_string(),
+            ))
+        }
     }
 
-    fn copy(&self, _gc: &mut onion_vm::GC<OnionObjectCell>) -> Box<dyn Runnable> {
+    fn copy(&self) -> Box<dyn Runnable> {
         Box::new(AsyncSleep {
             millis: self.millis,
             start_time: self.start_time,
@@ -309,6 +281,36 @@ impl Runnable for AsyncSleep {
     }
 }
 
+fn async_sleep(
+    argument: &OnionStaticObject,
+    _gc: &mut GC<OnionObjectCell>,
+) -> Result<OnionStaticObject, RuntimeError> {
+    let millis = argument.weak().with_data(|data| {
+        get_attr_direct(data, "millis".to_string())?
+            .weak()
+            .try_borrow()?
+            .to_integer()
+            .map_err(|e| RuntimeError::InvalidType(format!("Invalid milliseconds: {}", e)))
+    })?;
+
+    if millis < 0 {
+        return Err(RuntimeError::DetailedError(
+            "Sleep duration cannot be negative".to_string(),
+        ));
+    }
+
+    Ok(OnionLambdaDefinition::new_static(
+        &onion_tuple!(),
+        LambdaBody::NativeFunction(Box::new(AsyncSleep {
+            millis,
+            start_time: SystemTime::now(),
+        })),
+        None,
+        None,
+        "time::async_sleep".to_string(),
+    ))
+}
+
 /// 构建时间模块
 pub fn build_module() -> OnionStaticObject {
     let mut module = IndexMap::new(); // timestamp 函数 - 获取当前时间戳（秒）
@@ -319,7 +321,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "time::timestamp".to_string(),
-            timestamp,
+            &timestamp,
         ),
     );
 
@@ -331,7 +333,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "time::timestamp_millis".to_string(),
-            timestamp_millis,
+            &timestamp_millis,
         ),
     );
 
@@ -343,7 +345,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "time::timestamp_nanos".to_string(),
-            timestamp_nanos,
+            &timestamp_nanos,
         ),
     );
 
@@ -357,7 +359,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "time::sleep_seconds".to_string(),
-            sleep_seconds,
+            &sleep_seconds,
         ),
     );
 
@@ -371,7 +373,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "time::sleep_millis".to_string(),
-            sleep_millis,
+            &sleep_millis,
         ),
     );
 
@@ -388,7 +390,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "time::sleep_micros".to_string(),
-            sleep_micros,
+            &sleep_micros,
         ),
     ); // now_utc 函数 - 获取格式化的当前时间
     module.insert(
@@ -398,7 +400,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "time::now_utc".to_string(),
-            now_utc,
+            &now_utc,
         ),
     );
 
@@ -412,7 +414,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "time::format_time".to_string(),
-            format_time,
+            &format_time,
         ),
     );
 
@@ -427,11 +429,23 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "time::time_diff".to_string(),
-            time_diff,
+            &time_diff,
         ),
     );
 
-    module.insert("async_sleep".to_string(), AsyncSleep::get());
+    // async_sleep 函数 - 异步睡眠
+    let mut async_sleep_params = IndexMap::new();
+    async_sleep_params.insert("millis".to_string(), OnionObject::Integer(1000).stabilize());
+    module.insert(
+        "async_sleep".to_string(),
+        wrap_native_function(
+            &build_named_dict(async_sleep_params),
+            None,
+            None,
+            "time::async_sleep".to_string(),
+            &async_sleep,
+        ),
+    );
 
     build_named_dict(module)
 }

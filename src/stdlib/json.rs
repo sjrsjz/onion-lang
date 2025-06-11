@@ -156,7 +156,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "json_parse".to_string(),
-            |args, _gc| {
+            &|args, _gc| {
                 args.weak().with_data(|data| {
                     let json_string = super::get_attr_direct(data, "json_string".to_string())?;
                     json_string
@@ -188,7 +188,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "json_stringify".to_string(),
-            |args, _gc| {
+            &|args, _gc| {
                 args.weak().with_data(|data| {
                     let obj = super::get_attr_direct(data, "object".to_string())?;
                     let json_str = stringify_json(obj.weak().try_borrow()?.clone())
@@ -217,7 +217,7 @@ pub fn build_module() -> OnionStaticObject {
             None,
             None,
             "json_stringify_pretty".to_string(),
-            |args, _gc| {
+            &|args, _gc| {
                 args.weak().with_data(|data| {
                     let obj = super::get_attr_direct(data, "object".to_string())?;
                     let json_str = stringify_json_pretty(obj.weak().try_borrow()?.clone())
