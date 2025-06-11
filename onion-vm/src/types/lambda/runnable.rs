@@ -23,97 +23,101 @@ type InstructionHandler = fn(
 ) -> Result<StepResult, RuntimeError>;
 
 // 静态指令表，在程序启动时初始化一次
-static INSTRUCTION_TABLE: std::sync::LazyLock<Vec<InstructionHandler>> = std::sync::LazyLock::new(|| {
-    let mut instruction_table: Vec<InstructionHandler> = vec![
+static INSTRUCTION_TABLE: std::sync::LazyLock<Vec<InstructionHandler>> =
+    std::sync::LazyLock::new(|| {
+        let mut instruction_table: Vec<InstructionHandler> = vec![
         |_, opcode, _| Err(RuntimeError::DetailedError(format!("Invalid instruction: {:?}", opcode))); // 默认处理函数 - 返回无效指令错误
         256 // 数组大小，确保能容纳所有可能的操作码
     ];
 
-    // 使用枚举值作为索引，填充对应的处理函数
-    // 栈操作
-    instruction_table[VMInstruction::LoadNull as usize] = vm_instructions::load_null;
-    instruction_table[VMInstruction::LoadInt32 as usize] = vm_instructions::load_int;
-    instruction_table[VMInstruction::LoadInt64 as usize] = vm_instructions::load_int;
-    instruction_table[VMInstruction::LoadFloat32 as usize] = vm_instructions::load_float;
-    instruction_table[VMInstruction::LoadFloat64 as usize] = vm_instructions::load_float;
-    instruction_table[VMInstruction::LoadString as usize] = vm_instructions::load_string;
-    instruction_table[VMInstruction::LoadBytes as usize] = vm_instructions::load_bytes;
-    instruction_table[VMInstruction::LoadBool as usize] = vm_instructions::load_bool;
-    instruction_table[VMInstruction::LoadLambda as usize] = vm_instructions::load_lambda;
-    instruction_table[VMInstruction::LoadUndefined as usize] = vm_instructions::load_undefined;
+        // 使用枚举值作为索引，填充对应的处理函数
+        // 栈操作
+        instruction_table[VMInstruction::LoadNull as usize] = vm_instructions::load_null;
+        instruction_table[VMInstruction::LoadInt32 as usize] = vm_instructions::load_int;
+        instruction_table[VMInstruction::LoadInt64 as usize] = vm_instructions::load_int;
+        instruction_table[VMInstruction::LoadFloat32 as usize] = vm_instructions::load_float;
+        instruction_table[VMInstruction::LoadFloat64 as usize] = vm_instructions::load_float;
+        instruction_table[VMInstruction::LoadString as usize] = vm_instructions::load_string;
+        instruction_table[VMInstruction::LoadBytes as usize] = vm_instructions::load_bytes;
+        instruction_table[VMInstruction::LoadBool as usize] = vm_instructions::load_bool;
+        instruction_table[VMInstruction::LoadLambda as usize] = vm_instructions::load_lambda;
+        instruction_table[VMInstruction::LoadUndefined as usize] = vm_instructions::load_undefined;
 
-    // 数据结构构建
-    instruction_table[VMInstruction::BuildTuple as usize] = vm_instructions::build_tuple;
-    instruction_table[VMInstruction::BuildKeyValue as usize] = vm_instructions::build_keyval;
-    instruction_table[VMInstruction::BuildNamed as usize] = vm_instructions::build_named;
-    instruction_table[VMInstruction::BuildRange as usize] = vm_instructions::build_range;
-    instruction_table[VMInstruction::BuildSet as usize] = vm_instructions::build_set;
-    // 二元操作符
-    instruction_table[VMInstruction::BinaryIn as usize] = vm_instructions::is_in;
-    instruction_table[VMInstruction::BinaryIs as usize] = vm_instructions::check_is_same_object;
+        // 数据结构构建
+        instruction_table[VMInstruction::BuildTuple as usize] = vm_instructions::build_tuple;
+        instruction_table[VMInstruction::BuildKeyValue as usize] = vm_instructions::build_keyval;
+        instruction_table[VMInstruction::BuildNamed as usize] = vm_instructions::build_named;
+        instruction_table[VMInstruction::BuildRange as usize] = vm_instructions::build_range;
+        instruction_table[VMInstruction::BuildSet as usize] = vm_instructions::build_set;
+        // 二元操作符
+        instruction_table[VMInstruction::BinaryIn as usize] = vm_instructions::is_in;
+        instruction_table[VMInstruction::BinaryIs as usize] = vm_instructions::check_is_same_object;
 
-    instruction_table[VMInstruction::BinaryAdd as usize] = vm_instructions::binary_add;
-    instruction_table[VMInstruction::BinarySub as usize] = vm_instructions::binary_subtract;
-    instruction_table[VMInstruction::BinaryMul as usize] = vm_instructions::binary_multiply;
-    instruction_table[VMInstruction::BinaryDiv as usize] = vm_instructions::binary_divide;
-    instruction_table[VMInstruction::BinaryMod as usize] = vm_instructions::binary_modulus;
-    instruction_table[VMInstruction::BinaryPow as usize] = vm_instructions::binary_power;
-    instruction_table[VMInstruction::BinaryBitAnd as usize] = vm_instructions::binary_bitwise_and;
-    instruction_table[VMInstruction::BinaryBitOr as usize] = vm_instructions::binary_bitwise_or;
-    instruction_table[VMInstruction::BinaryBitXor as usize] = vm_instructions::binary_bitwise_xor;
-    instruction_table[VMInstruction::BinaryShl as usize] = vm_instructions::binary_shift_left;
-    instruction_table[VMInstruction::BinaryShr as usize] = vm_instructions::binary_shift_right;
-    instruction_table[VMInstruction::BinaryEq as usize] = vm_instructions::binary_equal;
-    instruction_table[VMInstruction::BinaryNe as usize] = vm_instructions::binary_not_equal;
-    instruction_table[VMInstruction::BinaryGt as usize] = vm_instructions::binary_greater;
-    instruction_table[VMInstruction::BinaryLt as usize] = vm_instructions::binary_less;
-    instruction_table[VMInstruction::BinaryGe as usize] = vm_instructions::binary_greater_equal;
-    instruction_table[VMInstruction::BinaryLe as usize] = vm_instructions::binary_less_equal;
-    instruction_table[VMInstruction::MapTo as usize] = vm_instructions::map_to;
+        instruction_table[VMInstruction::BinaryAdd as usize] = vm_instructions::binary_add;
+        instruction_table[VMInstruction::BinarySub as usize] = vm_instructions::binary_subtract;
+        instruction_table[VMInstruction::BinaryMul as usize] = vm_instructions::binary_multiply;
+        instruction_table[VMInstruction::BinaryDiv as usize] = vm_instructions::binary_divide;
+        instruction_table[VMInstruction::BinaryMod as usize] = vm_instructions::binary_modulus;
+        instruction_table[VMInstruction::BinaryPow as usize] = vm_instructions::binary_power;
+        instruction_table[VMInstruction::BinaryBitAnd as usize] =
+            vm_instructions::binary_bitwise_and;
+        instruction_table[VMInstruction::BinaryBitOr as usize] = vm_instructions::binary_bitwise_or;
+        instruction_table[VMInstruction::BinaryBitXor as usize] =
+            vm_instructions::binary_bitwise_xor;
+        instruction_table[VMInstruction::BinaryShl as usize] = vm_instructions::binary_shift_left;
+        instruction_table[VMInstruction::BinaryShr as usize] = vm_instructions::binary_shift_right;
+        instruction_table[VMInstruction::BinaryEq as usize] = vm_instructions::binary_equal;
+        instruction_table[VMInstruction::BinaryNe as usize] = vm_instructions::binary_not_equal;
+        instruction_table[VMInstruction::BinaryGt as usize] = vm_instructions::binary_greater;
+        instruction_table[VMInstruction::BinaryLt as usize] = vm_instructions::binary_less;
+        instruction_table[VMInstruction::BinaryGe as usize] = vm_instructions::binary_greater_equal;
+        instruction_table[VMInstruction::BinaryLe as usize] = vm_instructions::binary_less_equal;
+        instruction_table[VMInstruction::MapTo as usize] = vm_instructions::map_to;
 
-    // 一元操作
-    instruction_table[VMInstruction::UnaryBitNot as usize] = vm_instructions::unary_bitwise_not;
-    instruction_table[VMInstruction::UnaryAbs as usize] = vm_instructions::unary_plus;
-    instruction_table[VMInstruction::UnaryNeg as usize] = vm_instructions::unary_minus;
+        // 一元操作
+        instruction_table[VMInstruction::UnaryBitNot as usize] = vm_instructions::unary_bitwise_not;
+        instruction_table[VMInstruction::UnaryAbs as usize] = vm_instructions::unary_plus;
+        instruction_table[VMInstruction::UnaryNeg as usize] = vm_instructions::unary_minus;
 
-    // 变量与引用
-    instruction_table[VMInstruction::StoreVar as usize] = vm_instructions::let_var;
-    instruction_table[VMInstruction::LoadVar as usize] = vm_instructions::get_var;
-    instruction_table[VMInstruction::SetValue as usize] = vm_instructions::set_var;
-    instruction_table[VMInstruction::GetAttr as usize] = vm_instructions::get_attr;
-    instruction_table[VMInstruction::IndexOf as usize] = vm_instructions::index_of;
-    instruction_table[VMInstruction::KeyOf as usize] = vm_instructions::key_of;
-    instruction_table[VMInstruction::ValueOf as usize] = vm_instructions::value_of;
-    instruction_table[VMInstruction::TypeOf as usize] = vm_instructions::type_of;
-    instruction_table[VMInstruction::ShallowCopy as usize] = vm_instructions::copy;
-    instruction_table[VMInstruction::Swap as usize] = vm_instructions::swap;
-    instruction_table[VMInstruction::LengthOf as usize] = vm_instructions::get_length;
-    instruction_table[VMInstruction::Mut as usize] = vm_instructions::mutablize;
-    instruction_table[VMInstruction::Const as usize] = vm_instructions::immutablize;
-    instruction_table[VMInstruction::ForkInstruction as usize] = vm_instructions::fork_instruction;
+        // 变量与引用
+        instruction_table[VMInstruction::StoreVar as usize] = vm_instructions::let_var;
+        instruction_table[VMInstruction::LoadVar as usize] = vm_instructions::get_var;
+        instruction_table[VMInstruction::SetValue as usize] = vm_instructions::set_var;
+        instruction_table[VMInstruction::GetAttr as usize] = vm_instructions::get_attr;
+        instruction_table[VMInstruction::IndexOf as usize] = vm_instructions::index_of;
+        instruction_table[VMInstruction::KeyOf as usize] = vm_instructions::key_of;
+        instruction_table[VMInstruction::ValueOf as usize] = vm_instructions::value_of;
+        instruction_table[VMInstruction::TypeOf as usize] = vm_instructions::type_of;
+        instruction_table[VMInstruction::ShallowCopy as usize] = vm_instructions::copy;
+        instruction_table[VMInstruction::Swap as usize] = vm_instructions::swap;
+        instruction_table[VMInstruction::LengthOf as usize] = vm_instructions::get_length;
+        instruction_table[VMInstruction::Mut as usize] = vm_instructions::mutablize;
+        instruction_table[VMInstruction::Const as usize] = vm_instructions::immutablize;
+        instruction_table[VMInstruction::ForkInstruction as usize] =
+            vm_instructions::fork_instruction;
 
-    // 控制流
-    instruction_table[VMInstruction::Call as usize] = vm_instructions::call_lambda;
-    instruction_table[VMInstruction::AsyncCall as usize] = vm_instructions::async_call;
-    instruction_table[VMInstruction::SyncCall as usize] = vm_instructions::sync_call;
-    instruction_table[VMInstruction::Return as usize] = vm_instructions::return_value;
-    instruction_table[VMInstruction::Raise as usize] = vm_instructions::raise;
-    instruction_table[VMInstruction::Jump as usize] = vm_instructions::jump;
-    instruction_table[VMInstruction::JumpIfFalse as usize] = vm_instructions::jump_if_false;
+        // 控制流
+        instruction_table[VMInstruction::Call as usize] = vm_instructions::call_lambda;
+        instruction_table[VMInstruction::AsyncCall as usize] = vm_instructions::async_call;
+        instruction_table[VMInstruction::SyncCall as usize] = vm_instructions::sync_call;
+        instruction_table[VMInstruction::Return as usize] = vm_instructions::return_value;
+        instruction_table[VMInstruction::Raise as usize] = vm_instructions::raise;
+        instruction_table[VMInstruction::Jump as usize] = vm_instructions::jump;
+        instruction_table[VMInstruction::JumpIfFalse as usize] = vm_instructions::jump_if_false;
 
-    // 帧操作
-    instruction_table[VMInstruction::NewFrame as usize] = vm_instructions::new_frame;
-    instruction_table[VMInstruction::PopFrame as usize] = vm_instructions::pop_frame;
-    instruction_table[VMInstruction::ResetStack as usize] = vm_instructions::clear_stack;
-    instruction_table[VMInstruction::Pop as usize] = vm_instructions::discard_top;
+        // 帧操作
+        instruction_table[VMInstruction::NewFrame as usize] = vm_instructions::new_frame;
+        instruction_table[VMInstruction::PopFrame as usize] = vm_instructions::pop_frame;
+        instruction_table[VMInstruction::ResetStack as usize] = vm_instructions::clear_stack;
+        instruction_table[VMInstruction::Pop as usize] = vm_instructions::discard_top;
 
-    // 模块操作
-    instruction_table[VMInstruction::Import as usize] = vm_instructions::import;
+        // 模块操作
+        instruction_table[VMInstruction::Import as usize] = vm_instructions::import;
 
-    instruction_table[VMInstruction::Assert as usize] = vm_instructions::assert;
+        instruction_table[VMInstruction::Assert as usize] = vm_instructions::assert;
 
-    instruction_table
-});
+        instruction_table
+    });
 
 pub struct OnionLambdaRunnable {
     pub(crate) argument: OnionStaticObject,
@@ -209,7 +213,8 @@ impl OnionLambdaRunnable {
                     "Failed to initialize 'arguments' variable: {}",
                     e
                 ))
-            })?;        for item in tuple.elements.iter() {
+            })?;
+        for item in tuple.elements.iter() {
             match &*item.try_borrow()? {
                 OnionObject::Named(named) => {
                     named.get_key().with_data(|key| match key {
@@ -284,7 +289,8 @@ impl Runnable for OnionLambdaRunnable {
                 (code, opcode, ip)
             };
 
-            match code {                Some(opcode) => {
+            match code {
+                Some(opcode) => {
                     let handler = INSTRUCTION_TABLE
                         .get(opcode.instruction as usize)
                         .ok_or_else(|| {
@@ -319,7 +325,8 @@ impl Runnable for OnionLambdaRunnable {
 
         // 如果执行了最大步数仍未完成，返回 Continue 让外部继续调用
         Ok(StepResult::Continue)
-    }    fn copy(&self) -> Box<dyn Runnable> {
+    }
+    fn copy(&self) -> Box<dyn Runnable> {
         Box::new(OnionLambdaRunnable {
             argument: self.argument.clone(),
             capture: self.capture.clone(),
