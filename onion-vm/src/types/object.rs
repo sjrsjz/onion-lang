@@ -36,7 +36,11 @@ impl OnionObjectCell {
     {
         self.0
             .try_borrow()
-            .map_err(|_| RuntimeError::BrokenReference)?
+            .map_err(|_| {
+                RuntimeError::BorrowError(
+                    "Failed to borrow OnionObjectCell at `with_data`".to_string(),
+                )
+            })?
             .with_data(f)
     }
     #[inline(always)]
@@ -46,7 +50,11 @@ impl OnionObjectCell {
     {
         self.0
             .try_borrow_mut()
-            .map_err(|_| RuntimeError::BrokenReference)?
+            .map_err(|_| {
+                RuntimeError::BorrowError(
+                    "Failed to borrow OnionObjectCell at `with_data_mut`".to_string(),
+                )
+            })?
             .with_data_mut(f)
     }
 
@@ -57,7 +65,11 @@ impl OnionObjectCell {
     {
         self.0
             .try_borrow_mut()
-            .map_err(|_| RuntimeError::BrokenReference)?
+            .map_err(|_| {
+                RuntimeError::BorrowError(
+                    "Failed to borrow OnionObjectCell at `with_data_ref_mut`".to_string(),
+                )
+            })?
             .with_data_ref_mut(f)
     }
 
@@ -68,7 +80,11 @@ impl OnionObjectCell {
     {
         self.0
             .try_borrow()
-            .map_err(|_| RuntimeError::BrokenReference)?
+            .map_err(|_| {
+                RuntimeError::BorrowError(
+                    "Failed to borrow OnionObjectCell at `with_attribute`".to_string(),
+                )
+            })?
             .with_attribute(key, f)
     }
 
@@ -79,7 +95,11 @@ impl OnionObjectCell {
     {
         self.0
             .try_borrow_mut()
-            .map_err(|_| RuntimeError::BrokenReference)?
+            .map_err(|_| {
+                RuntimeError::BorrowError(
+                    "Failed to borrow OnionObjectCell at `with_attribute_mut`".to_string(),
+                )
+            })?
             .with_attribute_mut(key, f)
     }
 
@@ -105,15 +125,19 @@ impl OnionObjectCell {
 
     #[inline(always)]
     pub fn try_borrow(&self) -> Result<std::cell::Ref<OnionObject>, RuntimeError> {
-        self.0
-            .try_borrow()
-            .map_err(|_| RuntimeError::BrokenReference)
+        self.0.try_borrow().map_err(|_| {
+            RuntimeError::BorrowError(
+                "Failed to borrow OnionObjectCell at `try_borrow`".to_string(),
+            )
+        })
     }
     #[inline(always)]
     pub fn try_borrow_mut(&self) -> Result<std::cell::RefMut<OnionObject>, RuntimeError> {
-        self.0
-            .try_borrow_mut()
-            .map_err(|_| RuntimeError::BrokenReference)
+        self.0.try_borrow_mut().map_err(|_| {
+            RuntimeError::BorrowError(
+                "Failed to borrow OnionObjectCell at `try_borrow_mut`".to_string(),
+            )
+        })
     }
 }
 
@@ -338,16 +362,19 @@ impl OnionObject {
             )));
         };
         match weak.upgrade() {
-            Some(strong) => strong.as_ref().with_data_mut(|obj| {
-                other.with_data(|other| {
-                    *obj = other.clone();
+            Some(strong) => {
+                // 先克隆要赋值的内容，避免借用冲突
+                let new_value = other.with_data(|other| Ok(other.clone()))?;
+
+                // 然后进行赋值
+                strong.as_ref().with_data_mut(|obj| {
+                    *obj = new_value;
                     Ok(())
                 })
-            }),
+            }
             None => Err(RuntimeError::BrokenReference),
         }
     }
-
     pub fn with_data_ref_mut<T, F>(&mut self, f: F) -> Result<T, RuntimeError>
     where
         F: FnOnce(&mut OnionObject) -> Result<T, RuntimeError>,
@@ -442,7 +469,9 @@ impl OnionObject {
                             "({},)",
                             first
                                 .try_borrow()
-                                .map_err(|_| RuntimeError::BrokenReference)?
+                                .map_err(|_| RuntimeError::BorrowError(
+                                    "Failed to borrow tuple element at `to_string`".to_string(),
+                                ))?
                                 .repr(&new_ptrs)?
                         ))
                     }
@@ -452,7 +481,12 @@ impl OnionObject {
                             .iter()
                             .map(|e| {
                                 e.try_borrow()
-                                    .map_err(|_| RuntimeError::BrokenReference)?
+                                    .map_err(|_| {
+                                        RuntimeError::BorrowError(
+                                            "Failed to borrow tuple element at `to_string`"
+                                                .to_string(),
+                                        )
+                                    })?
                                     .repr(&new_ptrs)
                             })
                             .collect();
@@ -519,7 +553,9 @@ impl OnionObject {
                             "({},)",
                             first
                                 .try_borrow()
-                                .map_err(|_| RuntimeError::BrokenReference)?
+                                .map_err(|_| RuntimeError::BorrowError(
+                                    "Failed to borrow tuple element at `repr`".to_string(),
+                                ))?
                                 .repr(&new_ptrs)?
                         ))
                     }
@@ -529,7 +565,11 @@ impl OnionObject {
                             .iter()
                             .map(|e| {
                                 e.try_borrow()
-                                    .map_err(|_| RuntimeError::BrokenReference)?
+                                    .map_err(|_| {
+                                        RuntimeError::BorrowError(
+                                            "Failed to borrow tuple element at `repr`".to_string(),
+                                        )
+                                    })?
                                     .repr(&new_ptrs)
                             })
                             .collect();
@@ -564,7 +604,11 @@ impl OnionObject {
                         let inner_repr = strong
                             .as_ref()
                             .try_borrow()
-                            .map_err(|_| RuntimeError::BrokenReference)?
+                            .map_err(|_| {
+                                RuntimeError::BorrowError(
+                                    "Failed to borrow Mut object at `repr`".to_string(),
+                                )
+                            })?
                             .repr(&new_ptrs)?;
                         Ok(format!("mut ({})", inner_repr))
                     } else {
@@ -1424,7 +1468,10 @@ mod tests {
                     .with_data(|suffix_data| str_data.binary_add(suffix_data))
             }) {
                 // 模拟使用拼接结果
-                if let Ok(concat_str) = concat_result.weak().with_data(|data| data.to_string(&mut vec![])) {
+                if let Ok(concat_str) = concat_result
+                    .weak()
+                    .with_data(|data| data.to_string(&mut vec![]))
+                {
                     total_length += concat_str.len();
                 }
             }

@@ -13,6 +13,7 @@ pub enum RuntimeError {
     InvalidOperation(String),
     CustomValue(OnionStaticObject),
     BrokenReference,
+    BorrowError(String),
 }
 
 impl Display for RuntimeError {
@@ -23,6 +24,7 @@ impl Display for RuntimeError {
             RuntimeError::InvalidType(msg) => write!(f, "Invalid type: {}", msg),
             RuntimeError::InvalidOperation(msg) => write!(f, "Invalid operation: {}", msg),
             RuntimeError::BrokenReference => write!(f, "Broken reference encountered"),
+            RuntimeError::BorrowError(msg) => write!(f, "Borrow error: {}", msg),
             RuntimeError::CustomValue(value) => write!(f, "Custom value error: {}", value),
         }
     }
