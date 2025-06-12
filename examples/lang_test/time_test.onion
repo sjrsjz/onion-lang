@@ -50,13 +50,13 @@ stdlib.io.println("微秒睡眠完成");
 
 task1 := () -> {
     stdlib.io.println("开始异步睡眠任务...");
-    stdlib.time.async_sleep(millis => 1000);
+    stdlib.time.async_sleep(millis => 1000)();
     stdlib.io.println("异步睡眠任务完成");
 };
 
 task2 := () -> {
     stdlib.io.println("开始异步睡眠任务2...");
-    stdlib.time.async_sleep(millis => 5000);
+    stdlib.time.async_sleep(millis => 5000)();
     stdlib.io.println("异步睡眠任务2完成");
 };
 

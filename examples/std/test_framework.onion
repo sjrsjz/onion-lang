@@ -1,7 +1,8 @@
 // Onion Test Framework
-@required stdlib;
-
 // Assert 函数
+@required stdlib;
+@required Modules;
+
 assert := (condition?, message?) -> {
     if (not condition) {
         raise "Assertion failed: " + message;
@@ -27,10 +28,10 @@ assert_true := (condition?, message?) -> {
 assert_false := (condition?, message?) -> {
     assert(condition == false, message);
 };
-
 Test := (tests => ()) -> {
     @import "result.onion";
     @import "logging.onion";
+    stdlib.io.println("Starting tests...");
     writter := (level?, msg?) -> {
         color := {
             @import "tui_colors.onion";

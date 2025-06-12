@@ -1,0 +1,24 @@
+@import "prototype.onion";
+Float := (v?) -> typeof v == 'Float';
+Integer := (v?) -> typeof v == 'Integer';
+String := (v?) -> typeof v == 'String';
+Boolean := (v?) -> typeof v == 'Boolean';
+Bytes := (v?) -> typeof v == 'Bytes';
+Lambda := (v?) -> typeof v == 'Lambda';
+LazySet := (v?) -> typeof v == 'LazySet';
+Pair := (v?) -> typeof v == 'Pair';
+Named := (v?) -> typeof v == 'Named';
+InstructionPackage := (v?) -> typeof v == 'InstructionPackage';
+Null := (v?) -> typeof v == 'Null';
+Undefined := (v?) -> typeof v == 'Undefined';
+Tuple := (v?) -> typeof v == 'Tuple';
+Never := (v?) -> false; // Never type cannot be instantiated
+
+Positive := (x?) -> x > 0;
+Negative := (x?) -> x < 0;
+
+InstanceOf := (interface?) -> (x?) -> isinstance(x, interface);
+
+Union := (f?, g?) -> (v?) -> f(v) or g(v);
+Intersection := (f?, g?) -> (v?) -> f(v) and g(v);
+Not := (f?) -> (v?) -> not f(v);

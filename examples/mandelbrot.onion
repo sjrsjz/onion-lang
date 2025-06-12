@@ -1,0 +1,85 @@
+@required stdlib;
+@import "std/tui_colors.onion";
+
+w := 176.0;
+h := 88.0;
+max_iter := 200;
+
+// 有趣的 Mandelbrot 集合区域坐标
+// 1. 海马谷 (Seahorse Valley): 中心 (-0.75, 0.1), 缩放 0.01
+// 2. 螺旋区域: 中心 (-0.8, 0.156), 缩放 0.005  
+// 3. 闪电区域: 中心 (-1.25, 0), 缩放 0.02
+// 4. 经典全景: 中心 (-0.5, 0), 缩放 1.5
+
+center_x := -0.8;
+center_y := 0.156;
+zoom := 0.005;
+
+// 根据逃逸速度选择颜色的函数
+get_color := mut (iterations?) -> {
+    if (iterations == max_iter) {
+        // 在集合内，使用黑色
+        return colors.black;
+    } else if (iterations < 15) {
+        // 快速逃逸，使用蓝色
+        return colors.blue;
+    } else if (iterations < 30) {
+        // 中速逃逸，使用青色
+        return colors.cyan;
+    } else if (iterations < 45) {
+        // 较慢逃逸，使用绿色
+        return colors.green;
+    } else if (iterations < 60) {
+        // 慢速逃逸，使用黄色
+        return colors.yellow;
+    } else if (iterations < 80) {
+        // 非常慢逃逸，使用红色
+        return colors.red;
+    } else {
+        // 极慢逃逸，使用洋红色
+        return colors.magenta;
+    };
+};
+
+y := mut 0.0;
+while (y < h) {
+    x := mut 0.0;
+    while (x < w) {
+        Zr := 0.0;
+        Zi := 0.0;
+        Tr := 0.0;
+        Ti := 0.0;
+        // 使用新的坐标系统来聚焦有趣区域
+        Cr := center_x + (x - w / 2.0) * zoom / (w / 4.0);
+        Ci := center_y + (y - h / 2.0) * zoom / (h / 4.0);
+
+        i := 0;
+        while (i < max_iter and Tr + Ti <= 4.0) (
+            Zi := 2.0 * Zr * Zi + Ci;
+            Zr := Tr - Ti + Cr;
+            Tr := Zr * Zr;
+            Ti := Zi * Zi;
+            i := i + 1;
+        );        // 不使用 `{}` 来包裹循环体是因为直接在当前作用域计算更快，并且可以直接遮蔽变量不需要解引用 mut
+        // 根据逃逸速度选择颜色和字符
+        color := get_color(i);
+        if (i == max_iter) {
+            // 在集合内，显示实心方块
+            stdlib.io.print(color + "█" + colors.reset);
+        } else {
+            // 在集合外，根据逃逸速度显示不同字符和颜色
+            if (i < 25) {
+                stdlib.io.print(color + "░" + colors.reset);
+            } else if (i < 50) {
+                stdlib.io.print(color + "▒" + colors.reset);
+            } else {
+                stdlib.io.print(color + "▓" + colors.reset);
+            };
+        };
+
+        x = x + 1.0;
+    };
+
+    stdlib.io.println("");
+    y = y + 1.0;
+};

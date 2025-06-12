@@ -1,0 +1,370 @@
+// Test file for combinators library using modern test framework
+
+Modules := mut ();
+@required stdlib;
+@import "std/test_framework.onion";
+@import "std/combinators.onion";
+
+#Test {
+    // === Identity Combinator Tests ===
+    
+    TestIdentityWithNumber => () -> {
+        stdlib.io.println("Testing identity combinator with number...");
+        result := identity(42);
+        assert_eq(42, result, "identity(42) should return 42");
+        stdlib.io.println("✓ Identity with number test passed");
+    },
+    
+    TestIdentityWithString => () -> {
+        stdlib.io.println("Testing identity combinator with string...");
+        result := identity("hello");
+        assert_eq("hello", result, "identity(\"hello\") should return \"hello\"");
+        stdlib.io.println("✓ Identity with string test passed");
+    },
+    
+    TestIdentityWithFunction => () -> {
+        stdlib.io.println("Testing identity combinator with function...");
+        add_one := (x?) -> x + 1;
+        result_func := identity(add_one);
+        result := result_func(5);
+        assert_eq(6, result, "identity(add_one)(5) should return 6");
+        stdlib.io.println("✓ Identity with function test passed");
+    },
+    
+    // === Constant Combinator Tests ===
+    
+    TestConstantBasic => () -> {
+        stdlib.io.println("Testing constant combinator basic usage...");
+        always_42 := constant(42);
+        
+        result1 := always_42(100);
+        assert_eq(42, result1, "constant(42)(100) should return 42");
+        
+        result2 := always_42("anything");
+        assert_eq(42, result2, "constant(42)(\"anything\") should return 42");
+        
+        stdlib.io.println("✓ Constant basic test passed");
+    },
+    
+    TestConstantWithString => () -> {
+        stdlib.io.println("Testing constant combinator with string...");
+        always_hello := constant("hello");
+        result := always_hello(999);
+        assert_eq("hello", result, "constant(\"hello\")(999) should return \"hello\"");
+        stdlib.io.println("✓ Constant with string test passed");
+    },
+    
+    TestConstantIgnoresArguments => () -> {
+        stdlib.io.println("Testing constant combinator ignores all arguments...");
+        always_true := constant(true);
+        
+        assert_eq(true, always_true(false), "constant should ignore argument");
+        assert_eq(true, always_true(null), "constant should ignore null");
+        assert_eq(true, always_true((x?) -> x), "constant should ignore function");
+        
+        stdlib.io.println("✓ Constant ignores arguments test passed");
+    },
+    
+    // === Compose Combinator Tests ===
+    
+    TestComposeBasic => () -> {
+        stdlib.io.println("Testing compose combinator basic usage...");
+        add_one := (x?) -> x + 1;
+        multiply_by_two := (x?) -> x * 2;
+        
+        // compose(f, g)(x) = f(g(x))
+        composed := compose(multiply_by_two)(add_one);
+        result := composed(5); // multiply_by_two(add_one(5)) = multiply_by_two(6) = 12
+        assert_eq(12, result, "compose(multiply_by_two)(add_one)(5) should return 12");
+        
+        stdlib.io.println("✓ Compose basic test passed");
+    },
+    
+    TestComposeWithStrings => () -> {
+        stdlib.io.println("Testing compose combinator with string functions...");
+        add_exclamation := (s?) -> s + "!";
+        to_upper := (s?) -> s; // Simplified since we don't have string.upper
+        
+        string_composed := compose(add_exclamation)(to_upper);
+        result := string_composed("hello");
+        assert_eq("hello!", result, "compose(add_exclamation)(to_upper)(\"hello\") should return \"hello!\"");
+        
+        stdlib.io.println("✓ Compose with strings test passed");
+    },
+    
+    TestComposeChaining => () -> {
+        stdlib.io.println("Testing compose combinator chaining...");
+        add_ten := (x?) -> x + 10;
+        multiply_by_three := (x?) -> x * 3;
+        square := (x?) -> x * x;
+        
+        // Create a pipeline: square(multiply_by_three(add_ten(x)))
+        pipeline := compose(square)(compose(multiply_by_three)(add_ten));
+        result := pipeline(2); // add_ten(2) = 12, multiply_by_three(12) = 36, square(36) = 1296
+        assert_eq(1296, result, "Function pipeline should work correctly");
+        
+        stdlib.io.println("✓ Compose chaining test passed");
+    },
+    
+    // === Flip Combinator Tests ===
+    
+    TestFlipWithSubtraction => () -> {
+        stdlib.io.println("Testing flip combinator with subtraction...");
+        subtract := (x?) -> (y?) -> x - y;
+        flipped_subtract := flip(subtract);
+        
+        normal_result := subtract(10)(3); // 10 - 3 = 7
+        flipped_result := flipped_subtract(10)(3); // 3 - 10 = -7
+        
+        assert_eq(7, normal_result, "subtract(10)(3) should return 7");
+        assert_eq(-7, flipped_result, "flip(subtract)(10)(3) should return -7");
+        
+        stdlib.io.println("✓ Flip with subtraction test passed");
+    },
+    
+    TestFlipWithDivision => () -> {
+        stdlib.io.println("Testing flip combinator with division...");
+        divide := (x?) -> (y?) -> x / y;
+        flipped_divide := flip(divide);
+        
+        normal_div := divide(12.0)(3.0); // 12.0 / 3.0 = 4.0
+        flipped_div := flipped_divide(12.0)(3.0); // 3.0 / 12.0 = 0.25
+        
+        assert_eq(4.0, normal_div, "divide(12.0)(3.0) should return 4.0");
+        assert_eq(0.25, flipped_div, "flip(divide)(12.0)(3.0) should return 0.25");
+        
+        stdlib.io.println("✓ Flip with division test passed");
+    },
+    
+    TestFlipWithStringOperations => () -> {
+        stdlib.io.println("Testing flip combinator with string operations...");
+        append_string := (prefix?) -> (suffix?) -> prefix + suffix;
+        suffix_append := flip(append_string);
+        
+        normal_result := append_string("hello ")("world"); // "hello world"
+        flipped_result := suffix_append("world")("hello "); // "hello world"
+        
+        assert_eq("hello world", normal_result, "Normal append should work");
+        assert_eq("hello world", flipped_result, "Flipped string append should work");
+        
+        stdlib.io.println("✓ Flip with string operations test passed");
+    },
+    
+    // === Psi Combinator Tests ===
+    
+    TestPsiBasic => () -> {
+        stdlib.io.println("Testing psi combinator basic usage...");
+        // psi(f)(g)(x)(y) = f(g(x))(g(y))
+        add := (x?) -> (y?) -> x + y;
+        square := (x?) -> x * x;
+        
+        psi_add_square := psi(add)(square);
+        result := psi_add_square(3)(4); // add(square(3))(square(4)) = add(9)(16) = 25
+        assert_eq(25, result, "psi(add)(square)(3)(4) should return 25");
+        
+        stdlib.io.println("✓ Psi basic test passed");
+    },
+    
+    TestPsiWithDifferentFunctions => () -> {
+        stdlib.io.println("Testing psi combinator with different functions...");
+        multiply := (x?) -> (y?) -> x * y;
+        add_one := (x?) -> x + 1;
+        
+        psi_mult_add_one := psi(multiply)(add_one);
+        result := psi_mult_add_one(2)(3); // multiply(add_one(2))(add_one(3)) = multiply(3)(4) = 12
+        assert_eq(12, result, "psi(multiply)(add_one)(2)(3) should return 12");
+        
+        stdlib.io.println("✓ Psi with different functions test passed");
+    },
+    
+    TestPsiWithComparison => () -> {
+        stdlib.io.println("Testing psi combinator with comparison...");
+        max := (x?) -> (y?) -> {
+            if (x > y) {
+                return x;
+            } else {
+                return y;
+            }
+        };
+        double := (x?) -> x * 2;
+        
+        psi_max_double := psi(max)(double);
+        result := psi_max_double(3)(5); // max(double(3))(double(5)) = max(6)(10) = 10
+        assert_eq(10, result, "psi(max)(double)(3)(5) should return 10");
+        
+        stdlib.io.println("✓ Psi with comparison test passed");
+    },
+    
+    // === Blackbird Combinator Tests ===
+    
+    TestBlackbirdBasic => () -> {
+        stdlib.io.println("Testing blackbird combinator basic usage...");
+        // blackbird(f)(g)(x)(y) = f(g(x)(y))
+        add := (x?) -> (y?) -> x + y;
+        square := (x?) -> x * x;
+        
+        blackbird_square_add := blackbird(square)(add);
+        result := blackbird_square_add(3)(4); // square(add(3)(4)) = square(7) = 49
+        assert_eq(49, result, "blackbird(square)(add)(3)(4) should return 49");
+        
+        stdlib.io.println("✓ Blackbird basic test passed");
+    },
+    
+    TestBlackbirdWithNegation => () -> {
+        stdlib.io.println("Testing blackbird combinator with negation...");
+        negate := (x?) -> -x;
+        multiply := (x?) -> (y?) -> x * y;
+        
+        blackbird_negate_mult := blackbird(negate)(multiply);
+        result := blackbird_negate_mult(5)(6); // negate(multiply(5)(6)) = negate(30) = -30
+        assert_eq(-30, result, "blackbird(negate)(multiply)(5)(6) should return -30");
+        
+        stdlib.io.println("✓ Blackbird with negation test passed");
+    },
+    
+    TestBlackbirdWithStringOps => () -> {
+        stdlib.io.println("Testing blackbird combinator with string operations...");
+        length := (s?) -> lengthof s;
+        concat := (a?) -> (b?) -> a + b;
+        
+        blackbird_length_concat := blackbird(length)(concat);
+        result := blackbird_length_concat("hello")(" world"); // length(concat("hello")(" world")) = length("hello world") = 11
+        assert_eq(11, result, "blackbird should work with string operations");
+        
+        stdlib.io.println("✓ Blackbird with string operations test passed");
+    },
+    
+    // === Apply to Self Combinator Tests ===
+    
+    TestApplyToSelfBasic => () -> {
+        stdlib.io.println("Testing apply_to_self combinator...");
+        
+        // Create a function that can be meaningfully applied to itself
+        self_applicable := (f?) -> {
+            if (typeof f == "Lambda") {
+                return (x?) -> x + 1;
+            } else {
+                return f + 1;
+            }
+        };
+        
+        result_func := apply_to_self(self_applicable);
+        result := result_func(5);
+        assert_eq(6, result, "apply_to_self with custom function should work");
+        
+        stdlib.io.println("✓ Apply to self basic test passed");
+    },
+    
+    TestApplyToSelfWithConstants => () -> {
+        stdlib.io.println("Testing apply_to_self with constant function...");
+        
+        // Function that when applied to itself returns a constant
+        const_func := (f?) -> constant(42);
+        result_func := apply_to_self(const_func);
+        result := result_func("anything");
+        assert_eq(42, result, "apply_to_self should work with constant-returning function");
+        
+        stdlib.io.println("✓ Apply to self with constants test passed");
+    },
+    
+    // === Practical Examples and Integration Tests ===
+    
+    TestFunctionPipeline => () -> {
+        stdlib.io.println("Testing function pipeline using combinators...");
+        
+        // Create a complex pipeline using multiple combinators
+        add_five := (x?) -> x + 5;
+        multiply_by_two := (x?) -> x * 2;
+        subtract_three := (x?) -> x - 3;
+        
+        // Pipeline: subtract_three(multiply_by_two(add_five(x)))
+        pipeline := compose(subtract_three)(compose(multiply_by_two)(add_five));
+        result := pipeline(10); // add_five(10) = 15, multiply_by_two(15) = 30, subtract_three(30) = 27
+        assert_eq(27, result, "Complex pipeline should work correctly");
+        
+        stdlib.io.println("✓ Function pipeline test passed");
+    },
+    
+    TestCombinatorsWithConstants => () -> {
+        stdlib.io.println("Testing combinators with constant functions...");
+        
+        // Using constant with other combinators
+        get_default := constant("default");
+        upper_case := (s?) -> s; // Simplified
+        
+        composed_with_constant := compose(upper_case)(get_default);
+        result := composed_with_constant("ignored");
+        assert_eq("default", result, "Compose with constant should work");
+        
+        stdlib.io.println("✓ Combinators with constants test passed");
+    },
+    
+    TestNestedCombinators => () -> {
+        stdlib.io.println("Testing nested combinator combinations...");
+        
+        // Complex example: using psi with composed functions
+        add := (x?) -> (y?) -> x + y;
+        double := (x?) -> x * 2;
+        add_one := (x?) -> x + 1;
+        
+        // First compose double and add_one
+        double_add_one := compose(double)(add_one);
+        
+        // Then use with psi
+        psi_result := psi(add)(double_add_one);
+        result := psi_result(2)(3); // add(double_add_one(2))(double_add_one(3)) = add(6)(8) = 14
+        assert_eq(14, result, "Nested combinators should work correctly");
+        
+        stdlib.io.println("✓ Nested combinators test passed");
+    },
+    
+    TestCombinatorsProperties => () -> {
+        stdlib.io.println("Testing combinator mathematical properties...");
+        
+        // Test identity laws
+        value := 42;
+        assert_eq(value, identity(value), "Identity should satisfy I(x) = x");
+        
+        // Test constant laws
+        const_func := constant(100);
+        assert_eq(100, const_func(1), "Constant should ignore first argument");
+        assert_eq(100, const_func(2), "Constant should ignore different arguments");
+        
+        // Test composition associativity (informally)
+        f := (x?) -> x + 1;
+        g := (x?) -> x * 2;
+        h := (x?) -> x - 3;
+        
+        // (f ∘ g) ∘ h vs f ∘ (g ∘ h)
+        left_assoc := compose(compose(f)(g))(h);
+        right_assoc := compose(f)(compose(g)(h));
+        
+        test_value := 5;
+        assert_eq(left_assoc(test_value), right_assoc(test_value), "Composition should be associative");
+        
+        stdlib.io.println("✓ Combinator properties test passed");
+    },
+    
+    TestErrorHandling => () -> {
+        stdlib.io.println("Testing combinator error handling...");
+        
+        // Test with functions that might cause issues
+        safe_divide := (x?) -> (y?) -> {
+            if (y == 0) {
+                return 0; // Safe fallback
+            } else {
+                return x / y;
+            }
+        };
+        
+        // Use with flip to test argument order
+        flipped_safe_divide := flip(safe_divide);
+        result1 := safe_divide(10)(0); // Should return 0
+        result2 := flipped_safe_divide(0)(10); // Should also return 0
+        
+        assert_eq(0, result1, "Safe divide should handle division by zero");
+        assert_eq(0, result2, "Flipped safe divide should handle division by zero");
+        
+        stdlib.io.println("✓ Error handling test passed");
+    }
+};

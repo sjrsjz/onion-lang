@@ -1,0 +1,40 @@
+// Common Function Combinators
+
+// Identity combinator (I-combinator)
+// I x = x
+// Takes a value and returns it unchanged.
+identity := (x?) -> x;
+
+// Constant combinator (K-combinator)
+// K x y = x
+// Takes two arguments, returns the first one. Also known as `always` or `fst`.
+constant := (x?) -> (y?) -> x;
+
+// Apply to self combinator (M-combinator / Mockingbird)
+// M f = f f
+// Takes a function and applies it to itself.
+apply_to_self := (f?) -> f(f);
+
+// Composition combinator (B-combinator)
+// B f g x = f (g x)
+// Takes two functions f and g, and a value x. Returns f(g(x)).
+// Functions are applied from right to left.
+compose := (f?) -> (g?) -> (x?) -> f(g(x));
+
+// Flip combinator (C-combinator)
+// C f x y = f y x
+// Takes a function and two arguments, and applies the function
+// to the arguments in reverse order.
+flip := (f?) -> (x?) -> (y?) -> f(y)(x);
+
+// Psi combinator (Ψ-combinator)
+// Ψ f g x y = f (g x) (g y)
+// Takes two functions f and g, and two values x and y.
+// Applies g to x and y, then applies f to the results.
+psi := (f?) -> (g?) -> (x?) -> (y?) -> f(g(x))(g(y));
+
+// Blackbird combinator (B₁-combinator)
+// B₁ f g x y = f (g x y)
+// Similar to compose, but for functions taking multiple arguments.
+// Takes f, g, x, y. Returns f applied to the result of g(x,y).
+blackbird := (f?) -> (g?) -> (x?) -> (y?) -> f(g(x)(y));

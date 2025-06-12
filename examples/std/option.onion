@@ -1,64 +1,81 @@
-Option := mut undefined;
+@required Modules;
+if (not keyof sync (() -> Modules.Option)()) {
+    // 定义临时的 Option 构造器和辅助函数
+    _Option_Temp_Constructor := mut undefined;
+    _Some_Temp_Helper := (v?) -> _Option_Temp_Constructor(true : v);
+    _None_Temp_Helper := () -> _Option_Temp_Constructor(false : undefined);
+
+    // 配置临时 Option 构造器
+    _Option_Temp_Constructor = {
+        @import "result.onion"; // 假设 result.onion 中的 Err 已通过其自身的缓存机制全局可用
+        @import "prototype.onion";
+        // Option 实例的接口定义
+        Option_Interface := #interface {
+            is_some => () -> keyof keyof self,
+            is_none => () -> not keyof keyof self,
+            map => (f?) -> {
+                if (self.is_some()) {
+                    return _Some_Temp_Helper(f(valueof keyof self));
+                } else {
+                    return _None_Temp_Helper();
+                }
+            },
+            filter => (predicate?) -> {
+                if (self.is_some() and predicate(valueof keyof self)) {
+                    return _Some_Temp_Helper(valueof keyof self);
+                } else {
+                    return _None_Temp_Helper();
+                }
+            },
+            unwrap => () -> {
+                if (self.is_some()) {
+                    return valueof keyof self;
+                } else {
+                    raise Err("Option is None"); // 使用全局缓存的 Err
+                }
+            },
+            unwrap_or => (default?) -> {
+                if (self.is_some()) {
+                    return valueof keyof self;
+                } else {
+                    return default;
+                }
+            },
+            unwrap_or_else => (f?) -> {
+                if (self.is_some()) {
+                    return valueof keyof self;
+                } else {
+                    return f();
+                }
+            },
+            and_then => (f?) -> {
+                if (self.is_some()) {
+                    return f(valueof keyof self);
+                } else {
+                    return _None_Temp_Helper();
+                }
+            },
+            or_else => (f?) -> {
+                if (self.is_some()) {
+                    return _Option_Temp_Constructor(keyof self);
+                } else {
+                    return f();
+                }
+            }
+        };
+        Option_Interface // 块的计算结果是此接口，用于配置 _Option_Temp_Constructor
+    };
+
+    // 缓存已配置的临时 Option 构造器
+    Modules = Modules + (Option => _Option_Temp_Constructor,);
+};
+
+// 将缓存的构造器赋值给全局 Option
+Option := Modules.Option;
+
+// 使用缓存的全局 Option 构造器重新定义全局 Some 和 None 辅助函数
 Some := (v?) -> Option(true : v);
 None := () -> Option(false : undefined);
 
-Option = {
-    @import "result.onion";
-    @import "prototype.onion";
-    Option := #interface {
-        is_some => () -> keyof keyof self,
-        is_none => () -> not keyof keyof self,
-        map => (f?, Option => mut undefined) -> {
-            if (self.is_some()) {
-                return Some(f(valueof keyof self));
-            } else {
-                return None();
-            }
-        },
-        filter => (predicate?, Option => mut undefined) -> {
-            if (self.is_some() and predicate(valueof keyof self)) {
-                return Some(valueof keyof self);
-            } else {
-                return None();
-            }
-        },
-        unwrap => () -> {
-            if (self.is_some()) {
-                return valueof keyof self;
-            } else {
-                raise Err("Option is None");
-            }
-        },
-        unwrap_or => (default?) -> {
-            if (self.is_some()) {
-                return valueof keyof self;
-            } else {
-                return default;
-            }
-        },
-        unwrap_or_else => (f?) -> {
-            if (self.is_some()) {
-                return valueof keyof self;
-            } else {
-                return f();
-            }
-        },
-        and_then => (f?, Option => mut undefined) -> {
-            if (self.is_some()) {
-                return f(valueof keyof self);
-            } else {
-                return None();
-            }
-        },
-        or_else => (f?, Option => mut undefined) -> {
-            if (self.is_some()) {
-                return Option(keyof self);
-            } else {
-                return f();
-            }
-        }
-    };
-    Option
-};
-
+// OptionType 定义使用全局 Option
 OptionType := (x?) -> (valueof x) is Option.parameter.interface;

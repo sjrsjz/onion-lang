@@ -1,0 +1,206 @@
+// 粒子系统模拟器 - 烟花效果
+@required stdlib;
+@import "std/tui_colors.onion";
+
+width := 80;
+height := 30;
+
+// 简单的伪随机数生成器
+rand_seed := mut 12345;
+random := () -> {
+    rand_seed = (rand_seed * 1103515245 + 12345) % 2147483648;
+    return rand_seed / 2147483648.0;
+};
+
+// 粒子结构
+create_particle := (x?, y?, vx?, vy?, life?, color?) -> {
+    return {
+        "x": x,
+        "y": y,
+        "vx": vx,
+        "vy": vy,
+        "life": life,
+        "max_life": life,
+        "color": color,
+        "char": "*"
+    };
+};
+
+// 创建烟花爆炸
+create_firework := (center_x?, center_y?) -> {
+    particles := mut ();
+    particle_count := 20;
+    
+    colors_list := (
+        "\u001b[31m",   // red
+        "\u001b[33m",   // yellow  
+        "\u001b[32m",   // green
+        "\u001b[36m",   // cyan
+        "\u001b[34m",   // blue
+        "\u001b[35m",   // magenta
+        "\u001b[91m",   // bright_red
+        "\u001b[93m",   // bright_yellow
+        "\u001b[92m",   // bright_green
+        "\u001b[96m",   // bright_cyan
+        "\u001b[94m",   // bright_blue
+        "\u001b[95m"    // bright_magenta
+    );
+      i := mut 0;
+    while (i < particle_count) {
+        // 随机方向和速度
+        angle := (random() * 2.0 * 3.14159);
+        speed := random() * 3.0 + 1.0;
+        
+        vx := stdlib.math.cos(angle) * speed;
+        vy := stdlib.math.sin(angle) * speed;
+        
+        life := random() * 20.0 + 10.0;
+        particle_color := colors_list[i % lengthof colors_list];
+        
+        particle := create_particle(center_x, center_y, vx, vy, life, particle_color);
+        particles = particles + (particle,);
+        
+        i = i + 1;
+    };
+    
+    return particles;
+};
+
+// 更新粒子
+update_particles := (particles?) -> {
+    new_particles := mut ();
+    
+    i := mut 0;
+    while (i < lengthof particles) {
+        particle := particles[i];
+          // 更新位置
+        new_x := particle.x + particle.vx;
+        new_y := particle.y + particle.vy;
+        
+        // 重力效果
+        new_vy := mut (particle.vy + 0.2);
+        
+        // 空气阻力
+        new_vx := particle.vx * 0.98;
+        new_vy = new_vy * 0.98;
+        
+        // 减少生命值
+        new_life := particle.life - 1.0;
+        
+        // 只保留活着的粒子
+        if (new_life > 0.0 and new_x >= 0.0 and new_x < width and new_y >= 0.0 and new_y < height) {
+            new_particle := {
+                "x": new_x,
+                "y": new_y,
+                "vx": new_vx,
+                "vy": new_vy,
+                "life": new_life,
+                "max_life": particle.max_life,
+                "color": particle.color,
+                "char": particle.char
+            };
+            new_particles = new_particles + (new_particle,);
+        };
+        
+        i = i + 1;
+    };
+    
+    return new_particles;
+};
+
+// 渲染场景
+render_scene := (all_particles?, frame?) -> {
+    // 清屏
+    stdlib.io.println("\u001b[2J\u001b[H");
+    
+    // 显示标题
+    stdlib.io.println(colorize("🎆 粒子烟花模拟器 - 第" + stdlib.types.to_string(frame) + "帧 🎆", "bright_yellow", "bg_black"));
+    // 直接渲染每个位置
+    y := mut 0;
+    floor := stdlib.math.floor;
+    while (y < height) {
+        x := mut 0;
+        while (x < width) {
+            // 查找这个位置是否有粒子
+            found_particle := mut false;
+            particle_char := mut " ";
+            
+            i := mut 0;
+            while (i < lengthof all_particles and not found_particle) {
+                particles := all_particles[i];
+                
+                j := mut 0;
+                while (j < lengthof particles and not found_particle) {
+                    particle := particles[j];
+                    
+                    px := floor(particle.x);
+                    py := floor(particle.y);
+                    
+                    if (px == x and py == y) {
+                        found_particle = true;
+                        life_ratio := particle.life / particle.max_life;
+                        char := if (life_ratio > 0.7) {
+                            "█"
+                        } else if (life_ratio > 0.4) {
+                            "▓"
+                        } else if (life_ratio > 0.2) {
+                            "▒"
+                        } else {
+                            "░"
+                        };
+                        particle_char = particle.color + char + "\u001b[0m";
+                    };
+                    
+                    j = j + 1;
+                };
+                
+                i = i + 1;
+            };
+            
+            stdlib.io.print(particle_char);
+            x = x + 1;
+        };
+        stdlib.io.println("");
+        y = y + 1;
+    };
+};
+
+// 主模拟循环
+all_particles := mut ();
+frame := mut 0;
+max_frames := 200;
+
+while (frame < max_frames) {
+    // 每30帧创建新烟花
+    if (frame % 30 == 0) {
+        firework_x := random() * (width - 20.0) + 10.0;
+        firework_y := random() * (height - 20.0) + 10.0;
+        new_firework := create_firework(firework_x, firework_y);
+        all_particles = all_particles + (new_firework,);
+    };
+    
+    // 更新所有粒子系统
+    updated_particles := mut ();
+    i := mut 0;
+    while (i < lengthof all_particles) {
+        updated := update_particles(all_particles[i]);
+        if (lengthof updated > 0) {
+            updated_particles = updated_particles + (updated,);
+        };
+        i = i + 1;
+    };
+    all_particles = updated_particles;
+    
+    // 渲染场景
+    render_scene(all_particles, frame);
+    
+    // 延迟
+    delay := mut 0;
+    while (delay < 80000) {
+        delay = delay + 1;
+    };
+    
+    frame = frame + 1;
+};
+
+stdlib.io.println(colorize("烟花表演结束! 🌟", "bright_magenta", "bg_black"));

@@ -1,4 +1,0 @@
-@required stdlib;
-
-stdlib.io.println("测试访问 stdlib.time...");
-stdlib.io.println("stdlib:", stdlib);

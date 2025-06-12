@@ -1,0 +1,36 @@
+@required stdlib;
+close_signal := mut false;
+
+task1 := () -> {
+    stdlib.io.println("Task 1 started");
+    while (not close_signal) {
+        stdlib.io.println("Task 1 is running...");
+        n := mut 0;
+        while (n < 100000) {
+            n = n + 1;
+        };
+    };
+    stdlib.io.println("Task 1 stopped");
+};
+
+task2 := () -> {
+    stdlib.io.println("Task 2 started");
+    n := mut 0;
+    while (n < 1000000) {
+        n = n + 1;
+        if (n % 10000 == 0) {
+            stdlib.io.println("Task 2 is running... Count: ", n);
+        };
+    };
+    close_signal = true;
+    stdlib.io.println("Task 2 stopped");
+};
+
+pool := () -> {
+    stdlib.io.println("Starting task pool...");
+    sync task1();
+    sync task2();
+    stdlib.io.println("Task pool completed.");
+};
+
+async pool();

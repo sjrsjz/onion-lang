@@ -1,0 +1,194 @@
+// ASCII 艺术生成器 - 将文本转换为大字体艺术
+@required stdlib;
+@import "std/tui_colors.onion";
+
+// 5x7 字体库 (简化版)
+font_data := {
+    'A': (
+        " ███ ",
+        "█   █",
+        "█████",
+        "█   █",
+        "█   █",
+        "     ",
+        "     "
+    ),
+    'B': (
+        "████ ",
+        "█   █",
+        "████ ",
+        "█   █",
+        "████ ",
+        "     ",
+        "     "
+    ),
+    'C': (
+        " ████",
+        "█    ",
+        "█    ",
+        "█    ",
+        " ████",
+        "     ",
+        "     "
+    ),
+    'H': (
+        "█   █",
+        "█   █",
+        "█████",
+        "█   █",
+        "█   █",
+        "     ",
+        "     "
+    ),
+    'E': (
+        "█████",
+        "█    ",
+        "████ ",
+        "█    ",
+        "█████",
+        "     ",
+        "     "
+    ),
+    'L': (
+        "█    ",
+        "█    ",
+        "█    ",
+        "█    ",
+        "█████",
+        "     ",
+        "     "
+    ),
+    'O': (
+        " ███ ",
+        "█   █",
+        "█   █",
+        "█   █",
+        " ███ ",
+        "     ",
+        "     "
+    ),
+    ' ': (
+        "     ",
+        "     ",
+        "     ",
+        "     ",
+        "     ",
+        "     ",
+        "     "
+    ),
+    '!': (
+        "  █  ",
+        "  █  ",
+        "  █  ",
+        "     ",
+        "  █  ",
+        "     ",
+        "     "
+    )
+};
+
+// 生成彩虹色彩序列
+get_rainbow_color := (index?) -> {
+    colors_list := (
+        colors.red,
+        colors.yellow,
+        colors.green,
+        colors.cyan,
+        colors.blue,
+        colors.magenta
+    );
+    return colors_list[index % 6];
+};
+
+// 渲染文本为ASCII艺术
+render_ascii_art := (text?, use_rainbow?) -> {
+    if (lengthof text == 0) {
+        return;
+    };
+    
+    stdlib.io.println("");
+    
+    // 对每一行进行渲染
+    row := mut 0;
+    while (row < 7) {
+        char_index := mut 0;
+        while (char_index < lengthof text) {
+            char := text[char_index];
+            char_upper := stdlib.string.uppercase(char);
+            
+            if (keyof sync (() -> font_data.{char_upper})()) {
+                char_data := font_data.{char_upper};
+                line := char_data[row];
+                
+                if (use_rainbow) {
+                    color := get_rainbow_color(char_index);
+                    stdlib.io.print(color + line + colors.reset);
+                } else {
+                    stdlib.io.print(colorize(line, "bright_cyan", "bg_black"));
+                };
+            } else {
+                // 不支持的字符，显示空格
+                stdlib.io.print("     ");
+            };
+            
+            char_index = char_index + 1;
+        };
+        stdlib.io.println("");
+        row = row + 1;
+    };
+};
+
+// 创建动态标题动画
+animate_title := (text?, frames?) -> {
+    frame := mut 0;
+    while (frame < frames) {
+        // 清屏
+        stdlib.io.println("\u001b[2J\u001b[H");
+        
+        // 渐变效果
+        use_rainbow := (frame % 2 == 0);
+        
+        stdlib.io.println(colorize("=== ASCII 艺术生成器 ===", "bright_yellow", "bg_black"));
+        render_ascii_art(text, use_rainbow);
+        
+        // 添加闪烁效果
+        if (frame % 4 < 2) {
+            stdlib.io.println(colorize("✨ 闪闪发光! ✨", "bright_white", "bg_black"));
+        } else {
+            stdlib.io.println(colorize("★ 绚烂夺目! ★", "bright_magenta", "bg_black"));
+        };
+        
+        // 延迟
+        stdlib.time.sleep_seconds(1); // 暂停1秒
+        
+        frame = frame + 1;
+    };
+};
+
+// 主程序
+stdlib.io.println(colorize("欢迎使用 ASCII 艺术生成器!", "bright_green", "bg_black"));
+stdlib.io.println("");
+
+// 演示不同的文本
+demo_texts := ("HELLO", "COOL", "HELLO!");
+
+text_index := mut 0;
+while (text_index < lengthof demo_texts) {
+    text := demo_texts[text_index];
+    
+    stdlib.io.println(colorize("正在生成: " + text, "bright_yellow", "bg_black"));
+    animate_title(text, 8);
+    
+    // 静态显示
+    stdlib.io.println("\u001b[2J\u001b[H");
+    stdlib.io.println(colorize("=== 静态版本 ===", "bright_cyan", "bg_black"));
+    render_ascii_art(text, false);
+    
+    stdlib.io.println(colorize("=== 彩虹版本 ===", "bright_magenta", "bg_black"));
+    render_ascii_art(text, true);
+    
+    // 暂停
+    stdlib.time.sleep_seconds(2); // 暂停2秒
+    
+    text_index = text_index + 1;
+};

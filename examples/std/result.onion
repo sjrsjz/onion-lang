@@ -1,56 +1,76 @@
-Result := mut undefined;
+@required Modules;
+if (not keyof sync (() -> Modules.Result)()) {
+    // 定义临时的 Result 构造器和辅助函数
+    _Result_Temp_Constructor := mut undefined;
+    _Ok_Temp_Helper := (v?) -> _Result_Temp_Constructor(true : v);
+    _Err_Temp_Helper := (v?) -> _Result_Temp_Constructor(false : v);
+
+    // 配置临时 Result 构造器
+    _Result_Temp_Constructor = {
+        @import "prototype.onion";
+        // Result 实例的接口定义
+        Result_Interface := #interface {
+            is_ok => () -> keyof keyof self,
+            is_err => () -> not keyof keyof self,
+            map => (f?) -> {
+                if (self.is_ok()) {
+                    return _Ok_Temp_Helper(f(valueof keyof self));
+                } else {
+                    return _Result_Temp_Constructor(keyof self);
+                }
+            },
+            map_err => (f?) -> {
+                if (self.is_err()) {
+                    return _Err_Temp_Helper(f(valueof keyof self));
+                } else {
+                    return _Result_Temp_Constructor(keyof self);
+                }
+            },
+            unwrap => () -> {
+                if (self.is_ok()) {
+                    return valueof keyof self;
+                } else {
+                    raise _Err_Temp_Helper("Result is an error");
+                }
+            },
+            unwrap_or => (default?) -> {
+                if (self.is_ok()) {
+                    return valueof keyof self;
+                } else {
+                    return default;
+                }
+            },
+            unwrap_or_else => (f?) -> {
+                if (self.is_ok()) {
+                    return valueof keyof self;
+                } else {
+                    return f(valueof keyof self);
+                }
+            },
+            unwrap_err => () -> {
+                if (self.is_err()) {
+                    return valueof keyof self;
+                } else {
+                    raise _Err_Temp_Helper("Result is not an error");
+                }
+            }
+        };
+        Result_Interface // 块的计算结果是此接口，用于配置 _Result_Temp_Constructor
+    };
+
+    // 缓存已配置的临时 Result 构造器
+    Modules = Modules + (Result => _Result_Temp_Constructor,);
+};
+
+// 将缓存的构造器赋值给全局 Result
+Result := Modules.Result;
+
+// 使用缓存的全局 Result 构造器重新定义全局 Ok 和 Err 辅助函数
 Ok := (v?) -> Result(true : v);
 Err := (v?) -> Result(false : v);
-Result = {
-    @import "prototype.onion";
-    Result := #interface {
-        is_ok => () -> keyof keyof self,
-        is_err => () -> not keyof keyof self,
-        map => (f?, Result => mut undefined) -> {
-            if (self.is_ok()) {
-                return Ok(f(valueof keyof self));
-            } else {
-                return Result(keyof self);
-            }
-        },
-        map_err => (f?, Result => mut undefined) -> {
-            if (self.is_err()) {
-                return Err(f(valueof keyof self));
-            } else {
-                return Result(keyof self);
-            }
-        },
-        unwrap => () -> {
-            if (self.is_ok()) {
-                return valueof keyof self;
-            } else {
-                raise Err("Result is an error");
-            }
-        },
-        unwrap_or => (default?) -> {
-            if (self.is_ok()) {
-                return valueof keyof self;
-            } else {
-                return default;
-            }
-        },
-        unwrap_or_else => (f?) -> {
-            if (self.is_ok()) {
-                return valueof keyof self;
-            } else {
-                return f(valueof keyof self);
-            }
-        },
-        unwrap_err => () -> {
-            if (self.is_err()) {
-                return valueof keyof self;
-            } else {
-                raise Err("Result is not an error");
-            }
-        }
-    };
-    Result    
-};
+
+// ResultType 定义使用全局 Result
+ResultType := (x?) -> (valueof x) is Result.parameter.interface;
 
 try := (f?) -> {
     Result(sync f())
