@@ -51,7 +51,7 @@ impl OnionLambdaRunnableLauncher {
                 definition.parameter.try_borrow()?.with_data(|p_obj| {
                     if let OnionObject::Tuple(tuple) = p_obj {
                         // Initialize collected_arguments and assigned based on parameter count
-                        for param in &tuple.elements {
+                        for param in tuple.elements.as_ref() {
                             param.with_data(|param_obj| {
                                 match param_obj {
                                     OnionObject::LazySet(lazy_set) => {

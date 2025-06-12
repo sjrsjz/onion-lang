@@ -85,13 +85,13 @@ impl ReplExecutor {
     ) -> Result<(), String> {
         // 创建标准库对象
         let stdlib_pair = OnionNamed::new_static(
-            &OnionObject::String("stdlib".to_string()).stabilize(),
+            &OnionObject::String(Arc::new("stdlib".to_string())).stabilize(),
             &crate::stdlib::build_module(),
         );
 
         // 创建Out参数对象 - 直接使用当前的out_tuple
         let out_pair = OnionNamed::new_static(
-            &OnionObject::String("Out".to_string()).stabilize(),
+            &OnionObject::String(Arc::new("Out".to_string())).stabilize(),
             &self.out_tuple.clone(),
         );
 
@@ -237,7 +237,7 @@ impl ReplExecutor {
                 elements.push(result.to_cell());
                 elements
             } else {
-                vec![result.to_cell()]
+                vec![result.to_cell()].into()
             }
         };
 

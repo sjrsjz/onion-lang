@@ -76,7 +76,7 @@ fn input(
         std::io::stdin()
             .read_line(&mut input)
             .map_err(|e| RuntimeError::InvalidOperation(e.to_string()))?;
-        Ok(OnionObject::String(input.trim().to_string()).stabilize())
+        Ok(OnionObject::String(input.trim().to_string().into()).stabilize())
     })
 }
 
@@ -100,7 +100,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut input_params = IndexMap::new();
     input_params.insert(
         "hint".to_string(),
-        OnionObject::String("Input: ".to_string()).stabilize(),
+        OnionObject::String("Input: ".to_string().into()).stabilize(),
     );
     module.insert(
         "input".to_string(),

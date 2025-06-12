@@ -137,7 +137,7 @@ fn now_utc(
         Ok(duration) => {
             let secs = duration.as_secs();
             let datetime = format_timestamp(secs);
-            Ok(OnionObject::String(datetime).stabilize())
+            Ok(OnionObject::String(datetime.into()).stabilize())
         }
         Err(e) => Err(RuntimeError::DetailedError(format!(
             "Failed to get current time: {}",
@@ -193,7 +193,7 @@ fn format_time(
     }
 
     let datetime = format_timestamp(timestamp as u64);
-    Ok(OnionObject::String(datetime).stabilize())
+    Ok(OnionObject::String(datetime.into()).stabilize())
 }
 
 /// 计算两个时间戳之间的差值（秒）

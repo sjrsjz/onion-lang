@@ -98,9 +98,10 @@ pub fn load_string(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     if let OpcodeArgument::String(value) = opcode.operand1 {
-        let string =
-            OnionObject::String(runnable.instruction.get_string_pool()[value as usize].clone())
-                .stabilize();
+        let string = OnionObject::String(Arc::new(
+            runnable.instruction.get_string_pool()[value as usize].clone(),
+        ))
+        .stabilize();
         runnable.context.push_object(string)?;
         Ok(StepResult::Continue)
     } else {
@@ -117,9 +118,10 @@ pub fn load_bytes(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     if let OpcodeArgument::ByteArray(value) = opcode.operand1 {
-        let bytes =
-            OnionObject::Bytes(runnable.instruction.get_bytes_pool()[value as usize].clone())
-                .stabilize();
+        let bytes = OnionObject::Bytes(Arc::new(
+            runnable.instruction.get_bytes_pool()[value as usize].clone(),
+        ))
+        .stabilize();
         runnable.context.push_object(bytes)?;
         Ok(StepResult::Continue)
     } else {
@@ -532,7 +534,7 @@ pub fn type_of(
     let stack = runnable.context.get_current_stack_mut()?;
     let obj = Context::get_object_from_stack(stack, 0)?;
     let type_name = obj.weak().try_borrow()?.type_of()?;
-    Context::replace_last_object(stack, OnionObject::String(type_name).stabilize());
+    Context::replace_last_object(stack, OnionObject::String(Arc::new(type_name)).stabilize());
     Ok(StepResult::Continue)
 }
 

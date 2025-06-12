@@ -24,15 +24,15 @@ fn system(
                     ("sh", "-c")
                 };
 
-                match Command::new(shell).arg(flag).arg(cmd_str).output() {
+                match Command::new(shell).arg(flag).arg(cmd_str.as_ref()).output() {
                     Ok(output) => {
                         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
                         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
                         let status = output.status.code().unwrap_or(-1);
 
                         let mut result = IndexMap::new();
-                        result.insert("stdout".to_string(), OnionObject::String(stdout).stabilize());
-                        result.insert("stderr".to_string(), OnionObject::String(stderr).stabilize());
+                        result.insert("stdout".to_string(), OnionObject::String(stdout.into()).stabilize());
+                        result.insert("stderr".to_string(), OnionObject::String(stderr.into()).stabilize());
                         result.insert("status".to_string(), OnionObject::Integer(status as i64).stabilize());
                         result.insert("success".to_string(), OnionObject::Boolean(output.status.success()).stabilize());
 
@@ -65,7 +65,7 @@ fn system_code(
                     ("sh", "-c")
                 };
 
-                match Command::new(shell).arg(flag).arg(cmd_str).status() {
+                match Command::new(shell).arg(flag).arg(cmd_str.as_ref()).status() {
                     Ok(status) => {
                         let code = status.code().unwrap_or(-1);
                         Ok(OnionObject::Integer(code as i64).stabilize())
@@ -91,7 +91,7 @@ fn chdir(
         let path = get_attr_direct(data, "path".to_string())?;
         path.weak().with_data(|path_data| match path_data {
             OnionObject::String(path_str) => {
-                match env::set_current_dir(path_str) {
+                match env::set_current_dir(path_str.as_ref()) {
                     Ok(_) => Ok(OnionObject::Null.stabilize()),
                     Err(e) => Err(RuntimeError::DetailedError(format!(
                         "Failed to change directory: {}", e
@@ -111,8 +111,8 @@ fn username(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     match env::var("USERNAME").or_else(|_| env::var("USER")) {
-        Ok(user) => Ok(OnionObject::String(user).stabilize()),
-        Err(_) => Ok(OnionObject::String("unknown".to_string()).stabilize()),
+        Ok(user) => Ok(OnionObject::String(user.into()).stabilize()),
+        Err(_) => Ok(OnionObject::String("unknown".to_string().into()).stabilize()),
     }
 }
 
@@ -122,7 +122,7 @@ fn home_dir(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     match dirs::home_dir() {
-        Some(path) => Ok(OnionObject::String(path.to_string_lossy().to_string()).stabilize()),
+        Some(path) => Ok(OnionObject::String(path.to_string_lossy().to_string().into()).stabilize()),
         None => Err(RuntimeError::DetailedError(
             "Could not determine home directory".to_string(),
         )),
@@ -135,7 +135,7 @@ fn temp_dir(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let temp_path = env::temp_dir();
-    Ok(OnionObject::String(temp_path.to_string_lossy().to_string()).stabilize())
+    Ok(OnionObject::String(temp_path.to_string_lossy().to_string().into()).stabilize())
 }
 
 /// 检查文件或目录是否存在
@@ -147,7 +147,7 @@ fn path_exists(
         let path = get_attr_direct(data, "path".to_string())?;
         path.weak().with_data(|path_data| match path_data {
             OnionObject::String(path_str) => {
-                let exists = std::path::Path::new(path_str).exists();
+                let exists = std::path::Path::new(path_str.as_ref()).exists();
                 Ok(OnionObject::Boolean(exists).stabilize())
             }
             _ => Err(RuntimeError::InvalidType(
@@ -166,7 +166,7 @@ fn is_dir(
         let path = get_attr_direct(data, "path".to_string())?;
         path.weak().with_data(|path_data| match path_data {
             OnionObject::String(path_str) => {
-                let is_directory = std::path::Path::new(path_str).is_dir();
+                let is_directory = std::path::Path::new(path_str.as_ref()).is_dir();
                 Ok(OnionObject::Boolean(is_directory).stabilize())
             }
             _ => Err(RuntimeError::InvalidType(
@@ -185,7 +185,7 @@ fn is_file(
         let path = get_attr_direct(data, "path".to_string())?;
         path.weak().with_data(|path_data| match path_data {
             OnionObject::String(path_str) => {
-                let is_file = std::path::Path::new(path_str).is_file();
+                let is_file = std::path::Path::new(path_str.as_ref()).is_file();
                 Ok(OnionObject::Boolean(is_file).stabilize())
             }
             _ => Err(RuntimeError::InvalidType(
@@ -208,8 +208,8 @@ fn path_join(
             path.weak().with_data(|path_data| {
                 match (base_data, path_data) {
                     (OnionObject::String(base_str), OnionObject::String(path_str)) => {
-                        let joined = std::path::Path::new(base_str).join(path_str);
-                        Ok(OnionObject::String(joined.to_string_lossy().to_string()).stabilize())
+                        let joined = std::path::Path::new(base_str.as_ref()).join(path_str.as_ref());
+                        Ok(OnionObject::String(joined.to_string_lossy().to_string().into()).stabilize())
                     }
                     _ => Err(RuntimeError::InvalidType(
                         "Base and path must be strings".to_string(),
@@ -228,7 +228,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut system_params = IndexMap::new();
     system_params.insert(
         "command".to_string(),
-        OnionObject::String("".to_string()).stabilize(),
+        OnionObject::String("".to_string().into()).stabilize(),
     );
     module.insert(
         "system".to_string(),
@@ -245,7 +245,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut system_code_params = IndexMap::new();
     system_code_params.insert(
         "command".to_string(),
-        OnionObject::String("".to_string()).stabilize(),
+        OnionObject::String("".to_string().into()).stabilize(),
     );
     module.insert(
         "system_code".to_string(),
@@ -262,7 +262,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut chdir_params = IndexMap::new();
     chdir_params.insert(
         "path".to_string(),
-        OnionObject::String("".to_string()).stabilize(),
+        OnionObject::String("".to_string().into()).stabilize(),
     );
     module.insert(
         "chdir".to_string(),
@@ -315,7 +315,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut path_exists_params = IndexMap::new();
     path_exists_params.insert(
         "path".to_string(),
-        OnionObject::String("".to_string()).stabilize(),
+        OnionObject::String("".to_string().into()).stabilize(),
     );
     module.insert(
         "path_exists".to_string(),
@@ -332,7 +332,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut is_dir_params = IndexMap::new();
     is_dir_params.insert(
         "path".to_string(),
-        OnionObject::String("".to_string()).stabilize(),
+        OnionObject::String("".to_string().into()).stabilize(),
     );
     module.insert(
         "is_dir".to_string(),
@@ -349,7 +349,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut is_file_params = IndexMap::new();
     is_file_params.insert(
         "path".to_string(),
-        OnionObject::String("".to_string()).stabilize(),
+        OnionObject::String("".to_string().into()).stabilize(),
     );
     module.insert(
         "is_file".to_string(),
@@ -366,11 +366,11 @@ pub fn build_module() -> OnionStaticObject {
     let mut path_join_params = IndexMap::new();
     path_join_params.insert(
         "base".to_string(),
-        OnionObject::String("".to_string()).stabilize(),
+        OnionObject::String("".to_string().into()).stabilize(),
     );
     path_join_params.insert(
         "path".to_string(),
-        OnionObject::String("".to_string()).stabilize(),
+        OnionObject::String("".to_string().into()).stabilize(),
     );
     module.insert(
         "path_join".to_string(),

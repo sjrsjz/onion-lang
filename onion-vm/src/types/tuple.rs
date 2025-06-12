@@ -11,12 +11,12 @@ use super::object::{OnionObject, OnionObjectCell, OnionStaticObject};
 
 #[derive(Clone)]
 pub struct OnionTuple {
-    pub elements: Vec<OnionObjectCell>,
+    pub elements: Box<Vec<OnionObjectCell>>,
 }
 
 impl GCTraceable<OnionObjectCell> for OnionTuple {
     fn collect(&self, queue: &mut VecDeque<GCArcWeak<OnionObjectCell>>) {
-        for element in &self.elements {
+        for element in self.elements.as_ref() {
             element.collect(queue);
         }
     }
@@ -48,18 +48,28 @@ macro_rules! onion_tuple {
 
 impl OnionTuple {
     pub fn new(elements: Vec<OnionObjectCell>) -> Self {
-        OnionTuple { elements }
+        OnionTuple {
+            elements: elements.into(),
+        }
     }
 
     pub fn new_static(elements: Vec<&OnionStaticObject>) -> OnionStaticObject {
         OnionStaticObject::new(OnionObject::Tuple(OnionTuple {
-            elements: elements.into_iter().map(|e| e.weak().clone()).collect(),
+            elements: elements
+                .into_iter()
+                .map(|e| e.weak().clone())
+                .collect::<Vec<_>>()
+                .into(),
         }))
     }
 
     pub fn new_static_no_ref(elements: Vec<OnionStaticObject>) -> OnionStaticObject {
         OnionStaticObject::new(OnionObject::Tuple(OnionTuple {
-            elements: elements.into_iter().map(|e| e.weak().clone()).collect(),
+            elements: elements
+                .into_iter()
+                .map(|e| e.weak().clone())
+                .collect::<Vec<_>>()
+                .into(),
         }))
     }
     pub fn upgrade(&self) -> Option<Vec<GCArc<OnionObjectCell>>> {
@@ -67,7 +77,7 @@ impl OnionTuple {
             return None;
         }
         let mut arcs = Vec::new();
-        for element in &self.elements {
+        for element in self.elements.as_ref() {
             match element.upgrade() {
                 Some(arc) => arcs.extend(arc),
                 None => {}
@@ -112,7 +122,7 @@ impl OnionTuple {
     where
         F: Fn(&OnionObject) -> Result<R, RuntimeError>,
     {
-        for element in &self.elements {
+        for element in self.elements.as_ref() {
             match &*element.try_borrow()? {
                 OnionObject::Named(named) => {
                     if named.key.try_borrow()?.equals(key)? {
@@ -137,7 +147,7 @@ impl OnionTuple {
     where
         F: Fn(&mut OnionObject) -> Result<R, RuntimeError>,
     {
-        for element in &mut self.elements {
+        for element in self.elements.as_mut() {
             match &*element.try_borrow()? {
                 OnionObject::Named(named) => {
                     if named.key.try_borrow()?.equals(key)? {
@@ -172,7 +182,7 @@ impl OnionTuple {
         match other {
             OnionObject::Tuple(other_tuple) => {
                 let mut new_elements = self.elements.clone();
-                new_elements.extend(other_tuple.elements.clone());
+                new_elements.extend(other_tuple.elements.as_ref().clone());
                 Ok(OnionStaticObject::new(OnionObject::Tuple(OnionTuple {
                     elements: new_elements,
                 })))
@@ -184,7 +194,7 @@ impl OnionTuple {
     }
 
     pub fn contains(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
-        for element in &self.elements {
+        for element in self.elements.as_ref() {
             if element.try_borrow()?.equals(other)? {
                 return Ok(true);
             }
@@ -200,7 +210,7 @@ impl OnionTuple {
                 if self.elements.len() != other_tuple.elements.len() {
                     return Ok(false);
                 }
-                for (a, b) in self.elements.iter().zip(&other_tuple.elements) {
+                for (a, b) in self.elements.iter().zip(other_tuple.elements.as_ref()) {
                     if a.equals(b)? {
                         return Ok(false);
                     }

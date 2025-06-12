@@ -1,24 +1,22 @@
+use std::sync::Arc;
+
 use arc_gc::gc::GC;
 
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
     types::{
-        object::{OnionObject, OnionObjectCell, OnionStaticObject},
+        object::{OnionObject, OnionObjectCell},
         pair::OnionPair,
     },
 };
 
 pub struct Scheduler {
     pub(crate) runnable_stack: Vec<Box<dyn Runnable>>,
-    pub(crate) result: OnionStaticObject,
 }
 
 impl Scheduler {
     pub fn new(runnable_stack: Vec<Box<dyn Runnable>>) -> Self {
-        Scheduler {
-            runnable_stack,
-            result: OnionStaticObject::default(),
-        }
+        Scheduler { runnable_stack }
     }
 }
 
@@ -43,8 +41,7 @@ impl Runnable for Scheduler {
                     Ok(StepResult::Continue)
                 }
                 StepResult::ReplaceRunnable(new_runnable) => {
-                    self.runnable_stack.pop();
-                    self.runnable_stack.push(new_runnable);
+                    self.runnable_stack.last_mut().map(|r| *r = new_runnable);
                     Ok(StepResult::Continue)
                 }
                 StepResult::Return(result) => {
@@ -52,28 +49,33 @@ impl Runnable for Scheduler {
                     if let Some(top_runnable) = self.runnable_stack.last_mut() {
                         match top_runnable.receive(StepResult::Return(result.clone()), gc) {
                             Ok(_) => {}
+                            Err(RuntimeError::CustomValue(e)) => {
+                                return Ok(StepResult::Return(Box::new(OnionPair::new_static(
+                                    &OnionObject::Boolean(false).stabilize(),
+                                    &e,
+                                ))))
+                            }
                             Err(e) => {
                                 return Ok(StepResult::Return(Box::new(OnionPair::new_static(
                                     &OnionObject::Boolean(false).stabilize(),
-                                    &OnionObject::String(e.to_string()).stabilize(),
+                                    &OnionObject::String(Arc::new(e.to_string())).stabilize(),
                                 ))))
                             }
                         };
                         Ok(StepResult::Continue)
                     } else {
-                        self.result = *result;
+                        //self.result = *result;
                         Ok(StepResult::Return(Box::new(OnionPair::new_static(
                             &OnionObject::Boolean(true).stabilize(),
-                            &self.result.clone(),
+                            result.as_ref(),
                         ))))
                     }
                 }
             }
         } else {
-            Ok(StepResult::Return(Box::new(OnionPair::new_static(
-                &OnionObject::Boolean(true).stabilize(),
-                &self.result.clone(),
-            ))))
+            Err(RuntimeError::DetailedError(
+                "No runnable in stack".to_string(),
+            ))
         }
     }
     fn receive(
@@ -93,7 +95,6 @@ impl Runnable for Scheduler {
     fn copy(&self) -> Box<dyn Runnable> {
         Box::new(Scheduler {
             runnable_stack: self.runnable_stack.iter().map(|r| r.copy()).collect(),
-            result: self.result.clone(),
         })
     }
 

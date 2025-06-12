@@ -2,7 +2,8 @@ use std::{
     cell::RefCell,
     collections::VecDeque,
     fmt::{Debug, Display},
-    ptr::addr_eq, sync::Arc,
+    ptr::addr_eq,
+    sync::Arc,
 };
 
 use arc_gc::{
@@ -190,8 +191,8 @@ pub enum OnionObject {
     // immutable basic types
     Integer(i64),
     Float(f64),
-    String(String),
-    Bytes(Vec<u8>),
+    String(Arc<String>),
+    Bytes(Arc<Vec<u8>>),
     Boolean(bool),
     Range(i64, i64),
     Null,
@@ -286,10 +287,12 @@ impl OnionObject {
         self.with_data(|obj| {
             other.with_data(|other_obj| match (obj, other_obj) {
                 (OnionObject::Tuple(tuple), _) => tuple.contains(other_obj),
-                (OnionObject::String(s), OnionObject::String(other_s)) => Ok(s.contains(other_s)),
-                (OnionObject::Bytes(b), OnionObject::Bytes(other_b)) => {
-                    Ok(b.windows(other_b.len()).any(|window| window == other_b))
+                (OnionObject::String(s), OnionObject::String(other_s)) => {
+                    Ok(s.contains(other_s.as_ref()))
                 }
+                (OnionObject::Bytes(b), OnionObject::Bytes(other_b)) => Ok(b
+                    .windows(other_b.len())
+                    .any(|window| window == other_b.as_slice())),
                 (OnionObject::Range(l, r), OnionObject::Integer(i)) => Ok(*i >= *l && *i < *r),
                 (OnionObject::Range(start, end), OnionObject::Float(f)) => {
                     Ok(*f >= *start as f64 && *f < *end as f64)
@@ -446,10 +449,11 @@ impl OnionObject {
             match obj {
                 OnionObject::Integer(i) => Ok(i.to_string()),
                 OnionObject::Float(f) => Ok(f.to_string()),
-                OnionObject::String(s) => Ok(s.clone()),
-                OnionObject::Bytes(b) => {
-                    Ok(format!("$\"{}\"", general_purpose::STANDARD.encode(b)))
-                }
+                OnionObject::String(s) => Ok(s.as_ref().clone()),
+                OnionObject::Bytes(b) => Ok(format!(
+                    "$\"{}\"",
+                    general_purpose::STANDARD.encode(b.as_ref())
+                )),
                 OnionObject::Boolean(b) => Ok(if *b {
                     "true".to_string()
                 } else {
@@ -535,9 +539,10 @@ impl OnionObject {
                 OnionObject::Integer(i) => Ok(format!("{}", i)),
                 OnionObject::Float(f) => Ok(format!("{}", f)),
                 OnionObject::String(s) => Ok(format!("{:?}", s)),
-                OnionObject::Bytes(b) => {
-                    Ok(format!("$\"{}\"", general_purpose::STANDARD.encode(b)))
-                }
+                OnionObject::Bytes(b) => Ok(format!(
+                    "$\"{}\"",
+                    general_purpose::STANDARD.encode(b.as_ref())
+                )),
                 OnionObject::Boolean(b) => Ok(format!("{}", b)),
                 OnionObject::Null => Ok("null".to_string()),
                 OnionObject::Undefined(s) => Ok(match s {
@@ -624,7 +629,7 @@ impl OnionObject {
             OnionObject::Integer(i) => Ok(i.to_string().into_bytes()),
             OnionObject::Float(f) => Ok(f.to_string().into_bytes()),
             OnionObject::String(s) => Ok(s.as_bytes().to_vec()),
-            OnionObject::Bytes(b) => Ok(b.clone()),
+            OnionObject::Bytes(b) => Ok(b.as_ref().clone()),
             OnionObject::Boolean(b) => Ok(if *b {
                 b"true".to_vec()
             } else {
@@ -718,12 +723,14 @@ impl OnionObject {
                     Ok(OnionStaticObject::new(OnionObject::Float(f1 + *i2 as f64)))
                 }
                 (OnionObject::String(s1), OnionObject::String(s2)) => Ok(OnionStaticObject::new(
-                    OnionObject::String(format!("{}{}", s1, s2)),
+                    OnionObject::String(Arc::new(format!("{}{}", s1, s2))),
                 )),
                 (OnionObject::Bytes(b1), OnionObject::Bytes(b2)) => {
-                    let mut new_bytes = b1.clone();
+                    let mut new_bytes = b1.as_ref().clone();
                     new_bytes.extend_from_slice(b2);
-                    Ok(OnionStaticObject::new(OnionObject::Bytes(new_bytes)))
+                    Ok(OnionStaticObject::new(OnionObject::Bytes(Arc::new(
+                        new_bytes,
+                    ))))
                 }
                 (OnionObject::Range(start1, end1), OnionObject::Range(start2, end2)) => Ok(
                     OnionStaticObject::new(OnionObject::Range(start1 + start2, end1 + end2)),
@@ -1049,9 +1056,9 @@ impl OnionObject {
                         s
                     )));
                 }
-                Ok(OnionStaticObject::new(OnionObject::String(
+                Ok(OnionStaticObject::new(OnionObject::String(Arc::new(
                     s.chars().nth(index as usize).unwrap().to_string(),
-                )))
+                ))))
             }
             OnionObject::Bytes(b) => {
                 if index < 0 || index >= b.len() as i64 {
@@ -1060,9 +1067,9 @@ impl OnionObject {
                         b
                     )));
                 }
-                Ok(OnionStaticObject::new(OnionObject::Bytes(vec![
+                Ok(OnionStaticObject::new(OnionObject::Bytes(Arc::new(vec![
                     b[index as usize],
-                ])))
+                ]))))
             }
             _ => Err(RuntimeError::InvalidOperation(format!(
                 "index_of() not supported for {:?}",
@@ -1086,9 +1093,9 @@ impl OnionObject {
         self.with_data(|obj| match obj {
             OnionObject::Named(named) => Ok(named.get_value().clone().stabilize()),
             OnionObject::Pair(pair) => Ok(pair.get_value().clone().stabilize()),
-            OnionObject::Undefined(s) => Ok(OnionStaticObject::new(OnionObject::String(
+            OnionObject::Undefined(s) => Ok(OnionStaticObject::new(OnionObject::String(Arc::new(
                 s.clone().unwrap_or_else(|| "".to_string()),
-            ))),
+            )))),
             _ => Err(RuntimeError::InvalidOperation(format!(
                 "value_of() not supported for {:?}",
                 obj
@@ -1142,25 +1149,29 @@ impl Debug for GCArcStorage {
 }
 
 impl GCArcStorage {
+    #[inline(always)]
     pub fn from_option_vec(vec: Option<Vec<GCArc<OnionObjectCell>>>) -> Self {
         match vec {
             None => Self::None,
             Some(v) => match v.len() {
                 0 => Self::None,
-                1 => Self::Single(v.into_iter().next().unwrap()),
+                1 => Self::Single(v[0].clone()),
                 _ => Self::Multiple(v),
             },
         }
     }
 
+    #[inline(always)]
     pub fn is_empty(&self) -> bool {
         matches!(self, Self::None)
     }
 
+    #[inline(always)]
     pub fn is_none(&self) -> bool {
         matches!(self, Self::None)
     }
 
+    #[inline(always)]
     pub fn len(&self) -> usize {
         match self {
             Self::None => 0,
@@ -1257,11 +1268,11 @@ mod tests {
     #[test]
     fn test_detailed_memory_sizes() {
         println!("详细内存分析:");
-        println!("OnionObject: {} bytes", std::mem::size_of::<OnionObject>());
         println!(
             "OnionObjectCell: {} bytes",
             std::mem::size_of::<OnionObjectCell>()
         );
+        println!("OnionObject: {} bytes", std::mem::size_of::<OnionObject>());
         println!(
             "OnionStaticObject: {} bytes",
             std::mem::size_of::<OnionStaticObject>()
@@ -1270,49 +1281,26 @@ mod tests {
             "GCArcStorage: {} bytes",
             std::mem::size_of::<GCArcStorage>()
         );
-
-        // 分析OnionObject各个变体的大小
-        println!("\nOnionObject变体分析:");
-        println!("String: {} bytes", std::mem::size_of::<String>());
-        println!("Vec<u8>: {} bytes", std::mem::size_of::<Vec<u8>>());
+        println!(
+            "GCArc<OnionObjectCell>: {} bytes",
+            std::mem::size_of::<GCArc<OnionObjectCell>>()
+        );
+        println!("Arc<String>: {} bytes", std::mem::size_of::<Arc<String>>());
+        println!(
+            "Arc<Vec<u8>>: {} bytes",
+            std::mem::size_of::<Arc<Vec<u8>>>()
+        );
+        println!(
+            "GCArcWeak<OnionObjectCell>: {} bytes",
+            std::mem::size_of::<GCArcWeak<OnionObjectCell>>()
+        );
         println!("OnionTuple: {} bytes", std::mem::size_of::<OnionTuple>());
-        println!("OnionPair: {} bytes", std::mem::size_of::<OnionPair>());
         println!("OnionNamed: {} bytes", std::mem::size_of::<OnionNamed>());
+        println!("OnionPair: {} bytes", std::mem::size_of::<OnionPair>());
         println!(
             "OnionLazySet: {} bytes",
             std::mem::size_of::<OnionLazySet>()
         );
-        println!(
-            "Box<VMInstructionPackage>: {} bytes",
-            std::mem::size_of::<Box<VMInstructionPackage>>()
-        );
-        println!(
-            "Box<OnionLambdaDefinition>: {} bytes",
-            std::mem::size_of::<Box<OnionLambdaDefinition>>()
-        );
-        println!(
-            "OnionMut: {} bytes",
-            std::mem::size_of::<GCArcWeak<OnionObjectCell>>()
-        );
-        println!(
-            "OnionObject::Undefined: {} bytes",
-            std::mem::size_of::<Option<String>>()
-        );
-        println!(
-            "OnionObject::Range: {} bytes",
-            std::mem::size_of::<(i64, i64)>()
-        );
-
-        // RefCell的开销
-        println!("\nRefCell开销:");
-        println!(
-            "RefCell<OnionObject>: {} bytes",
-            std::mem::size_of::<RefCell<OnionObject>>()
-        );
-        println!("基础类型对比:");
-        println!("i64: {} bytes", std::mem::size_of::<i64>());
-        println!("f64: {} bytes", std::mem::size_of::<f64>());
-        println!("bool: {} bytes", std::mem::size_of::<bool>());
     }
 
     #[test]
@@ -1451,7 +1439,7 @@ mod tests {
 
         for i in 0..500_000 {
             // 创建字符串对象
-            let str_obj = OnionObject::String(format!("string_{}", i)).stabilize();
+            let str_obj = OnionObject::String(Arc::new(format!("string_{}", i))).stabilize();
 
             // 获取字符串长度（模拟len()操作）
             if let Ok(len_obj) = str_obj.weak().with_data(|data| data.len()) {
@@ -1461,7 +1449,7 @@ mod tests {
             }
 
             // 字符串拼接操作
-            let suffix = OnionObject::String("_suffix".to_string()).stabilize();
+            let suffix = OnionObject::String(Arc::new("_suffix".to_string())).stabilize();
             if let Ok(concat_result) = str_obj.weak().with_data(|str_data| {
                 suffix
                     .weak()

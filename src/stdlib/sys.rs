@@ -14,7 +14,7 @@ fn argv(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let args: Vec<_> = env::args()
-        .map(|arg| OnionObject::String(arg).to_cell())
+        .map(|arg| OnionObject::String(arg.into()).to_cell().into())
         .collect();
     
     Ok(OnionObject::Tuple(onion_vm::types::tuple::OnionTuple::new(args)).stabilize())
@@ -29,8 +29,8 @@ fn getenv(
         let key = get_attr_direct(data, "key".to_string())?;
         key.weak().with_data(|key_data| match key_data {
             OnionObject::String(key_str) => {
-                match env::var(key_str) {
-                    Ok(value) => Ok(OnionObject::String(value).stabilize()),
+                match env::var(key_str.as_ref()) {
+                    Ok(value) => Ok(OnionObject::String(value.into()).stabilize()),
                     Err(_) => Ok(OnionObject::Null.stabilize()),
                 }
             }
@@ -54,7 +54,7 @@ fn setenv(
             value.weak().with_data(|value_data| {
                 match (key_data, value_data) {
                     (OnionObject::String(key_str), OnionObject::String(value_str)) => {
-                        env::set_var(key_str, value_str);
+                        env::set_var(key_str.as_ref(), value_str.as_ref());
                         Ok(OnionObject::Null.stabilize())
                     }
                     _ => Err(RuntimeError::InvalidType(
@@ -75,7 +75,7 @@ fn unsetenv(
         let key = get_attr_direct(data, "key".to_string())?;
         key.weak().with_data(|key_data| match key_data {
             OnionObject::String(key_str) => {
-                env::remove_var(key_str);
+                env::remove_var(key_str.as_ref());
                 Ok(OnionObject::Null.stabilize())
             }
             _ => Err(RuntimeError::InvalidType(
@@ -92,8 +92,8 @@ fn environ(
 ) -> Result<OnionStaticObject, RuntimeError> {
     let env_vars: Vec<_> = env::vars()
         .map(|(key, value)| {
-            let key_obj = OnionObject::String(key).to_cell();
-            let value_obj = OnionObject::String(value).to_cell();
+            let key_obj = OnionObject::String(key.into()).to_cell();
+            let value_obj = OnionObject::String(value.into()).to_cell();
             OnionObject::Pair(onion_vm::types::pair::OnionPair::new(key_obj, value_obj)).to_cell()
         })
         .collect();
@@ -107,7 +107,7 @@ fn getcwd(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     match env::current_dir() {
-        Ok(path) => Ok(OnionObject::String(path.to_string_lossy().to_string()).stabilize()),
+        Ok(path) => Ok(OnionObject::String(path.to_string_lossy().to_string().into()).stabilize()),
         Err(e) => Err(RuntimeError::DetailedError(format!(
             "Failed to get current directory: {}", e
         ))),
@@ -148,7 +148,7 @@ fn platform(
         "unknown"
     };
     
-    Ok(OnionObject::String(platform.to_string()).stabilize())
+    Ok(OnionObject::String(platform.to_string().into()).stabilize())
 }
 
 /// 获取系统架构信息
@@ -168,7 +168,7 @@ fn arch(
         "unknown"
     };
     
-    Ok(OnionObject::String(arch.to_string()).stabilize())
+    Ok(OnionObject::String(arch.to_string().into()).stabilize())
 }
 
 /// 获取程序执行路径
@@ -177,7 +177,7 @@ fn executable(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     match env::current_exe() {
-        Ok(path) => Ok(OnionObject::String(path.to_string_lossy().to_string()).stabilize()),
+        Ok(path) => Ok(OnionObject::String(path.to_string_lossy().to_string().into()).stabilize()),
         Err(e) => Err(RuntimeError::DetailedError(format!(
             "Failed to get executable path: {}", e
         ))),
@@ -204,7 +204,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut getenv_params = IndexMap::new();
     getenv_params.insert(
         "key".to_string(),
-        OnionObject::String("".to_string()).stabilize(),
+        OnionObject::String("".to_string().into()).stabilize(),
     );
     module.insert(
         "getenv".to_string(),
@@ -221,11 +221,11 @@ pub fn build_module() -> OnionStaticObject {
     let mut setenv_params = IndexMap::new();
     setenv_params.insert(
         "key".to_string(),
-        OnionObject::String("".to_string()).stabilize(),
+        OnionObject::String("".to_string().into()).stabilize(),
     );
     setenv_params.insert(
         "value".to_string(),
-        OnionObject::String("".to_string()).stabilize(),
+        OnionObject::String("".to_string().into()).stabilize(),
     );
     module.insert(
         "setenv".to_string(),
@@ -242,7 +242,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut unsetenv_params = IndexMap::new();
     unsetenv_params.insert(
         "key".to_string(),
-        OnionObject::String("".to_string()).stabilize(),
+        OnionObject::String("".to_string().into()).stabilize(),
     );
     module.insert(
         "unsetenv".to_string(),

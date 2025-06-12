@@ -125,8 +125,6 @@ static INSTRUCTION_TABLE: std::sync::LazyLock<Vec<InstructionHandler>> =
 pub struct OnionLambdaRunnable {
     pub(crate) argument: OnionStaticObject,
     pub(crate) result: OnionStaticObject,
-    pub(crate) capture: OnionStaticObject,
-    pub(crate) self_object: OnionStaticObject,
     pub(crate) this_lambda: OnionStaticObject,
     pub(crate) context: Context,
     pub(crate) ip: isize, // Instruction pointer
@@ -136,9 +134,8 @@ pub struct OnionLambdaRunnable {
 impl OnionLambdaRunnable {
     pub fn new(
         argument: OnionStaticObject,
-        capture: OnionStaticObject,
-        self_object: OnionStaticObject,
-        this_lambda: OnionStaticObject,
+        self_object: &OnionObjectCell,
+        this_lambda: &OnionStaticObject,
         instruction: Arc<VMInstructionPackage>,
         ip: isize,
     ) -> Result<Self, RuntimeError> {
@@ -150,12 +147,6 @@ impl OnionLambdaRunnable {
                 stack: Vec::new(),
             },
         );
-
-        let OnionObject::Tuple(tuple) = &*argument.weak().try_borrow()? else {
-            return Err(RuntimeError::InvalidOperation(
-                "Argument must be a tuple".to_string(),
-            ));
-        };
 
         let (index_this, index_self, index_arguments) = {
             let string_pool = instruction.get_string_pool();
@@ -201,7 +192,7 @@ impl OnionLambdaRunnable {
             })?;
 
         new_context
-            .let_variable(index_self, self_object.clone())
+            .let_variable(index_self, self_object.clone().stabilize())
             .map_err(|e| {
                 RuntimeError::InvalidOperation(format!(
                     "Failed to initialize 'self' variable: {}",
@@ -217,40 +208,44 @@ impl OnionLambdaRunnable {
                     e
                 ))
             })?;
-        for item in tuple.elements.iter() {
-            match &*item.try_borrow()? {
-                OnionObject::Named(named) => {
-                    named.get_key().with_data(|key| match key {
-                        OnionObject::String(key_str) => {
-                            match instruction
-                                .get_string_pool()
-                                .iter()
-                                .position(|s| *s == *key_str)
-                            {
-                                Some(index) => new_context
-                                    .let_variable(index, named.get_value().clone().stabilize()),
-                                None => {
-                                    // do nothing because the runnable does not need this variable
-                                    Ok(())
+
+        let pool = instruction.get_string_pool();
+
+        argument.weak().try_borrow()?.with_data(|data| {
+            if let OnionObject::Tuple(tuple) = data {
+                for item in tuple.elements.iter() {
+                    match &*item.try_borrow()? {
+                        OnionObject::Named(named) => {
+                            named.get_key().with_data(|key| match key {
+                                OnionObject::String(key_str) => {
+                                    match pool.iter().position(|s| s.eq(key_str.as_ref())) {
+                                        Some(index) => new_context.let_variable(
+                                            index,
+                                            named.get_value().clone().stabilize(),
+                                        ),
+                                        None => {
+                                            // do nothing because the runnable does not need this variable
+                                            Ok(())
+                                        }
+                                    }
                                 }
-                            }
-                            // new_context.let_variable(
-                            //     key_str.clone(),
-                            //     named.get_value().clone().stabilize(),
-                            // )
+                                _ => Ok(()),
+                            })?;
                         }
-                        _ => Ok(()),
-                    })?;
+                        _ => {}
+                    }
                 }
-                _ => {}
+                Ok(())
+            } else {
+                Err(RuntimeError::InvalidOperation(
+                    "Argument must be a tuple".to_string(),
+                ))
             }
-        }
+        })?;
 
         Ok(OnionLambdaRunnable {
-            argument: argument.clone(),
-            capture,
-            self_object,
-            this_lambda,
+            argument,
+            this_lambda: this_lambda.clone(),
             result: OnionStaticObject::default(),
             context: new_context,
             ip,
@@ -316,8 +311,6 @@ impl Runnable for OnionLambdaRunnable {
     fn copy(&self) -> Box<dyn Runnable> {
         Box::new(OnionLambdaRunnable {
             argument: self.argument.clone(),
-            capture: self.capture.clone(),
-            self_object: self.self_object.clone(),
             this_lambda: self.this_lambda.clone(),
             result: self.result.clone(),
             context: self.context.clone(),
@@ -338,8 +331,6 @@ impl Runnable for OnionLambdaRunnable {
             "frames": stack_json_array,
             "ip": self.ip,
             "argument": self.argument.to_string(),
-            "capture": self.capture.to_string(),
-            "self_object": self.self_object.to_string(),
             "this_lambda": self.this_lambda.to_string(),
             "result": self.result.to_string(),
         }))
@@ -348,12 +339,14 @@ impl Runnable for OnionLambdaRunnable {
 #[cfg(test)]
 mod size_tests {
     use super::*;
-    
+
     #[test]
     fn print_sizes() {
         println!("StepResult size: {}", std::mem::size_of::<StepResult>());
         println!("RuntimeError size: {}", std::mem::size_of::<RuntimeError>());
-        println!("Result<StepResult, RuntimeError> size: {}", 
-                 std::mem::size_of::<Result<StepResult, RuntimeError>>());
+        println!(
+            "Result<StepResult, RuntimeError> size: {}",
+            std::mem::size_of::<Result<StepResult, RuntimeError>>()
+        );
     }
 }

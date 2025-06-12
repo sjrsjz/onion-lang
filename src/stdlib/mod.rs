@@ -27,7 +27,7 @@ pub fn build_named_dict(dict: IndexMap<String, OnionStaticObject>) -> OnionStati
     let mut pairs = vec![];
     for (key, value) in dict {
         pairs.push(OnionNamed::new_static(
-            &OnionObject::String(key).stabilize(),
+            &OnionObject::String(key.into()).stabilize(),
             &value,
         ));
     }
@@ -35,7 +35,7 @@ pub fn build_named_dict(dict: IndexMap<String, OnionStaticObject>) -> OnionStati
 }
 
 pub fn get_attr_direct(obj: &OnionObject, key: String) -> Result<OnionStaticObject, RuntimeError> {
-    obj.with_attribute(&OnionObject::String(key), &|obj| {
+    obj.with_attribute(&OnionObject::String(key.into()), &|obj| {
         Ok(obj.clone().stabilize())
     })
 }

@@ -1,3 +1,5 @@
+use std::vec;
+
 use indexmap::IndexMap;
 use onion_vm::{
     lambda::runnable::RuntimeError,
@@ -15,7 +17,7 @@ fn to_string(
     argument.weak().with_data(|data| {
         let value = get_attr_direct(data, "value".to_string())?;
         let string_representation = value.weak().try_borrow()?.to_string(&vec![])?;
-        Ok(OnionObject::String(string_representation).stabilize())
+        Ok(OnionObject::String(string_representation.into()).stabilize())
     })
 }
 
@@ -117,7 +119,7 @@ fn type_of(
 
         value.weak().with_data(|data| {
             let type_name = data.type_of()?;
-            Ok(OnionObject::String(type_name).stabilize())
+            Ok(OnionObject::String(type_name.into()).stabilize())
         })
     })
 }
@@ -206,13 +208,22 @@ fn to_bytes(
         let value = get_attr_direct(data, "value".to_string())?;
 
         value.weak().with_data(|data| match data {
-            OnionObject::String(s) => Ok(OnionObject::Bytes(s.as_bytes().to_vec()).stabilize()),
+            OnionObject::String(s) => {
+                Ok(OnionObject::Bytes(s.as_bytes().to_vec().into()).stabilize())
+            }
             OnionObject::Bytes(b) => Ok(OnionObject::Bytes(b.clone()).stabilize()),
-            OnionObject::Integer(i) => Ok(OnionObject::Bytes(i.to_string().into_bytes()).stabilize()),
-            OnionObject::Float(f) => Ok(OnionObject::Bytes(f.to_string().into_bytes()).stabilize()),
-            OnionObject::Boolean(b) => Ok(OnionObject::Bytes(
-                if *b { b"true".to_vec() } else { b"false".to_vec() }
-            ).stabilize()),
+            OnionObject::Integer(i) => {
+                Ok(OnionObject::Bytes(i.to_string().into_bytes().into()).stabilize())
+            }
+            OnionObject::Float(f) => {
+                Ok(OnionObject::Bytes(f.to_string().into_bytes().into()).stabilize())
+            }
+            OnionObject::Boolean(b) => Ok(OnionObject::Bytes(if *b {
+                vec![1u8].into()
+            } else {
+                vec![0u8].into()
+            })
+            .stabilize()),
             _ => Err(RuntimeError::InvalidOperation(format!(
                 "Cannot convert {:?} to bytes",
                 data
@@ -304,7 +315,8 @@ pub fn build_module() -> OnionStaticObject {
     to_bool_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Value to convert to boolean".to_string())).stabilize(),
-    );    module.insert(
+    );
+    module.insert(
         "to_bool".to_string(),
         wrap_native_function(
             &build_named_dict(to_bool_params),
@@ -401,7 +413,8 @@ pub fn build_module() -> OnionStaticObject {
     is_bool_params.insert(
         "value".to_string(),
         OnionObject::Undefined(Some("Value to check if is boolean".to_string())).stabilize(),
-    );    module.insert(
+    );
+    module.insert(
         "is_bool".to_string(),
         wrap_native_function(
             &build_named_dict(is_bool_params),

@@ -189,12 +189,12 @@ impl Runnable for AsyncHttpRequest {
                 // 请求完成，返回结果
                 match result {
                     Ok(response) => {
-                        let response_obj = OnionObject::String(response).stabilize();
+                        let response_obj = OnionObject::String(response.into()).stabilize();
                         Ok(StepResult::Return(Box::new(response_obj)))
                     }
                     Err(error) => {
                         let error_obj =
-                            OnionObject::String(format!("HTTP Error: {}", error)).stabilize();
+                            OnionObject::String(format!("HTTP Error: {}", error).into()).stabilize();
                         Ok(StepResult::Return(Box::new(error_obj)))
                     }
                 }
@@ -264,7 +264,7 @@ fn parse_request_params(
 
         // 获取方法，默认为GET
         let method = get_attr_direct(data, "method".to_string())
-            .unwrap_or_else(|_| OnionObject::String("GET".to_string()).stabilize())
+            .unwrap_or_else(|_| OnionObject::String("GET".to_string().into()).stabilize())
             .weak()
             .try_borrow()?
             .to_string(&vec![])
@@ -274,7 +274,7 @@ fn parse_request_params(
         let mut headers = IndexMap::new();
         if let Ok(headers_obj) = get_attr_direct(data, "headers".to_string()) {
             if let OnionObject::Tuple(headers_tuple) = &*headers_obj.weak().try_borrow()? {
-                for element in &headers_tuple.elements {
+                for element in headers_tuple.elements.as_ref() {
                     if let OnionObject::Named(named) = &*element.try_borrow()? {
                         let key = named
                             .get_key()
@@ -496,8 +496,8 @@ fn http_get_sync(
     // 直接执行HTTP请求并返回结果
     let headers = IndexMap::new();
     match AsyncHttpRequest::perform_http_request(&url, "GET", &headers, None) {
-        Ok(response) => Ok(OnionObject::String(response).stabilize()),
-        Err(error) => Ok(OnionObject::String(format!("HTTP Error: {}", error)).stabilize()),
+        Ok(response) => Ok(OnionObject::String(response.into()).stabilize()),
+        Err(error) => Ok(OnionObject::String(format!("HTTP Error: {}", error).into()).stabilize()),
     }
 }
 
@@ -522,8 +522,8 @@ fn http_post_sync(
 
     let headers = IndexMap::new();
     match AsyncHttpRequest::perform_http_request(&url, "POST", &headers, body.as_deref()) {
-        Ok(response) => Ok(OnionObject::String(response).stabilize()),
-        Err(error) => Ok(OnionObject::String(format!("HTTP Error: {}", error)).stabilize()),
+        Ok(response) => Ok(OnionObject::String(response.into()).stabilize()),
+        Err(error) => Ok(OnionObject::String(format!("HTTP Error: {}", error).into()).stabilize()),
     }
 }
 
@@ -535,7 +535,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut get_params = IndexMap::new();
     get_params.insert(
         "url".to_string(),
-        OnionObject::String("".to_string()).stabilize(),
+        OnionObject::String("".to_string().into()).stabilize(),
     );
 
     module.insert(
@@ -553,11 +553,11 @@ pub fn build_module() -> OnionStaticObject {
     let mut post_params = IndexMap::new();
     post_params.insert(
         "url".to_string(),
-        OnionObject::String("".to_string()).stabilize(),
+        OnionObject::String("".to_string().into()).stabilize(),
     );
     post_params.insert(
         "body".to_string(),
-        OnionObject::String("{}".to_string()).stabilize(),
+        OnionObject::String("{}".to_string().into()).stabilize(),
     );
 
     module.insert(
@@ -575,11 +575,11 @@ pub fn build_module() -> OnionStaticObject {
     let mut put_params = IndexMap::new();
     put_params.insert(
         "url".to_string(),
-        OnionObject::String("".to_string()).stabilize(),
+        OnionObject::String("".to_string().into()).stabilize(),
     );
     put_params.insert(
         "body".to_string(),
-        OnionObject::String("{}".to_string()).stabilize(),
+        OnionObject::String("{}".to_string().into()).stabilize(),
     );
 
     module.insert(
@@ -597,7 +597,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut delete_params = IndexMap::new();
     delete_params.insert(
         "url".to_string(),
-        OnionObject::String("".to_string()).stabilize(),
+        OnionObject::String("".to_string().into()).stabilize(),
     );
 
     module.insert(
@@ -613,11 +613,11 @@ pub fn build_module() -> OnionStaticObject {
     let mut patch_params = IndexMap::new();
     patch_params.insert(
         "url".to_string(),
-        OnionObject::String("".to_string()).stabilize(),
+        OnionObject::String("".to_string().into()).stabilize(),
     );
     patch_params.insert(
         "body".to_string(),
-        OnionObject::String("{}".to_string()).stabilize(),
+        OnionObject::String("{}".to_string().into()).stabilize(),
     );
 
     module.insert(
@@ -635,7 +635,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut get_sync_params = IndexMap::new();
     get_sync_params.insert(
         "url".to_string(),
-        OnionObject::String("".to_string()).stabilize(),
+        OnionObject::String("".to_string().into()).stabilize(),
     );
 
     module.insert(
@@ -653,11 +653,11 @@ pub fn build_module() -> OnionStaticObject {
     let mut post_sync_params = IndexMap::new();
     post_sync_params.insert(
         "url".to_string(),
-        OnionObject::String("".to_string()).stabilize(),
+        OnionObject::String("".to_string().into()).stabilize(),
     );
     post_sync_params.insert(
         "body".to_string(),
-        OnionObject::String("{}".to_string()).stabilize(),
+        OnionObject::String("{}".to_string().into()).stabilize(),
     );
 
     module.insert(
@@ -675,16 +675,16 @@ pub fn build_module() -> OnionStaticObject {
     let mut request_params = IndexMap::new();
     request_params.insert(
         "url".to_string(),
-        OnionObject::String("".to_string()).stabilize(),
+        OnionObject::String("".to_string().into()).stabilize(),
     );
     request_params.insert(
         "method".to_string(),
-        OnionObject::String("GET".to_string()).stabilize(),
+        OnionObject::String("GET".to_string().into()).stabilize(),
     );
     request_params.insert("headers".to_string(), onion_tuple!());
     request_params.insert(
         "body".to_string(),
-        OnionObject::String("".to_string()).stabilize(),
+        OnionObject::String("".to_string().into()).stabilize(),
     );
 
     module.insert(

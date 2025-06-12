@@ -97,9 +97,8 @@ impl OnionLambdaDefinition {
             LambdaBody::Instruction(instruction) => {
                 let runnable = OnionLambdaRunnable::new(
                     argument,
-                    self.capture.clone().stabilize(),
-                    self.self_object.clone().stabilize(),
-                    this_lambda.clone(),
+                    self.self_object.as_ref(),
+                    this_lambda,
                     instruction.clone(),
                     match instruction.get_table().get(&self.signature) {
                         Some(ip) => *ip as isize,
@@ -154,7 +153,7 @@ impl OnionLambdaDefinition {
             OnionObject::String(s) if s.as_str() == "capture" => f(&*self.capture.try_borrow()?),
             OnionObject::String(s) if s.as_str() == "self" => f(&*self.self_object.try_borrow()?),
             OnionObject::String(s) if s.as_str() == "signature" => {
-                f(&OnionObject::String(self.signature.clone()))
+                f(&OnionObject::String(Arc::new(self.signature.clone())))
             }
             _ => Err(RuntimeError::InvalidOperation(format!(
                 "Attribute '{:?}' not found in lambda definition",
