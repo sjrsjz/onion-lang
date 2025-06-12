@@ -58,3 +58,13 @@ pub trait Runnable {
 
     fn format_context(&self) -> Result<Value, RuntimeError>;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn check_step_result_size() {
+        println!("Size of StepResult: {}", std::mem::size_of::<StepResult>());
+    }
+}

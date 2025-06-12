@@ -56,10 +56,10 @@ impl Display for LambdaBody {
 
 #[derive(Clone)]
 pub struct OnionLambdaDefinition {
-    pub(crate) parameter: Box<OnionObjectCell>,
+    pub(crate) parameter: Box<OnionObject>,
     pub(crate) body: LambdaBody,
-    pub(crate) capture: Box<OnionObjectCell>,
-    pub(crate) self_object: Box<OnionObjectCell>,
+    pub(crate) capture: Box<OnionObject>,
+    pub(crate) self_object: Box<OnionObject>,
     pub(crate) signature: String,
 }
 
@@ -76,11 +76,11 @@ impl OnionLambdaDefinition {
             body,
             capture: Box::new(match capture {
                 Some(capture) => capture.weak().clone(),
-                None => OnionObject::Undefined(None).to_cell(),
+                None => OnionObject::Undefined(None),
             }),
             self_object: Box::new(match self_object {
                 Some(self_object) => self_object.weak().clone(),
-                None => OnionObject::Undefined(None).to_cell(),
+                None => OnionObject::Undefined(None),
             }),
             signature,
         }))
@@ -120,26 +120,10 @@ impl OnionLambdaDefinition {
         }
     }
 
-    pub fn upgrade(&self) -> Option<Vec<GCArc<OnionObjectCell>>> {
-        let mut arcs = Vec::new();
-        if let Some(param_arcs) = self.parameter.upgrade() {
-            arcs.extend(param_arcs);
-        }
-        if let Some(capture_arcs) = self.capture.upgrade() {
-            arcs.extend(capture_arcs);
-        }
-        if let Some(self_object_arcs) = self.self_object.upgrade() {
-            arcs.extend(self_object_arcs);
-        }
-        // match &self.body {
-        //     LambdaBody::Instruction(_) => {}
-        //     LambdaBody::NativeFunction(_) => {}
-        // }
-        if arcs.is_empty() {
-            None
-        } else {
-            Some(arcs)
-        }
+    pub fn upgrade(&self, collected: &mut Vec<GCArc<OnionObjectCell>>) {
+        self.parameter.upgrade(collected);
+        self.capture.upgrade(collected);
+        self.self_object.upgrade(collected);
     }
 
     pub fn with_attribute<F, R>(&self, key: &OnionObject, f: &F) -> Result<R, RuntimeError>
@@ -147,11 +131,9 @@ impl OnionLambdaDefinition {
         F: Fn(&OnionObject) -> Result<R, RuntimeError>,
     {
         match key {
-            OnionObject::String(s) if s.as_str() == "parameter" => {
-                f(&*self.parameter.try_borrow()?)
-            }
-            OnionObject::String(s) if s.as_str() == "capture" => f(&*self.capture.try_borrow()?),
-            OnionObject::String(s) if s.as_str() == "self" => f(&*self.self_object.try_borrow()?),
+            OnionObject::String(s) if s.as_str() == "parameter" => f(&self.parameter),
+            OnionObject::String(s) if s.as_str() == "capture" => f(&self.capture),
+            OnionObject::String(s) if s.as_str() == "self" => f(&self.self_object),
             OnionObject::String(s) if s.as_str() == "signature" => {
                 f(&OnionObject::String(Arc::new(self.signature.clone())))
             }
@@ -167,15 +149,9 @@ impl OnionLambdaDefinition {
         F: Fn(&mut OnionObject) -> Result<R, RuntimeError>,
     {
         match key {
-            OnionObject::String(s) if s.as_str() == "parameter" => {
-                f(&mut *self.parameter.try_borrow_mut()?)
-            }
-            OnionObject::String(s) if s.as_str() == "capture" => {
-                f(&mut *self.capture.try_borrow_mut()?)
-            }
-            OnionObject::String(s) if s.as_str() == "self" => {
-                f(&mut *self.self_object.try_borrow_mut()?)
-            }
+            OnionObject::String(s) if s.as_str() == "parameter" => f(&mut self.parameter),
+            OnionObject::String(s) if s.as_str() == "capture" => f(&mut self.capture),
+            OnionObject::String(s) if s.as_str() == "self" => f(&mut self.self_object),
             _ => Err(RuntimeError::InvalidOperation(format!(
                 "Attribute '{:?}' not found in lambda definition",
                 key
@@ -187,17 +163,13 @@ impl OnionLambdaDefinition {
     where
         F: Fn(&OnionObject) -> Result<R, RuntimeError>,
     {
-        f(&*self.parameter.try_borrow()?)
+        f(&self.parameter)
     }
 }
 
 impl GCTraceable<OnionObjectCell> for OnionLambdaDefinition {
     fn collect(&self, queue: &mut VecDeque<GCArcWeak<OnionObjectCell>>) {
         self.parameter.collect(queue);
-        // match &self.body {
-        //     LambdaBody::Instruction(instruction) => _,
-        //     LambdaBody::NativeFunction(_) => {}
-        // }
         self.capture.collect(queue);
         self.self_object.collect(queue);
     }

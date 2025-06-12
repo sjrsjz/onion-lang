@@ -134,7 +134,7 @@ pub struct OnionLambdaRunnable {
 impl OnionLambdaRunnable {
     pub fn new(
         argument: OnionStaticObject,
-        self_object: &OnionObjectCell,
+        self_object: &OnionObject,
         this_lambda: &OnionStaticObject,
         instruction: Arc<VMInstructionPackage>,
         ip: isize,
@@ -211,7 +211,7 @@ impl OnionLambdaRunnable {
 
         let pool = instruction.get_string_pool();
 
-        argument.weak().try_borrow()?.with_data(|data| {
+        argument.weak().with_data(|data| {
             if let OnionObject::Tuple(tuple) = data {
                 for item in tuple.elements.iter() {
                     match &*item.try_borrow()? {

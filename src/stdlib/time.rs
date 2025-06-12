@@ -67,7 +67,7 @@ fn sleep_seconds(
     let seconds = argument.weak().with_data(|data| {
         get_attr_direct(data, "seconds".to_string())?
             .weak()
-            .try_borrow()?
+            
             .to_integer()
             .map_err(|e| RuntimeError::InvalidType(format!("Invalid seconds: {}", e)))
     })?;
@@ -90,7 +90,7 @@ fn sleep_millis(
     let millis = argument.weak().with_data(|data| {
         get_attr_direct(data, "millis".to_string())?
             .weak()
-            .try_borrow()?
+            
             .to_integer()
             .map_err(|e| RuntimeError::InvalidType(format!("Invalid milliseconds: {}", e)))
     })?;
@@ -113,7 +113,7 @@ fn sleep_micros(
     let micros = argument.weak().with_data(|data| {
         get_attr_direct(data, "micros".to_string())?
             .weak()
-            .try_borrow()?
+            
             .to_integer()
             .map_err(|e| RuntimeError::InvalidType(format!("Invalid microseconds: {}", e)))
     })?;
@@ -181,7 +181,7 @@ fn format_time(
     let timestamp = argument.weak().with_data(|data| {
         get_attr_direct(data, "timestamp".to_string())?
             .weak()
-            .try_borrow()?
+            
             .to_integer()
             .map_err(|e| RuntimeError::InvalidType(format!("Invalid timestamp: {}", e)))
     })?;
@@ -204,13 +204,13 @@ fn time_diff(
     let (start, end) = argument.weak().with_data(|data| {
         let start = get_attr_direct(data, "start".to_string())?
             .weak()
-            .try_borrow()?
+            
             .to_integer()
             .map_err(|e| RuntimeError::InvalidType(format!("Invalid start timestamp: {}", e)))?;
 
         let end = get_attr_direct(data, "end".to_string())?
             .weak()
-            .try_borrow()?
+            
             .to_integer()
             .map_err(|e| RuntimeError::InvalidType(format!("Invalid end timestamp: {}", e)))?;
 
@@ -288,7 +288,7 @@ fn async_sleep(
     let millis = argument.weak().with_data(|data| {
         get_attr_direct(data, "millis".to_string())?
             .weak()
-            .try_borrow()?
+            
             .to_integer()
             .map_err(|e| RuntimeError::InvalidType(format!("Invalid milliseconds: {}", e)))
     })?;

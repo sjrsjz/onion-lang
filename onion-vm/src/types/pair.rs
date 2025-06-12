@@ -38,8 +38,8 @@ impl OnionPair {
 
     pub fn new_static(key: &OnionStaticObject, value: &OnionStaticObject) -> OnionStaticObject {
         OnionObject::Pair(OnionPair {
-            key: Box::new(key.weak().clone()),
-            value: Box::new(value.weak().clone()),
+            key: Box::new(key.weak().clone().to_cell()),
+            value: Box::new(value.weak().clone().to_cell()),
         })
         .stabilize()
     }
@@ -60,16 +60,9 @@ impl OnionPair {
         &mut self.value
     }
 
-    pub fn upgrade(&self) -> Option<Vec<GCArc<OnionObjectCell>>> {
-        match (self.key.upgrade(), self.value.upgrade()) {
-            (Some(mut key_arcs), Some(value_arcs)) => {
-                key_arcs.extend(value_arcs);
-                Some(key_arcs)
-            }
-            (Some(key_arcs), None) => Some(key_arcs),
-            (None, Some(value_arcs)) => Some(value_arcs),
-            (None, None) => None,
-        }
+    pub fn upgrade(&self, collected: &mut Vec<GCArc<OnionObjectCell>>) {
+        self.key.upgrade(collected);
+        self.value.upgrade(collected)
     }
 }
 

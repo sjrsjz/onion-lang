@@ -194,7 +194,8 @@ impl Runnable for AsyncHttpRequest {
                     }
                     Err(error) => {
                         let error_obj =
-                            OnionObject::String(format!("HTTP Error: {}", error).into()).stabilize();
+                            OnionObject::String(format!("HTTP Error: {}", error).into())
+                                .stabilize();
                         Ok(StepResult::Return(Box::new(error_obj)))
                     }
                 }
@@ -258,7 +259,6 @@ fn parse_request_params(
         // 获取URL
         let url = get_attr_direct(data, "url".to_string())?
             .weak()
-            .try_borrow()?
             .to_string(&vec![])
             .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))?;
 
@@ -266,14 +266,13 @@ fn parse_request_params(
         let method = get_attr_direct(data, "method".to_string())
             .unwrap_or_else(|_| OnionObject::String("GET".to_string().into()).stabilize())
             .weak()
-            .try_borrow()?
             .to_string(&vec![])
             .unwrap_or_else(|_| "GET".to_string());
 
         // 获取headers，如果有的话
         let mut headers = IndexMap::new();
         if let Ok(headers_obj) = get_attr_direct(data, "headers".to_string()) {
-            if let OnionObject::Tuple(headers_tuple) = &*headers_obj.weak().try_borrow()? {
+            if let OnionObject::Tuple(headers_tuple) = &*headers_obj.weak() {
                 for element in headers_tuple.elements.as_ref() {
                     if let OnionObject::Named(named) = &*element.try_borrow()? {
                         let key = named
@@ -295,7 +294,7 @@ fn parse_request_params(
         // 获取body，如果有的话
         let body = get_attr_direct(data, "body".to_string())
             .ok()
-            .and_then(|body_obj| body_obj.weak().try_borrow().ok()?.to_string(&vec![]).ok());
+            .and_then(|body_obj| body_obj.weak().to_string(&vec![]).ok());
 
         Ok((url, method, headers, body))
     })
@@ -309,7 +308,6 @@ fn http_get(
     let url = argument.weak().with_data(|data| {
         get_attr_direct(data, "url".to_string())?
             .weak()
-            .try_borrow()?
             .to_string(&vec![])
             .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))
     })?;
@@ -338,13 +336,12 @@ fn http_post(
     let (url, body) = argument.weak().with_data(|data| {
         let url = get_attr_direct(data, "url".to_string())?
             .weak()
-            .try_borrow()?
             .to_string(&vec![])
             .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))?;
 
         let body = get_attr_direct(data, "body".to_string())
             .ok()
-            .and_then(|body_obj| body_obj.weak().try_borrow().ok()?.to_string(&vec![]).ok());
+            .and_then(|body_obj| body_obj.weak().to_string(&vec![]).ok());
 
         Ok((url, body))
     })?;
@@ -372,13 +369,12 @@ fn http_put(
     let (url, body) = argument.weak().with_data(|data| {
         let url = get_attr_direct(data, "url".to_string())?
             .weak()
-            .try_borrow()?
             .to_string(&vec![])
             .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))?;
 
         let body = get_attr_direct(data, "body".to_string())
             .ok()
-            .and_then(|body_obj| body_obj.weak().try_borrow().ok()?.to_string(&vec![]).ok());
+            .and_then(|body_obj| body_obj.weak().to_string(&vec![]).ok());
 
         Ok((url, body))
     })?;
@@ -406,7 +402,6 @@ fn http_delete(
     let url = argument.weak().with_data(|data| {
         get_attr_direct(data, "url".to_string())?
             .weak()
-            .try_borrow()?
             .to_string(&vec![])
             .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))
     })?;
@@ -434,13 +429,12 @@ fn http_patch(
     let (url, body) = argument.weak().with_data(|data| {
         let url = get_attr_direct(data, "url".to_string())?
             .weak()
-            .try_borrow()?
             .to_string(&vec![])
             .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))?;
 
         let body = get_attr_direct(data, "body".to_string())
             .ok()
-            .and_then(|body_obj| body_obj.weak().try_borrow().ok()?.to_string(&vec![]).ok());
+            .and_then(|body_obj| body_obj.weak().to_string(&vec![]).ok());
 
         Ok((url, body))
     })?;
@@ -488,7 +482,6 @@ fn http_get_sync(
     let url = argument.weak().with_data(|data| {
         get_attr_direct(data, "url".to_string())?
             .weak()
-            .try_borrow()?
             .to_string(&vec![])
             .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))
     })?;
@@ -509,13 +502,12 @@ fn http_post_sync(
     let (url, body) = argument.weak().with_data(|data| {
         let url = get_attr_direct(data, "url".to_string())?
             .weak()
-            .try_borrow()?
             .to_string(&vec![])
             .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))?;
 
         let body = get_attr_direct(data, "body".to_string())
             .ok()
-            .and_then(|body_obj| body_obj.weak().try_borrow().ok()?.to_string(&vec![]).ok());
+            .and_then(|body_obj| body_obj.weak().to_string(&vec![]).ok());
 
         Ok((url, body))
     })?;

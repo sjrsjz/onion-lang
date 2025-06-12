@@ -66,7 +66,7 @@ fn input(
     argument.weak().with_data(|data| {
         let hint = get_attr_direct(data, "hint".to_string())?
             .weak()
-            .try_borrow()?
+            
             .to_string(&vec![])?;
         print!("{}", hint);
         stdout()

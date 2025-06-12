@@ -407,9 +407,7 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
                     }
                     StepResult::Return(result) => {
                         let result_borrowed = result
-                            .weak()
-                            .try_borrow()
-                            .map_err(|e| format!("Failed to borrow result: {:?}", e))?;
+                            .weak();
                         let result = unwrap_object!(&*result_borrowed, OnionObject::Pair)
                             .map_err(|e| format!("Failed to unwrap result: {:?}", e))?;
                         let key_borrowed = result

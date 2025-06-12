@@ -1065,7 +1065,7 @@ dependencies = [
 
 [[package]]
 name = "onion-lang"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "clap",
  "colored",
@@ -1089,7 +1089,7 @@ dependencies = [
 
 [[package]]
 name = "onion-vm"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "base64 0.22.1",
  "bincode",

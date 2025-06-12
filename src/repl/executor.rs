@@ -44,7 +44,7 @@ impl ReplExecutor {
 
     /// 获取历史执行结果数量
     pub fn history_count(&self) -> usize {
-        if let OnionObject::Tuple(tuple) = &*self.out_tuple.weak().borrow() {
+        if let OnionObject::Tuple(tuple) = &*self.out_tuple.weak() {
             tuple.elements.len()
         } else {
             0
@@ -161,9 +161,7 @@ impl ReplExecutor {
                     }
                     StepResult::Return(result) => {
                         let result_borrowed = result
-                            .weak()
-                            .try_borrow()
-                            .map_err(|e| format!("Failed to borrow result: {:?}", e))?;
+                            .weak();
                         let result = unwrap_object!(&*result_borrowed, OnionObject::Pair)
                             .map_err(|e| format!("Failed to unwrap result: {:?}", e))?;
                         let key = result.get_key();
@@ -232,7 +230,7 @@ impl ReplExecutor {
     /// 将结果添加到Out元组中
     fn add_result_to_out(&mut self, result: OnionObject) {
         let new_elements = {
-            if let OnionObject::Tuple(tuple) = &*self.out_tuple.weak().borrow() {
+            if let OnionObject::Tuple(tuple) = &*self.out_tuple.weak() {
                 let mut elements = tuple.elements.clone();
                 elements.push(result.to_cell());
                 elements

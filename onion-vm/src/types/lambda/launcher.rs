@@ -46,9 +46,9 @@ impl OnionLambdaRunnableLauncher {
         let mut collected_arguments = Vec::new();
         let mut assigned = Vec::new();
 
-        lambda_obj.weak().try_borrow()?.with_data(|obj_ref| {
+        lambda_obj.weak().with_data(|obj_ref| {
             if let OnionObject::Lambda(definition) = obj_ref {
-                definition.parameter.try_borrow()?.with_data(|p_obj| {
+                definition.parameter.with_data(|p_obj| {
                     if let OnionObject::Tuple(tuple) = p_obj {
                         // Initialize collected_arguments and assigned based on parameter count
                         for param in tuple.elements.as_ref() {
@@ -168,7 +168,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
                 // 约束的返回值约定为一个 Pair：(布尔值表示是否panic, 布尔值表示约束是否通过)
                 StepResult::Return(v) => {
                     // 解析约束的返回值
-                    v.weak().try_borrow()?.with_data(|v_obj| {
+                    v.weak().with_data(|v_obj| {
                         // 约束的返回值必须是一个 Pair 对象
                         let OnionObject::Pair(constrain_result_pair) = v_obj else {
                             // 如果不是 Pair，则认为约束失败（或者约束实现有误）
@@ -184,8 +184,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
                                 // 第二个元素 (value) 表示约束是否通过
                                 if constrain_result_pair
                                     .get_value()
-                                    .try_borrow()?
-                                    .to_boolean()?
+                                    .try_borrow()?.to_boolean()?
                                 {
                                     // 约束通过，清除 `constrain_runnable`，准备处理下一个参数或阶段。
                                     self.constrain_runnable = None;
@@ -210,7 +209,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
                                 return Err(RuntimeError::CustomValue(Box::new(
                                     constrain_result_pair
                                         .get_value()
-                                        .try_borrow()?
+                                        
                                         .clone()
                                         .stabilize(),
                                 )));
@@ -232,7 +231,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
                 let argument_count =
                     self.argument_tuple
                         .weak()
-                        .try_borrow()?
+                        
                         .with_data(|arg_obj| {
                             if let OnionObject::Tuple(tuple) = arg_obj {
                                 Ok(tuple.elements.len())
@@ -259,7 +258,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
                 self
                     .argument_tuple
                     .weak()
-                    .try_borrow()?
+                    
                     .with_data(|arg_obj| {
                         if let OnionObject::Tuple(tuple) = arg_obj {
                             if current_arg_index < tuple.elements.len() {
@@ -270,9 +269,9 @@ impl Runnable for OnionLambdaRunnableLauncher {
 
                     // 遍历 Lambda 定义中的参数，使用 with_data 访问
                     let parameter_count =
-                        self.lambda.weak().try_borrow()?.with_data(|obj_ref| {
+                        self.lambda.weak().with_data(|obj_ref| {
                             if let OnionObject::Lambda(definition) = obj_ref {
-                                definition.parameter.try_borrow()?.with_data(|p_obj| {
+                                definition.parameter.with_data(|p_obj| {
                                     if let OnionObject::Tuple(tuple) = p_obj {
                                         Ok(tuple.elements.len())
                                     } else {
@@ -290,9 +289,9 @@ impl Runnable for OnionLambdaRunnableLauncher {
 
                     for param_idx in 0..parameter_count {
                         // 使用 with_data 访问参数定义
-                        let matched = self.lambda.weak().try_borrow()?.with_data(|obj_ref| {
+                        let matched = self.lambda.weak().with_data(|obj_ref| {
                             if let OnionObject::Lambda(definition) = obj_ref {
-                                definition.parameter.try_borrow()?.with_data(|p_obj| {
+                                definition.parameter.with_data(|p_obj| {
                                     if let OnionObject::Tuple(tuple) = p_obj {
                                         if param_idx < tuple.elements.len() {
                                             tuple.elements[param_idx].with_data(|param_obj| {
@@ -388,7 +387,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
                 let argument_count =
                     self.argument_tuple
                         .weak()
-                        .try_borrow()?
+                        
                         .with_data(|arg_obj| {
                             if let OnionObject::Tuple(tuple) = arg_obj {
                                 Ok(tuple.elements.len())
@@ -412,7 +411,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
                 self.current_argument_index += 1; // 移动到下一个提供的参数
 
                 // Access the argument tuple and the specific argument within this closure
-                self.argument_tuple.weak().try_borrow()?.with_data(|arg_tuple_obj| {
+                self.argument_tuple.weak().with_data(|arg_tuple_obj| {
                     let tuple_elements = if let OnionObject::Tuple(t) = arg_tuple_obj {
                         &t.elements
                     } else {
@@ -427,10 +426,10 @@ impl Runnable for OnionLambdaRunnableLauncher {
 
                     // Get a borrowed view of the current argument from the argument tuple
                     let current_provided_arg_weak = &tuple_elements[current_processing_arg_idx];
-                    let current_provided_arg_view = current_provided_arg_weak.try_borrow()?; // This is GcRef<OnionObjectCell>
+                    let current_provided_arg_view = current_provided_arg_weak; // This is GcRef<OnionObjectCell>
 
                     // 如果当前提供的参数是命名参数，则在位置参数阶段跳过。
-                    if let OnionObject::Named(_) = &*current_provided_arg_view {
+                    if let OnionObject::Named(_) = &*current_provided_arg_view.try_borrow()? {
                         // Skip named arguments in this phase.
                     } else {
                         // This is a positional argument.
@@ -441,11 +440,11 @@ impl Runnable for OnionLambdaRunnableLauncher {
                         // 尝试找到第一个尚未被赋值的 Lambda 定义参数槽。
                         if let Some(param_idx) = self.assigned.iter().position(|&assigned| !assigned) {
                             // 找到了一个未分配的参数槽。 Access the lambda's parameter definition.
-                            self.lambda.weak().try_borrow()?.with_data(|lambda_obj_ref| {
+                            self.lambda.weak().with_data(|lambda_obj_ref| {
                                 let lambda_def = if let OnionObject::Lambda(def) = lambda_obj_ref { def }
                                 else { return Err(RuntimeError::DetailedError("Expected a Lambda definition object".to_string())); };
 
-                                lambda_def.parameter.try_borrow()?.with_data(|param_tuple_obj_ref| {
+                                lambda_def.parameter.with_data(|param_tuple_obj_ref| {
                                     let param_tuple_elements = if let OnionObject::Tuple(pt) = param_tuple_obj_ref { &pt.elements }
                                     else { return Err(RuntimeError::DetailedError("Lambda parameters must be a Tuple".to_string())); };
 
@@ -506,8 +505,8 @@ impl Runnable for OnionLambdaRunnableLauncher {
                                             }
                                         }
                                     }) // End of param_tuple_elements[param_idx].with_data
-                                }) // End of lambda_def.parameter.try_borrow()?.with_data
-                            })?; // End of self.lambda.weak().try_borrow()?.with_data
+                                }) // End of lambda_def.parameter.with_data
+                            })?; // End of self.lambda.weak().with_data
                         } else {
                             // 所有 Lambda 定义的参数槽都已被填充。 This is an extra positional argument.
                             self.collected_arguments.push(current_provided_arg_static); // Add the stabilized argument
@@ -539,7 +538,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
                     OnionTuple::new_static_no_ref(self.collected_arguments.clone());
 
                 // 获取原始 Lambda 定义对象。
-                self.lambda.weak().try_borrow()?.with_data(|obj| {
+                self.lambda.weak().with_data(|obj| {
                     if let OnionObject::Lambda(lambda_def) = obj {
                         // 使用最终的参数元组和 Lambda 定义来创建实际的 Lambda 可运行实例。
                         let runnable = lambda_def

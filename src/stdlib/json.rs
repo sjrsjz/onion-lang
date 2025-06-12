@@ -92,7 +92,7 @@ fn from_json(value: Value) -> Result<OnionStaticObject, RuntimeError> {
         Value::Array(arr) => {
             let elements: Result<Vec<_>, _> = arr
                 .into_iter()
-                .map(|v| from_json(v).map(|obj| obj.weak().clone()))
+                .map(|v| from_json(v).map(|obj| obj.weak().clone().to_cell()))
                 .collect();
             match elements {
                 Ok(elems) => Ok(OnionObject::Tuple(OnionTuple::new(elems)).stabilize()),
@@ -104,7 +104,7 @@ fn from_json(value: Value) -> Result<OnionStaticObject, RuntimeError> {
                 .into_iter()
                 .map(|(k, v)| {
                     let key_obj = OnionObject::String(k.into()).to_cell();
-                    let value_obj = from_json(v)?.weak().clone();
+                    let value_obj = from_json(v)?.weak().clone().to_cell();
                     Ok(OnionObject::Pair(OnionPair::new(key_obj, value_obj)).to_cell())
                 })
                 .collect();
@@ -191,7 +191,7 @@ pub fn build_module() -> OnionStaticObject {
             &|args, _gc| {
                 args.weak().with_data(|data| {
                     let obj = super::get_attr_direct(data, "object".to_string())?;
-                    let json_str = stringify_json(obj.weak().try_borrow()?.clone())
+                    let json_str = stringify_json(obj.weak().clone())
                         .map_err(|e| RuntimeError::InvalidOperation(e.to_string()))?;
                     Ok(OnionObject::String(json_str.into()).stabilize())
                 })
@@ -220,7 +220,7 @@ pub fn build_module() -> OnionStaticObject {
             &|args, _gc| {
                 args.weak().with_data(|data| {
                     let obj = super::get_attr_direct(data, "object".to_string())?;
-                    let json_str = stringify_json_pretty(obj.weak().try_borrow()?.clone())
+                    let json_str = stringify_json_pretty(obj.weak().clone())
                         .map_err(|e| RuntimeError::InvalidOperation(e.to_string()))?;
                     Ok(OnionObject::String(json_str.into()).stabilize())
                 })

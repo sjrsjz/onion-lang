@@ -16,7 +16,7 @@ fn to_string(
 ) -> Result<OnionStaticObject, RuntimeError> {
     argument.weak().with_data(|data| {
         let value = get_attr_direct(data, "value".to_string())?;
-        let string_representation = value.weak().try_borrow()?.to_string(&vec![])?;
+        let string_representation = value.weak().to_string(&vec![])?;
         Ok(OnionObject::String(string_representation.into()).stabilize())
     })
 }
@@ -240,7 +240,7 @@ fn find(
     argument.weak().with_data(|data| {
         let obj = get_attr_direct(data, "obj".to_string())?;
         let key = get_attr_direct(data, "key".to_string())?;
-        let key_borrowed = key.weak().try_borrow()?;
+        let key_borrowed = key.weak();
         match obj
             .weak()
             .with_attribute(&*key_borrowed, &|obj| Ok(obj.clone().stabilize()))

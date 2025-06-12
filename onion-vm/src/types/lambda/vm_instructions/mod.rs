@@ -224,16 +224,16 @@ pub fn build_range(
     let stack = runnable.context.get_current_stack_mut()?;
     let left = Context::get_object_from_stack(stack, 1)?;
     let right = Context::get_object_from_stack(stack, 0)?;
-    let range =
-        OnionObject::Range(
-            left.weak().try_borrow()?.to_integer().map_err(|e| {
-                RuntimeError::DetailedError(format!("Failed to build range: {}", e))
-            })?,
-            right.weak().try_borrow()?.to_integer().map_err(|e| {
-                RuntimeError::DetailedError(format!("Failed to build range: {}", e))
-            })?,
-        )
-        .stabilize();
+    let range = OnionObject::Range(
+        left.weak()
+            .to_integer()
+            .map_err(|e| RuntimeError::DetailedError(format!("Failed to build range: {}", e)))?,
+        right
+            .weak()
+            .to_integer()
+            .map_err(|e| RuntimeError::DetailedError(format!("Failed to build range: {}", e)))?,
+    )
+    .stabilize();
 
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, range);
@@ -304,11 +304,10 @@ pub fn load_lambda(
         .context
         .get_object_rev(if should_capture { 2 } else { 1 })?
         .weak()
-        .try_borrow()?
         .clone()
         .stabilize();
 
-    let OnionObject::Tuple(_) = &*default_parameters.weak().try_borrow()? else {
+    let OnionObject::Tuple(_) = &*default_parameters.weak() else {
         return Err(RuntimeError::DetailedError(format!(
             "Lambda default parameters must be a Tuple, but found {}",
             default_parameters
@@ -319,11 +318,9 @@ pub fn load_lambda(
         .context
         .get_object_rev(0)?
         .weak()
-        .try_borrow()?
         .clone()
         .stabilize();
-    let OnionObject::InstructionPackage(package) = &*instruction_package.weak().try_borrow()?
-    else {
+    let OnionObject::InstructionPackage(package) = &*instruction_package.weak() else {
         return Err(RuntimeError::DetailedError(format!(
             "Lambda instruction must be an InstructionPackage, but found {}",
             instruction_package
@@ -400,22 +397,24 @@ pub fn get_var(
     // };
 
     let value = runnable.context.get_variable(index as usize);
-    if value.is_none() {
-        let var_name = runnable
-            .instruction
-            .get_string_pool()
-            .get(index as usize)
-            .cloned()
-            .unwrap_or_else(|| format!("Variable at index {}", index));
-        return Err(RuntimeError::DetailedError(format!(
-            "Variable '{}' not found in context",
-            var_name
-        )));
+    match value {
+        Some(v) => {
+            runnable.context.push_object(v.clone())?;
+            Ok(StepResult::Continue)
+        }
+        None => {
+            let var_name = runnable
+                .instruction
+                .get_string_pool()
+                .get(index as usize)
+                .cloned()
+                .unwrap_or_else(|| format!("Variable at index {}", index));
+            return Err(RuntimeError::DetailedError(format!(
+                "Variable '{}' not found in context",
+                var_name
+            )));
+        }
     }
-    let value = value.unwrap();
-
-    runnable.context.push_object(value.clone())?;
-    Ok(StepResult::Continue)
 }
 
 pub fn set_var(
@@ -425,9 +424,7 @@ pub fn set_var(
 ) -> Result<StepResult, RuntimeError> {
     let right = runnable.context.get_object_rev(0)?;
     let left = runnable.context.get_object_rev(1)?;
-    left.weak()
-        .try_borrow()?
-        .assign(&*right.weak().try_borrow()?)?;
+    left.weak().assign(&*right.weak())?;
     // 保留左侧对象的引用，由于其是不可变的可变对象的引用，assign不会导致GC错误回收
     runnable.context.discard_objects(1)?;
     Ok(StepResult::Continue)
@@ -478,7 +475,7 @@ pub fn index_of(
     let container_obj = runnable.context.get_object_rev(1)?;
 
     // Extract the integer index value
-    let index_value = index_obj.weak().try_borrow()?.with_data(|index_ref| {
+    let index_value = index_obj.weak().with_data(|index_ref| {
         if let OnionObject::Integer(index) = &*index_ref {
             Ok(*index)
         } else {
@@ -491,7 +488,7 @@ pub fn index_of(
 
     // Get the element at the index
     let element = {
-        let obj_ref = container_obj.weak().try_borrow()?;
+        let obj_ref = container_obj.weak();
         obj_ref.at(index_value)?
     };
 
@@ -508,7 +505,7 @@ pub fn key_of(
 ) -> Result<StepResult, RuntimeError> {
     let stack = runnable.context.get_current_stack_mut()?;
     let obj = Context::get_object_from_stack(stack, 0)?;
-    let key = obj.weak().try_borrow()?.key_of()?;
+    let key = obj.weak().key_of()?;
     Context::replace_last_object(stack, key);
     Ok(StepResult::Continue)
 }
@@ -520,7 +517,7 @@ pub fn value_of(
 ) -> Result<StepResult, RuntimeError> {
     let stack = runnable.context.get_current_stack_mut()?;
     let obj = Context::get_object_from_stack(stack, 0)?;
-    let value = obj.weak().try_borrow()?.value_of()?;
+    let value = obj.weak().value_of()?;
     Context::replace_last_object(stack, value);
     Ok(StepResult::Continue)
 }
@@ -533,7 +530,7 @@ pub fn type_of(
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
     let obj = Context::get_object_from_stack(stack, 0)?;
-    let type_name = obj.weak().try_borrow()?.type_of()?;
+    let type_name = obj.weak().type_of()?;
     Context::replace_last_object(stack, OnionObject::String(Arc::new(type_name)).stabilize());
     Ok(StepResult::Continue)
 }
@@ -546,7 +543,7 @@ pub fn copy(
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
     let obj = Context::get_object_from_stack(stack, 0)?;
-    let copied_obj = obj.weak().try_borrow()?.copy()?;
+    let copied_obj = obj.weak().copy()?;
     Context::discard_from_stack(stack, 1)?;
     Context::push_to_stack(stack, copied_obj);
     Ok(StepResult::Continue)
@@ -559,10 +556,7 @@ pub fn check_is_same_object(
 ) -> Result<StepResult, RuntimeError> {
     let obj1 = runnable.context.get_object_rev(0)?;
     let obj2 = runnable.context.get_object_rev(1)?;
-    let is_same = obj1
-        .weak()
-        .try_borrow()?
-        .is_same(&*obj2.weak().try_borrow()?)?;
+    let is_same = obj1.weak().is_same(&*obj2.weak())?;
     runnable.context.discard_objects(2)?;
     runnable
         .context
@@ -579,10 +573,7 @@ pub fn binary_add(
     let stack = runnable.context.get_current_stack_mut()?;
     let right = Context::get_object_from_stack(stack, 0)?;
     let left = Context::get_object_from_stack(stack, 1)?;
-    let result = left
-        .weak()
-        .try_borrow()?
-        .binary_add(&*right.weak().try_borrow()?)?;
+    let result = left.weak().binary_add(&*right.weak())?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -597,10 +588,7 @@ pub fn binary_subtract(
     let stack = runnable.context.get_current_stack_mut()?;
     let right = Context::get_object_from_stack(stack, 0)?;
     let left = Context::get_object_from_stack(stack, 1)?;
-    let result = left
-        .weak()
-        .try_borrow()?
-        .binary_sub(&*right.weak().try_borrow()?)?;
+    let result = left.weak().binary_sub(&*right.weak())?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -615,10 +603,7 @@ pub fn binary_multiply(
     let stack = runnable.context.get_current_stack_mut()?;
     let right = Context::get_object_from_stack(stack, 0)?;
     let left = Context::get_object_from_stack(stack, 1)?;
-    let result = left
-        .weak()
-        .try_borrow()?
-        .binary_mul(&*right.weak().try_borrow()?)?;
+    let result = left.weak().binary_mul(&*right.weak())?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -633,10 +618,7 @@ pub fn binary_divide(
     let stack = runnable.context.get_current_stack_mut()?;
     let right = Context::get_object_from_stack(stack, 0)?;
     let left = Context::get_object_from_stack(stack, 1)?;
-    let result = left
-        .weak()
-        .try_borrow()?
-        .binary_div(&*right.weak().try_borrow()?)?;
+    let result = left.weak().binary_div(&*right.weak())?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -651,10 +633,7 @@ pub fn binary_modulus(
     let stack = runnable.context.get_current_stack_mut()?;
     let right = Context::get_object_from_stack(stack, 0)?;
     let left = Context::get_object_from_stack(stack, 1)?;
-    let result = left
-        .weak()
-        .try_borrow()?
-        .binary_mod(&*right.weak().try_borrow()?)?;
+    let result = left.weak().binary_mod(&*right.weak())?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -669,10 +648,7 @@ pub fn binary_power(
     let stack = runnable.context.get_current_stack_mut()?;
     let right = Context::get_object_from_stack(stack, 0)?;
     let left = Context::get_object_from_stack(stack, 1)?;
-    let result = left
-        .weak()
-        .try_borrow()?
-        .binary_pow(&*right.weak().try_borrow()?)?;
+    let result = left.weak().binary_pow(&*right.weak())?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -687,10 +663,7 @@ pub fn binary_bitwise_or(
     let stack = runnable.context.get_current_stack_mut()?;
     let right = Context::get_object_from_stack(stack, 0)?;
     let left = Context::get_object_from_stack(stack, 1)?;
-    let result = left
-        .weak()
-        .try_borrow()?
-        .binary_or(&*right.weak().try_borrow()?)?;
+    let result = left.weak().binary_or(&*right.weak())?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -705,10 +678,7 @@ pub fn binary_bitwise_and(
     let stack = runnable.context.get_current_stack_mut()?;
     let right = Context::get_object_from_stack(stack, 0)?;
     let left = Context::get_object_from_stack(stack, 1)?;
-    let result = left
-        .weak()
-        .try_borrow()?
-        .binary_and(&*right.weak().try_borrow()?)?;
+    let result = left.weak().binary_and(&*right.weak())?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -723,10 +693,7 @@ pub fn binary_bitwise_xor(
     let stack = runnable.context.get_current_stack_mut()?;
     let right = Context::get_object_from_stack(stack, 0)?;
     let left = Context::get_object_from_stack(stack, 1)?;
-    let result = left
-        .weak()
-        .try_borrow()?
-        .binary_xor(&*right.weak().try_borrow()?)?;
+    let result = left.weak().binary_xor(&*right.weak())?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -741,10 +708,7 @@ pub fn binary_shift_left(
     let stack = runnable.context.get_current_stack_mut()?;
     let right = Context::get_object_from_stack(stack, 0)?;
     let left = Context::get_object_from_stack(stack, 1)?;
-    let result = left
-        .weak()
-        .try_borrow()?
-        .binary_shl(&*right.weak().try_borrow()?)?;
+    let result = left.weak().binary_shl(&*right.weak())?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -759,10 +723,7 @@ pub fn binary_shift_right(
     let stack = runnable.context.get_current_stack_mut()?;
     let right = Context::get_object_from_stack(stack, 0)?;
     let left = Context::get_object_from_stack(stack, 1)?;
-    let result = left
-        .weak()
-        .try_borrow()?
-        .binary_shr(&*right.weak().try_borrow()?)?;
+    let result = left.weak().binary_shr(&*right.weak())?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -777,10 +738,7 @@ pub fn binary_equal(
     let stack = runnable.context.get_current_stack_mut()?;
     let right = Context::get_object_from_stack(stack, 0)?;
     let left = Context::get_object_from_stack(stack, 1)?;
-    let result = left
-        .weak()
-        .try_borrow()?
-        .binary_eq(&*right.weak().try_borrow()?)?;
+    let result = left.weak().binary_eq(&*right.weak())?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, OnionObject::Boolean(result).stabilize());
     Ok(StepResult::Continue)
@@ -795,10 +753,7 @@ pub fn binary_not_equal(
     let stack = runnable.context.get_current_stack_mut()?;
     let right = Context::get_object_from_stack(stack, 0)?;
     let left = Context::get_object_from_stack(stack, 1)?;
-    let result = left
-        .weak()
-        .try_borrow()?
-        .binary_eq(&*right.weak().try_borrow()?)?;
+    let result = left.weak().binary_eq(&*right.weak())?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, OnionObject::Boolean(!result).stabilize());
     Ok(StepResult::Continue)
@@ -813,10 +768,7 @@ pub fn binary_greater(
     let stack = runnable.context.get_current_stack_mut()?;
     let right = Context::get_object_from_stack(stack, 0)?;
     let left = Context::get_object_from_stack(stack, 1)?;
-    let result = left
-        .weak()
-        .try_borrow()?
-        .binary_gt(&*right.weak().try_borrow()?)?;
+    let result = left.weak().binary_gt(&*right.weak())?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, OnionObject::Boolean(result).stabilize());
     Ok(StepResult::Continue)
@@ -831,10 +783,7 @@ pub fn binary_greater_equal(
     let stack = runnable.context.get_current_stack_mut()?;
     let right = Context::get_object_from_stack(stack, 0)?;
     let left = Context::get_object_from_stack(stack, 1)?;
-    let result = left
-        .weak()
-        .try_borrow()?
-        .binary_lt(&*right.weak().try_borrow()?)?;
+    let result = left.weak().binary_lt(&*right.weak())?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, OnionObject::Boolean(!result).stabilize());
     Ok(StepResult::Continue)
@@ -849,10 +798,7 @@ pub fn binary_less(
     let stack = runnable.context.get_current_stack_mut()?;
     let right = Context::get_object_from_stack(stack, 0)?;
     let left = Context::get_object_from_stack(stack, 1)?;
-    let result = left
-        .weak()
-        .try_borrow()?
-        .binary_lt(&*right.weak().try_borrow()?)?;
+    let result = left.weak().binary_lt(&*right.weak())?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, OnionObject::Boolean(result).stabilize());
     Ok(StepResult::Continue)
@@ -867,10 +813,7 @@ pub fn binary_less_equal(
     let stack = runnable.context.get_current_stack_mut()?;
     let right = Context::get_object_from_stack(stack, 0)?;
     let left = Context::get_object_from_stack(stack, 1)?;
-    let result = left
-        .weak()
-        .try_borrow()?
-        .binary_gt(&*right.weak().try_borrow()?)?;
+    let result = left.weak().binary_gt(&*right.weak())?;
     Context::discard_from_stack(stack, 2)?;
     Context::push_to_stack(stack, OnionObject::Boolean(!result).stabilize());
     Ok(StepResult::Continue)
@@ -884,7 +827,7 @@ pub fn unary_bitwise_not(
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
     let obj = Context::get_object_from_stack(stack, 0)?;
-    let result = obj.weak().try_borrow()?.unary_not()?;
+    let result = obj.weak().unary_not()?;
     Context::discard_from_stack(stack, 1)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -897,7 +840,7 @@ pub fn unary_plus(
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
     let obj = Context::get_object_from_stack(stack, 0)?;
-    let result = obj.weak().try_borrow()?.unary_plus()?;
+    let result = obj.weak().unary_plus()?;
     Context::discard_from_stack(stack, 1)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -910,7 +853,7 @@ pub fn unary_minus(
     // 快速路径：一次获取栈的可变引用，避免重复查找
     let stack = runnable.context.get_current_stack_mut()?;
     let obj = Context::get_object_from_stack(stack, 0)?;
-    let result = obj.weak().try_borrow()?.unary_neg()?;
+    let result = obj.weak().unary_neg()?;
     Context::discard_from_stack(stack, 1)?;
     Context::push_to_stack(stack, result);
     Ok(StepResult::Continue)
@@ -956,7 +899,7 @@ pub fn jump_if_false(
         )));
     };
     let condition = runnable.context.get_object_rev(0)?;
-    if !condition.weak().try_borrow()?.to_boolean()? {
+    if !condition.weak().to_boolean()? {
         runnable.ip += offset as isize;
     }
     runnable.context.discard_objects(1)?;
@@ -968,7 +911,7 @@ pub fn get_length(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let obj = runnable.context.get_object_rev(0)?;
-    let length = obj.weak().try_borrow()?.len()?;
+    let length = obj.weak().len()?;
     runnable.context.discard_objects(1)?;
     runnable.context.push_object(length)?;
     Ok(StepResult::Continue)
@@ -1010,7 +953,7 @@ pub fn assert(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let condition = runnable.context.get_object_rev(0)?;
-    if !condition.weak().try_borrow()?.to_boolean()? {
+    if !condition.weak().to_boolean()? {
         return Err(RuntimeError::DetailedError(format!(
             "Assertion failed: condition evaluated to false (value: {})",
             condition
@@ -1035,7 +978,7 @@ pub fn is_in(
             OnionObject::LazySet(lazy_set) => lazy_set
                 .get_container()
                 .try_borrow()?
-                .contains(&*element.weak().try_borrow()?),
+                .contains(&*element.weak()),
             _ => {
                 return Err(RuntimeError::DetailedError(format!(
                     "Container is not a LazySet: {}",
@@ -1057,8 +1000,8 @@ pub fn is_in(
     let (args, filter) = container.weak().with_data(|container_ref| {
         match container_ref {
             OnionObject::LazySet(lazy_set) => {
-                let filter = lazy_set.get_filter().try_borrow()?;
-                let OnionObject::Lambda(_) = &*filter else {
+                let filter = lazy_set.get_filter();
+                let OnionObject::Lambda(_) = &*filter.try_borrow()? else {
                     // 过滤器不是 Lambda 对象，认定为惰性求值结果为 filter
                     let filter = filter.clone().stabilize();
                     return Ok((None, filter));
@@ -1122,7 +1065,7 @@ pub fn immutablize(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let obj = runnable.context.get_object_rev(0)?;
-    let immutable_obj = obj.weak().try_borrow()?.clone_value()?;
+    let immutable_obj = obj.weak().clone_value()?;
     runnable.context.discard_objects(1)?;
     runnable.context.push_object(immutable_obj)?;
     Ok(StepResult::Continue)

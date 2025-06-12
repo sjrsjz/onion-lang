@@ -16,7 +16,7 @@ fn push(
         let value = get_attr_direct(data, "value".to_string())?;
         tuple.weak().with_data_ref_mut(|tuple| match tuple {
             OnionObject::Tuple(tuple) => {
-                tuple.push(value.weak().clone());
+                tuple.push(value.weak().clone().to_cell());
                 Ok(())
             }
             _ => Err(RuntimeError::InvalidOperation(
@@ -57,8 +57,8 @@ fn insert(
         let value = get_attr_direct(data, "value".to_string())?;
         tuple.weak().with_data_ref_mut(|tuple| match tuple {
             OnionObject::Tuple(tuple) => {
-                if let OnionObject::Integer(index) = &*index.weak().try_borrow()? {
-                    tuple.insert(*index as usize, value.weak().clone())?;
+                if let OnionObject::Integer(index) = &*index.weak() {
+                    tuple.insert(*index as usize, value.weak().clone().to_cell())?;
                     Ok(OnionObject::Undefined(None).stabilize())
                 } else {
                     Err(RuntimeError::InvalidOperation(
@@ -82,7 +82,7 @@ fn remove(
         let index = get_attr_direct(data, "index".to_string())?;
         tuple.weak().with_data_ref_mut(|tuple| match tuple {
             OnionObject::Tuple(tuple) => {
-                if let OnionObject::Integer(index) = &*index.weak().try_borrow()? {
+                if let OnionObject::Integer(index) = &*index.weak() {
                     tuple.remove(*index as usize)
                 } else {
                     Err(RuntimeError::InvalidOperation(

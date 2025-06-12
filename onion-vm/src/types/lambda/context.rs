@@ -25,12 +25,8 @@ impl Frame {
         for (var_name, var_value) in &self.variables {
             let value_str = var_value
                 .weak()
-                .try_borrow()
-                .map(|obj| {
-                    obj.to_string(&vec![])
-                        .unwrap_or_else(|_| format!("{:?}", obj))
-                })
-                .unwrap_or_else(|_| "<borrow_error>".to_string());
+                .to_string(&vec![])
+                .unwrap_or("Unknown value".into());
             variables.insert(var_name.to_string(), Value::String(value_str));
         }
         frame_obj.insert("variables".to_string(), Value::Object(variables));
@@ -42,9 +38,8 @@ impl Frame {
             .map(|obj| {
                 let obj_str = obj
                     .weak()
-                    .try_borrow()
-                    .map(|o| o.to_string(&vec![]).unwrap_or_else(|_| format!("{:?}", o)))
-                    .unwrap_or_else(|_| "<borrow_error>".to_string());
+                    .to_string(&vec![])
+                    .unwrap_or("Unknown object".into());
                 Value::String(obj_str)
             })
             .collect();
@@ -230,6 +225,7 @@ impl Context {
     //     }    //     Ok(())
     // }
 
+    #[inline(always)]
     pub fn let_variable(
         &mut self,
         name: usize,
@@ -270,6 +266,7 @@ impl Context {
     //     )))
     // }
 
+    #[inline(always)]
     pub fn get_variable(&self, name: usize) -> Option<&OnionStaticObject> {
         if self.frames.len() == 0 {
             return None;
@@ -417,12 +414,8 @@ impl Context {
             for (var_name, var_value) in &frame.variables {
                 let value_str = var_value
                     .weak()
-                    .try_borrow()
-                    .map(|obj| {
-                        obj.to_string(&vec![])
-                            .unwrap_or_else(|_| format!("{:?}", obj))
-                    })
-                    .unwrap_or_else(|_| "<borrow_error>".to_string());
+                    .to_string(&vec![])
+                    .unwrap_or("Unknown value".into());
 
                 variables.insert(var_name.to_string(), Value::String(value_str));
             }
@@ -435,9 +428,8 @@ impl Context {
                 .map(|obj| {
                     let obj_str = obj
                         .weak()
-                        .try_borrow()
-                        .map(|o| o.to_string(&vec![]).unwrap_or_else(|_| format!("{:?}", o)))
-                        .unwrap_or_else(|_| "<borrow_error>".to_string());
+                        .to_string(&vec![])
+                        .unwrap_or("Unknown value".into());
                     Value::String(obj_str)
                 })
                 .collect();

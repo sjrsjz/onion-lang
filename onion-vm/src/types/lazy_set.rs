@@ -50,8 +50,8 @@ impl OnionLazySet {
         filter: &OnionStaticObject,
     ) -> OnionStaticObject {
         OnionObject::LazySet(OnionLazySet {
-            container: Box::new(container.weak().clone()),
-            filter: Box::new(filter.weak().clone()),
+            container: Box::new(container.weak().clone().to_cell()),
+            filter: Box::new(filter.weak().clone().to_cell()),
         })
         .stabilize()
     }
@@ -64,14 +64,9 @@ impl OnionLazySet {
         &self.filter
     }
 
-    pub fn upgrade(&self) -> Option<Vec<GCArc<OnionObjectCell>>> {
-        match (self.container.upgrade(), self.filter.upgrade()) {
-            (Some(mut container_arcs), Some(filter_arcs)) => {
-                container_arcs.extend(filter_arcs);
-                Some(container_arcs)
-            }
-            _ => None,
-        }
+    pub fn upgrade(&self, collected: &mut Vec<GCArc<OnionObjectCell>>) {
+        self.container.upgrade(collected);
+        self.filter.upgrade(collected)
     }
 
     pub fn with_attribute<F, R>(&self, key: &OnionObject, f: &F) -> Result<R, RuntimeError>
@@ -100,7 +95,7 @@ impl OnionLazySet {
                 // Keep the collector alive until after we use its weak reference
                 let result = {
                     let collector_weak = collector.weak();
-                    f(&*collector_weak.try_borrow()?)
+                    f(collector_weak)
                 };
                 result
             }
@@ -155,9 +150,9 @@ impl Runnable for OnionLazySetCollector {
     ) -> Result<(), RuntimeError> {
         match step_result {
             StepResult::Return(result) => {
-                match &*result.weak().try_borrow()? {
+                match &*result.weak() {
                     OnionObject::Boolean(true) => {
-                        match &*self.container.weak().try_borrow()? {
+                        match &*self.container.weak() {
                             OnionObject::Tuple(tuple) => {
                                 // 如果是布尔值 true，表示需要收集当前元素
                                 if let Some(item) = tuple.elements.get(self.current_index - 1) {

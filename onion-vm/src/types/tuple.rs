@@ -57,7 +57,7 @@ impl OnionTuple {
         OnionStaticObject::new(OnionObject::Tuple(OnionTuple {
             elements: elements
                 .into_iter()
-                .map(|e| e.weak().clone())
+                .map(|e| e.weak().clone().to_cell())
                 .collect::<Vec<_>>()
                 .into(),
         }))
@@ -67,23 +67,13 @@ impl OnionTuple {
         OnionStaticObject::new(OnionObject::Tuple(OnionTuple {
             elements: elements
                 .into_iter()
-                .map(|e| e.weak().clone())
+                .map(|e| e.weak().clone().to_cell())
                 .collect::<Vec<_>>()
                 .into(),
         }))
     }
-    pub fn upgrade(&self) -> Option<Vec<GCArc<OnionObjectCell>>> {
-        if self.elements.is_empty() {
-            return None;
-        }
-        let mut arcs = Vec::new();
-        for element in self.elements.as_ref() {
-            match element.upgrade() {
-                Some(arc) => arcs.extend(arc),
-                None => {}
-            }
-        }
-        Some(arcs)
+    pub fn upgrade(&self, collected: &mut Vec<GCArc<OnionObjectCell>>) {
+        self.elements.iter().for_each(|e| e.upgrade(collected));
     }
 
     pub fn len(&self) -> Result<OnionStaticObject, RuntimeError> {

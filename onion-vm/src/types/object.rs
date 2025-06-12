@@ -105,8 +105,14 @@ impl OnionObjectCell {
     }
 
     #[inline(always)]
-    pub fn upgrade(&self) -> Option<Vec<GCArc<OnionObjectCell>>> {
-        self.0.try_borrow().map(|obj| obj.upgrade()).unwrap_or(None)
+    pub fn upgrade(&self, collected: &mut Vec<GCArc<OnionObjectCell>>) {
+        match self.0.try_borrow() {
+            Ok(obj) => obj.upgrade(collected),
+            Err(_) => {
+                // 如果无法借用，可能是因为对象已经被回收或正在被其他线程使用
+                // 这里选择忽略
+            }
+        }
     }
 
     #[inline(always)]
@@ -237,24 +243,23 @@ impl GCTraceable<OnionObjectCell> for OnionObject {
     }
 }
 impl OnionObject {
-    pub fn upgrade(&self) -> Option<Vec<GCArc<OnionObjectCell>>> {
+    pub fn upgrade(&self, collected: &mut Vec<GCArc<OnionObjectCell>>) {
         match self {
             OnionObject::Mut(weak) => {
                 if let Some(strong) = weak.upgrade() {
-                    Some(vec![strong])
-                } else {
-                    None
+                    collected.push(strong.clone());
                 }
             }
-            OnionObject::Tuple(tuple) => tuple.upgrade(),
-            OnionObject::Pair(pair) => pair.upgrade(),
-            OnionObject::Named(named) => named.upgrade(),
-            OnionObject::LazySet(lazy_set) => lazy_set.upgrade(),
-            OnionObject::Lambda(lambda) => lambda.upgrade(),
-            _ => None,
+            OnionObject::Tuple(tuple) => tuple.upgrade(collected),
+            OnionObject::Pair(pair) => pair.upgrade(collected),
+            OnionObject::Named(named) => named.upgrade(collected),
+            OnionObject::LazySet(lazy_set) => lazy_set.upgrade(collected),
+            OnionObject::Lambda(lambda) => lambda.upgrade(collected),
+            _ => {}
         }
     }
 
+    #[inline(always)]
     pub fn to_cell(self) -> OnionObjectCell {
         OnionObjectCell(RefCell::new(self))
     }
@@ -378,7 +383,7 @@ impl OnionObject {
             None => Err(RuntimeError::BrokenReference),
         }
     }
-    pub fn with_data_ref_mut<T, F>(&mut self, f: F) -> Result<T, RuntimeError>
+    pub fn with_data_ref_mut<T, F>(&self, f: F) -> Result<T, RuntimeError>
     where
         F: FnOnce(&mut OnionObject) -> Result<T, RuntimeError>,
     {
@@ -514,7 +519,7 @@ impl OnionObject {
                 }
                 OnionObject::InstructionPackage(_) => Ok("InstructionPackage(...)".to_string()),
                 OnionObject::Lambda(lambda) => {
-                    let params = lambda.parameter.try_borrow()?.repr(&new_ptrs)?;
+                    let params = lambda.parameter.repr(&new_ptrs)?;
                     let body = lambda.body.to_string();
                     Ok(format!("{}::{} -> {}", lambda.signature, params, body))
                 }
@@ -598,7 +603,7 @@ impl OnionObject {
                 }
                 OnionObject::InstructionPackage(_) => Ok("InstructionPackage(...)".to_string()),
                 OnionObject::Lambda(lambda) => {
-                    let params = lambda.parameter.try_borrow()?.repr(&new_ptrs)?;
+                    let params = lambda.parameter.repr(&new_ptrs)?;
                     Ok(format!(
                         "{}::{} -> {}",
                         lambda.signature, params, lambda.body
@@ -660,8 +665,8 @@ impl OnionObject {
     pub fn mutablize(self, gc: &mut GC<OnionObjectCell>) -> OnionStaticObject {
         let arc = gc.create(OnionObjectCell::from(self));
         OnionStaticObject {
-            obj: OnionObject::Mut(arc.as_weak()).to_cell(),
-            arcs: GCArcStorage::from_option_vec(Some(vec![arc])),
+            obj: OnionObject::Mut(arc.as_weak()),
+            _arcs: GCArcStorage::Single(arc),
         }
     }
 }
@@ -1133,66 +1138,34 @@ impl OnionObject {
 
 #[derive(Clone)]
 pub enum GCArcStorage {
+    // 极其怪异的枚举类型，仅仅是修改属性都会导致性能严重下降
     None,
     Single(GCArc<OnionObjectCell>),
     Multiple(Vec<GCArc<OnionObjectCell>>),
 }
 
-impl Debug for GCArcStorage {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::None => write!(f, "GCArcStorage::None"),
-            Self::Single(_) => write!(f, "GCArcStorage::Single(<arc>)"),
-            Self::Multiple(v) => write!(f, "GCArcStorage::Multiple({} arcs)", v.len()),
-        }
-    }
-}
-
-impl GCArcStorage {
-    #[inline(always)]
-    pub fn from_option_vec(vec: Option<Vec<GCArc<OnionObjectCell>>>) -> Self {
-        match vec {
-            None => Self::None,
-            Some(v) => match v.len() {
-                0 => Self::None,
-                1 => Self::Single(v[0].clone()),
-                _ => Self::Multiple(v),
-            },
-        }
-    }
-
-    #[inline(always)]
-    pub fn is_empty(&self) -> bool {
-        matches!(self, Self::None)
-    }
-
-    #[inline(always)]
-    pub fn is_none(&self) -> bool {
-        matches!(self, Self::None)
-    }
-
-    #[inline(always)]
-    pub fn len(&self) -> usize {
-        match self {
-            Self::None => 0,
-            Self::Single(_) => 1,
-            Self::Multiple(v) => v.len(),
-        }
-    }
-}
+// impl GCArcStorage {
+//     #[inline(always)]
+//     pub fn from_vec(v: Vec<GCArc<OnionObjectCell>>) -> Self {
+//         match v.len() {
+//             0 => Self::None,
+//             1 => Self::Single(v[0].clone()),
+//             _ => Self::Multiple(v),
+//         }
+//     }
+// }
 
 #[derive(Clone)]
 pub struct OnionStaticObject {
-    obj: OnionObjectCell,
-    #[allow(dead_code)]
-    arcs: GCArcStorage,
+    _arcs: GCArcStorage,
+    obj: OnionObject,
 }
 
 impl Default for OnionStaticObject {
     fn default() -> Self {
         OnionStaticObject {
-            obj: OnionObject::Undefined(None).to_cell(),
-            arcs: GCArcStorage::None,
+            obj: OnionObject::Undefined(None),
+            _arcs: GCArcStorage::None,
         }
     }
 }
@@ -1210,6 +1183,7 @@ impl Display for OnionStaticObject {
 }
 
 impl OnionStaticObject {
+    #[inline(always)]
     pub fn new(obj: OnionObject) -> Self {
         let arcs = match &obj {
             OnionObject::Mut(obj) => match obj.upgrade() {
@@ -1224,16 +1198,20 @@ impl OnionStaticObject {
             | OnionObject::Null
             | OnionObject::Undefined(_)
             | OnionObject::Range(_, _) => GCArcStorage::None,
-            _ => GCArcStorage::from_option_vec(obj.upgrade()),
+            _ => {
+                let mut arcs = vec![];
+                obj.upgrade(&mut arcs);
+                GCArcStorage::Multiple(arcs)
+            }
         };
         OnionStaticObject {
-            obj: obj.to_cell(),
-            arcs,
+            obj: obj,
+            _arcs: arcs,
         }
     }
 
     #[inline(always)]
-    pub fn weak(&self) -> &OnionObjectCell {
+    pub fn weak(&self) -> &OnionObject {
         &self.obj
     }
 
