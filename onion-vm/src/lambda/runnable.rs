@@ -11,7 +11,7 @@ pub enum RuntimeError {
     DetailedError(String),
     InvalidType(String),
     InvalidOperation(String),
-    CustomValue(OnionStaticObject),
+    CustomValue(Box<OnionStaticObject>),
     BrokenReference,
     BorrowError(String),
 }
@@ -34,7 +34,7 @@ pub enum StepResult {
     Continue,
     NewRunnable(Box<dyn Runnable>),
     ReplaceRunnable(Box<dyn Runnable>),
-    Return(OnionStaticObject),
+    Return(Box<OnionStaticObject>),
 }
 
 #[allow(unused_variables)]

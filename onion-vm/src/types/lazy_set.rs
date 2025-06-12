@@ -230,9 +230,9 @@ impl Runnable for OnionLazySetCollector {
                             })
                     } else {
                         // 所有元素都处理完了
-                        Ok(StepResult::Return(OnionTuple::new_static_no_ref(
+                        Ok(StepResult::Return(Box::new(OnionTuple::new_static_no_ref(
                             self.collected.clone(),
-                        )))
+                        ))))
                     }
                 }
                 _ => Err(RuntimeError::InvalidType(

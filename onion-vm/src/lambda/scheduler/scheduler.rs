@@ -28,13 +28,13 @@ impl Runnable for Scheduler {
             match match runnable.step(gc) {
                 Ok(step_result) => step_result,
                 Err(error) => {
-                    return Ok(StepResult::Return(OnionPair::new_static(
+                    return Ok(StepResult::Return(Box::new(OnionPair::new_static(
                         &OnionObject::Boolean(false).stabilize(),
                         &match error {
-                            RuntimeError::CustomValue(v) => v,
+                            RuntimeError::CustomValue(v) => *v,
                             _ => OnionObject::Undefined(Some(error.to_string())).stabilize(),
                         },
-                    )))
+                    ))))
                 }
             } {
                 StepResult::Continue => Ok(StepResult::Continue),
@@ -53,27 +53,27 @@ impl Runnable for Scheduler {
                         match top_runnable.receive(StepResult::Return(result.clone()), gc) {
                             Ok(_) => {}
                             Err(e) => {
-                                return Ok(StepResult::Return(OnionPair::new_static(
+                                return Ok(StepResult::Return(Box::new(OnionPair::new_static(
                                     &OnionObject::Boolean(false).stabilize(),
                                     &OnionObject::String(e.to_string()).stabilize(),
-                                )))
+                                ))))
                             }
                         };
                         Ok(StepResult::Continue)
                     } else {
-                        self.result = result;
-                        Ok(StepResult::Return(OnionPair::new_static(
+                        self.result = *result;
+                        Ok(StepResult::Return(Box::new(OnionPair::new_static(
                             &OnionObject::Boolean(true).stabilize(),
                             &self.result.clone(),
-                        )))
+                        ))))
                     }
                 }
             }
         } else {
-            Ok(StepResult::Return(OnionPair::new_static(
+            Ok(StepResult::Return(Box::new(OnionPair::new_static(
                 &OnionObject::Boolean(true).stabilize(),
                 &self.result.clone(),
-            )))
+            ))))
         }
     }
     fn receive(

@@ -55,7 +55,7 @@ where
         + 'static,
 {
     fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
-        (self.function)(&self.argument, gc).map(|result| StepResult::Return(result))
+        (self.function)(&self.argument, gc).map(|result| StepResult::Return(Box::new(result)))
     }
 
     fn receive(
@@ -64,7 +64,7 @@ where
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         if let StepResult::Return(result) = step_result {
-            self.argument = result;
+            self.argument = *result;
             Ok(())
         } else {
             Err(RuntimeError::InvalidOperation(

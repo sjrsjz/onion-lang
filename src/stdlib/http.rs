@@ -190,12 +190,12 @@ impl Runnable for AsyncHttpRequest {
                 match result {
                     Ok(response) => {
                         let response_obj = OnionObject::String(response).stabilize();
-                        Ok(StepResult::Return(response_obj))
+                        Ok(StepResult::Return(Box::new(response_obj)))
                     }
                     Err(error) => {
                         let error_obj =
                             OnionObject::String(format!("HTTP Error: {}", error)).stabilize();
-                        Ok(StepResult::Return(error_obj))
+                        Ok(StepResult::Return(Box::new(error_obj)))
                     }
                 }
             }

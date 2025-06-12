@@ -242,7 +242,7 @@ impl Runnable for AsyncSleep {
             RuntimeError::DetailedError(format!("Failed to get elapsed time: {}", e))
         })?;
         if elapsed.as_millis() >= self.millis as u128 {
-            Ok(StepResult::Return(OnionObject::Null.stabilize()))
+            Ok(StepResult::Return(Box::new(OnionObject::Null.stabilize())))
         } else {
             Ok(StepResult::Continue)
         }

@@ -115,7 +115,7 @@ impl OnionLambdaDefinition {
             }
             LambdaBody::NativeFunction(native_function) => {
                 let mut runnable = native_function.copy();
-                runnable.receive(StepResult::Return(argument), gc)?;
+                runnable.receive(StepResult::Return(Box::new(argument)), gc)?;
                 Ok(runnable)
             }
         }

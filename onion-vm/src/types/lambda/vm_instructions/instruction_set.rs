@@ -45,7 +45,7 @@ pub enum VMInstruction {
     BinaryLe = 36,     // <=
     BinaryIn = 37,     // in
     BinaryIs = 38,     // is
-    MapTo = 39,     // map to
+    MapTo = 39,        // map to
 
     // 一元操作 (40-49)
     UnaryBitNot = 40, // ~
@@ -74,8 +74,8 @@ pub enum VMInstruction {
     Return = 72,      // 返回
     Jump = 73,        // 跳转
     JumpIfFalse = 74, // 条件跳转
-    SyncCall = 75, // 运行函数
-    Raise = 76, // 抛出自定义值
+    SyncCall = 75,    // 运行函数
+    Raise = 76,       // 抛出自定义值
 
     // 帧操作 (80-89)
     NewFrame = 80,   // 新建帧
@@ -87,10 +87,10 @@ pub enum VMInstruction {
     Import = 90, // 导入模块
 
     // 特殊操作 (100-109)
-    ForkInstruction = 100,     // 复制当前函数指令集
-    BindSelf = 101, // 绑定self
-    Assert = 102,   // 断言
-    Emit = 103,     // 发射事件
+    ForkInstruction = 100, // 复制当前函数指令集
+    BindSelf = 101,        // 绑定self
+    Assert = 102,          // 断言
+    Emit = 103,            // 发射事件
 
     // 其他
     Nop = 255, // 空操作
@@ -211,21 +211,27 @@ impl VMInstructionPackage {
             source,
         }
     }
+    #[inline(always)]
     pub fn get_table(&self) -> &HashMap<String, usize> {
         &self.function_ips
     }
+    #[inline(always)]
     pub fn get_code(&self) -> &Vec<u32> {
         &self.code
     }
+    #[inline(always)]
     pub fn get_string_pool(&self) -> &Vec<String> {
         &self.string_pool
     }
+    #[inline(always)]
     pub fn get_bytes_pool(&self) -> &Vec<Vec<u8>> {
         &self.bytes_pool
     }
+    #[inline(always)]
     pub fn get_source(&self) -> &Option<String> {
         &self.source
     }
+    #[inline(always)]
     pub fn get_debug_info(&self) -> &HashMap<usize, DebugInfo> {
         &self.debug_infos
     }
@@ -248,14 +254,20 @@ impl VMInstructionPackage {
         let mut seen_strings = std::collections::HashSet::new();
         for (index, string) in self.string_pool.iter().enumerate() {
             if !seen_strings.insert(string) {
-                return Err(format!("Duplicate string found at index {}: {}", index, string));
+                return Err(format!(
+                    "Duplicate string found at index {}: {}",
+                    index, string
+                ));
             }
         }
         // 验证字节池是否不重复
         let mut seen_bytes = std::collections::HashSet::new();
         for (index, bytes) in self.bytes_pool.iter().enumerate() {
             if !seen_bytes.insert(bytes.clone()) {
-                return Err(format!("Duplicate bytes found at index {}: {:?}", index, bytes));
+                return Err(format!(
+                    "Duplicate bytes found at index {}: {:?}",
+                    index, bytes
+                ));
             }
         }
         Ok(())

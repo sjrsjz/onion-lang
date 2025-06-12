@@ -4,7 +4,10 @@ use arc_gc::gc::GC;
 
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
-    types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
+    types::{
+        lambda::vm_instructions::opcode::get_processed_opcode,
+        object::{OnionObject, OnionObjectCell, OnionStaticObject},
+    },
 };
 
 use super::{
@@ -12,7 +15,7 @@ use super::{
     vm_instructions::{
         self,
         instruction_set::{VMInstruction, VMInstructionPackage},
-        opcode::{Instruction32, ProcessedOpcode},
+        opcode::ProcessedOpcode,
     },
 };
 
@@ -263,7 +266,7 @@ impl Runnable for OnionLambdaRunnable {
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         if let StepResult::Return(result) = step_result {
-            self.context.push_object(result)?;
+            self.context.push_object(*result)?;
             Ok(())
         } else {
             Err(RuntimeError::DetailedError(
@@ -274,56 +277,40 @@ impl Runnable for OnionLambdaRunnable {
     fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
         const MAX_INLINE_STEPS: usize = 1024;
 
-        for _ in 0..MAX_INLINE_STEPS {
-            let (code, raw, new_ip) = {
-                let code = self.instruction.get_code();
-                if self.ip < 0 || self.ip as usize >= code.len() {
-                    return Err(RuntimeError::DetailedError(
-                        "Instruction pointer out of bounds".to_string(),
-                    ));
-                }
-                let opcode = code[self.ip as usize];
-                let mut ip = self.ip as usize;
-                let mut instruction32 = Instruction32::new(code, &mut ip);
-                let code = instruction32.get_processed_opcode();
-                (code, opcode, ip)
-            };
+        let mut steps = 0;
 
-            match code {
-                Some(opcode) => {
-                    let handler = INSTRUCTION_TABLE
-                        .get(opcode.instruction as usize)
-                        .ok_or_else(|| {
-                            RuntimeError::DetailedError(format!(
-                                "No handler for opcode: {}",
-                                opcode.instruction
-                            ))
-                        })?;
-                    self.ip = new_ip as isize;
-                    let result = handler(self, &opcode, gc)?;
+        // 获取代码的原始指针和长度，避免借用冲突
+        let (code_ptr, code_len) = {
+            let code = self.instruction.get_code();
+            (code.as_ptr(), code.len())
+        };
 
-                    // 检查是否需要中断循环
-                    match result {
-                        StepResult::Continue => {
-                            // 继续下一步
-                            continue;
-                        }
-                        _ => {
-                            // 返回结果或错误
-                            return Ok(result);
-                        }
-                    }
-                }
-                None => {
-                    return Err(RuntimeError::DetailedError(format!(
-                        "Invalid opcode at IP {}: {:?}",
-                        self.ip, raw
-                    )));
-                }
+        loop {
+            if steps >= MAX_INLINE_STEPS {
+                break;
+            }
+            steps += 1;
+
+            let mut ip = self.ip as usize;
+            if ip >= code_len {
+                return Err(RuntimeError::DetailedError(
+                    "Instruction pointer out of bounds".to_string(),
+                ));
+            }
+
+            // 使用 unsafe 从原始指针创建切片
+            let code = unsafe { std::slice::from_raw_parts(code_ptr, code_len) };
+            let opcode = get_processed_opcode(code, &mut ip);
+
+            let handler = unsafe { *INSTRUCTION_TABLE.get_unchecked(opcode.instruction as usize) };
+            self.ip = ip as isize;
+
+            match handler(self, &opcode, gc)? {
+                StepResult::Continue => continue,
+                v => return Ok(v),
             }
         }
 
-        // 如果执行了最大步数仍未完成，返回 Continue 让外部继续调用
         Ok(StepResult::Continue)
     }
     fn copy(&self) -> Box<dyn Runnable> {
@@ -356,5 +343,17 @@ impl Runnable for OnionLambdaRunnable {
             "this_lambda": self.this_lambda.to_string(),
             "result": self.result.to_string(),
         }))
+    }
+}
+#[cfg(test)]
+mod size_tests {
+    use super::*;
+    
+    #[test]
+    fn print_sizes() {
+        println!("StepResult size: {}", std::mem::size_of::<StepResult>());
+        println!("RuntimeError size: {}", std::mem::size_of::<RuntimeError>());
+        println!("Result<StepResult, RuntimeError> size: {}", 
+                 std::mem::size_of::<Result<StepResult, RuntimeError>>());
     }
 }

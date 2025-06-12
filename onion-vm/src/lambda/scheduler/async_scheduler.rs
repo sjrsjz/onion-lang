@@ -21,10 +21,10 @@ impl AsyncScheduler {
 impl Runnable for AsyncScheduler {
     fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
         if self.runnables.is_empty() {
-            return Ok(StepResult::Return(OnionPair::new_static(
+            return Ok(StepResult::Return(Box::new(OnionPair::new_static(
                 &OnionObject::Boolean(true).stabilize(),
                 &OnionObject::Undefined(Some("All runnables completed".to_string())).stabilize(),
-            )));
+            ))));
         }
 
         let mut i = 0;
@@ -38,10 +38,10 @@ impl Runnable for AsyncScheduler {
                         StepResult::NewRunnable(new_runnable) => {
                             self.runnables.push(new_runnable);
                             self.runnables[i].receive(
-                                StepResult::Return(
+                                StepResult::Return(Box::new(
                                     OnionObject::Undefined(Some("Task Launched".to_string()))
                                         .stabilize(),
-                                ),
+                                )),
                                 gc,
                             )?;
                             i += 1; // 继续处理下一个runnable

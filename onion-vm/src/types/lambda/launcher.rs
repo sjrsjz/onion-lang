@@ -207,13 +207,13 @@ impl Runnable for OnionLambdaRunnableLauncher {
                             }
                             Ok(false) => {
                                 // false 表示约束执行过程中发生了 panic
-                                return Err(RuntimeError::CustomValue(
+                                return Err(RuntimeError::CustomValue(Box::new(
                                     constrain_result_pair
                                         .get_value()
                                         .try_borrow()?
                                         .clone()
                                         .stabilize(),
-                                ));
+                                )));
                             }
                             Err(err) => return Err(err), // 转换布尔值失败
                         }

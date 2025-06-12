@@ -1132,7 +1132,7 @@ pub fn return_value(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let return_value = runnable.context.get_object_rev(0)?;
-    Ok(StepResult::Return(return_value.clone()))
+    Ok(StepResult::Return(Box::new(return_value.clone())))
 }
 
 pub fn fork_instruction(
@@ -1238,5 +1238,5 @@ pub fn raise(
 ) -> Result<StepResult, RuntimeError> {
     // 获取抛出对象
     let value = runnable.context.pop()?;
-    return Err(RuntimeError::CustomValue(value));
+    return Err(RuntimeError::CustomValue(Box::new(value)));
 }
