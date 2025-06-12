@@ -39,7 +39,7 @@ impl Clone for LambdaBody {
 impl Debug for LambdaBody {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LambdaBody::Instruction(instruction) => write!(f, "Instruction({:?})", instruction),
+            LambdaBody::Instruction(_) => write!(f, "Instruction(...)"),
             LambdaBody::NativeFunction(_) => write!(f, "NativeFunction"),
         }
     }
@@ -48,7 +48,7 @@ impl Debug for LambdaBody {
 impl Display for LambdaBody {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LambdaBody::Instruction(instruction) => write!(f, "Instruction({:?})", instruction),
+            LambdaBody::Instruction(_) => write!(f, "Instruction(...)"),
             LambdaBody::NativeFunction(_) => write!(f, "NativeFunction"),
         }
     }
