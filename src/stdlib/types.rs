@@ -246,9 +246,9 @@ fn find(
             .with_attribute(&*key_borrowed, &|obj| Ok(obj.clone().stabilize()))
         {
             Ok(value) => Ok(value),
-            Err(RuntimeError::InvalidOperation(err)) => {
+            Err(RuntimeError::InvalidOperation(ref err)) => {
                 // If the attribute is not found, return undefined
-                Ok(OnionObject::Undefined(Some(err)).stabilize())
+                Ok(OnionObject::Undefined(Some(err.clone())).stabilize())
             }
             Err(e) => {
                 // If any other error occurs, propagate it

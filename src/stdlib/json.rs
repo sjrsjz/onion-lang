@@ -19,10 +19,9 @@ fn to_json(obj: OnionObject) -> Result<Value, RuntimeError> {
                 // 将 Pair 转换为只有一个键值对的 JSON 对象
                 let key = p
                     .get_key()
-                    .try_borrow()?
                     .to_string(&vec![])
                     .map_err(|e| RuntimeError::InvalidOperation(e.to_string()))?;
-                let value = to_json(p.get_value().try_borrow()?.clone())
+                let value = to_json(p.get_value().clone())
                     .map_err(|e| RuntimeError::InvalidOperation(e.to_string()))?;
                 let mut map = serde_json::Map::new();
                 map.insert(key, value);
@@ -30,22 +29,18 @@ fn to_json(obj: OnionObject) -> Result<Value, RuntimeError> {
             }
             OnionObject::Tuple(t) => {
                 // 检查是否所有元素都是 Pair，如果是则转换为 JSON 对象
-                let all_pairs = t
-                    .elements
-                    .iter()
-                    .all(|e| matches!(&*e.borrow(), OnionObject::Pair(_)));
+                let all_pairs = t.elements.iter().all(|e| matches!(e, OnionObject::Pair(_)));
 
                 if all_pairs && !t.elements.is_empty() {
                     // 转换为 JSON 对象 (字典)
                     let mut map = serde_json::Map::new();
                     for element in t.elements.as_ref() {
-                        if let OnionObject::Pair(pair) = &*element.try_borrow()? {
+                        if let OnionObject::Pair(pair) = &*element {
                             let key = pair
                                 .get_key()
-                                .try_borrow()?
                                 .to_string(&vec![])
                                 .map_err(|e| RuntimeError::InvalidOperation(e.to_string()))?;
-                            let value = to_json(pair.get_value().try_borrow()?.clone())
+                            let value = to_json(pair.get_value().clone())
                                 .map_err(|e| RuntimeError::InvalidOperation(e.to_string()))?;
                             map.insert(key, value);
                         }
@@ -53,11 +48,7 @@ fn to_json(obj: OnionObject) -> Result<Value, RuntimeError> {
                     Ok(Value::Object(map))
                 } else {
                     // 转换为 JSON 数组
-                    let vec: Vec<_> = t
-                        .elements
-                        .iter()
-                        .map(|e| to_json(e.borrow().clone()))
-                        .collect();
+                    let vec: Vec<_> = t.elements.iter().map(|e| to_json(e.clone())).collect();
                     Ok(Value::Array(
                         vec.into_iter()
                             .collect::<Result<Vec<_>, _>>()
@@ -92,7 +83,7 @@ fn from_json(value: Value) -> Result<OnionStaticObject, RuntimeError> {
         Value::Array(arr) => {
             let elements: Result<Vec<_>, _> = arr
                 .into_iter()
-                .map(|v| from_json(v).map(|obj| obj.weak().clone().to_cell()))
+                .map(|v| from_json(v).map(|obj| obj.weak().clone()))
                 .collect();
             match elements {
                 Ok(elems) => Ok(OnionObject::Tuple(OnionTuple::new(elems)).stabilize()),
@@ -103,9 +94,9 @@ fn from_json(value: Value) -> Result<OnionStaticObject, RuntimeError> {
             let pairs: Result<Vec<_>, _> = obj
                 .into_iter()
                 .map(|(k, v)| {
-                    let key_obj = OnionObject::String(k.into()).to_cell();
-                    let value_obj = from_json(v)?.weak().clone().to_cell();
-                    Ok(OnionObject::Pair(OnionPair::new(key_obj, value_obj)).to_cell())
+                    let key_obj = OnionObject::String(k.into());
+                    let value_obj = from_json(v)?.weak().clone();
+                    Ok(OnionObject::Pair(OnionPair::new(key_obj, value_obj)))
                 })
                 .collect();
             match pairs {

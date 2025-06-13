@@ -21,10 +21,14 @@ impl AsyncScheduler {
 impl Runnable for AsyncScheduler {
     fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
         if self.runnables.is_empty() {
-            return Ok(StepResult::Return(Box::new(OnionPair::new_static(
-                &OnionObject::Boolean(true).stabilize(),
-                &OnionObject::Undefined(Some("All runnables completed".to_string())).stabilize(),
-            ))));
+            return Ok(StepResult::Return(
+                OnionPair::new_static(
+                    &OnionObject::Boolean(true).stabilize(),
+                    &OnionObject::Undefined(Some("All runnables completed".to_string()))
+                        .stabilize(),
+                )
+                .into(),
+            ));
         }
 
         let mut i = 0;
@@ -35,18 +39,19 @@ impl Runnable for AsyncScheduler {
                         StepResult::Continue => {
                             i += 1; // 继续处理下一个runnable
                         }
-                        StepResult::NewRunnable(new_runnable) => {
-                            self.runnables.push(new_runnable);
+                        StepResult::NewRunnable(ref new_runnable) => {
+                            self.runnables.push(new_runnable.copy());
                             self.runnables[i].receive(
-                                StepResult::Return(Box::new(
+                                &StepResult::Return(
                                     OnionObject::Undefined(Some("Task Launched".to_string()))
-                                        .stabilize(),
-                                )),
+                                        .stabilize()
+                                        .into(),
+                                ),
                                 gc,
                             )?;
                             i += 1; // 继续处理下一个runnable
                         }
-                        StepResult::ReplaceRunnable(new_runnable) => {
+                        StepResult::ReplaceRunnable(ref new_runnable) => {
                             // self.runnables.push(new_runnable);
                             // self.runnables[i].receive(
                             //     StepResult::Return(
@@ -55,7 +60,7 @@ impl Runnable for AsyncScheduler {
                             //     gc,
                             // )?;
                             // i += 1; // 继续处理下一个runnable
-                            self.runnables[i] = new_runnable;
+                            self.runnables[i] = new_runnable.copy();
                             i += 1; // 继续处理下一个runnable
                         }
                         StepResult::Return(_) => {
@@ -75,7 +80,7 @@ impl Runnable for AsyncScheduler {
     }
     fn receive(
         &mut self,
-        _step_result: StepResult,
+        _step_result: &StepResult,
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         Err(RuntimeError::DetailedError(

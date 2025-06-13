@@ -29,12 +29,12 @@ impl Runnable for Mapping {
 
     fn receive(
         &mut self,
-        step_result: StepResult,
+        step_result: &StepResult,
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         match step_result {
             StepResult::Return(result) => {
-                self.collected.push(*result);
+                self.collected.push(result.as_ref().clone());
                 self.current_index += 1; // 移动到下一个元素
                 Ok(())
             }
@@ -84,9 +84,9 @@ impl Runnable for Mapping {
                         })
                     } else {
                         // 所有元素都处理完了
-                        Ok(StepResult::Return(Box::new(OnionTuple::new_static_no_ref(
-                            self.collected.clone(),
-                        ))))
+                        Ok(StepResult::Return(
+                            OnionTuple::new_static_no_ref(self.collected.clone()).into(),
+                        ))
                     }
                 }
                 _ => Err(RuntimeError::InvalidType(

@@ -24,10 +24,9 @@ fn println(
                 tuple
                     .elements
                     .iter()
-                    .map(|element| match element.try_borrow() {
-                        Ok(obj) => obj.to_string(&vec![]).unwrap_or("<unknown>".to_string()),
-                        Err(_) => "<borrow error>".to_string(),
-                    })
+                    .map(|element| element
+                        .to_string(&vec![])
+                        .unwrap_or("<unknown>".to_string()))
                     .collect::<Vec<_>>()
                     .join(" ")
             );
@@ -47,10 +46,9 @@ fn print(
                 tuple
                     .elements
                     .iter()
-                    .map(|element| match element.try_borrow() {
-                        Ok(obj) => obj.to_string(&vec![]).unwrap_or("<unknown>".to_string()),
-                        Err(_) => "<borrow error>".to_string(),
-                    })
+                    .map(|element| element
+                        .to_string(&vec![])
+                        .unwrap_or("<unknown>".to_string()))
                     .collect::<Vec<_>>()
                     .join(" ")
             );
@@ -66,7 +64,6 @@ fn input(
     argument.weak().with_data(|data| {
         let hint = get_attr_direct(data, "hint".to_string())?
             .weak()
-            
             .to_string(&vec![])?;
         print!("{}", hint);
         stdout()

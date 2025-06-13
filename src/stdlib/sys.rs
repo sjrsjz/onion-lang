@@ -14,9 +14,9 @@ fn argv(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let args: Vec<_> = env::args()
-        .map(|arg| OnionObject::String(arg.into()).to_cell().into())
+        .map(|arg| OnionObject::String(arg.into()))
         .collect();
-    
+
     Ok(OnionObject::Tuple(onion_vm::types::tuple::OnionTuple::new(args)).stabilize())
 }
 
@@ -28,12 +28,10 @@ fn getenv(
     argument.weak().with_data(|data| {
         let key = get_attr_direct(data, "key".to_string())?;
         key.weak().with_data(|key_data| match key_data {
-            OnionObject::String(key_str) => {
-                match env::var(key_str.as_ref()) {
-                    Ok(value) => Ok(OnionObject::String(value.into()).stabilize()),
-                    Err(_) => Ok(OnionObject::Null.stabilize()),
-                }
-            }
+            OnionObject::String(key_str) => match env::var(key_str.as_ref()) {
+                Ok(value) => Ok(OnionObject::String(value.into()).stabilize()),
+                Err(_) => Ok(OnionObject::Null.stabilize()),
+            },
             _ => Err(RuntimeError::InvalidType(
                 "Key must be a string".to_string(),
             )),
@@ -49,10 +47,11 @@ fn setenv(
     argument.weak().with_data(|data| {
         let key = get_attr_direct(data, "key".to_string())?;
         let value = get_attr_direct(data, "value".to_string())?;
-        
+
         key.weak().with_data(|key_data| {
-            value.weak().with_data(|value_data| {
-                match (key_data, value_data) {
+            value
+                .weak()
+                .with_data(|value_data| match (key_data, value_data) {
                     (OnionObject::String(key_str), OnionObject::String(value_str)) => {
                         env::set_var(key_str.as_ref(), value_str.as_ref());
                         Ok(OnionObject::Null.stabilize())
@@ -60,8 +59,7 @@ fn setenv(
                     _ => Err(RuntimeError::InvalidType(
                         "Key and value must be strings".to_string(),
                     )),
-                }
-            })
+                })
         })
     })
 }
@@ -92,12 +90,12 @@ fn environ(
 ) -> Result<OnionStaticObject, RuntimeError> {
     let env_vars: Vec<_> = env::vars()
         .map(|(key, value)| {
-            let key_obj = OnionObject::String(key.into()).to_cell();
-            let value_obj = OnionObject::String(value.into()).to_cell();
-            OnionObject::Pair(onion_vm::types::pair::OnionPair::new(key_obj, value_obj)).to_cell()
+            let key_obj = OnionObject::String(key.into());
+            let value_obj = OnionObject::String(value.into());
+            OnionObject::Pair(onion_vm::types::pair::OnionPair::new(key_obj, value_obj))
         })
         .collect();
-    
+
     Ok(OnionObject::Tuple(onion_vm::types::tuple::OnionTuple::new(env_vars)).stabilize())
 }
 
@@ -109,7 +107,8 @@ fn getcwd(
     match env::current_dir() {
         Ok(path) => Ok(OnionObject::String(path.to_string_lossy().to_string().into()).stabilize()),
         Err(e) => Err(RuntimeError::DetailedError(format!(
-            "Failed to get current directory: {}", e
+            "Failed to get current directory: {}",
+            e
         ))),
     }
 }
@@ -129,7 +128,7 @@ fn exit(
                 )),
             })
     })?;
-    
+
     std::process::exit(exit_code);
 }
 
@@ -147,7 +146,7 @@ fn platform(
     } else {
         "unknown"
     };
-    
+
     Ok(OnionObject::String(platform.to_string().into()).stabilize())
 }
 
@@ -167,7 +166,7 @@ fn arch(
     } else {
         "unknown"
     };
-    
+
     Ok(OnionObject::String(arch.to_string().into()).stabilize())
 }
 
@@ -179,7 +178,8 @@ fn executable(
     match env::current_exe() {
         Ok(path) => Ok(OnionObject::String(path.to_string_lossy().to_string().into()).stabilize()),
         Err(e) => Err(RuntimeError::DetailedError(format!(
-            "Failed to get executable path: {}", e
+            "Failed to get executable path: {}",
+            e
         ))),
     }
 }
@@ -281,10 +281,7 @@ pub fn build_module() -> OnionStaticObject {
 
     // exit 函数 - 退出程序
     let mut exit_params = IndexMap::new();
-    exit_params.insert(
-        "code".to_string(),
-        OnionObject::Integer(0).stabilize(),
-    );
+    exit_params.insert("code".to_string(), OnionObject::Integer(0).stabilize());
     module.insert(
         "exit".to_string(),
         wrap_native_function(

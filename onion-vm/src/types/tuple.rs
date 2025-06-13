@@ -11,7 +11,7 @@ use super::object::{OnionObject, OnionObjectCell, OnionStaticObject};
 
 #[derive(Clone)]
 pub struct OnionTuple {
-    pub elements: Box<Vec<OnionObjectCell>>,
+    pub elements: Box<Vec<OnionObject>>,
 }
 
 impl GCTraceable<OnionObjectCell> for OnionTuple {
@@ -47,7 +47,7 @@ macro_rules! onion_tuple {
 }
 
 impl OnionTuple {
-    pub fn new(elements: Vec<OnionObjectCell>) -> Self {
+    pub fn new(elements: Vec<OnionObject>) -> Self {
         OnionTuple {
             elements: elements.into(),
         }
@@ -57,7 +57,7 @@ impl OnionTuple {
         OnionStaticObject::new(OnionObject::Tuple(OnionTuple {
             elements: elements
                 .into_iter()
-                .map(|e| e.weak().clone().to_cell())
+                .map(|e| e.weak().clone())
                 .collect::<Vec<_>>()
                 .into(),
         }))
@@ -67,7 +67,7 @@ impl OnionTuple {
         OnionStaticObject::new(OnionObject::Tuple(OnionTuple {
             elements: elements
                 .into_iter()
-                .map(|e| e.weak().clone().to_cell())
+                .map(|e| e.weak().clone())
                 .collect::<Vec<_>>()
                 .into(),
         }))
@@ -90,7 +90,7 @@ impl OnionTuple {
             )));
         }
         Ok(OnionStaticObject::new(
-            self.elements[index as usize].try_borrow()?.clone(),
+            self.elements[index as usize].clone(),
         ))
     }
 
@@ -104,8 +104,8 @@ impl OnionTuple {
                 index
             )));
         }
-        let borrowed = self.elements[index as usize].try_borrow()?;
-        f(&*borrowed)
+        let borrowed = &self.elements[index as usize];
+        f(borrowed)
     }
 
     pub fn with_attribute<F, R>(&self, key: &OnionObject, f: &F) -> Result<R, RuntimeError>
@@ -113,50 +113,15 @@ impl OnionTuple {
         F: Fn(&OnionObject) -> Result<R, RuntimeError>,
     {
         for element in self.elements.as_ref() {
-            match &*element.try_borrow()? {
+            match element {
                 OnionObject::Named(named) => {
-                    if named.key.try_borrow()?.equals(key)? {
-                        return f(&*named.value.try_borrow()?);
+                    if named.key.equals(key)? {
+                        return f(&named.value);
                     }
                 }
                 OnionObject::Pair(pair) => {
-                    if pair.key.try_borrow()?.equals(key)? {
-                        return f(&*pair.value.try_borrow()?);
-                    }
-                }
-                _ => {}
-            }
-        }
-        Err(RuntimeError::InvalidOperation(format!(
-            "Attribute {:?} not found in tuple",
-            key
-        )))
-    }
-
-    pub fn with_attribute_mut<F, R>(&mut self, key: &OnionObject, f: F) -> Result<R, RuntimeError>
-    where
-        F: Fn(&mut OnionObject) -> Result<R, RuntimeError>,
-    {
-        for element in self.elements.as_mut() {
-            match &*element.try_borrow()? {
-                OnionObject::Named(named) => {
-                    if named.key.try_borrow()?.equals(key)? {
-                        return f(&mut *named.value.try_borrow_mut().map_err(|_| {
-                            RuntimeError::InvalidOperation(format!(
-                                "Failed to borrow value for key {:?}",
-                                key
-                            ))
-                        })?);
-                    }
-                }
-                OnionObject::Pair(pair) => {
-                    if pair.key.try_borrow()?.equals(key)? {
-                        return f(&mut *pair.value.try_borrow_mut().map_err(|_| {
-                            RuntimeError::InvalidOperation(format!(
-                                "Failed to borrow value for key {:?}",
-                                key
-                            ))
-                        })?);
+                    if pair.key.equals(key)? {
+                        return f(&pair.value);
                     }
                 }
                 _ => {}
@@ -185,7 +150,7 @@ impl OnionTuple {
 
     pub fn contains(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
         for element in self.elements.as_ref() {
-            if element.try_borrow()?.equals(other)? {
+            if element.equals(other)? {
                 return Ok(true);
             }
         }
@@ -221,7 +186,7 @@ impl OnionTuple {
 //         let mut assigned = vec![false; new_elements.len()];
 
 //         for other_element in &other.elements {
-//             match &*other_element.try_borrow()? {
+//             match &*other_element {
 //                 OnionObject::Named(named) => {
 //                     let key = named.key.as_ref();
 //                     let mut found = false;
@@ -229,7 +194,7 @@ impl OnionTuple {
 //                     // 查找是否有相同的key
 //                     for (i, element) in new_elements.iter_mut().enumerate() {
 //                         let should_replace = {
-//                             match &*element.try_borrow()? {
+//                             match &*element {
 //                                 OnionObject::Named(existing_named) => {
 //                                     existing_named.key.equals(key)?
 //                                 }
@@ -258,7 +223,7 @@ impl OnionTuple {
 
 //         // 处理未赋值的元素
 //         for other_element in &other.elements {
-//             match &*other_element.try_borrow()? {
+//             match &*other_element {
 //                 OnionObject::Named(_) => {}
 //                 _ => {
 //                     // 找到第一个未赋值的元素，并赋值
@@ -302,7 +267,7 @@ impl OnionTuple {
 // }
 
 impl OnionTuple {
-    pub fn push(&mut self, element: OnionObjectCell) {
+    pub fn push(&mut self, element: OnionObject) {
         self.elements.push(element);
     }
     pub fn pop(&mut self) -> Option<OnionStaticObject> {
@@ -320,7 +285,7 @@ impl OnionTuple {
     pub fn clear(&mut self) {
         self.elements.clear();
     }
-    pub fn insert(&mut self, index: usize, element: OnionObjectCell) -> Result<(), RuntimeError> {
+    pub fn insert(&mut self, index: usize, element: OnionObject) -> Result<(), RuntimeError> {
         if index > self.elements.len() {
             return Err(RuntimeError::InvalidOperation(format!(
                 "Index out of bounds: {}",

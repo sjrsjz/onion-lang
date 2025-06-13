@@ -42,7 +42,7 @@ pub trait Runnable {
     fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError>;
     fn receive(
         &mut self,
-        step_result: StepResult,
+        step_result: &StepResult,
         gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         Err(RuntimeError::DetailedError(
@@ -52,9 +52,7 @@ pub trait Runnable {
     fn copy_with_gc(&self, gc: &mut GC<OnionObjectCell>) -> Box<dyn Runnable> {
         panic!("copy_with_gc is not implemented for this Runnable")
     }
-    fn copy(&self) -> Box<dyn Runnable> {
-        panic!("copy is not implemented for this Runnable")
-    }
+    fn copy(&self) -> Box<dyn Runnable>;
 
     fn format_context(&self) -> Result<Value, RuntimeError>;
 }
@@ -66,5 +64,9 @@ mod tests {
     #[test]
     fn check_step_result_size() {
         println!("Size of StepResult: {}", std::mem::size_of::<StepResult>());
+        println!(
+            "Size of Result<StepResult, RuntimeError>: {}",
+            std::mem::size_of::<Result<StepResult, RuntimeError>>()
+        );
     }
 }

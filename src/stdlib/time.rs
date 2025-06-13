@@ -67,7 +67,6 @@ fn sleep_seconds(
     let seconds = argument.weak().with_data(|data| {
         get_attr_direct(data, "seconds".to_string())?
             .weak()
-            
             .to_integer()
             .map_err(|e| RuntimeError::InvalidType(format!("Invalid seconds: {}", e)))
     })?;
@@ -90,7 +89,6 @@ fn sleep_millis(
     let millis = argument.weak().with_data(|data| {
         get_attr_direct(data, "millis".to_string())?
             .weak()
-            
             .to_integer()
             .map_err(|e| RuntimeError::InvalidType(format!("Invalid milliseconds: {}", e)))
     })?;
@@ -113,7 +111,6 @@ fn sleep_micros(
     let micros = argument.weak().with_data(|data| {
         get_attr_direct(data, "micros".to_string())?
             .weak()
-            
             .to_integer()
             .map_err(|e| RuntimeError::InvalidType(format!("Invalid microseconds: {}", e)))
     })?;
@@ -181,7 +178,6 @@ fn format_time(
     let timestamp = argument.weak().with_data(|data| {
         get_attr_direct(data, "timestamp".to_string())?
             .weak()
-            
             .to_integer()
             .map_err(|e| RuntimeError::InvalidType(format!("Invalid timestamp: {}", e)))
     })?;
@@ -204,13 +200,11 @@ fn time_diff(
     let (start, end) = argument.weak().with_data(|data| {
         let start = get_attr_direct(data, "start".to_string())?
             .weak()
-            
             .to_integer()
             .map_err(|e| RuntimeError::InvalidType(format!("Invalid start timestamp: {}", e)))?;
 
         let end = get_attr_direct(data, "end".to_string())?
             .weak()
-            
             .to_integer()
             .map_err(|e| RuntimeError::InvalidType(format!("Invalid end timestamp: {}", e)))?;
 
@@ -242,7 +236,7 @@ impl Runnable for AsyncSleep {
             RuntimeError::DetailedError(format!("Failed to get elapsed time: {}", e))
         })?;
         if elapsed.as_millis() >= self.millis as u128 {
-            Ok(StepResult::Return(Box::new(OnionObject::Null.stabilize())))
+            Ok(StepResult::Return(OnionObject::Null.stabilize().into()))
         } else {
             Ok(StepResult::Continue)
         }
@@ -250,7 +244,7 @@ impl Runnable for AsyncSleep {
 
     fn receive(
         &mut self,
-        _step_result: StepResult,
+        _step_result: &StepResult,
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         if let StepResult::Return(_) = _step_result {
@@ -288,7 +282,6 @@ fn async_sleep(
     let millis = argument.weak().with_data(|data| {
         get_attr_direct(data, "millis".to_string())?
             .weak()
-            
             .to_integer()
             .map_err(|e| RuntimeError::InvalidType(format!("Invalid milliseconds: {}", e)))
     })?;

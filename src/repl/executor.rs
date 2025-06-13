@@ -156,27 +156,20 @@ impl ReplExecutor {
                         // 添加新的可执行对象到调度器
                         unreachable!()
                     }
-                    StepResult::ReplaceRunnable(r) => {
-                        scheduler = r;
+                    StepResult::ReplaceRunnable(ref r) => {
+                        scheduler = r.copy();
                     }
-                    StepResult::Return(result) => {
-                        let result_borrowed = result
-                            .weak();
+                    StepResult::Return(ref result) => {
+                        let result_borrowed = result.weak();
                         let result = unwrap_object!(&*result_borrowed, OnionObject::Pair)
                             .map_err(|e| format!("Failed to unwrap result: {:?}", e))?;
                         let key = result.get_key();
-                        let key_borrowed = key
-                            .try_borrow()
-                            .map_err(|e| format!("Failed to borrow key: {:?}", e))?;
-                        let success = *unwrap_object!(&*key_borrowed, OnionObject::Boolean)
+                        let success = *unwrap_object!(key, OnionObject::Boolean)
                             .map_err(|e| format!("Failed to get success key: {:?}", e))?;
 
                         if !success {
-                            let value_borrowed = result
+                            let error_msg = result
                                 .get_value()
-                                .try_borrow()
-                                .map_err(|e| format!("Failed to borrow value: {:?}", e))?;
-                            let error_msg = value_borrowed
                                 .to_string(&vec![])
                                 .map_err(|e| format!("Failed to get error message: {:?}", e))?;
                             println!("{} {}", "Error:".red().bold(), error_msg);
@@ -187,12 +180,7 @@ impl ReplExecutor {
                         let result_value = result.get_value();
 
                         // 将结果添加到Out元组中
-                        self.add_result_to_out(
-                            result_value
-                                .try_borrow()
-                                .map_err(|e| format!("Failed to borrow result value: {:?}", e))?
-                                .clone(),
-                        );
+                        self.add_result_to_out(result_value.clone());
                         let is_undefined = result_value
                             .with_data(|data| {
                                 Ok(unwrap_object!(data, OnionObject::Undefined).is_ok())
@@ -205,8 +193,6 @@ impl ReplExecutor {
                         }
                         // 打印结果
                         let result_str = result_value
-                            .try_borrow()
-                            .map_err(|e| format!("Failed to borrow result value: {:?}", e))?
                             .to_string(&vec![])
                             .map_err(|e| format!("Failed to get result value: {:?}", e))?;
                         println!("{} {}", "Result:".cyan(), result_str);
@@ -230,19 +216,19 @@ impl ReplExecutor {
     /// 将结果添加到Out元组中
     fn add_result_to_out(&mut self, result: OnionObject) {
         let new_elements = {
-            if let OnionObject::Tuple(tuple) = &*self.out_tuple.weak() {
+            if let OnionObject::Tuple(tuple) = self.out_tuple.weak() {
                 let mut elements = tuple.elements.clone();
-                elements.push(result.to_cell());
+                elements.push(result);
                 elements
             } else {
-                vec![result.to_cell()].into()
+                vec![result].into()
             }
         };
 
         self.out_tuple = OnionTuple::new_static_no_ref(
             new_elements
                 .into_iter()
-                .map(|obj| OnionStaticObject::new(obj.borrow().clone()))
+                .map(|obj| OnionStaticObject::new(obj.clone()))
                 .collect(),
         );
     }

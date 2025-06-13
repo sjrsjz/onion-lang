@@ -20,8 +20,8 @@ use super::{
 
 #[derive(Clone)]
 pub struct OnionLazySet {
-    pub container: Box<OnionObjectCell>,
-    pub filter: Box<OnionObjectCell>,
+    pub container: Box<OnionObject>,
+    pub filter: Box<OnionObject>,
 }
 
 impl GCTraceable<OnionObjectCell> for OnionLazySet {
@@ -38,7 +38,7 @@ impl Debug for OnionLazySet {
 }
 
 impl OnionLazySet {
-    pub fn new(container: OnionObjectCell, filter: OnionObjectCell) -> Self {
+    pub fn new(container: OnionObject, filter: OnionObject) -> Self {
         OnionLazySet {
             container: Box::new(container),
             filter: Box::new(filter),
@@ -50,17 +50,17 @@ impl OnionLazySet {
         filter: &OnionStaticObject,
     ) -> OnionStaticObject {
         OnionObject::LazySet(OnionLazySet {
-            container: Box::new(container.weak().clone().to_cell()),
-            filter: Box::new(filter.weak().clone().to_cell()),
+            container: Box::new(container.weak().clone()),
+            filter: Box::new(filter.weak().clone()),
         })
         .stabilize()
     }
 
-    pub fn get_container(&self) -> &OnionObjectCell {
+    pub fn get_container(&self) -> &OnionObject {
         &self.container
     }
 
-    pub fn get_filter(&self) -> &OnionObjectCell {
+    pub fn get_filter(&self) -> &OnionObject {
         &self.filter
     }
 
@@ -74,10 +74,8 @@ impl OnionLazySet {
         F: Fn(&OnionObject) -> Result<R, RuntimeError>,
     {
         match key {
-            OnionObject::String(s) if s.as_str() == "container" => {
-                f(&*self.container.try_borrow()?)
-            }
-            OnionObject::String(s) if s.as_str() == "filter" => f(&*self.filter.try_borrow()?),
+            OnionObject::String(s) if s.as_str() == "container" => f(&self.container),
+            OnionObject::String(s) if s.as_str() == "filter" => f(&self.filter),
             OnionObject::String(s) if s.as_str() == "collect" => {
                 let collector = OnionLazySetCollector {
                     container: self.container.clone().stabilize(),
@@ -98,24 +96,6 @@ impl OnionLazySet {
                     f(collector_weak)
                 };
                 result
-            }
-            _ => Err(RuntimeError::InvalidOperation(format!(
-                "Attribute '{:?}' not found in lazy set",
-                key
-            ))),
-        }
-    }
-
-    pub fn with_attribute_mut<F, R>(&mut self, key: &OnionObject, f: &F) -> Result<R, RuntimeError>
-    where
-        F: Fn(&mut OnionObject) -> Result<R, RuntimeError>,
-    {
-        match key {
-            OnionObject::String(s) if s.as_str() == "container" => {
-                f(&mut *self.container.try_borrow_mut()?)
-            }
-            OnionObject::String(s) if s.as_str() == "filter" => {
-                f(&mut *self.filter.try_borrow_mut()?)
             }
             _ => Err(RuntimeError::InvalidOperation(format!(
                 "Attribute '{:?}' not found in lazy set",
@@ -145,7 +125,7 @@ impl Runnable for OnionLazySetCollector {
 
     fn receive(
         &mut self,
-        step_result: StepResult,
+        step_result: &StepResult,
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         match step_result {
@@ -225,9 +205,9 @@ impl Runnable for OnionLazySetCollector {
                             })
                     } else {
                         // 所有元素都处理完了
-                        Ok(StepResult::Return(Box::new(OnionTuple::new_static_no_ref(
-                            self.collected.clone(),
-                        ))))
+                        Ok(StepResult::Return(
+                            OnionTuple::new_static_no_ref(self.collected.clone()).into(),
+                        ))
                     }
                 }
                 _ => Err(RuntimeError::InvalidType(

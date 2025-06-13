@@ -214,7 +214,7 @@ impl OnionLambdaRunnable {
         argument.weak().with_data(|data| {
             if let OnionObject::Tuple(tuple) = data {
                 for item in tuple.elements.iter() {
-                    match &*item.try_borrow()? {
+                    match item {
                         OnionObject::Named(named) => {
                             named.get_key().with_data(|key| match key {
                                 OnionObject::String(key_str) => {
@@ -257,11 +257,11 @@ impl OnionLambdaRunnable {
 impl Runnable for OnionLambdaRunnable {
     fn receive(
         &mut self,
-        step_result: StepResult,
+        step_result: &StepResult,
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         if let StepResult::Return(result) = step_result {
-            self.context.push_object(*result)?;
+            self.context.push_object(result.as_ref().clone())?;
             Ok(())
         } else {
             Err(RuntimeError::DetailedError(

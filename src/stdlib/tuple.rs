@@ -16,7 +16,7 @@ fn push(
         let value = get_attr_direct(data, "value".to_string())?;
         tuple.weak().with_data_ref_mut(|tuple| match tuple {
             OnionObject::Tuple(tuple) => {
-                tuple.push(value.weak().clone().to_cell());
+                tuple.push(value.weak().clone());
                 Ok(())
             }
             _ => Err(RuntimeError::InvalidOperation(
@@ -58,7 +58,7 @@ fn insert(
         tuple.weak().with_data_ref_mut(|tuple| match tuple {
             OnionObject::Tuple(tuple) => {
                 if let OnionObject::Integer(index) = &*index.weak() {
-                    tuple.insert(*index as usize, value.weak().clone().to_cell())?;
+                    tuple.insert(*index as usize, value.weak().clone())?;
                     Ok(OnionObject::Undefined(None).stabilize())
                 } else {
                     Err(RuntimeError::InvalidOperation(

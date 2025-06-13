@@ -55,16 +55,16 @@ where
         + 'static,
 {
     fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
-        (self.function)(&self.argument, gc).map(|result| StepResult::Return(Box::new(result)))
+        (self.function)(&self.argument, gc).map(|result| StepResult::Return(result.into()))
     }
 
     fn receive(
         &mut self,
-        step_result: StepResult,
+        step_result: &StepResult,
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         if let StepResult::Return(result) = step_result {
-            self.argument = *result;
+            self.argument = result.as_ref().clone();
             Ok(())
         } else {
             Err(RuntimeError::InvalidOperation(

@@ -11,8 +11,8 @@ use super::object::{OnionObject, OnionObjectCell, OnionStaticObject};
 
 #[derive(Clone)]
 pub struct OnionNamed {
-    pub key: Box<OnionObjectCell>,   // 使用 Box 避免递归
-    pub value: Box<OnionObjectCell>, // 使用 Box 避免递归
+    pub key: Box<OnionObject>,   // 使用 Box 避免递归
+    pub value: Box<OnionObject>, // 使用 Box 避免递归
 }
 
 impl GCTraceable<OnionObjectCell> for OnionNamed {
@@ -29,7 +29,7 @@ impl Debug for OnionNamed {
 }
 
 impl OnionNamed {
-    pub fn new(key: OnionObjectCell, value: OnionObjectCell) -> Self {
+    pub fn new(key: OnionObject, value: OnionObject) -> Self {
         OnionNamed {
             key: Box::new(key),
             value: Box::new(value),
@@ -38,25 +38,25 @@ impl OnionNamed {
 
     pub fn new_static(key: &OnionStaticObject, value: &OnionStaticObject) -> OnionStaticObject {
         OnionObject::Named(OnionNamed {
-            key: Box::new(key.weak().clone().to_cell()),
-            value: Box::new(value.weak().clone().to_cell()),
+            key: Box::new(key.weak().clone()),
+            value: Box::new(value.weak().clone()),
         })
         .stabilize()
     }
 
-    pub fn get_key(&self) -> &OnionObjectCell {
+    pub fn get_key(&self) -> &OnionObject {
         &self.key
     }
 
-    pub fn get_key_mut(&mut self) -> &mut OnionObjectCell {
+    pub fn get_key_mut(&mut self) -> &mut OnionObject {
         &mut self.key
     }
 
-    pub fn get_value(&self) -> &OnionObjectCell {
+    pub fn get_value(&self) -> &OnionObject {
         &self.value
     }
 
-    pub fn get_value_mut(&mut self) -> &mut OnionObjectCell {
+    pub fn get_value_mut(&mut self) -> &mut OnionObject {
         &mut self.value
     }
 
@@ -86,14 +86,5 @@ impl OnionNamed {
         self.value
             .with_attribute(key, f)
             .or_else(|_| self.key.with_attribute(key, f))
-    }
-
-    pub fn with_attribute_mut<F, R>(&mut self, key: &OnionObject, f: &F) -> Result<R, RuntimeError>
-    where
-        F: Fn(&mut OnionObject) -> Result<R, RuntimeError>,
-    {
-        self.value
-            .with_attribute_mut(key, f)
-            .or_else(|_| self.key.with_attribute_mut(key, f))
     }
 }

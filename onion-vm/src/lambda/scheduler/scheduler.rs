@@ -24,51 +24,65 @@ impl Runnable for Scheduler {
     fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
         if let Some(runnable) = self.runnable_stack.last_mut() {
             match match runnable.step(gc) {
-                Ok(step_result) => step_result,
+                Ok(ref step_result) => step_result,
                 Err(error) => {
-                    return Ok(StepResult::Return(Box::new(OnionPair::new_static(
-                        &OnionObject::Boolean(false).stabilize(),
-                        &match error {
-                            RuntimeError::CustomValue(v) => *v,
-                            _ => OnionObject::Undefined(Some(error.to_string())).stabilize(),
-                        },
-                    ))))
+                    return Ok(StepResult::Return(
+                        OnionPair::new_static(
+                            &OnionObject::Boolean(false).stabilize(),
+                            &match error {
+                                RuntimeError::CustomValue(ref v) => v.as_ref().clone(),
+                                _ => OnionObject::Undefined(Some(error.to_string())).stabilize(),
+                            },
+                        )
+                        .into(),
+                    ))
                 }
             } {
                 StepResult::Continue => Ok(StepResult::Continue),
                 StepResult::NewRunnable(new_runnable) => {
-                    self.runnable_stack.push(new_runnable);
+                    self.runnable_stack.push(new_runnable.copy());
                     Ok(StepResult::Continue)
                 }
                 StepResult::ReplaceRunnable(new_runnable) => {
-                    self.runnable_stack.last_mut().map(|r| *r = new_runnable);
+                    self.runnable_stack
+                        .last_mut()
+                        .map(|r| *r = new_runnable.copy());
                     Ok(StepResult::Continue)
                 }
-                StepResult::Return(result) => {
+                StepResult::Return(ref result) => {
                     self.runnable_stack.pop();
                     if let Some(top_runnable) = self.runnable_stack.last_mut() {
-                        match top_runnable.receive(StepResult::Return(result.clone()), gc) {
+                        match top_runnable.receive(&StepResult::Return(result.clone()), gc) {
                             Ok(_) => {}
-                            Err(RuntimeError::CustomValue(e)) => {
-                                return Ok(StepResult::Return(Box::new(OnionPair::new_static(
-                                    &OnionObject::Boolean(false).stabilize(),
-                                    &e,
-                                ))))
+                            Err(RuntimeError::CustomValue(ref e)) => {
+                                return Ok(StepResult::Return(
+                                    OnionPair::new_static(
+                                        &OnionObject::Boolean(false).stabilize(),
+                                        &e,
+                                    )
+                                    .into(),
+                                ))
                             }
                             Err(e) => {
-                                return Ok(StepResult::Return(Box::new(OnionPair::new_static(
-                                    &OnionObject::Boolean(false).stabilize(),
-                                    &OnionObject::String(Arc::new(e.to_string())).stabilize(),
-                                ))))
+                                return Ok(StepResult::Return(
+                                    OnionPair::new_static(
+                                        &OnionObject::Boolean(false).stabilize(),
+                                        &OnionObject::String(Arc::new(e.to_string())).stabilize(),
+                                    )
+                                    .into(),
+                                ))
                             }
                         };
                         Ok(StepResult::Continue)
                     } else {
                         //self.result = *result;
-                        Ok(StepResult::Return(Box::new(OnionPair::new_static(
-                            &OnionObject::Boolean(true).stabilize(),
-                            result.as_ref(),
-                        ))))
+                        Ok(StepResult::Return(
+                            OnionPair::new_static(
+                                &OnionObject::Boolean(true).stabilize(),
+                                result.as_ref(),
+                            )
+                            .into(),
+                        ))
                     }
                 }
             }
@@ -80,11 +94,11 @@ impl Runnable for Scheduler {
     }
     fn receive(
         &mut self,
-        step_result: StepResult,
+        step_result: &StepResult,
         gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         if let Some(runnable) = self.runnable_stack.last_mut() {
-            runnable.receive(step_result, gc)
+            runnable.receive(&step_result, gc)
         } else {
             Err(RuntimeError::DetailedError(
                 "No runnable in stack".to_string(),

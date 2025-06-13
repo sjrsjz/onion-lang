@@ -975,10 +975,7 @@ pub fn is_in(
     let is_in = container
         .weak()
         .with_data(|container_ref| match container_ref {
-            OnionObject::LazySet(lazy_set) => lazy_set
-                .get_container()
-                .try_borrow()?
-                .contains(&*element.weak()),
+            OnionObject::LazySet(lazy_set) => lazy_set.get_container().contains(&*element.weak()),
             _ => {
                 return Err(RuntimeError::DetailedError(format!(
                     "Container is not a LazySet: {}",
@@ -1001,7 +998,7 @@ pub fn is_in(
         match container_ref {
             OnionObject::LazySet(lazy_set) => {
                 let filter = lazy_set.get_filter();
-                let OnionObject::Lambda(_) = &*filter.try_borrow()? else {
+                let OnionObject::Lambda(_) = filter else {
                     // 过滤器不是 Lambda 对象，认定为惰性求值结果为 filter
                     let filter = filter.clone().stabilize();
                     return Ok((None, filter));
@@ -1077,7 +1074,7 @@ pub fn return_value(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<StepResult, RuntimeError> {
     let return_value = runnable.context.get_object_rev(0)?;
-    Ok(StepResult::Return(Box::new(return_value.clone())))
+    Ok(StepResult::Return(return_value.clone().into()))
 }
 
 pub fn fork_instruction(

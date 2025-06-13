@@ -190,13 +190,13 @@ impl Runnable for AsyncHttpRequest {
                 match result {
                     Ok(response) => {
                         let response_obj = OnionObject::String(response.into()).stabilize();
-                        Ok(StepResult::Return(Box::new(response_obj)))
+                        Ok(StepResult::Return(response_obj.into()))
                     }
                     Err(error) => {
                         let error_obj =
                             OnionObject::String(format!("HTTP Error: {}", error).into())
                                 .stabilize();
-                        Ok(StepResult::Return(Box::new(error_obj)))
+                        Ok(StepResult::Return(error_obj.into()))
                     }
                 }
             }
@@ -205,7 +205,7 @@ impl Runnable for AsyncHttpRequest {
 
     fn receive(
         &mut self,
-        step_result: StepResult,
+        step_result: &StepResult,
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         if let StepResult::Return(_) = step_result {
@@ -274,17 +274,9 @@ fn parse_request_params(
         if let Ok(headers_obj) = get_attr_direct(data, "headers".to_string()) {
             if let OnionObject::Tuple(headers_tuple) = &*headers_obj.weak() {
                 for element in headers_tuple.elements.as_ref() {
-                    if let OnionObject::Named(named) = &*element.try_borrow()? {
-                        let key = named
-                            .get_key()
-                            .try_borrow()?
-                            .to_string(&vec![])
-                            .unwrap_or_default();
-                        let value = named
-                            .get_value()
-                            .try_borrow()?
-                            .to_string(&vec![])
-                            .unwrap_or_default();
+                    if let OnionObject::Named(named) = element {
+                        let key = named.get_key().to_string(&vec![]).unwrap_or_default();
+                        let value = named.get_value().to_string(&vec![]).unwrap_or_default();
                         headers.insert(key, value);
                     }
                 }

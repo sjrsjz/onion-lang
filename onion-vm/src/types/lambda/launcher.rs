@@ -12,6 +12,7 @@ use crate::{
     },
 };
 
+#[derive(Clone)]
 enum ArgumentProcessingPhase {
     NamedArguments,
     PositionalArguments,
@@ -96,9 +97,26 @@ impl OnionLambdaRunnableLauncher {
 }
 
 impl Runnable for OnionLambdaRunnableLauncher {
+
+    fn copy(&self) -> Box<dyn Runnable> {
+        Box::new(OnionLambdaRunnableLauncher {
+            lambda: self.lambda.clone(),
+            argument_tuple: self.argument_tuple.clone(),
+            collected_arguments: self.collected_arguments.clone(),
+            assigned: self.assigned.clone(),
+            phase: self.phase.clone(),
+            current_argument_index: self.current_argument_index,
+            runnable_mapper: self.runnable_mapper,
+            constrain_runnable: match &self.constrain_runnable {
+                Some(runnable) => Some(runnable.copy()),
+                None => None,               
+            },
+        })
+    }
+
     fn receive(
         &mut self,
-        step_result: StepResult,
+        step_result: &StepResult,
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         match step_result {
@@ -166,7 +184,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
                 }
                 // 约束执行完成并返回了一个值。
                 // 约束的返回值约定为一个 Pair：(布尔值表示是否panic, 布尔值表示约束是否通过)
-                StepResult::Return(v) => {
+                StepResult::Return(ref v) => {
                     // 解析约束的返回值
                     v.weak().with_data(|v_obj| {
                         // 约束的返回值必须是一个 Pair 对象
@@ -178,13 +196,13 @@ impl Runnable for OnionLambdaRunnableLauncher {
                         };
 
                         // 第一个元素 (key) 表示约束执行是否 panic
-                        match constrain_result_pair.get_key().try_borrow()?.to_boolean() {
+                        match constrain_result_pair.get_key().to_boolean() {
                             Ok(true) => {
                                 // true 表示约束执行没有 panic
                                 // 第二个元素 (value) 表示约束是否通过
                                 if constrain_result_pair
                                     .get_value()
-                                    .try_borrow()?.to_boolean()?
+                                    .to_boolean()?
                                 {
                                     // 约束通过，清除 `constrain_runnable`，准备处理下一个参数或阶段。
                                     self.constrain_runnable = None;
@@ -262,9 +280,9 @@ impl Runnable for OnionLambdaRunnableLauncher {
                     .with_data(|arg_obj| {
                         if let OnionObject::Tuple(tuple) = arg_obj {
                             if current_arg_index < tuple.elements.len() {
-                                let arg_obj_view = tuple.elements[current_arg_index].try_borrow()?;
+                                let arg_obj_view = &tuple.elements[current_arg_index];
                 // 检查当前提供的参数是否是命名参数 (`OnionObject::Named`)
-                if let OnionObject::Named(named_arg) = &*arg_obj_view {
+                if let OnionObject::Named(named_arg) = arg_obj_view {
                     let key_to_match = &named_arg.key; // 获取命名参数的名称
 
                     // 遍历 Lambda 定义中的参数，使用 with_data 访问
@@ -429,7 +447,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
                     let current_provided_arg_view = current_provided_arg_weak; // This is GcRef<OnionObjectCell>
 
                     // 如果当前提供的参数是命名参数，则在位置参数阶段跳过。
-                    if let OnionObject::Named(_) = &*current_provided_arg_view.try_borrow()? {
+                    if let OnionObject::Named(_) = current_provided_arg_view {
                         // Skip named arguments in this phase.
                     } else {
                         // This is a positional argument.

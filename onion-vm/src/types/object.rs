@@ -90,21 +90,6 @@ impl OnionObjectCell {
     }
 
     #[inline(always)]
-    pub fn with_attribute_mut<T, F>(&self, key: &OnionObject, f: &F) -> Result<T, RuntimeError>
-    where
-        F: Fn(&mut OnionObject) -> Result<T, RuntimeError>,
-    {
-        self.0
-            .try_borrow_mut()
-            .map_err(|_| {
-                RuntimeError::BorrowError(
-                    "Failed to borrow OnionObjectCell at `with_attribute_mut`".to_string(),
-                )
-            })?
-            .with_attribute_mut(key, f)
-    }
-
-    #[inline(always)]
     pub fn upgrade(&self, collected: &mut Vec<GCArc<OnionObjectCell>>) {
         match self.0.try_borrow() {
             Ok(obj) => obj.upgrade(collected),
@@ -212,6 +197,212 @@ pub enum OnionObject {
 
     // mutable types, DO NOT USE THIS TYPE DIRECTLY, use `mutablize` instead
     Mut(GCArcWeak<OnionObjectCell>),
+}
+
+pub trait OnionObjectExt: GCTraceable<OnionObjectCell> + Debug {
+    // GC and memory management
+    fn upgrade(&self, collected: &mut Vec<GCArc<OnionObjectCell>>);
+
+    // Basic type conversions
+    fn to_integer(&self) -> Result<i64, RuntimeError> {
+        Err(RuntimeError::InvalidType(format!(
+            "Cannot convert {:?} to Integer",
+            self
+        )))
+    }
+    fn to_float(&self) -> Result<f64, RuntimeError> {
+        Err(RuntimeError::InvalidType(format!(
+            "Cannot convert {:?} to Float",
+            self
+        )))
+    }
+    #[allow(unused_variables)]
+    fn to_string(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+        Err(RuntimeError::InvalidType(format!(
+            "Cannot convert {:?} to String",
+            self
+        )))
+    }
+    fn to_bytes(&self) -> Result<Vec<u8>, RuntimeError> {
+        Err(RuntimeError::InvalidType(format!(
+            "Cannot convert {:?} to Bytes",
+            self
+        )))
+    }
+    fn to_boolean(&self) -> Result<bool, RuntimeError> {
+        Err(RuntimeError::InvalidType(format!(
+            "Cannot convert {:?} to Boolean",
+            self
+        )))
+    }
+    #[allow(unused_variables)]
+    fn repr(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+        Ok(format!("{:?}", self))
+    }
+    fn type_of(&self) -> Result<String, RuntimeError> {
+        Err(RuntimeError::InvalidType(format!(
+            "Cannot get type of {:?}",
+            self
+        )))
+    }
+
+    // Container operations
+    fn len(&self) -> Result<OnionStaticObject, RuntimeError> {
+        Err(RuntimeError::InvalidOperation(format!(
+            "len() not supported for {:?}",
+            self
+        )))
+    }
+    fn contains(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
+        Err(RuntimeError::InvalidOperation(format!(
+            "contains() not supported for {:?} and {:?}",
+            self, other
+        )))
+    }
+    fn at(&self, index: i64) -> Result<OnionStaticObject, RuntimeError> {
+        Err(RuntimeError::InvalidOperation(format!(
+            "at() not supported for {:?} with index {}",
+            self, index
+        )))
+    }
+
+    // Key-value operations
+    fn key_of(&self) -> Result<OnionStaticObject, RuntimeError> {
+        Err(RuntimeError::InvalidOperation(format!(
+            "key_of() not supported for {:?}",
+            self
+        )))
+    }
+    fn value_of(&self) -> Result<OnionStaticObject, RuntimeError> {
+        Err(RuntimeError::InvalidOperation(format!(
+            "value_of() not supported for {:?}",
+            self
+        )))
+    }
+    #[allow(unused_variables)]
+    fn with_attribute<F, R>(&self, key: &OnionObject, f: &F) -> Result<R, RuntimeError>
+    where
+        F: Fn(&OnionObject) -> Result<R, RuntimeError>,
+    {
+        Err(RuntimeError::InvalidOperation(format!(
+            "with_attribute() not supported for {:?} with key {:?}",
+            self, key
+        )))
+    }
+
+    // Comparison operations
+    fn equals(&self, other: &OnionObject) -> Result<bool, RuntimeError>;
+    fn is_same(&self, other: &OnionObject) -> Result<bool, RuntimeError>;
+    fn binary_eq(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
+        Err(RuntimeError::InvalidOperation(format!(
+            "binary_eq() not supported for {:?} and {:?}",
+            self, other
+        )))
+    }
+    fn binary_lt(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
+        Err(RuntimeError::InvalidOperation(format!(
+            "binary_lt() not supported for {:?} and {:?}",
+            self, other
+        )))
+    }
+    fn binary_gt(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
+        Err(RuntimeError::InvalidOperation(format!(
+            "binary_gt() not supported for {:?} and {:?}",
+            self, other
+        )))
+    }
+
+    // Binary arithmetic operations
+    fn binary_add(&self, other: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
+        Err(RuntimeError::InvalidOperation(format!(
+            "binary_add() not supported for {:?} and {:?}",
+            self, other
+        )))
+    }
+    fn binary_sub(&self, other: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
+        Err(RuntimeError::InvalidOperation(format!(
+            "binary_sub() not supported for {:?} and {:?}",
+            self, other
+        )))
+    }
+    fn binary_mul(&self, other: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
+        Err(RuntimeError::InvalidOperation(format!(
+            "binary_mul() not supported for {:?} and {:?}",
+            self, other
+        )))
+    }
+    fn binary_div(&self, other: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
+        Err(RuntimeError::InvalidOperation(format!(
+            "binary_div() not supported for {:?} and {:?}",
+            self, other
+        )))
+    }
+    fn binary_mod(&self, other: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
+        Err(RuntimeError::InvalidOperation(format!(
+            "binary_mod() not supported for {:?} and {:?}",
+            self, other
+        )))
+    }
+    fn binary_pow(&self, other: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
+        Err(RuntimeError::InvalidOperation(format!(
+            "binary_pow() not supported for {:?} and {:?}",
+            self, other
+        )))
+    }
+
+    // Binary logical operations
+    fn binary_and(&self, other: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
+        Err(RuntimeError::InvalidOperation(format!(
+            "binary_and() not supported for {:?} and {:?}",
+            self, other
+        )))
+    }
+    fn binary_or(&self, other: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
+        Err(RuntimeError::InvalidOperation(format!(
+            "binary_or() not supported for {:?} and {:?}",
+            self, other
+        )))
+    }
+    fn binary_xor(&self, other: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
+        Err(RuntimeError::InvalidOperation(format!(
+            "binary_xor() not supported for {:?} and {:?}",
+            self, other
+        )))
+    }
+
+    // Binary shift operations
+    fn binary_shl(&self, other: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
+        Err(RuntimeError::InvalidOperation(format!(
+            "binary_shl() not supported for {:?} and {:?}",
+            self, other
+        )))
+    }
+    fn binary_shr(&self, other: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
+        Err(RuntimeError::InvalidOperation(format!(
+            "binary_shr() not supported for {:?} and {:?}",
+            self, other
+        )))
+    }
+
+    // Unary operations
+    fn unary_neg(&self) -> Result<OnionStaticObject, RuntimeError> {
+        Err(RuntimeError::InvalidOperation(format!(
+            "unary_neg() not supported for {:?}",
+            self
+        )))
+    }
+    fn unary_plus(&self) -> Result<OnionStaticObject, RuntimeError> {
+        Err(RuntimeError::InvalidOperation(format!(
+            "unary_plus() not supported for {:?}",
+            self
+        )))
+    }
+    fn unary_not(&self) -> Result<OnionStaticObject, RuntimeError> {
+        Err(RuntimeError::InvalidOperation(format!(
+            "unary_not() not supported for {:?}",
+            self
+        )))
+    }
 }
 
 impl Debug for OnionObject {
@@ -474,47 +665,27 @@ impl OnionObject {
                     0 => Ok("()".to_string()),
                     1 => {
                         let first = tuple.elements.first().unwrap();
-                        Ok(format!(
-                            "({},)",
-                            first
-                                .try_borrow()
-                                .map_err(|_| RuntimeError::BorrowError(
-                                    "Failed to borrow tuple element at `to_string`".to_string(),
-                                ))?
-                                .repr(&new_ptrs)?
-                        ))
+                        Ok(format!("({},)", first.repr(&new_ptrs)?))
                     }
                     _ => {
-                        let elements: Result<Vec<String>, RuntimeError> = tuple
-                            .elements
-                            .iter()
-                            .map(|e| {
-                                e.try_borrow()
-                                    .map_err(|_| {
-                                        RuntimeError::BorrowError(
-                                            "Failed to borrow tuple element at `to_string`"
-                                                .to_string(),
-                                        )
-                                    })?
-                                    .repr(&new_ptrs)
-                            })
-                            .collect();
+                        let elements: Result<Vec<String>, RuntimeError> =
+                            tuple.elements.iter().map(|e| e.repr(&new_ptrs)).collect();
                         Ok(format!("({})", elements?.join(", ")))
                     }
                 },
                 OnionObject::Pair(pair) => {
-                    let left = pair.key.borrow().repr(&new_ptrs)?;
-                    let right = pair.value.borrow().repr(&new_ptrs)?;
+                    let left = pair.key.repr(&new_ptrs)?;
+                    let right = pair.value.repr(&new_ptrs)?;
                     Ok(format!("{} : {}", left, right))
                 }
                 OnionObject::Named(named) => {
-                    let name = named.key.try_borrow()?.repr(&new_ptrs)?;
-                    let value = named.value.try_borrow()?.repr(&new_ptrs)?;
+                    let name = named.key.repr(&new_ptrs)?;
+                    let value = named.value.repr(&new_ptrs)?;
                     Ok(format!("{} => {}", name, value))
                 }
                 OnionObject::LazySet(lazy_set) => {
-                    let container = lazy_set.container.try_borrow()?.repr(&new_ptrs)?;
-                    let filter = lazy_set.filter.try_borrow()?.repr(&new_ptrs)?;
+                    let container = lazy_set.container.repr(&new_ptrs)?;
+                    let filter = lazy_set.filter.repr(&new_ptrs)?;
                     Ok(format!("[{} | {}]", container, filter))
                 }
                 OnionObject::InstructionPackage(_) => Ok("InstructionPackage(...)".to_string()),
@@ -559,46 +730,27 @@ impl OnionObject {
                     0 => Ok("()".to_string()),
                     1 => {
                         let first = tuple.elements.first().unwrap();
-                        Ok(format!(
-                            "({},)",
-                            first
-                                .try_borrow()
-                                .map_err(|_| RuntimeError::BorrowError(
-                                    "Failed to borrow tuple element at `repr`".to_string(),
-                                ))?
-                                .repr(&new_ptrs)?
-                        ))
+                        Ok(format!("({},)", first.repr(&new_ptrs)?))
                     }
                     _ => {
-                        let elements: Result<Vec<String>, RuntimeError> = tuple
-                            .elements
-                            .iter()
-                            .map(|e| {
-                                e.try_borrow()
-                                    .map_err(|_| {
-                                        RuntimeError::BorrowError(
-                                            "Failed to borrow tuple element at `repr`".to_string(),
-                                        )
-                                    })?
-                                    .repr(&new_ptrs)
-                            })
-                            .collect();
+                        let elements: Result<Vec<String>, RuntimeError> =
+                            tuple.elements.iter().map(|e| e.repr(&new_ptrs)).collect();
                         Ok(format!("({})", elements?.join(", ")))
                     }
                 },
                 OnionObject::Pair(pair) => {
-                    let left = pair.key.borrow().repr(&new_ptrs)?;
-                    let right = pair.value.borrow().repr(&new_ptrs)?;
+                    let left = pair.key.repr(&new_ptrs)?;
+                    let right = pair.value.repr(&new_ptrs)?;
                     Ok(format!("{} : {}", left, right))
                 }
                 OnionObject::Named(named) => {
-                    let name = named.key.try_borrow()?.repr(&new_ptrs)?;
-                    let value = named.value.try_borrow()?.repr(&new_ptrs)?;
+                    let name = named.key.repr(&new_ptrs)?;
+                    let value = named.value.repr(&new_ptrs)?;
                     Ok(format!("{} => {}", name, value))
                 }
                 OnionObject::LazySet(lazy_set) => {
-                    let container = lazy_set.container.try_borrow()?.repr(&new_ptrs)?;
-                    let filter = lazy_set.filter.try_borrow()?.repr(&new_ptrs)?;
+                    let container = lazy_set.container.repr(&new_ptrs)?;
+                    let filter = lazy_set.filter.repr(&new_ptrs)?;
                     Ok(format!("[{} | {}]", container, filter))
                 }
                 OnionObject::InstructionPackage(_) => Ok("InstructionPackage(...)".to_string()),
@@ -1033,24 +1185,6 @@ impl OnionObject {
             ))),
         })
     }
-
-    pub fn with_attribute_mut<F, R>(&mut self, key: &OnionObject, f: &F) -> Result<R, RuntimeError>
-    where
-        F: Fn(&mut OnionObject) -> Result<R, RuntimeError>,
-    {
-        self.with_data_mut(|obj| match obj {
-            OnionObject::Tuple(tuple) => tuple.with_attribute_mut(key, f),
-            OnionObject::Named(named) => named.with_attribute_mut(key, f),
-            OnionObject::Pair(pair) => pair.with_attribute_mut(key, f),
-            OnionObject::Lambda(lambda) => lambda.with_attribute_mut(key, f),
-            OnionObject::LazySet(lazy_set) => lazy_set.with_attribute_mut(key, f),
-            _ => Err(RuntimeError::InvalidOperation(format!(
-                "with_attribute_mut() not supported for {:?}",
-                obj
-            ))),
-        })
-    }
-
     pub fn at(&self, index: i64) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| match obj {
             OnionObject::Tuple(tuple) => tuple.at(index),
