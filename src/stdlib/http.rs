@@ -169,7 +169,7 @@ impl AsyncHttpRequest {
 }
 
 impl Runnable for AsyncHttpRequest {
-    fn step(&mut self, _gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
+    fn step(&mut self, _gc: &mut GC<OnionObjectCell>) -> StepResult {
         let state = {
             let state_guard = self.state.lock().unwrap();
             state_guard.clone()
@@ -179,24 +179,24 @@ impl Runnable for AsyncHttpRequest {
             RequestState::Pending => {
                 // 启动请求
                 self.start_request();
-                Ok(StepResult::Continue)
+                StepResult::Continue
             }
             RequestState::InProgress => {
                 // 请求正在进行中，继续等待
-                Ok(StepResult::Continue)
+                StepResult::Continue
             }
             RequestState::Completed(result) => {
                 // 请求完成，返回结果
                 match result {
                     Ok(response) => {
                         let response_obj = OnionObject::String(response.into()).stabilize();
-                        Ok(StepResult::Return(response_obj.into()))
+                        StepResult::Return(response_obj.into())
                     }
                     Err(error) => {
                         let error_obj =
                             OnionObject::String(format!("HTTP Error: {}", error).into())
                                 .stabilize();
-                        Ok(StepResult::Return(error_obj.into()))
+                        StepResult::Return(error_obj.into())
                     }
                 }
             }
@@ -214,7 +214,9 @@ impl Runnable for AsyncHttpRequest {
             Ok(())
         } else {
             Err(RuntimeError::InvalidOperation(
-                "AsyncHttpRequest can only receive StepResult::Return".to_string(),
+                "AsyncHttpRequest can only receive StepResult::Return"
+                    .to_string()
+                    .into(),
             ))
         }
     }
@@ -260,7 +262,7 @@ fn parse_request_params(
         let url = get_attr_direct(data, "url".to_string())?
             .weak()
             .to_string(&vec![])
-            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))?;
+            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e).into()))?;
 
         // 获取方法，默认为GET
         let method = get_attr_direct(data, "method".to_string())
@@ -301,7 +303,7 @@ fn http_get(
         get_attr_direct(data, "url".to_string())?
             .weak()
             .to_string(&vec![])
-            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))
+            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e).into()))
     })?;
 
     let headers = IndexMap::new();
@@ -329,7 +331,7 @@ fn http_post(
         let url = get_attr_direct(data, "url".to_string())?
             .weak()
             .to_string(&vec![])
-            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))?;
+            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e).into()))?;
 
         let body = get_attr_direct(data, "body".to_string())
             .ok()
@@ -362,7 +364,7 @@ fn http_put(
         let url = get_attr_direct(data, "url".to_string())?
             .weak()
             .to_string(&vec![])
-            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))?;
+            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e).into()))?;
 
         let body = get_attr_direct(data, "body".to_string())
             .ok()
@@ -395,7 +397,7 @@ fn http_delete(
         get_attr_direct(data, "url".to_string())?
             .weak()
             .to_string(&vec![])
-            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))
+            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e).into()))
     })?;
 
     let headers = IndexMap::new();
@@ -422,7 +424,7 @@ fn http_patch(
         let url = get_attr_direct(data, "url".to_string())?
             .weak()
             .to_string(&vec![])
-            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))?;
+            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e).into()))?;
 
         let body = get_attr_direct(data, "body".to_string())
             .ok()
@@ -475,7 +477,7 @@ fn http_get_sync(
         get_attr_direct(data, "url".to_string())?
             .weak()
             .to_string(&vec![])
-            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))
+            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e).into()))
     })?;
 
     // 直接执行HTTP请求并返回结果
@@ -495,7 +497,7 @@ fn http_post_sync(
         let url = get_attr_direct(data, "url".to_string())?
             .weak()
             .to_string(&vec![])
-            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e)))?;
+            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e).into()))?;
 
         let body = get_attr_direct(data, "body".to_string())
             .ok()

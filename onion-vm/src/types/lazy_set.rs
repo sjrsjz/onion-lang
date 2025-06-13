@@ -10,6 +10,7 @@ use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
     onion_tuple,
     types::lambda::launcher::OnionLambdaRunnableLauncher,
+    unwrap_step_result,
 };
 
 use super::{
@@ -97,10 +98,9 @@ impl OnionLazySet {
                 };
                 result
             }
-            _ => Err(RuntimeError::InvalidOperation(format!(
-                "Attribute '{:?}' not found in lazy set",
-                key
-            ))),
+            _ => Err(RuntimeError::InvalidOperation(
+                format!("Attribute '{:?}' not found in lazy set", key).into(),
+            )),
         }
     }
 }
@@ -144,7 +144,7 @@ impl Runnable for OnionLazySetCollector {
                                 }
                             }
                             _ => Err(RuntimeError::DetailedError(
-                                "Container must be a tuple".to_string(),
+                                "Container must be a tuple".to_string().into(),
                             )),
                         }
                     }
@@ -155,13 +155,16 @@ impl Runnable for OnionLazySetCollector {
                 }
             }
             _ => Err(RuntimeError::DetailedError(
-                "Unexpected step result in lazy set collector".to_string(),
+                "Unexpected step result in lazy set collector"
+                    .to_string()
+                    .into(),
             )),
         }
     }
 
-    fn step(&mut self, _gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
-        self.container
+    fn step(&mut self, _gc: &mut GC<OnionObjectCell>) -> StepResult {
+        unwrap_step_result!(self
+            .container
             .weak()
             .with_data(|container| match container {
                 OnionObject::Tuple(tuple) => {
@@ -211,9 +214,9 @@ impl Runnable for OnionLazySetCollector {
                     }
                 }
                 _ => Err(RuntimeError::InvalidType(
-                    "Container must be a tuple".to_string(),
+                    "Container must be a tuple".to_string().into(),
                 )),
-            })
+            }))
     }
 
     fn format_context(&self) -> Result<serde_json::Value, RuntimeError> {

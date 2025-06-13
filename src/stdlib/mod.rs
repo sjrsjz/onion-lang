@@ -8,7 +8,7 @@ use onion_vm::{
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         tuple::OnionTuple,
     },
-    GC,
+    unwrap_step_result, GC,
 };
 
 mod fs;
@@ -54,8 +54,10 @@ where
     F: Fn(&OnionStaticObject, &mut GC<OnionObjectCell>) -> Result<OnionStaticObject, RuntimeError>
         + 'static,
 {
-    fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
-        (self.function)(&self.argument, gc).map(|result| StepResult::Return(result.into()))
+    fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> StepResult {
+        unwrap_step_result!(
+            (self.function)(&self.argument, gc).map(|result| StepResult::Return(result.into()))
+        )
     }
 
     fn receive(
@@ -68,7 +70,9 @@ where
             Ok(())
         } else {
             Err(RuntimeError::InvalidOperation(
-                "NativeFunctionGenerator can only receive StepResult::Return".to_string(),
+                "NativeFunctionGenerator can only receive StepResult::Return"
+                    .to_string()
+                    .into(),
             ))
         }
     }

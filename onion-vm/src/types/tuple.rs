@@ -84,10 +84,9 @@ impl OnionTuple {
 
     pub fn at(&self, index: i64) -> Result<OnionStaticObject, RuntimeError> {
         if index < 0 || index >= self.elements.len() as i64 {
-            return Err(RuntimeError::InvalidOperation(format!(
-                "Index out of bounds: {}",
-                index
-            )));
+            return Err(RuntimeError::InvalidOperation(
+                format!("Index out of bounds: {}", index).into(),
+            ));
         }
         Ok(OnionStaticObject::new(
             self.elements[index as usize].clone(),
@@ -99,10 +98,9 @@ impl OnionTuple {
         F: Fn(&OnionObject) -> Result<R, RuntimeError>,
     {
         if index < 0 || index >= self.elements.len() as i64 {
-            return Err(RuntimeError::InvalidOperation(format!(
-                "Index out of bounds: {}",
-                index
-            )));
+            return Err(RuntimeError::InvalidOperation(
+                format!("Index out of bounds: {}", index).into(),
+            ));
         }
         let borrowed = &self.elements[index as usize];
         f(borrowed)
@@ -127,10 +125,9 @@ impl OnionTuple {
                 _ => {}
             }
         }
-        Err(RuntimeError::InvalidOperation(format!(
-            "Attribute {:?} not found in tuple",
-            key
-        )))
+        Err(RuntimeError::InvalidOperation(
+            format!("Attribute {:?} not found in tuple", key).into(),
+        ))
     }
 
     pub fn binary_add(&self, other: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
@@ -287,10 +284,9 @@ impl OnionTuple {
     }
     pub fn insert(&mut self, index: usize, element: OnionObject) -> Result<(), RuntimeError> {
         if index > self.elements.len() {
-            return Err(RuntimeError::InvalidOperation(format!(
-                "Index out of bounds: {}",
-                index
-            )));
+            return Err(RuntimeError::InvalidOperation(
+                format!("Index out of bounds: {}", index).into(),
+            ));
         }
         self.elements.insert(index, element);
         Ok(())
@@ -300,7 +296,7 @@ impl OnionTuple {
             .elements
             .get(index)
             .ok_or_else(|| {
-                RuntimeError::InvalidOperation(format!("Index out of bounds: {}", index))
+                RuntimeError::InvalidOperation(format!("Index out of bounds: {}", index).into())
             })?
             .clone()
             .stabilize();

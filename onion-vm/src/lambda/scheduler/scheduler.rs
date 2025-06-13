@@ -21,12 +21,58 @@ impl Scheduler {
 }
 
 impl Runnable for Scheduler {
-    fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
+    fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> StepResult {
         if let Some(runnable) = self.runnable_stack.last_mut() {
-            match match runnable.step(gc) {
-                Ok(ref step_result) => step_result,
-                Err(error) => {
-                    return Ok(StepResult::Return(
+            match runnable.step(gc) {
+                StepResult::Continue => StepResult::Continue,
+                StepResult::NewRunnable(new_runnable) => {
+                    self.runnable_stack.push(new_runnable);
+                    StepResult::Continue
+                }
+                StepResult::ReplaceRunnable(new_runnable) => {
+                    self.runnable_stack
+                        .last_mut()
+                        .map(|r| *r = new_runnable);
+                    StepResult::Continue
+                }
+                StepResult::Return(ref result) => {
+                    self.runnable_stack.pop();
+                    if let Some(top_runnable) = self.runnable_stack.last_mut() {
+                        match top_runnable.receive(&StepResult::Return(result.clone()), gc) {
+                            Ok(_) => {}
+                            Err(RuntimeError::CustomValue(ref e)) => {
+                                return StepResult::Return(
+                                    OnionPair::new_static(
+                                        &OnionObject::Boolean(false).stabilize(),
+                                        &e,
+                                    )
+                                    .into(),
+                                )
+                            }
+                            Err(e) => {
+                                return StepResult::Return(
+                                    OnionPair::new_static(
+                                        &OnionObject::Boolean(false).stabilize(),
+                                        &OnionObject::String(Arc::new(e.to_string())).stabilize(),
+                                    )
+                                    .into(),
+                                )
+                            }
+                        };
+                        StepResult::Continue
+                    } else {
+                        //self.result = *result;
+                        StepResult::Return(
+                            OnionPair::new_static(
+                                &OnionObject::Boolean(true).stabilize(),
+                                result.as_ref(),
+                            )
+                            .into(),
+                        )
+                    }
+                }
+                StepResult::Error(ref error) => {
+                    return StepResult::Return(
                         OnionPair::new_static(
                             &OnionObject::Boolean(false).stabilize(),
                             &match error {
@@ -35,60 +81,12 @@ impl Runnable for Scheduler {
                             },
                         )
                         .into(),
-                    ))
-                }
-            } {
-                StepResult::Continue => Ok(StepResult::Continue),
-                StepResult::NewRunnable(new_runnable) => {
-                    self.runnable_stack.push(new_runnable.copy());
-                    Ok(StepResult::Continue)
-                }
-                StepResult::ReplaceRunnable(new_runnable) => {
-                    self.runnable_stack
-                        .last_mut()
-                        .map(|r| *r = new_runnable.copy());
-                    Ok(StepResult::Continue)
-                }
-                StepResult::Return(ref result) => {
-                    self.runnable_stack.pop();
-                    if let Some(top_runnable) = self.runnable_stack.last_mut() {
-                        match top_runnable.receive(&StepResult::Return(result.clone()), gc) {
-                            Ok(_) => {}
-                            Err(RuntimeError::CustomValue(ref e)) => {
-                                return Ok(StepResult::Return(
-                                    OnionPair::new_static(
-                                        &OnionObject::Boolean(false).stabilize(),
-                                        &e,
-                                    )
-                                    .into(),
-                                ))
-                            }
-                            Err(e) => {
-                                return Ok(StepResult::Return(
-                                    OnionPair::new_static(
-                                        &OnionObject::Boolean(false).stabilize(),
-                                        &OnionObject::String(Arc::new(e.to_string())).stabilize(),
-                                    )
-                                    .into(),
-                                ))
-                            }
-                        };
-                        Ok(StepResult::Continue)
-                    } else {
-                        //self.result = *result;
-                        Ok(StepResult::Return(
-                            OnionPair::new_static(
-                                &OnionObject::Boolean(true).stabilize(),
-                                result.as_ref(),
-                            )
-                            .into(),
-                        ))
-                    }
+                    )
                 }
             }
         } else {
-            Err(RuntimeError::DetailedError(
-                "No runnable in stack".to_string(),
+            StepResult::Error(RuntimeError::DetailedError(
+                "No runnable in stack".to_string().into(),
             ))
         }
     }
@@ -101,7 +99,7 @@ impl Runnable for Scheduler {
             runnable.receive(&step_result, gc)
         } else {
             Err(RuntimeError::DetailedError(
-                "No runnable in stack".to_string(),
+                "No runnable in stack".to_string().into(),
             ))
         }
     }

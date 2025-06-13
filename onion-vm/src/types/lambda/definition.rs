@@ -103,10 +103,13 @@ impl OnionLambdaDefinition {
                     match instruction.get_table().get(&self.signature) {
                         Some(ip) => *ip as isize,
                         None => {
-                            return Err(RuntimeError::InvalidOperation(format!(
-                                "Signature '{}' not found in instruction package",
-                                self.signature
-                            )));
+                            return Err(RuntimeError::InvalidOperation(
+                                format!(
+                                    "Signature '{}' not found in instruction package",
+                                    self.signature
+                                )
+                                .into(),
+                            ));
                         }
                     },
                 )?;
@@ -137,10 +140,9 @@ impl OnionLambdaDefinition {
             OnionObject::String(s) if s.as_str() == "signature" => {
                 f(&OnionObject::String(Arc::new(self.signature.clone())))
             }
-            _ => Err(RuntimeError::InvalidOperation(format!(
-                "Attribute '{:?}' not found in lambda definition",
-                key
-            ))),
+            _ => Err(RuntimeError::InvalidOperation(
+                format!("Attribute '{:?}' not found in lambda definition", key).into(),
+            )),
         }
     }
 
@@ -152,10 +154,9 @@ impl OnionLambdaDefinition {
             OnionObject::String(s) if s.as_str() == "parameter" => f(&mut self.parameter),
             OnionObject::String(s) if s.as_str() == "capture" => f(&mut self.capture),
             OnionObject::String(s) if s.as_str() == "self" => f(&mut self.self_object),
-            _ => Err(RuntimeError::InvalidOperation(format!(
-                "Attribute '{:?}' not found in lambda definition",
-                key
-            ))),
+            _ => Err(RuntimeError::InvalidOperation(
+                format!("Attribute '{:?}' not found in lambda definition", key).into(),
+            )),
         }
     }
 

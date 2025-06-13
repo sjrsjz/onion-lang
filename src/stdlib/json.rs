@@ -20,9 +20,9 @@ fn to_json(obj: OnionObject) -> Result<Value, RuntimeError> {
                 let key = p
                     .get_key()
                     .to_string(&vec![])
-                    .map_err(|e| RuntimeError::InvalidOperation(e.to_string()))?;
+                    .map_err(|e| RuntimeError::InvalidOperation(e.to_string().into()))?;
                 let value = to_json(p.get_value().clone())
-                    .map_err(|e| RuntimeError::InvalidOperation(e.to_string()))?;
+                    .map_err(|e| RuntimeError::InvalidOperation(e.to_string().into()))?;
                 let mut map = serde_json::Map::new();
                 map.insert(key, value);
                 Ok(Value::Object(map))
@@ -36,12 +36,12 @@ fn to_json(obj: OnionObject) -> Result<Value, RuntimeError> {
                     let mut map = serde_json::Map::new();
                     for element in t.elements.as_ref() {
                         if let OnionObject::Pair(pair) = &*element {
-                            let key = pair
-                                .get_key()
-                                .to_string(&vec![])
-                                .map_err(|e| RuntimeError::InvalidOperation(e.to_string()))?;
-                            let value = to_json(pair.get_value().clone())
-                                .map_err(|e| RuntimeError::InvalidOperation(e.to_string()))?;
+                            let key = pair.get_key().to_string(&vec![]).map_err(|e| {
+                                RuntimeError::InvalidOperation(e.to_string().into())
+                            })?;
+                            let value = to_json(pair.get_value().clone()).map_err(|e| {
+                                RuntimeError::InvalidOperation(e.to_string().into())
+                            })?;
                             map.insert(key, value);
                         }
                     }
@@ -52,14 +52,13 @@ fn to_json(obj: OnionObject) -> Result<Value, RuntimeError> {
                     Ok(Value::Array(
                         vec.into_iter()
                             .collect::<Result<Vec<_>, _>>()
-                            .map_err(|e| RuntimeError::InvalidOperation(e.to_string()))?,
+                            .map_err(|e| RuntimeError::InvalidOperation(e.to_string().into()))?,
                     ))
                 }
             }
-            _ => Err(RuntimeError::InvalidType(format!(
-                "Cannot convert {:?} to JSON",
-                data
-            ))),
+            _ => Err(RuntimeError::InvalidType(
+                format!("Cannot convert {:?} to JSON", data).into(),
+            )),
         }
     })
 }
@@ -75,7 +74,7 @@ fn from_json(value: Value) -> Result<OnionStaticObject, RuntimeError> {
                 Ok(OnionObject::Float(f).stabilize())
             } else {
                 Err(RuntimeError::InvalidType(
-                    "Invalid number format".to_string(),
+                    "Invalid number format".to_string().into(),
                 ))
             }
         }
@@ -110,7 +109,7 @@ fn from_json(value: Value) -> Result<OnionStaticObject, RuntimeError> {
 /// 解析 JSON 字符串为 OnionObject
 pub fn parse_json(json_str: &str) -> Result<OnionStaticObject, RuntimeError> {
     let value: Value = serde_json::from_str(json_str)
-        .map_err(|e| RuntimeError::InvalidOperation(format!("JSON parse error: {}", e)))?;
+        .map_err(|e| RuntimeError::InvalidOperation(format!("JSON parse error: {}", e).into()))?;
     from_json(value)
 }
 
@@ -118,14 +117,14 @@ pub fn parse_json(json_str: &str) -> Result<OnionStaticObject, RuntimeError> {
 pub fn stringify_json(obj: OnionObject) -> Result<String, RuntimeError> {
     let json_value = to_json(obj)?;
     serde_json::to_string(&json_value)
-        .map_err(|e| RuntimeError::InvalidOperation(format!("JSON stringify error: {}", e)))
+        .map_err(|e| RuntimeError::InvalidOperation(format!("JSON stringify error: {}", e).into()))
 }
 
 /// 将 OnionObject 序列化为格式化的 JSON 字符串
 pub fn stringify_json_pretty(obj: OnionObject) -> Result<String, RuntimeError> {
     let json_value = to_json(obj)?;
     serde_json::to_string_pretty(&json_value)
-        .map_err(|e| RuntimeError::InvalidOperation(format!("JSON stringify error: {}", e)))
+        .map_err(|e| RuntimeError::InvalidOperation(format!("JSON stringify error: {}", e).into()))
 }
 
 /// 构建 JSON 模块
@@ -154,9 +153,9 @@ pub fn build_module() -> OnionStaticObject {
                         .weak()
                         .with_data(|string_data| match string_data {
                             OnionObject::String(s) => parse_json(s)
-                                .map_err(|e| RuntimeError::InvalidOperation(e.to_string())),
+                                .map_err(|e| RuntimeError::InvalidOperation(e.to_string().into())),
                             _ => Err(RuntimeError::InvalidOperation(
-                                "parse requires string".to_string(),
+                                "parse requires string".to_string().into(),
                             )),
                         })
                 })
@@ -183,7 +182,7 @@ pub fn build_module() -> OnionStaticObject {
                 args.weak().with_data(|data| {
                     let obj = super::get_attr_direct(data, "object".to_string())?;
                     let json_str = stringify_json(obj.weak().clone())
-                        .map_err(|e| RuntimeError::InvalidOperation(e.to_string()))?;
+                        .map_err(|e| RuntimeError::InvalidOperation(e.to_string().into()))?;
                     Ok(OnionObject::String(json_str.into()).stabilize())
                 })
             },
@@ -212,7 +211,7 @@ pub fn build_module() -> OnionStaticObject {
                 args.weak().with_data(|data| {
                     let obj = super::get_attr_direct(data, "object".to_string())?;
                     let json_str = stringify_json_pretty(obj.weak().clone())
-                        .map_err(|e| RuntimeError::InvalidOperation(e.to_string()))?;
+                        .map_err(|e| RuntimeError::InvalidOperation(e.to_string().into()))?;
                     Ok(OnionObject::String(json_str.into()).stabilize())
                 })
             },

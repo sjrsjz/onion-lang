@@ -9,7 +9,7 @@ use crate::{
         named::OnionNamed,
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         tuple::OnionTuple,
-    },
+    }, unwrap_step_result,
 };
 
 #[derive(Clone)]
@@ -72,13 +72,13 @@ impl OnionLambdaRunnableLauncher {
                         Ok(())
                     } else {
                         Err(RuntimeError::DetailedError(
-                            "Lambda parameters must be a Tuple".to_string(),
+                            "Lambda parameters must be a Tuple".to_string().into(),
                         ))
                     }
                 })
             } else {
                 Err(RuntimeError::DetailedError(
-                    "Expected a Lambda definition object".to_string(),
+                    "Expected a Lambda definition object".to_string().into(),
                 ))
             }
         })?;
@@ -124,20 +124,24 @@ impl Runnable for OnionLambdaRunnableLauncher {
             StepResult::NewRunnable(_) => {
                 // This should not happen, as this launcher is not designed to yield new runnables.
                 Err(RuntimeError::DetailedError(
-                    "OnionLambdaRunnableLauncher cannot yield new runnables".to_string(),
+                    "OnionLambdaRunnableLauncher cannot yield new runnables".to_string().into(),
                 ))
             }
             StepResult::Return(_) => {
                 // This should not happen, as this launcher is not designed to return values.
                 Err(RuntimeError::DetailedError(
-                    "OnionLambdaRunnableLauncher cannot return values".to_string(),
+                    "OnionLambdaRunnableLauncher cannot return values".to_string().into(),
                 ))
             }
             StepResult::ReplaceRunnable(_) => {
                 // This should not happen, as this launcher is not designed to replace runnables.
                 Err(RuntimeError::DetailedError(
-                    "OnionLambdaRunnableLauncher cannot replace runnables".to_string(),
+                    "OnionLambdaRunnableLauncher cannot replace runnables".to_string().into(),
                 ))
+            }
+            StepResult::Error(e) => {
+                // Propagate any errors received from the runnable.
+                Err(e.clone())
             }
         }
     }
@@ -159,39 +163,43 @@ impl Runnable for OnionLambdaRunnableLauncher {
     ///   - `StepResult::Continue`: 表示启动器需要更多步骤来完成参数处理或约束执行。
     ///   - `StepResult::ReplaceRunnable`: 表示参数处理完成，启动器应被新的 Lambda 可运行实例替换。
     /// * `Err(RuntimeError)`: 表示在执行过程中发生错误。
-    fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
+    fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> StepResult {
         // 阶段一：执行参数约束 (如果存在)
         // 如果 `constrain_runnable` (通常是一个由 LazySet 的 filter 创建的 Lambda 启动器) 存在，
         // 意味着当前正在处理的参数有一个关联的约束需要被满足。
         if let Some(constrain_runnable) = self.constrain_runnable.as_mut() {
             // 执行约束可运行对象的 `step` 方法
-            match constrain_runnable.step(gc)? {
+            match constrain_runnable.step(gc) {
                 // 约束尚未完成，需要继续执行。启动器也返回 Continue。
                 StepResult::Continue => {
-                    return Ok(StepResult::Continue);
+                    return StepResult::Continue;
                 }
                 // 约束执行过程中不应该产生新的可运行对象或替换自身。
                 StepResult::NewRunnable(_) => {
-                    return Err(RuntimeError::DetailedError(
-                        "OnionLambdaRunnableLauncher's constrain_runnable cannot yield new runnables".to_string(),
+                    return StepResult::Error(RuntimeError::DetailedError(
+                        "OnionLambdaRunnableLauncher's constrain_runnable cannot yield new runnables".to_string().into(),
                     ));
                 }
                 StepResult::ReplaceRunnable(_) => {
-                    return Err(RuntimeError::DetailedError(
+                    return StepResult::Error(RuntimeError::DetailedError(
                         "OnionLambdaRunnableLauncher's constrain_runnable cannot replace runnables"
-                            .to_string(),
+                            .to_string().into(),
                     ));
+                }
+                StepResult::Error(e) => {
+                    // 如果约束执行过程中发生错误，直接返回该错误。
+                    return StepResult::Error(e.clone());
                 }
                 // 约束执行完成并返回了一个值。
                 // 约束的返回值约定为一个 Pair：(布尔值表示是否panic, 布尔值表示约束是否通过)
                 StepResult::Return(ref v) => {
                     // 解析约束的返回值
-                    v.weak().with_data(|v_obj| {
+                    unwrap_step_result!(                    v.weak().with_data(|v_obj| {
                         // 约束的返回值必须是一个 Pair 对象
                         let OnionObject::Pair(constrain_result_pair) = v_obj else {
                             // 如果不是 Pair，则认为约束失败（或者约束实现有误）
                             return Err(RuntimeError::DetailedError(
-                                "Constrain runnable did not return a Pair object".to_string(),
+                                "Constrain runnable did not return a Pair object".to_string().into(),
                             ));
                         };
 
@@ -218,7 +226,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
                                 } else {
                                     // 约束未通过 (返回 false)
                                     return Err(RuntimeError::DetailedError(
-                                        "Argument constraint failed".to_string(),
+                                        "Argument constraint failed".to_string().into(),
                                     ));
                                 }
                             }
@@ -234,7 +242,9 @@ impl Runnable for OnionLambdaRunnableLauncher {
                             }
                             Err(err) => return Err(err), // 转换布尔值失败
                         }
-                    })?;
+                    }))
+
+
                     // 如果约束成功并通过 (上面返回 Ok(()) 但没有实际 return)，则会继续到下面的 phase 处理。
                     // 如果约束失败或 panic (上面返回 Err)，则整个 step 会在这里结束。
                 }
@@ -247,7 +257,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
             ArgumentProcessingPhase::NamedArguments => {
                 // Get argument count using with_data to avoid storing Vec
                 let argument_count =
-                    self.argument_tuple
+                    unwrap_step_result!(self.argument_tuple
                         .weak()
                         
                         .with_data(|arg_obj| {
@@ -255,10 +265,10 @@ impl Runnable for OnionLambdaRunnableLauncher {
                                 Ok(tuple.elements.len())
                             } else {
                                 Err(RuntimeError::DetailedError(
-                                    "Lambda arguments must be a Tuple".to_string(),
+                                    "Lambda arguments must be a Tuple".to_string().into(),
                                 ))
                             }
-                        })?;
+                        }));
 
                 // 如果当前参数索引超出了提供的参数列表的范围，
                 // 说明所有提供的参数都已在命名参数阶段被初步检查过。
@@ -266,14 +276,14 @@ impl Runnable for OnionLambdaRunnableLauncher {
                 if self.current_argument_index >= argument_count {
                     self.phase = ArgumentProcessingPhase::PositionalArguments;
                     self.current_argument_index = 0; // 重置索引以供位置参数阶段使用
-                    return Ok(StepResult::Continue); // 请求调度器再次调用 step
+                    return StepResult::Continue; // 请求调度器再次调用 step
                 }
 
                 // 获取当前正在处理的由调用者提供的参数
                 let current_arg_index = self.current_argument_index;
                 self.current_argument_index += 1; // 移动到下一个提供的参数
 
-                self
+                unwrap_step_result!(self
                     .argument_tuple
                     .weak()
                     
@@ -294,13 +304,13 @@ impl Runnable for OnionLambdaRunnableLauncher {
                                         Ok(tuple.elements.len())
                                     } else {
                                         Err(RuntimeError::DetailedError(
-                                            "Lambda parameters must be a Tuple".to_string(),
+                                            "Lambda parameters must be a Tuple".to_string().into(),
                                         ))
                                     }
                                 })
                             } else {
                                 Err(RuntimeError::DetailedError(
-                                    "Expected a Lambda definition object".to_string(),
+                                    "Expected a Lambda definition object".to_string().into(),
                                 ))
                             }
                         })?;
@@ -361,13 +371,13 @@ impl Runnable for OnionLambdaRunnableLauncher {
                                         }
                                     } else {
                                         Err(RuntimeError::DetailedError(
-                                            "Lambda parameters must be a Tuple".to_string(),
+                                            "Lambda parameters must be a Tuple".to_string().into(),
                                         ))
                                     }
                                 })
                             } else {
                                 Err(RuntimeError::DetailedError(
-                                    "Expected a Lambda definition object".to_string(),
+                                    "Expected a Lambda definition object".to_string().into(),
                                 ))
                             }
                         })?;
@@ -387,23 +397,23 @@ impl Runnable for OnionLambdaRunnableLauncher {
 
                             } else {
                                 Err(RuntimeError::DetailedError(
-                                    "Argument index out of bounds".to_string(),
+                                    "Argument index out of bounds".to_string().into(),
                                 ))
                             }
                         } else {
                             Err(RuntimeError::DetailedError(
-                                "Lambda arguments must be a Tuple".to_string(),
+                                "Lambda arguments must be a Tuple".to_string().into(),
                             ))
                         }
-                    })?;
+                    }));
 
                 // 如果当前提供的参数不是 OnionObject::Named，则在命名参数阶段被忽略。
-                Ok(StepResult::Continue)
+                StepResult::Continue
             } // 阶段 2.2: 处理位置参数
             ArgumentProcessingPhase::PositionalArguments => {
                 // Get argument count using with_data to avoid storing Vec
                 let argument_count =
-                    self.argument_tuple
+                    unwrap_step_result!(self.argument_tuple
                         .weak()
                         
                         .with_data(|arg_obj| {
@@ -411,17 +421,17 @@ impl Runnable for OnionLambdaRunnableLauncher {
                                 Ok(tuple.elements.len())
                             } else {
                                 Err(RuntimeError::DetailedError(
-                                    "Lambda arguments must be a Tuple".to_string(),
+                                    "Lambda arguments must be a Tuple".to_string().into(),
                                 ))
                             }
-                        })?;
+                        }));
 
                 // 如果当前参数索引超出了提供的参数列表的范围，
                 // 说明所有提供的参数都已在位置参数阶段被处理。
                 // 切换到完成阶段。
                 if self.current_argument_index >= argument_count {
                     self.phase = ArgumentProcessingPhase::Done;
-                    return Ok(StepResult::Continue); // 请求调度器再次调用 step
+                    return StepResult::Continue; // 请求调度器再次调用 step
                 }
 
                 // 获取当前正在处理的由调用者提供的参数
@@ -429,17 +439,17 @@ impl Runnable for OnionLambdaRunnableLauncher {
                 self.current_argument_index += 1; // 移动到下一个提供的参数
 
                 // Access the argument tuple and the specific argument within this closure
-                self.argument_tuple.weak().with_data(|arg_tuple_obj| {
+                unwrap_step_result!(self.argument_tuple.weak().with_data(|arg_tuple_obj| {
                     let tuple_elements = if let OnionObject::Tuple(t) = arg_tuple_obj {
                         &t.elements
                     } else {
-                        return Err(RuntimeError::DetailedError("Lambda arguments must be a Tuple".to_string()));
+                        return Err(RuntimeError::DetailedError("Lambda arguments must be a Tuple".to_string().into()));
                     };
 
                     if current_processing_arg_idx >= tuple_elements.len() {
                         // This should ideally be caught by the argument_count check earlier,
                         // but as a safeguard within the closure.
-                        return Err(RuntimeError::DetailedError("Argument index out of bounds during positional processing".to_string()));
+                        return Err(RuntimeError::DetailedError("Argument index out of bounds during positional processing".to_string().into()));
                     }
 
                     // Get a borrowed view of the current argument from the argument tuple
@@ -460,14 +470,14 @@ impl Runnable for OnionLambdaRunnableLauncher {
                             // 找到了一个未分配的参数槽。 Access the lambda's parameter definition.
                             self.lambda.weak().with_data(|lambda_obj_ref| {
                                 let lambda_def = if let OnionObject::Lambda(def) = lambda_obj_ref { def }
-                                else { return Err(RuntimeError::DetailedError("Expected a Lambda definition object".to_string())); };
+                                else { return Err(RuntimeError::DetailedError("Expected a Lambda definition object".to_string().into())); };
 
                                 lambda_def.parameter.with_data(|param_tuple_obj_ref| {
                                     let param_tuple_elements = if let OnionObject::Tuple(pt) = param_tuple_obj_ref { &pt.elements }
-                                    else { return Err(RuntimeError::DetailedError("Lambda parameters must be a Tuple".to_string())); };
+                                    else { return Err(RuntimeError::DetailedError("Lambda parameters must be a Tuple".to_string().into())); };
 
                                     if param_idx >= param_tuple_elements.len() {
-                                        return Err(RuntimeError::DetailedError("Parameter index out of bounds for assignment".to_string()));
+                                        return Err(RuntimeError::DetailedError("Parameter index out of bounds for assignment".to_string().into()));
                                     }
 
                                     param_tuple_elements[param_idx].with_data(|param_def_obj_ref| {
@@ -510,7 +520,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
                                                         Ok(())
                                                     } else {
                                                         Err(RuntimeError::DetailedError(
-                                                            "LazySet\'s container must be a Named object for positional assignment".to_string(),
+                                                            "LazySet\'s container must be a Named object for positional assignment".to_string().into(),
                                                         ))
                                                     }
                                                 }) // End of lazy_set_def.container.with_data
@@ -532,9 +542,9 @@ impl Runnable for OnionLambdaRunnableLauncher {
                         }
                     }
                     Ok(()) // Return for the main with_data on argument_tuple
-                })?; // Propagate error from with_data
+                })); // Propagate error from with_data
 
-                Ok(StepResult::Continue)
+                StepResult::Continue
             }
 
             // 阶段 2.3: 完成参数处理，准备启动 Lambda
@@ -547,7 +557,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
                     // 如果执行到 `Done` 阶段约束仍在，说明之前的约束处理逻辑可能需要返回 `Continue`
                     // 直到约束被清除。或者，这是一个不期望的状态。
                     // 为安全起见，如果还有约束，则继续等待。
-                    return Ok(StepResult::Continue);
+                    return StepResult::Continue;
                 }
 
                 // 所有参数都已收集完毕，并且所有约束（如果有的话）都已满足。
@@ -556,7 +566,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
                     OnionTuple::new_static_no_ref(self.collected_arguments.clone());
 
                 // 获取原始 Lambda 定义对象。
-                self.lambda.weak().with_data(|obj| {
+                unwrap_step_result!(self.lambda.weak().with_data(|obj| {
                     if let OnionObject::Lambda(lambda_def) = obj {
                         // 使用最终的参数元组和 Lambda 定义来创建实际的 Lambda 可运行实例。
                         let runnable = lambda_def
@@ -565,7 +575,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
                                 RuntimeError::InvalidType(format!(
                                     "Failed to create runnable from lambda: {}",
                                     e
-                                ))
+                                ).into())
                             })?;
                         // 应用 mapper。
                         // 成功映射，返回 ReplaceRunnable
@@ -574,10 +584,10 @@ impl Runnable for OnionLambdaRunnableLauncher {
                     } else {
                         // 这是一个内部错误，启动器持有的 lambda 对象不是 Lambda 类型。
                         Err(RuntimeError::DetailedError(
-                            "Launcher's lambda object is not OnionObject::Lambda".to_string(),
+                            "Launcher's lambda object is not OnionObject::Lambda".to_string().into(),
                         ))
                     }
-                })
+                }))
             }
         }
     }
@@ -585,7 +595,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
     fn format_context(&self) -> Result<serde_json::Value, RuntimeError> {
         // 此启动器不提供上下文格式化功能。
         Err(RuntimeError::DetailedError(
-            "OnionLambdaRunnableLauncher does not support context formatting".to_string(),
+            "OnionLambdaRunnableLauncher does not support context formatting".to_string().into(),
         ))
     }
 }

@@ -6,6 +6,7 @@ use crate::{
         object::{OnionObject, OnionObjectCell},
         pair::OnionPair,
     },
+    unwrap_step_result,
 };
 
 pub struct AsyncScheduler {
@@ -19,64 +20,58 @@ impl AsyncScheduler {
 }
 
 impl Runnable for AsyncScheduler {
-    fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
+    fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> StepResult {
         if self.runnables.is_empty() {
-            return Ok(StepResult::Return(
+            return StepResult::Return(
                 OnionPair::new_static(
                     &OnionObject::Boolean(true).stabilize(),
                     &OnionObject::Undefined(Some("All runnables completed".to_string()))
                         .stabilize(),
                 )
                 .into(),
-            ));
+            );
         }
 
         let mut i = 0;
         while i < self.runnables.len() {
             match self.runnables[i].step(gc) {
-                Ok(step_result) => {
-                    match step_result {
-                        StepResult::Continue => {
-                            i += 1; // 继续处理下一个runnable
-                        }
-                        StepResult::NewRunnable(ref new_runnable) => {
-                            self.runnables.push(new_runnable.copy());
-                            self.runnables[i].receive(
-                                &StepResult::Return(
-                                    OnionObject::Undefined(Some("Task Launched".to_string()))
-                                        .stabilize()
-                                        .into(),
-                                ),
-                                gc,
-                            )?;
-                            i += 1; // 继续处理下一个runnable
-                        }
-                        StepResult::ReplaceRunnable(ref new_runnable) => {
-                            // self.runnables.push(new_runnable);
-                            // self.runnables[i].receive(
-                            //     StepResult::Return(
-                            //         OnionObject::Undefined(Some("Task Launched".to_string())).stabilize(),
-                            //     ),
-                            //     gc,
-                            // )?;
-                            // i += 1; // 继续处理下一个runnable
-                            self.runnables[i] = new_runnable.copy();
-                            i += 1; // 继续处理下一个runnable
-                        }
-                        StepResult::Return(_) => {
-                            // 移除已完成的runnable
-                            self.runnables.remove(i);
-                        }
-                    }
+                StepResult::Continue => {
+                    i += 1; // 继续处理下一个runnable
                 }
-                Err(e) => {
-                    return Err(e);
+                StepResult::NewRunnable(new_runnable) => {
+                    self.runnables.push(new_runnable);
+                    unwrap_step_result!(self.runnables[i].receive(
+                        &StepResult::Return(
+                            OnionObject::Undefined(Some("Task Launched".to_string()))
+                                .stabilize()
+                                .into(),
+                        ),
+                        gc,
+                    ));
+                    i += 1; // 继续处理下一个runnable
                 }
+                StepResult::ReplaceRunnable(new_runnable) => {
+                    // self.runnables.push(new_runnable);
+                    // self.runnables[i].receive(
+                    //     StepResult::Return(
+                    //         OnionObject::Undefined(Some("Task Launched".to_string())).stabilize(),
+                    //     ),
+                    //     gc,
+                    // )?;
+                    // i += 1; // 继续处理下一个runnable
+                    self.runnables[i] = new_runnable;
+                    i += 1; // 继续处理下一个runnable
+                }
+                StepResult::Return(_) => {
+                    // 移除已完成的runnable
+                    self.runnables.remove(i);
+                }
+                e => return e,
             }
         }
 
         // 如果所有runnable都需要继续，返回Continue
-        Ok(StepResult::Continue)
+        StepResult::Continue
     }
     fn receive(
         &mut self,
@@ -84,7 +79,7 @@ impl Runnable for AsyncScheduler {
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         Err(RuntimeError::DetailedError(
-            "AsyncScheduler does not support receive".to_string(),
+            "AsyncScheduler does not support receive".to_string().into(),
         ))
     }
 

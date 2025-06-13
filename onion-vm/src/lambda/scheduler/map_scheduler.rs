@@ -39,12 +39,12 @@ impl Runnable for Mapping {
                 Ok(())
             }
             _ => Err(RuntimeError::DetailedError(
-                "Unexpected step result in mapping".to_string(),
+                "Unexpected step result in mapping".to_string().into(),
             )),
         }
     }
 
-    fn step(&mut self, _gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
+    fn step(&mut self, _gc: &mut GC<OnionObjectCell>) -> StepResult {
         self.container
             .weak()
             .with_data(|container| match container {
@@ -90,9 +90,10 @@ impl Runnable for Mapping {
                     }
                 }
                 _ => Err(RuntimeError::InvalidType(
-                    "Container must be a tuple".to_string(),
+                    "Container must be a tuple".to_string().into(),
                 )),
             })
+            .unwrap_or_else(|e| StepResult::Error(e))
     }
 
     fn format_context(&self) -> Result<serde_json::Value, RuntimeError> {

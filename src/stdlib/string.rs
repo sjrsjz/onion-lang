@@ -16,7 +16,7 @@ fn length(
         string.weak().with_data(|string_data| match string_data {
             OnionObject::String(s) => Ok(OnionObject::Integer(s.len() as i64).stabilize()),
             _ => Err(RuntimeError::InvalidOperation(
-                "length requires string".to_string(),
+                "length requires string".to_string().into(),
             )),
         })
     })
@@ -29,9 +29,11 @@ fn trim(
     argument.weak().with_data(|data| {
         let string = get_attr_direct(data, "string".to_string())?;
         string.weak().with_data(|string_data| match string_data {
-            OnionObject::String(s) => Ok(OnionObject::String(s.trim().to_string().into()).stabilize()),
+            OnionObject::String(s) => {
+                Ok(OnionObject::String(s.trim().to_string().into()).stabilize())
+            }
             _ => Err(RuntimeError::InvalidOperation(
-                "trim requires string".to_string(),
+                "trim requires string".to_string().into(),
             )),
         })
     })
@@ -46,7 +48,7 @@ fn uppercase(
         string.weak().with_data(|string_data| match string_data {
             OnionObject::String(s) => Ok(OnionObject::String(s.to_uppercase().into()).stabilize()),
             _ => Err(RuntimeError::InvalidOperation(
-                "uppercase requires string".to_string(),
+                "uppercase requires string".to_string().into(),
             )),
         })
     })
@@ -61,7 +63,7 @@ fn lowercase(
         string.weak().with_data(|string_data| match string_data {
             OnionObject::String(s) => Ok(OnionObject::String(s.to_lowercase().into()).stabilize()),
             _ => Err(RuntimeError::InvalidOperation(
-                "lowercase requires string".to_string(),
+                "lowercase requires string".to_string().into(),
             )),
         })
     })
@@ -83,7 +85,7 @@ fn contains(
                         Ok(OnionObject::Boolean(s.contains(sub.as_ref())).stabilize())
                     }
                     _ => Err(RuntimeError::InvalidOperation(
-                        "contains requires string arguments".to_string(),
+                        "contains requires string arguments".to_string().into(),
                     )),
                 })
         })
@@ -106,7 +108,7 @@ fn concat(
                     Ok(OnionObject::String(result.into()).stabilize())
                 }
                 _ => Err(RuntimeError::InvalidOperation(
-                    "concat requires string arguments".to_string(),
+                    "concat requires string arguments".to_string().into(),
                 )),
             })
         })
@@ -136,7 +138,7 @@ fn split(
                         Ok(OnionTuple::new_static_no_ref(parts))
                     }
                     _ => Err(RuntimeError::InvalidOperation(
-                        "split requires string arguments".to_string(),
+                        "split requires string arguments".to_string().into(),
                     )),
                 })
         })
@@ -166,7 +168,7 @@ fn replace(
                             Ok(OnionObject::String(result.into()).stabilize())
                         }
                         _ => Err(RuntimeError::InvalidOperation(
-                            "replace requires string arguments".to_string(),
+                            "replace requires string arguments".to_string().into(),
                         )),
                     })
             })
@@ -209,7 +211,9 @@ fn substr(
                             }
                         }
                         _ => Err(RuntimeError::InvalidOperation(
-                            "substr requires string and integer arguments".to_string(),
+                            "substr requires string and integer arguments"
+                                .to_string()
+                                .into(),
                         )),
                     }
                 })
@@ -231,12 +235,14 @@ fn index_of(
             substring
                 .weak()
                 .with_data(|substring_data| match (string_data, substring_data) {
-                    (OnionObject::String(s), OnionObject::String(sub)) => match s.find(sub.as_ref()) {
-                        Some(index) => Ok(OnionObject::Integer(index as i64).stabilize()),
-                        None => Ok(OnionObject::Integer(-1).stabilize()),
-                    },
+                    (OnionObject::String(s), OnionObject::String(sub)) => {
+                        match s.find(sub.as_ref()) {
+                            Some(index) => Ok(OnionObject::Integer(index as i64).stabilize()),
+                            None => Ok(OnionObject::Integer(-1).stabilize()),
+                        }
+                    }
                     _ => Err(RuntimeError::InvalidOperation(
-                        "index_of requires string arguments".to_string(),
+                        "index_of requires string arguments".to_string().into(),
                     )),
                 })
         })
@@ -260,7 +266,7 @@ fn starts_with(
                         Ok(OnionObject::Boolean(s.starts_with(p.as_ref())).stabilize())
                     }
                     _ => Err(RuntimeError::InvalidOperation(
-                        "starts_with requires string arguments".to_string(),
+                        "starts_with requires string arguments".to_string().into(),
                     )),
                 })
         })
@@ -284,7 +290,7 @@ fn ends_with(
                         Ok(OnionObject::Boolean(s.ends_with(suf.as_ref())).stabilize())
                     }
                     _ => Err(RuntimeError::InvalidOperation(
-                        "ends_with requires string arguments".to_string(),
+                        "ends_with requires string arguments".to_string().into(),
                     )),
                 })
         })
@@ -307,14 +313,16 @@ fn repeat(
                     (OnionObject::String(s), OnionObject::Integer(n)) => {
                         if *n < 0 {
                             return Err(RuntimeError::InvalidOperation(
-                                "repeat count cannot be negative".to_string(),
+                                "repeat count cannot be negative".to_string().into(),
                             ));
                         }
                         let result = s.repeat(*n as usize);
                         Ok(OnionObject::String(result.into()).stabilize())
                     }
                     _ => Err(RuntimeError::InvalidOperation(
-                        "repeat requires string and integer arguments".to_string(),
+                        "repeat requires string and integer arguments"
+                            .to_string()
+                            .into(),
                     )),
                 })
         })
@@ -352,7 +360,9 @@ fn pad_left(
                             }
                         }
                         _ => Err(RuntimeError::InvalidOperation(
-                            "pad_left requires string, integer, and string arguments".to_string(),
+                            "pad_left requires string, integer, and string arguments"
+                                .to_string()
+                                .into(),
                         )),
                     }
                 })
@@ -392,7 +402,9 @@ fn pad_right(
                             }
                         }
                         _ => Err(RuntimeError::InvalidOperation(
-                            "pad_right requires string, integer, and string arguments".to_string(),
+                            "pad_right requires string, integer, and string arguments"
+                                .to_string()
+                                .into(),
                         )),
                     }
                 })
@@ -411,7 +423,7 @@ fn is_empty(
         string.weak().with_data(|string_data| match string_data {
             OnionObject::String(s) => Ok(OnionObject::Boolean(s.is_empty()).stabilize()),
             _ => Err(RuntimeError::InvalidOperation(
-                "is_empty requires string".to_string(),
+                "is_empty requires string".to_string().into(),
             )),
         })
     })
@@ -430,7 +442,7 @@ fn reverse(
                 Ok(OnionObject::String(reversed.into()).stabilize())
             }
             _ => Err(RuntimeError::InvalidOperation(
-                "reverse requires string".to_string(),
+                "reverse requires string".to_string().into(),
             )),
         })
     })

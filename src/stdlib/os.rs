@@ -31,20 +31,32 @@ fn system(
                         let status = output.status.code().unwrap_or(-1);
 
                         let mut result = IndexMap::new();
-                        result.insert("stdout".to_string(), OnionObject::String(stdout.into()).stabilize());
-                        result.insert("stderr".to_string(), OnionObject::String(stderr.into()).stabilize());
-                        result.insert("status".to_string(), OnionObject::Integer(status as i64).stabilize());
-                        result.insert("success".to_string(), OnionObject::Boolean(output.status.success()).stabilize());
+                        result.insert(
+                            "stdout".to_string(),
+                            OnionObject::String(stdout.into()).stabilize(),
+                        );
+                        result.insert(
+                            "stderr".to_string(),
+                            OnionObject::String(stderr.into()).stabilize(),
+                        );
+                        result.insert(
+                            "status".to_string(),
+                            OnionObject::Integer(status as i64).stabilize(),
+                        );
+                        result.insert(
+                            "success".to_string(),
+                            OnionObject::Boolean(output.status.success()).stabilize(),
+                        );
 
                         Ok(build_named_dict(result))
                     }
-                    Err(e) => Err(RuntimeError::DetailedError(format!(
-                        "Failed to execute command: {}", e
-                    ))),
+                    Err(e) => Err(RuntimeError::DetailedError(
+                        format!("Failed to execute command: {}", e).into(),
+                    )),
                 }
             }
             _ => Err(RuntimeError::InvalidType(
-                "Command must be a string".to_string(),
+                "Command must be a string".to_string().into(),
             )),
         })
     })
@@ -70,13 +82,13 @@ fn system_code(
                         let code = status.code().unwrap_or(-1);
                         Ok(OnionObject::Integer(code as i64).stabilize())
                     }
-                    Err(e) => Err(RuntimeError::DetailedError(format!(
-                        "Failed to execute command: {}", e
-                    ))),
+                    Err(e) => Err(RuntimeError::DetailedError(
+                        format!("Failed to execute command: {}", e).into(),
+                    )),
                 }
             }
             _ => Err(RuntimeError::InvalidType(
-                "Command must be a string".to_string(),
+                "Command must be a string".to_string().into(),
             )),
         })
     })
@@ -90,16 +102,14 @@ fn chdir(
     argument.weak().with_data(|data| {
         let path = get_attr_direct(data, "path".to_string())?;
         path.weak().with_data(|path_data| match path_data {
-            OnionObject::String(path_str) => {
-                match env::set_current_dir(path_str.as_ref()) {
-                    Ok(_) => Ok(OnionObject::Null.stabilize()),
-                    Err(e) => Err(RuntimeError::DetailedError(format!(
-                        "Failed to change directory: {}", e
-                    ))),
-                }
-            }
+            OnionObject::String(path_str) => match env::set_current_dir(path_str.as_ref()) {
+                Ok(_) => Ok(OnionObject::Null.stabilize()),
+                Err(e) => Err(RuntimeError::DetailedError(
+                    format!("Failed to change directory: {}", e).into(),
+                )),
+            },
             _ => Err(RuntimeError::InvalidType(
-                "Path must be a string".to_string(),
+                "Path must be a string".to_string().into(),
             )),
         })
     })
@@ -122,9 +132,11 @@ fn home_dir(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     match dirs::home_dir() {
-        Some(path) => Ok(OnionObject::String(path.to_string_lossy().to_string().into()).stabilize()),
+        Some(path) => {
+            Ok(OnionObject::String(path.to_string_lossy().to_string().into()).stabilize())
+        }
         None => Err(RuntimeError::DetailedError(
-            "Could not determine home directory".to_string(),
+            "Could not determine home directory".to_string().into(),
         )),
     }
 }
@@ -151,7 +163,7 @@ fn path_exists(
                 Ok(OnionObject::Boolean(exists).stabilize())
             }
             _ => Err(RuntimeError::InvalidType(
-                "Path must be a string".to_string(),
+                "Path must be a string".to_string().into(),
             )),
         })
     })
@@ -170,7 +182,7 @@ fn is_dir(
                 Ok(OnionObject::Boolean(is_directory).stabilize())
             }
             _ => Err(RuntimeError::InvalidType(
-                "Path must be a string".to_string(),
+                "Path must be a string".to_string().into(),
             )),
         })
     })
@@ -189,7 +201,7 @@ fn is_file(
                 Ok(OnionObject::Boolean(is_file).stabilize())
             }
             _ => Err(RuntimeError::InvalidType(
-                "Path must be a string".to_string(),
+                "Path must be a string".to_string().into(),
             )),
         })
     })
@@ -203,19 +215,22 @@ fn path_join(
     argument.weak().with_data(|data| {
         let base = get_attr_direct(data, "base".to_string())?;
         let path = get_attr_direct(data, "path".to_string())?;
-        
+
         base.weak().with_data(|base_data| {
-            path.weak().with_data(|path_data| {
-                match (base_data, path_data) {
+            path.weak()
+                .with_data(|path_data| match (base_data, path_data) {
                     (OnionObject::String(base_str), OnionObject::String(path_str)) => {
-                        let joined = std::path::Path::new(base_str.as_ref()).join(path_str.as_ref());
-                        Ok(OnionObject::String(joined.to_string_lossy().to_string().into()).stabilize())
+                        let joined =
+                            std::path::Path::new(base_str.as_ref()).join(path_str.as_ref());
+                        Ok(
+                            OnionObject::String(joined.to_string_lossy().to_string().into())
+                                .stabilize(),
+                        )
                     }
                     _ => Err(RuntimeError::InvalidType(
-                        "Base and path must be strings".to_string(),
+                        "Base and path must be strings".to_string().into(),
                     )),
-                }
-            })
+                })
         })
     })
 }

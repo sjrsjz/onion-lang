@@ -148,64 +148,59 @@ impl ReplExecutor {
             }
 
             match scheduler.step(&mut gc) {
-                Ok(step_result) => match step_result {
-                    StepResult::Continue => {
-                        // 继续下一步
-                    }
-                    StepResult::NewRunnable(_) => {
-                        // 添加新的可执行对象到调度器
-                        unreachable!()
-                    }
-                    StepResult::ReplaceRunnable(ref r) => {
-                        scheduler = r.copy();
-                    }
-                    StepResult::Return(ref result) => {
-                        let result_borrowed = result.weak();
-                        let result = unwrap_object!(&*result_borrowed, OnionObject::Pair)
-                            .map_err(|e| format!("Failed to unwrap result: {:?}", e))?;
-                        let key = result.get_key();
-                        let success = *unwrap_object!(key, OnionObject::Boolean)
-                            .map_err(|e| format!("Failed to get success key: {:?}", e))?;
-
-                        if !success {
-                            let error_msg = result
-                                .get_value()
-                                .to_string(&vec![])
-                                .map_err(|e| format!("Failed to get error message: {:?}", e))?;
-                            println!("{} {}", "Error:".red().bold(), error_msg);
-                            return Err("Execution failed".to_string());
-                        }
-
-                        // 获取执行结果并存储到Out元组中
-                        let result_value = result.get_value();
-
-                        // 将结果添加到Out元组中
-                        self.add_result_to_out(result_value.clone());
-                        let is_undefined = result_value
-                            .with_data(|data| {
-                                Ok(unwrap_object!(data, OnionObject::Undefined).is_ok())
-                            })
-                            .map_err(|e| {
-                                format!("Failed to check if result is Undefined: {:?}", e)
-                            })?;
-                        if is_undefined {
-                            break; // 如果结果是Undefined，则不需要打印
-                        }
-                        // 打印结果
-                        let result_str = result_value
-                            .to_string(&vec![])
-                            .map_err(|e| format!("Failed to get result value: {:?}", e))?;
-                        println!("{} {}", "Result:".cyan(), result_str);
-                        break;
-                    }
-                },
-                Err(e) => {
-                    // 检查是否因为中断而出错
+                StepResult::Continue => {
+                    // 继续下一步
+                }
+                StepResult::Error(ref error) => {
+                    // 处理错误
                     if self.interrupted.load(Ordering::SeqCst) {
+                        // 重置中断标志
                         // self.interrupted.store(false, Ordering::SeqCst); // 由 REPL 循环在每个命令开始时重置
                         return Err("Execution interrupted by Ctrl+C".to_string());
                     }
-                    return Err(format!("Execution error: {}", e));
+                    return Err(format!("Execution error: {}", error));
+                }
+                StepResult::NewRunnable(_) => {
+                    // 添加新的可执行对象到调度器
+                    unreachable!()
+                }
+                StepResult::ReplaceRunnable(ref r) => {
+                    scheduler = r.copy();
+                }
+                StepResult::Return(ref result) => {
+                    let result_borrowed = result.weak();
+                    let result = unwrap_object!(&*result_borrowed, OnionObject::Pair)
+                        .map_err(|e| format!("Failed to unwrap result: {:?}", e))?;
+                    let key = result.get_key();
+                    let success = *unwrap_object!(key, OnionObject::Boolean)
+                        .map_err(|e| format!("Failed to get success key: {:?}", e))?;
+
+                    if !success {
+                        let error_msg = result
+                            .get_value()
+                            .to_string(&vec![])
+                            .map_err(|e| format!("Failed to get error message: {:?}", e))?;
+                        println!("{} {}", "Error:".red().bold(), error_msg);
+                        return Err("Execution failed".to_string());
+                    }
+
+                    // 获取执行结果并存储到Out元组中
+                    let result_value = result.get_value();
+
+                    // 将结果添加到Out元组中
+                    self.add_result_to_out(result_value.clone());
+                    let is_undefined = result_value
+                        .with_data(|data| Ok(unwrap_object!(data, OnionObject::Undefined).is_ok()))
+                        .map_err(|e| format!("Failed to check if result is Undefined: {:?}", e))?;
+                    if is_undefined {
+                        break; // 如果结果是Undefined，则不需要打印
+                    }
+                    // 打印结果
+                    let result_str = result_value
+                        .to_string(&vec![])
+                        .map_err(|e| format!("Failed to get result value: {:?}", e))?;
+                    println!("{} {}", "Result:".cyan(), result_str);
+                    break;
                 }
             }
         }

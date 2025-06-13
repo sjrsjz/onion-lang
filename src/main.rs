@@ -393,59 +393,52 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
     // Execute code
     loop {
         match scheduler.step(&mut gc) {
-            Ok(step_result) => {
-                match step_result {
-                    StepResult::Continue => {
-                        // Continue to next step
-                    }
-                    StepResult::NewRunnable(_) => {
-                        // Add new runnable to scheduler
-                        unreachable!()
-                    }
-                    StepResult::ReplaceRunnable(ref r) => {
-                        scheduler = r.copy();
-                    }
-                    StepResult::Return(ref result) => {
-                        let result_borrowed = result.weak();
-                        let result = unwrap_object!(&*result_borrowed, OnionObject::Pair)
-                            .map_err(|e| format!("Failed to unwrap result: {:?}", e))?;
-                        let success = *unwrap_object!(result.get_key(), OnionObject::Boolean)
-                            .map_err(|e| format!("Failed to get success key: {:?}", e))?;
-                        if !success {
-                            println!(
-                                "{} {}",
-                                "Error:".red().bold(),
-                                result.get_value().to_string(&vec![]).map_err(|e| {
-                                    format!("Failed to get error message: {:?}", e)
-                                })?
-                            );
-                            return Err("Execution failed".to_string());
-                        }
-                        let is_undefined = result
-                            .get_value()
-                            .with_data(|data| {
-                                Ok(unwrap_object!(data, OnionObject::Undefined).is_ok())
-                            })
-                            .map_err(|e| {
-                                format!("Failed to check if result is undefined: {:?}", e)
-                            })?;
-                        if is_undefined {
-                            return Ok(());
-                        }
-                        // Print result and exit
-                        println!(
-                            "{}",
-                            result
-                                .get_value()
-                                .to_string(&vec![])
-                                .map_err(|e| format!("Failed to get result value: {:?}", e))?
-                        );
-                        break;
-                    }
-                }
+            StepResult::Continue => {
+                // Continue to next step
             }
-            Err(e) => {
-                return Err(format!("Execution error: {}", e));
+            StepResult::Error(ref error) => {
+                return Err(format!("Execution error: {}", error));
+            }
+            StepResult::NewRunnable(_) => {
+                // Add new runnable to scheduler
+                unreachable!()
+            }
+            StepResult::ReplaceRunnable(ref r) => {
+                scheduler = r.copy();
+            }
+            StepResult::Return(ref result) => {
+                let result_borrowed = result.weak();
+                let result = unwrap_object!(&*result_borrowed, OnionObject::Pair)
+                    .map_err(|e| format!("Failed to unwrap result: {:?}", e))?;
+                let success = *unwrap_object!(result.get_key(), OnionObject::Boolean)
+                    .map_err(|e| format!("Failed to get success key: {:?}", e))?;
+                if !success {
+                    println!(
+                        "{} {}",
+                        "Error:".red().bold(),
+                        result
+                            .get_value()
+                            .to_string(&vec![])
+                            .map_err(|e| { format!("Failed to get error message: {:?}", e) })?
+                    );
+                    return Err("Execution failed".to_string());
+                }
+                let is_undefined = result
+                    .get_value()
+                    .with_data(|data| Ok(unwrap_object!(data, OnionObject::Undefined).is_ok()))
+                    .map_err(|e| format!("Failed to check if result is undefined: {:?}", e))?;
+                if is_undefined {
+                    return Ok(());
+                }
+                // Print result and exit
+                println!(
+                    "{}",
+                    result
+                        .get_value()
+                        .to_string(&vec![])
+                        .map_err(|e| format!("Failed to get result value: {:?}", e))?
+                );
+                break;
             }
         }
     }

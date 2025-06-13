@@ -19,17 +19,14 @@ use super::{
     },
 };
 
-type InstructionHandler = fn(
-    &mut OnionLambdaRunnable,
-    &ProcessedOpcode,
-    &mut GC<OnionObjectCell>,
-) -> Result<StepResult, RuntimeError>;
+type InstructionHandler =
+    fn(&mut OnionLambdaRunnable, &ProcessedOpcode, &mut GC<OnionObjectCell>) -> StepResult;
 
 // 静态指令表，在程序启动时初始化一次
 static INSTRUCTION_TABLE: std::sync::LazyLock<Vec<InstructionHandler>> =
     std::sync::LazyLock::new(|| {
         let mut instruction_table: Vec<InstructionHandler> = vec![
-        |_, opcode, _| Err(RuntimeError::DetailedError(format!("Invalid instruction: {:?}", opcode))); // 默认处理函数 - 返回无效指令错误
+        |_, opcode, _| StepResult::Error(RuntimeError::DetailedError(format!("Invalid instruction: {:?}", opcode).into())); // 默认处理函数 - 返回无效指令错误
         256 // 数组大小，确保能容纳所有可能的操作码
     ];
 
@@ -156,7 +153,9 @@ impl OnionLambdaRunnable {
                 .position(|s| s == "this")
                 .ok_or_else(|| {
                     RuntimeError::InvalidOperation(
-                        "Missing required variable 'this' in string pool".to_string(),
+                        "Missing required variable 'this' in string pool"
+                            .to_string()
+                            .into(),
                     )
                 })?;
 
@@ -165,7 +164,9 @@ impl OnionLambdaRunnable {
                 .position(|s| s == "self")
                 .ok_or_else(|| {
                     RuntimeError::InvalidOperation(
-                        "Missing required variable 'self' in string pool".to_string(),
+                        "Missing required variable 'self' in string pool"
+                            .to_string()
+                            .into(),
                     )
                 })?;
 
@@ -174,7 +175,9 @@ impl OnionLambdaRunnable {
                 .position(|s| s == "arguments")
                 .ok_or_else(|| {
                     RuntimeError::InvalidOperation(
-                        "Missing required variable 'arguments' in string pool".to_string(),
+                        "Missing required variable 'arguments' in string pool"
+                            .to_string()
+                            .into(),
                     )
                 })?;
 
@@ -185,28 +188,25 @@ impl OnionLambdaRunnable {
         new_context
             .let_variable(index_this, this_lambda.clone())
             .map_err(|e| {
-                RuntimeError::InvalidOperation(format!(
-                    "Failed to initialize 'this' variable: {}",
-                    e
-                ))
+                RuntimeError::InvalidOperation(
+                    format!("Failed to initialize 'this' variable: {}", e).into(),
+                )
             })?;
 
         new_context
             .let_variable(index_self, self_object.clone().stabilize())
             .map_err(|e| {
-                RuntimeError::InvalidOperation(format!(
-                    "Failed to initialize 'self' variable: {}",
-                    e
-                ))
+                RuntimeError::InvalidOperation(
+                    format!("Failed to initialize 'self' variable: {}", e).into(),
+                )
             })?;
 
         new_context
             .let_variable(index_arguments, argument.clone())
             .map_err(|e| {
-                RuntimeError::InvalidOperation(format!(
-                    "Failed to initialize 'arguments' variable: {}",
-                    e
-                ))
+                RuntimeError::InvalidOperation(
+                    format!("Failed to initialize 'arguments' variable: {}", e).into(),
+                )
             })?;
 
         let pool = instruction.get_string_pool();
@@ -238,7 +238,7 @@ impl OnionLambdaRunnable {
                 Ok(())
             } else {
                 Err(RuntimeError::InvalidOperation(
-                    "Argument must be a tuple".to_string(),
+                    "Argument must be a tuple".to_string().into(),
                 ))
             }
         })?;
@@ -265,11 +265,13 @@ impl Runnable for OnionLambdaRunnable {
             Ok(())
         } else {
             Err(RuntimeError::DetailedError(
-                "receive not implemented for cases except `Return`".to_string(),
+                "receive not implemented for cases except `Return`"
+                    .to_string()
+                    .into(),
             ))
         }
     }
-    fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
+    fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> StepResult {
         const MAX_INLINE_STEPS: usize = 1024;
 
         let mut steps = 0;
@@ -288,8 +290,8 @@ impl Runnable for OnionLambdaRunnable {
 
             let mut ip = self.ip as usize;
             if ip >= code_len {
-                return Err(RuntimeError::DetailedError(
-                    "Instruction pointer out of bounds".to_string(),
+                return StepResult::Error(RuntimeError::DetailedError(
+                    "Instruction pointer out of bounds".to_string().into(),
                 ));
             }
 
@@ -300,13 +302,13 @@ impl Runnable for OnionLambdaRunnable {
             let handler = unsafe { *INSTRUCTION_TABLE.get_unchecked(opcode.instruction as usize) };
             self.ip = ip as isize;
 
-            match handler(self, &opcode, gc)? {
+            match handler(self, &opcode, gc) {
                 StepResult::Continue => continue,
-                v => return Ok(v),
+                v => return v,
             }
         }
 
-        Ok(StepResult::Continue)
+        StepResult::Continue
     }
     fn copy(&self) -> Box<dyn Runnable> {
         Box::new(OnionLambdaRunnable {
@@ -344,9 +346,6 @@ mod size_tests {
     fn print_sizes() {
         println!("StepResult size: {}", std::mem::size_of::<StepResult>());
         println!("RuntimeError size: {}", std::mem::size_of::<RuntimeError>());
-        println!(
-            "Result<StepResult, RuntimeError> size: {}",
-            std::mem::size_of::<Result<StepResult, RuntimeError>>()
-        );
+        println!("StepResult size: {}", std::mem::size_of::<StepResult>());
     }
 }

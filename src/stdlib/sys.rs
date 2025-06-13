@@ -33,7 +33,7 @@ fn getenv(
                 Err(_) => Ok(OnionObject::Null.stabilize()),
             },
             _ => Err(RuntimeError::InvalidType(
-                "Key must be a string".to_string(),
+                "Key must be a string".to_string().into(),
             )),
         })
     })
@@ -57,7 +57,7 @@ fn setenv(
                         Ok(OnionObject::Null.stabilize())
                     }
                     _ => Err(RuntimeError::InvalidType(
-                        "Key and value must be strings".to_string(),
+                        "Key and value must be strings".to_string().into(),
                     )),
                 })
         })
@@ -77,7 +77,7 @@ fn unsetenv(
                 Ok(OnionObject::Null.stabilize())
             }
             _ => Err(RuntimeError::InvalidType(
-                "Key must be a string".to_string(),
+                "Key must be a string".to_string().into(),
             )),
         })
     })
@@ -106,10 +106,9 @@ fn getcwd(
 ) -> Result<OnionStaticObject, RuntimeError> {
     match env::current_dir() {
         Ok(path) => Ok(OnionObject::String(path.to_string_lossy().to_string().into()).stabilize()),
-        Err(e) => Err(RuntimeError::DetailedError(format!(
-            "Failed to get current directory: {}",
-            e
-        ))),
+        Err(e) => Err(RuntimeError::DetailedError(
+            format!("Failed to get current directory: {}", e).into(),
+        )),
     }
 }
 
@@ -124,7 +123,7 @@ fn exit(
             .with_data(|code_data| match code_data {
                 OnionObject::Integer(code) => Ok(*code as i32),
                 _ => Err(RuntimeError::InvalidType(
-                    "Exit code must be an integer".to_string(),
+                    "Exit code must be an integer".to_string().into(),
                 )),
             })
     })?;
@@ -177,10 +176,9 @@ fn executable(
 ) -> Result<OnionStaticObject, RuntimeError> {
     match env::current_exe() {
         Ok(path) => Ok(OnionObject::String(path.to_string_lossy().to_string().into()).stabilize()),
-        Err(e) => Err(RuntimeError::DetailedError(format!(
-            "Failed to get executable path: {}",
-            e
-        ))),
+        Err(e) => Err(RuntimeError::DetailedError(
+            format!("Failed to get executable path: {}", e).into(),
+        )),
     }
 }
 

@@ -18,13 +18,12 @@ fn read_file(
         path.weak().with_data(|path_data| match path_data {
             OnionObject::String(path_str) => match fs::read(path_str.as_ref()) {
                 Ok(content) => Ok(OnionObject::Bytes(content.into()).stabilize()),
-                Err(e) => Err(RuntimeError::DetailedError(format!(
-                    "Failed to read file '{}': {}",
-                    path_str, e
-                ))),
+                Err(e) => Err(RuntimeError::DetailedError(
+                    format!("Failed to read file '{}': {}", path_str, e).into(),
+                )),
             },
             _ => Err(RuntimeError::InvalidType(
-                "Path must be a string".to_string(),
+                "Path must be a string".to_string().into(),
             )),
         })
     })
@@ -45,24 +44,24 @@ fn write_file(
                     (OnionObject::String(path_str), OnionObject::Bytes(content_bytes)) => {
                         match fs::write(&**path_str, &**content_bytes) {
                             Ok(_) => Ok(OnionObject::Null.stabilize()),
-                            Err(e) => Err(RuntimeError::DetailedError(format!(
-                                "Failed to write file '{}': {}",
-                                path_str, e
-                            ))),
+                            Err(e) => Err(RuntimeError::DetailedError(
+                                format!("Failed to write file '{}': {}", path_str, e).into(),
+                            )),
                         }
                     }
                     (OnionObject::String(path_str), OnionObject::String(content_str)) => {
                         // 为了向后兼容，仍然支持字符串输入，但转换为字节
                         match fs::write(&**path_str, content_str.as_bytes()) {
                             Ok(_) => Ok(OnionObject::Null.stabilize()),
-                            Err(e) => Err(RuntimeError::DetailedError(format!(
-                                "Failed to write file '{}': {}",
-                                path_str, e
-                            ))),
+                            Err(e) => Err(RuntimeError::DetailedError(
+                                format!("Failed to write file '{}': {}", path_str, e).into(),
+                            )),
                         }
                     }
                     _ => Err(RuntimeError::InvalidType(
-                        "Path must be a string and content must be bytes or string".to_string(),
+                        "Path must be a string and content must be bytes or string"
+                            .to_string()
+                            .into(),
                     )),
                 }
             })
@@ -90,15 +89,15 @@ fn append_file(
                         {
                             Ok(mut file) => match file.write_all(&**content_bytes) {
                                 Ok(_) => Ok(OnionObject::Null.stabilize()),
-                                Err(e) => Err(RuntimeError::DetailedError(format!(
-                                    "Failed to append to file '{}': {}",
-                                    path_str, e
-                                ))),
+                                Err(e) => Err(RuntimeError::DetailedError(
+                                    format!("Failed to append to file '{}': {}", path_str, e)
+                                        .into(),
+                                )),
                             },
-                            Err(e) => Err(RuntimeError::DetailedError(format!(
-                                "Failed to open file '{}' for appending: {}",
-                                path_str, e
-                            ))),
+                            Err(e) => Err(RuntimeError::DetailedError(
+                                format!("Failed to open file '{}' for appending: {}", path_str, e)
+                                    .into(),
+                            )),
                         }
                     }
                     (OnionObject::String(path_str), OnionObject::String(content_str)) => {
@@ -110,19 +109,21 @@ fn append_file(
                         {
                             Ok(mut file) => match file.write_all(content_str.as_bytes()) {
                                 Ok(_) => Ok(OnionObject::Null.stabilize()),
-                                Err(e) => Err(RuntimeError::DetailedError(format!(
-                                    "Failed to append to file '{}': {}",
-                                    path_str, e
-                                ))),
+                                Err(e) => Err(RuntimeError::DetailedError(
+                                    format!("Failed to append to file '{}': {}", path_str, e)
+                                        .into(),
+                                )),
                             },
-                            Err(e) => Err(RuntimeError::DetailedError(format!(
-                                "Failed to open file '{}' for appending: {}",
-                                path_str, e
-                            ))),
+                            Err(e) => Err(RuntimeError::DetailedError(
+                                format!("Failed to open file '{}' for appending: {}", path_str, e)
+                                    .into(),
+                            )),
                         }
                     }
                     _ => Err(RuntimeError::InvalidType(
-                        "Path must be a string and content must be bytes or string".to_string(),
+                        "Path must be a string and content must be bytes or string"
+                            .to_string()
+                            .into(),
                     )),
                 }
             })
@@ -140,13 +141,12 @@ fn remove_file(
         path.weak().with_data(|path_data| match path_data {
             OnionObject::String(path_str) => match fs::remove_file(&**path_str) {
                 Ok(_) => Ok(OnionObject::Null.stabilize()),
-                Err(e) => Err(RuntimeError::DetailedError(format!(
-                    "Failed to remove file '{}': {}",
-                    path_str, e
-                ))),
+                Err(e) => Err(RuntimeError::DetailedError(
+                    format!("Failed to remove file '{}': {}", path_str, e).into(),
+                )),
             },
             _ => Err(RuntimeError::InvalidType(
-                "Path must be a string".to_string(),
+                "Path must be a string".to_string().into(),
             )),
         })
     })
@@ -167,14 +167,17 @@ fn copy_file(
                     (OnionObject::String(src_str), OnionObject::String(dest_str)) => {
                         match fs::copy(src_str.as_ref(), dest_str.as_ref()) {
                             Ok(_) => Ok(OnionObject::Null.stabilize()),
-                            Err(e) => Err(RuntimeError::DetailedError(format!(
-                                "Failed to copy file from '{}' to '{}': {}",
-                                src_str, dest_str, e
-                            ))),
+                            Err(e) => Err(RuntimeError::DetailedError(
+                                format!(
+                                    "Failed to copy file from '{}' to '{}': {}",
+                                    src_str, dest_str, e
+                                )
+                                .into(),
+                            )),
                         }
                     }
                     _ => Err(RuntimeError::InvalidType(
-                        "Source and destination must be strings".to_string(),
+                        "Source and destination must be strings".to_string().into(),
                     )),
                 })
         })
@@ -196,14 +199,17 @@ fn rename_file(
                     (OnionObject::String(src_str), OnionObject::String(dest_str)) => {
                         match fs::rename(src_str.as_ref(), dest_str.as_ref()) {
                             Ok(_) => Ok(OnionObject::Null.stabilize()),
-                            Err(e) => Err(RuntimeError::DetailedError(format!(
-                                "Failed to rename file from '{}' to '{}': {}",
-                                src_str, dest_str, e
-                            ))),
+                            Err(e) => Err(RuntimeError::DetailedError(
+                                format!(
+                                    "Failed to rename file from '{}' to '{}': {}",
+                                    src_str, dest_str, e
+                                )
+                                .into(),
+                            )),
                         }
                     }
                     _ => Err(RuntimeError::InvalidType(
-                        "Source and destination must be strings".to_string(),
+                        "Source and destination must be strings".to_string().into(),
                     )),
                 })
         })
@@ -220,13 +226,12 @@ fn create_dir(
         path.weak().with_data(|path_data| match path_data {
             OnionObject::String(path_str) => match fs::create_dir(path_str.as_ref()) {
                 Ok(_) => Ok(OnionObject::Null.stabilize()),
-                Err(e) => Err(RuntimeError::DetailedError(format!(
-                    "Failed to create directory '{}': {}",
-                    path_str, e
-                ))),
+                Err(e) => Err(RuntimeError::DetailedError(
+                    format!("Failed to create directory '{}': {}", path_str, e).into(),
+                )),
             },
             _ => Err(RuntimeError::InvalidType(
-                "Path must be a string".to_string(),
+                "Path must be a string".to_string().into(),
             )),
         })
     })
@@ -242,13 +247,12 @@ fn create_dir_all(
         path.weak().with_data(|path_data| match path_data {
             OnionObject::String(path_str) => match fs::create_dir_all(path_str.as_ref()) {
                 Ok(_) => Ok(OnionObject::Null.stabilize()),
-                Err(e) => Err(RuntimeError::DetailedError(format!(
-                    "Failed to create directory '{}': {}",
-                    path_str, e
-                ))),
+                Err(e) => Err(RuntimeError::DetailedError(
+                    format!("Failed to create directory '{}': {}", path_str, e).into(),
+                )),
             },
             _ => Err(RuntimeError::InvalidType(
-                "Path must be a string".to_string(),
+                "Path must be a string".to_string().into(),
             )),
         })
     })
@@ -264,13 +268,12 @@ fn remove_dir(
         path.weak().with_data(|path_data| match path_data {
             OnionObject::String(path_str) => match fs::remove_dir(path_str.as_ref()) {
                 Ok(_) => Ok(OnionObject::Null.stabilize()),
-                Err(e) => Err(RuntimeError::DetailedError(format!(
-                    "Failed to remove directory '{}': {}",
-                    path_str, e
-                ))),
+                Err(e) => Err(RuntimeError::DetailedError(
+                    format!("Failed to remove directory '{}': {}", path_str, e).into(),
+                )),
             },
             _ => Err(RuntimeError::InvalidType(
-                "Path must be a string".to_string(),
+                "Path must be a string".to_string().into(),
             )),
         })
     })
@@ -286,13 +289,12 @@ fn remove_dir_all(
         path.weak().with_data(|path_data| match path_data {
             OnionObject::String(path_str) => match fs::remove_dir_all(path_str.as_ref()) {
                 Ok(_) => Ok(OnionObject::Null.stabilize()),
-                Err(e) => Err(RuntimeError::DetailedError(format!(
-                    "Failed to remove directory '{}': {}",
-                    path_str, e
-                ))),
+                Err(e) => Err(RuntimeError::DetailedError(
+                    format!("Failed to remove directory '{}': {}", path_str, e).into(),
+                )),
             },
             _ => Err(RuntimeError::InvalidType(
-                "Path must be a string".to_string(),
+                "Path must be a string".to_string().into(),
             )),
         })
     })
@@ -316,10 +318,9 @@ fn read_dir(
                                 files.push(OnionObject::String(file_name.into()));
                             }
                             Err(e) => {
-                                return Err(RuntimeError::DetailedError(format!(
-                                    "Error reading directory entry: {}",
-                                    e
-                                )));
+                                return Err(RuntimeError::DetailedError(
+                                    format!("Error reading directory entry: {}", e).into(),
+                                ));
                             }
                         }
                     }
@@ -328,13 +329,12 @@ fn read_dir(
                             .stabilize(),
                     )
                 }
-                Err(e) => Err(RuntimeError::DetailedError(format!(
-                    "Failed to read directory '{}': {}",
-                    path_str, e
-                ))),
+                Err(e) => Err(RuntimeError::DetailedError(
+                    format!("Failed to read directory '{}': {}", path_str, e).into(),
+                )),
             },
             _ => Err(RuntimeError::InvalidType(
-                "Path must be a string".to_string(),
+                "Path must be a string".to_string().into(),
             )),
         })
     })
@@ -379,13 +379,12 @@ fn file_metadata(
 
                     Ok(build_named_dict(meta))
                 }
-                Err(e) => Err(RuntimeError::DetailedError(format!(
-                    "Failed to get metadata for '{}': {}",
-                    path_str, e
-                ))),
+                Err(e) => Err(RuntimeError::DetailedError(
+                    format!("Failed to get metadata for '{}': {}", path_str, e).into(),
+                )),
             },
             _ => Err(RuntimeError::InvalidType(
-                "Path must be a string".to_string(),
+                "Path must be a string".to_string().into(),
             )),
         })
     })
@@ -404,7 +403,7 @@ fn exists(
                 Ok(OnionObject::Boolean(exists).stabilize())
             }
             _ => Err(RuntimeError::InvalidType(
-                "Path must be a string".to_string(),
+                "Path must be a string".to_string().into(),
             )),
         })
     })
@@ -421,18 +420,16 @@ fn read_text(
             OnionObject::String(path_str) => match fs::read(path_str.as_ref()) {
                 Ok(bytes) => match String::from_utf8(bytes) {
                     Ok(text) => Ok(OnionObject::String(text.into()).stabilize()),
-                    Err(e) => Err(RuntimeError::DetailedError(format!(
-                        "Failed to decode file '{}' as UTF-8: {}",
-                        path_str, e
-                    ))),
+                    Err(e) => Err(RuntimeError::DetailedError(
+                        format!("Failed to decode file '{}' as UTF-8: {}", path_str, e).into(),
+                    )),
                 },
-                Err(e) => Err(RuntimeError::DetailedError(format!(
-                    "Failed to read file '{}': {}",
-                    path_str, e
-                ))),
+                Err(e) => Err(RuntimeError::DetailedError(
+                    format!("Failed to read file '{}': {}", path_str, e).into(),
+                )),
             },
             _ => Err(RuntimeError::InvalidType(
-                "Path must be a string".to_string(),
+                "Path must be a string".to_string().into(),
             )),
         })
     })
@@ -454,14 +451,13 @@ fn write_text(
                     (OnionObject::String(path_str), OnionObject::String(content_str)) => {
                         match fs::write(path_str.as_ref(), content_str.as_bytes()) {
                             Ok(_) => Ok(OnionObject::Null.stabilize()),
-                            Err(e) => Err(RuntimeError::DetailedError(format!(
-                                "Failed to write text file '{}': {}",
-                                path_str, e
-                            ))),
+                            Err(e) => Err(RuntimeError::DetailedError(
+                                format!("Failed to write text file '{}': {}", path_str, e).into(),
+                            )),
                         }
                     }
                     _ => Err(RuntimeError::InvalidType(
-                        "Path and content must be strings".to_string(),
+                        "Path and content must be strings".to_string().into(),
                     )),
                 })
         })
@@ -489,19 +485,22 @@ fn append_text(
                         {
                             Ok(mut file) => match file.write_all(content_str.as_bytes()) {
                                 Ok(_) => Ok(OnionObject::Null.stabilize()),
-                                Err(e) => Err(RuntimeError::DetailedError(format!(
-                                    "Failed to append to text file '{}': {}",
-                                    path_str, e
-                                ))),
+                                Err(e) => Err(RuntimeError::DetailedError(
+                                    format!("Failed to append to text file '{}': {}", path_str, e)
+                                        .into(),
+                                )),
                             },
-                            Err(e) => Err(RuntimeError::DetailedError(format!(
-                                "Failed to open text file '{}' for appending: {}",
-                                path_str, e
-                            ))),
+                            Err(e) => Err(RuntimeError::DetailedError(
+                                format!(
+                                    "Failed to open text file '{}' for appending: {}",
+                                    path_str, e
+                                )
+                                .into(),
+                            )),
                         }
                     }
                     _ => Err(RuntimeError::InvalidType(
-                        "Path and content must be strings".to_string(),
+                        "Path and content must be strings".to_string().into(),
                     )),
                 })
         })

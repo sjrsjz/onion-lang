@@ -7,13 +7,13 @@ use crate::types::object::{OnionObjectCell, OnionStaticObject};
 
 #[derive(Clone, Debug)]
 pub enum RuntimeError {
-    StepError(String),
-    DetailedError(String),
-    InvalidType(String),
-    InvalidOperation(String),
+    StepError(Box<String>),
+    DetailedError(Box<String>),
+    InvalidType(Box<String>),
+    InvalidOperation(Box<String>),
     CustomValue(Box<OnionStaticObject>),
     BrokenReference,
-    BorrowError(String),
+    BorrowError(Box<String>),
 }
 
 impl Display for RuntimeError {
@@ -35,18 +35,42 @@ pub enum StepResult {
     NewRunnable(Box<dyn Runnable>),
     ReplaceRunnable(Box<dyn Runnable>),
     Return(Box<OnionStaticObject>),
+    Error(RuntimeError),
+}
+
+impl StepResult {
+    pub fn unwrap_error(self) -> RuntimeError {
+        match self {
+            StepResult::Error(error) => error,
+            _ => RuntimeError::StepError(
+                "Expected an error, but got a different result"
+                    .to_string()
+                    .into(),
+            ),
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! unwrap_step_result {
+    ($result:expr) => {
+        match $result {
+            Ok(value) => value,
+            Err(error) => return StepResult::Error(error),
+        }
+    };
 }
 
 #[allow(unused_variables)]
 pub trait Runnable {
-    fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError>;
+    fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> StepResult;
     fn receive(
         &mut self,
         step_result: &StepResult,
         gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         Err(RuntimeError::DetailedError(
-            "receive not implemented".to_string(),
+            "receive not implemented".to_string().into(),
         ))
     }
     fn copy_with_gc(&self, gc: &mut GC<OnionObjectCell>) -> Box<dyn Runnable> {
@@ -64,9 +88,5 @@ mod tests {
     #[test]
     fn check_step_result_size() {
         println!("Size of StepResult: {}", std::mem::size_of::<StepResult>());
-        println!(
-            "Size of Result<StepResult, RuntimeError>: {}",
-            std::mem::size_of::<Result<StepResult, RuntimeError>>()
-        );
     }
 }

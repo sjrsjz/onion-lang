@@ -20,7 +20,7 @@ fn push(
                 Ok(())
             }
             _ => Err(RuntimeError::InvalidOperation(
-                "Expected a tuple for 'container'".to_string(),
+                "Expected a tuple for 'container'".to_string().into(),
             )),
         })?;
         Ok(OnionObject::Undefined(None).stabilize())
@@ -37,11 +37,11 @@ fn pop(
             OnionObject::Tuple(tuple) => match tuple.pop() {
                 Some(v) => Ok(v),
                 None => Err(RuntimeError::InvalidOperation(
-                    "Cannot pop from an empty tuple".to_string(),
+                    "Cannot pop from an empty tuple".to_string().into(),
                 )),
             },
             _ => Err(RuntimeError::InvalidOperation(
-                "Expected a tuple for 'container'".to_string(),
+                "Expected a tuple for 'container'".to_string().into(),
             )),
         })
     })
@@ -62,12 +62,12 @@ fn insert(
                     Ok(OnionObject::Undefined(None).stabilize())
                 } else {
                     Err(RuntimeError::InvalidOperation(
-                        "Index must be an integer".to_string(),
+                        "Index must be an integer".to_string().into(),
                     ))
                 }
             }
             _ => Err(RuntimeError::InvalidOperation(
-                "Expected a tuple for 'container'".to_string(),
+                "Expected a tuple for 'container'".to_string().into(),
             )),
         })
     })
@@ -86,12 +86,12 @@ fn remove(
                     tuple.remove(*index as usize)
                 } else {
                     Err(RuntimeError::InvalidOperation(
-                        "Index must be an integer".to_string(),
+                        "Index must be an integer".to_string().into(),
                     ))
                 }
             }
             _ => Err(RuntimeError::InvalidOperation(
-                "Expected a tuple for 'container'".to_string(),
+                "Expected a tuple for 'container'".to_string().into(),
             )),
         })
     })

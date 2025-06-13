@@ -67,7 +67,7 @@ impl Context {
         match self.frames.pop() {
             Some(frame) => Ok(frame),
             None => Err(RuntimeError::DetailedError(
-                "Cannot pop frame from empty context".to_string(),
+                "Cannot pop frame from empty context".to_string().into(),
             )),
         }
     }
@@ -93,7 +93,7 @@ impl Context {
             Ok(())
         } else {
             Err(RuntimeError::DetailedError(
-                "Cannot push object to empty context".to_string(),
+                "Cannot push object to empty context".to_string().into(),
             ))
         }
     }
@@ -101,13 +101,13 @@ impl Context {
     pub fn pop(&mut self) -> Result<OnionStaticObject, RuntimeError> {
         if self.frames.len() == 0 {
             return Err(RuntimeError::DetailedError(
-                "Cannot pop object from empty context".to_string(),
+                "Cannot pop object from empty context".to_string().into(),
             ));
         }
         let last_frame = self.frames.last_mut().unwrap();
         if last_frame.get_stack().len() == 0 {
             return Err(RuntimeError::DetailedError(
-                "Cannot pop object from empty stack".to_string(),
+                "Cannot pop object from empty stack".to_string().into(),
             ));
         }
         let stack = last_frame.get_stack_mut();
@@ -117,14 +117,18 @@ impl Context {
     pub fn discard_objects(&mut self, count: usize) -> Result<(), RuntimeError> {
         if self.frames.len() == 0 {
             return Err(RuntimeError::DetailedError(
-                "Cannot discard objects from empty context".to_string(),
+                "Cannot discard objects from empty context"
+                    .to_string()
+                    .into(),
             ));
         }
         let last_frame = self.frames.last_mut().unwrap();
         let stack = last_frame.get_stack_mut();
         if stack.len() < count {
             return Err(RuntimeError::DetailedError(
-                "Cannot discard more objects than available in stack".to_string(),
+                "Cannot discard more objects than available in stack"
+                    .to_string()
+                    .into(),
             ));
         }
         // for _ in 0..count {
@@ -141,14 +145,18 @@ impl Context {
     ) -> Result<(), RuntimeError> {
         if self.frames.len() == 0 {
             return Err(RuntimeError::DetailedError(
-                "Cannot discard objects from empty context".to_string(),
+                "Cannot discard objects from empty context"
+                    .to_string()
+                    .into(),
             ));
         }
         let last_frame = self.frames.last_mut().unwrap();
         let stack = last_frame.get_stack_mut();
         if stack.len() < offset + count {
             return Err(RuntimeError::DetailedError(
-                "Cannot discard more objects than available in stack".to_string(),
+                "Cannot discard more objects than available in stack"
+                    .to_string()
+                    .into(),
             ));
         }
 
@@ -162,19 +170,19 @@ impl Context {
     pub fn get_object_rev(&self, idx: usize) -> Result<&OnionStaticObject, RuntimeError> {
         if self.frames.len() == 0 {
             return Err(RuntimeError::DetailedError(
-                "Cannot get object from empty context".to_string(),
+                "Cannot get object from empty context".to_string().into(),
             ));
         }
         let last_frame = self.frames.last().unwrap();
         if last_frame.get_stack().len() <= idx {
             return Err(RuntimeError::DetailedError(
-                "Cannot get object from empty stack".to_string(),
+                "Cannot get object from empty stack".to_string().into(),
             ));
         }
         let stack = last_frame.get_stack();
         match stack.get(stack.len() - 1 - idx) {
             None => Err(RuntimeError::DetailedError(
-                "Index out of bounds".to_string(),
+                "Index out of bounds".to_string().into(),
             )),
             Some(o) => Ok(o),
         }
@@ -186,20 +194,20 @@ impl Context {
     ) -> Result<&mut OnionStaticObject, RuntimeError> {
         if self.frames.len() == 0 {
             return Err(RuntimeError::DetailedError(
-                "Cannot get object from empty context".to_string(),
+                "Cannot get object from empty context".to_string().into(),
             ));
         }
         let last_frame = self.frames.last_mut().unwrap();
         if last_frame.get_stack().len() <= idx {
             return Err(RuntimeError::DetailedError(
-                "Cannot get object from empty stack".to_string(),
+                "Cannot get object from empty stack".to_string().into(),
             ));
         }
         let stack = last_frame.get_stack_mut();
         let idx = stack.len() - 1 - idx;
         match stack.get_mut(idx) {
             None => Err(RuntimeError::DetailedError(
-                "Index out of bounds".to_string(),
+                "Index out of bounds".to_string().into(),
             )),
             Some(o) => Ok(o),
         }
@@ -233,7 +241,7 @@ impl Context {
     ) -> Result<(), RuntimeError> {
         if self.frames.len() == 0 {
             return Err(RuntimeError::InvalidOperation(
-                "Cannot let variable in empty context".to_string(),
+                "Cannot let variable in empty context".to_string().into(),
             ));
         }
 
@@ -328,14 +336,14 @@ impl Context {
     pub fn swap(&mut self, idx1: usize, idx2: usize) -> Result<(), RuntimeError> {
         if self.frames.len() == 0 {
             return Err(RuntimeError::DetailedError(
-                "Cannot swap objects in empty context".to_string(),
+                "Cannot swap objects in empty context".to_string().into(),
             ));
         }
         let last_frame = self.frames.last_mut().unwrap();
         let stack = last_frame.get_stack_mut();
         if stack.len() <= idx1 || stack.len() <= idx2 {
             return Err(RuntimeError::DetailedError(
-                "Cannot swap objects in empty stack".to_string(),
+                "Cannot swap objects in empty stack".to_string().into(),
             ));
         }
         let len = stack.len();
@@ -346,7 +354,7 @@ impl Context {
     pub fn get_current_stack_mut(&mut self) -> Result<&mut Vec<OnionStaticObject>, RuntimeError> {
         if self.frames.len() == 0 {
             return Err(RuntimeError::DetailedError(
-                "Cannot get stack from empty context".to_string(),
+                "Cannot get stack from empty context".to_string().into(),
             ));
         }
         let last_frame = self.frames.last_mut().unwrap();
@@ -363,7 +371,7 @@ impl Context {
     ) -> Result<OnionStaticObject, RuntimeError> {
         if stack.is_empty() {
             return Err(RuntimeError::DetailedError(
-                "Cannot pop from empty stack".to_string(),
+                "Cannot pop from empty stack".to_string().into(),
             ));
         }
         Ok(stack.pop().unwrap())
@@ -376,7 +384,9 @@ impl Context {
     ) -> Result<(), RuntimeError> {
         if stack.len() < count {
             return Err(RuntimeError::DetailedError(
-                "Cannot discard more objects than available in stack".to_string(),
+                "Cannot discard more objects than available in stack"
+                    .to_string()
+                    .into(),
             ));
         }
         stack.truncate(stack.len() - count);
@@ -390,7 +400,7 @@ impl Context {
     ) -> Result<&OnionStaticObject, RuntimeError> {
         if stack.len() <= idx {
             return Err(RuntimeError::DetailedError(
-                "Index out of bounds".to_string(),
+                "Index out of bounds".to_string().into(),
             ));
         }
         Ok(&stack[stack.len() - 1 - idx])

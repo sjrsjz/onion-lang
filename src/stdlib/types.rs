@@ -35,7 +35,7 @@ fn to_int(
                 Err(e) => Err(RuntimeError::InvalidOperation(format!(
                     "Cannot convert string '{}' to integer: {}",
                     s, e
-                ))),
+                ).into())),
             },
             OnionObject::Float(f) => Ok(OnionObject::Integer(*f as i64).stabilize()),
             OnionObject::Integer(i) => Ok(OnionObject::Integer(*i).stabilize()),
@@ -43,7 +43,7 @@ fn to_int(
             _ => Err(RuntimeError::InvalidOperation(format!(
                 "Cannot convert {:?} to integer",
                 data
-            ))),
+            ).into())),
         })
     })
 }
@@ -62,7 +62,7 @@ fn to_float(
                 Err(e) => Err(RuntimeError::InvalidOperation(format!(
                     "Cannot convert string '{}' to float: {}",
                     s, e
-                ))),
+                ).into())),
             },
             OnionObject::Integer(i) => Ok(OnionObject::Float(*i as f64).stabilize()),
             OnionObject::Float(f) => Ok(OnionObject::Float(*f).stabilize()),
@@ -72,7 +72,7 @@ fn to_float(
             _ => Err(RuntimeError::InvalidOperation(format!(
                 "Cannot convert {:?} to float",
                 data
-            ))),
+            ).into())),
         })
     })
 }
@@ -96,7 +96,7 @@ fn to_bool(
                     Err(RuntimeError::InvalidOperation(format!(
                         "Cannot convert string '{}' to boolean",
                         s
-                    )))
+                    ).into()))
                 }
             }
             OnionObject::Integer(i) => Ok(OnionObject::Boolean(*i != 0).stabilize()),
@@ -227,7 +227,7 @@ fn to_bytes(
             _ => Err(RuntimeError::InvalidOperation(format!(
                 "Cannot convert {:?} to bytes",
                 data
-            ))),
+            ).into())),
         })
     })
 }
@@ -248,7 +248,7 @@ fn find(
             Ok(value) => Ok(value),
             Err(RuntimeError::InvalidOperation(ref err)) => {
                 // If the attribute is not found, return undefined
-                Ok(OnionObject::Undefined(Some(err.clone())).stabilize())
+                Ok(OnionObject::Undefined(Some(err.as_ref().clone())).stabilize())
             }
             Err(e) => {
                 // If any other error occurs, propagate it

@@ -12,7 +12,7 @@ use onion_vm::{
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         tuple::OnionTuple,
     },
-    GC,
+    unwrap_step_result, GC,
 };
 
 use super::{build_named_dict, get_attr_direct, wrap_native_function};
@@ -24,10 +24,9 @@ fn timestamp(
 ) -> Result<OnionStaticObject, RuntimeError> {
     match SystemTime::now().duration_since(UNIX_EPOCH) {
         Ok(duration) => Ok(OnionObject::Integer(duration.as_secs() as i64).stabilize()),
-        Err(e) => Err(RuntimeError::DetailedError(format!(
-            "Failed to get timestamp: {}",
-            e
-        ))),
+        Err(e) => Err(RuntimeError::DetailedError(
+            format!("Failed to get timestamp: {}", e).into(),
+        )),
     }
 }
 
@@ -38,10 +37,9 @@ fn timestamp_millis(
 ) -> Result<OnionStaticObject, RuntimeError> {
     match SystemTime::now().duration_since(UNIX_EPOCH) {
         Ok(duration) => Ok(OnionObject::Integer(duration.as_millis() as i64).stabilize()),
-        Err(e) => Err(RuntimeError::DetailedError(format!(
-            "Failed to get timestamp: {}",
-            e
-        ))),
+        Err(e) => Err(RuntimeError::DetailedError(
+            format!("Failed to get timestamp: {}", e).into(),
+        )),
     }
 }
 
@@ -52,10 +50,9 @@ fn timestamp_nanos(
 ) -> Result<OnionStaticObject, RuntimeError> {
     match SystemTime::now().duration_since(UNIX_EPOCH) {
         Ok(duration) => Ok(OnionObject::Integer(duration.as_nanos() as i64).stabilize()),
-        Err(e) => Err(RuntimeError::DetailedError(format!(
-            "Failed to get timestamp: {}",
-            e
-        ))),
+        Err(e) => Err(RuntimeError::DetailedError(
+            format!("Failed to get timestamp: {}", e).into(),
+        )),
     }
 }
 
@@ -68,12 +65,12 @@ fn sleep_seconds(
         get_attr_direct(data, "seconds".to_string())?
             .weak()
             .to_integer()
-            .map_err(|e| RuntimeError::InvalidType(format!("Invalid seconds: {}", e)))
+            .map_err(|e| RuntimeError::InvalidType(format!("Invalid seconds: {}", e).into()))
     })?;
 
     if seconds < 0 {
         return Err(RuntimeError::DetailedError(
-            "Sleep duration cannot be negative".to_string(),
+            "Sleep duration cannot be negative".to_string().into(),
         ));
     }
 
@@ -90,12 +87,12 @@ fn sleep_millis(
         get_attr_direct(data, "millis".to_string())?
             .weak()
             .to_integer()
-            .map_err(|e| RuntimeError::InvalidType(format!("Invalid milliseconds: {}", e)))
+            .map_err(|e| RuntimeError::InvalidType(format!("Invalid milliseconds: {}", e).into()))
     })?;
 
     if millis < 0 {
         return Err(RuntimeError::DetailedError(
-            "Sleep duration cannot be negative".to_string(),
+            "Sleep duration cannot be negative".to_string().into(),
         ));
     }
 
@@ -112,12 +109,12 @@ fn sleep_micros(
         get_attr_direct(data, "micros".to_string())?
             .weak()
             .to_integer()
-            .map_err(|e| RuntimeError::InvalidType(format!("Invalid microseconds: {}", e)))
+            .map_err(|e| RuntimeError::InvalidType(format!("Invalid microseconds: {}", e).into()))
     })?;
 
     if micros < 0 {
         return Err(RuntimeError::DetailedError(
-            "Sleep duration cannot be negative".to_string(),
+            "Sleep duration cannot be negative".to_string().into(),
         ));
     }
 
@@ -136,10 +133,9 @@ fn now_utc(
             let datetime = format_timestamp(secs);
             Ok(OnionObject::String(datetime.into()).stabilize())
         }
-        Err(e) => Err(RuntimeError::DetailedError(format!(
-            "Failed to get current time: {}",
-            e
-        ))),
+        Err(e) => Err(RuntimeError::DetailedError(
+            format!("Failed to get current time: {}", e).into(),
+        )),
     }
 }
 
@@ -179,12 +175,12 @@ fn format_time(
         get_attr_direct(data, "timestamp".to_string())?
             .weak()
             .to_integer()
-            .map_err(|e| RuntimeError::InvalidType(format!("Invalid timestamp: {}", e)))
+            .map_err(|e| RuntimeError::InvalidType(format!("Invalid timestamp: {}", e).into()))
     })?;
 
     if timestamp < 0 {
         return Err(RuntimeError::DetailedError(
-            "Timestamp cannot be negative".to_string(),
+            "Timestamp cannot be negative".to_string().into(),
         ));
     }
 
@@ -201,12 +197,16 @@ fn time_diff(
         let start = get_attr_direct(data, "start".to_string())?
             .weak()
             .to_integer()
-            .map_err(|e| RuntimeError::InvalidType(format!("Invalid start timestamp: {}", e)))?;
+            .map_err(|e| {
+                RuntimeError::InvalidType(format!("Invalid start timestamp: {}", e).into())
+            })?;
 
         let end = get_attr_direct(data, "end".to_string())?
             .weak()
             .to_integer()
-            .map_err(|e| RuntimeError::InvalidType(format!("Invalid end timestamp: {}", e)))?;
+            .map_err(|e| {
+                RuntimeError::InvalidType(format!("Invalid end timestamp: {}", e).into())
+            })?;
 
         Ok((start, end))
     })?;
@@ -231,14 +231,14 @@ impl Default for AsyncSleep {
 }
 
 impl Runnable for AsyncSleep {
-    fn step(&mut self, _gc: &mut GC<OnionObjectCell>) -> Result<StepResult, RuntimeError> {
-        let elapsed = self.start_time.elapsed().map_err(|e| {
-            RuntimeError::DetailedError(format!("Failed to get elapsed time: {}", e))
-        })?;
+    fn step(&mut self, _gc: &mut GC<OnionObjectCell>) -> StepResult {
+        let elapsed = unwrap_step_result!(self.start_time.elapsed().map_err(|e| {
+            RuntimeError::DetailedError(format!("Failed to get elapsed time: {}", e).into())
+        }));
         if elapsed.as_millis() >= self.millis as u128 {
-            Ok(StepResult::Return(OnionObject::Null.stabilize().into()))
+            StepResult::Return(OnionObject::Null.stabilize().into())
         } else {
-            Ok(StepResult::Continue)
+            StepResult::Continue
         }
     }
 
@@ -252,7 +252,9 @@ impl Runnable for AsyncSleep {
             Ok(())
         } else {
             Err(RuntimeError::InvalidOperation(
-                "AsyncSleep can only receive StepResult::Return".to_string(),
+                "AsyncSleep can only receive StepResult::Return"
+                    .to_string()
+                    .into(),
             ))
         }
     }
@@ -283,12 +285,12 @@ fn async_sleep(
         get_attr_direct(data, "millis".to_string())?
             .weak()
             .to_integer()
-            .map_err(|e| RuntimeError::InvalidType(format!("Invalid milliseconds: {}", e)))
+            .map_err(|e| RuntimeError::InvalidType(format!("Invalid milliseconds: {}", e).into()))
     })?;
 
     if millis < 0 {
         return Err(RuntimeError::DetailedError(
-            "Sleep duration cannot be negative".to_string(),
+            "Sleep duration cannot be negative".to_string().into(),
         ));
     }
 

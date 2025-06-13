@@ -39,7 +39,9 @@ impl OnionObjectCell {
             .try_borrow()
             .map_err(|_| {
                 RuntimeError::BorrowError(
-                    "Failed to borrow OnionObjectCell at `with_data`".to_string(),
+                    "Failed to borrow OnionObjectCell at `with_data`"
+                        .to_string()
+                        .into(),
                 )
             })?
             .with_data(f)
@@ -53,7 +55,9 @@ impl OnionObjectCell {
             .try_borrow_mut()
             .map_err(|_| {
                 RuntimeError::BorrowError(
-                    "Failed to borrow OnionObjectCell at `with_data_mut`".to_string(),
+                    "Failed to borrow OnionObjectCell at `with_data_mut`"
+                        .to_string()
+                        .into(),
                 )
             })?
             .with_data_mut(f)
@@ -68,7 +72,9 @@ impl OnionObjectCell {
             .try_borrow_mut()
             .map_err(|_| {
                 RuntimeError::BorrowError(
-                    "Failed to borrow OnionObjectCell at `with_data_ref_mut`".to_string(),
+                    "Failed to borrow OnionObjectCell at `with_data_ref_mut`"
+                        .to_string()
+                        .into(),
                 )
             })?
             .with_data_ref_mut(f)
@@ -83,7 +89,9 @@ impl OnionObjectCell {
             .try_borrow()
             .map_err(|_| {
                 RuntimeError::BorrowError(
-                    "Failed to borrow OnionObjectCell at `with_attribute`".to_string(),
+                    "Failed to borrow OnionObjectCell at `with_attribute`"
+                        .to_string()
+                        .into(),
                 )
             })?
             .with_attribute(key, f)
@@ -119,7 +127,9 @@ impl OnionObjectCell {
     pub fn try_borrow(&self) -> Result<std::cell::Ref<OnionObject>, RuntimeError> {
         self.0.try_borrow().map_err(|_| {
             RuntimeError::BorrowError(
-                "Failed to borrow OnionObjectCell at `try_borrow`".to_string(),
+                "Failed to borrow OnionObjectCell at `try_borrow`"
+                    .to_string()
+                    .into(),
             )
         })
     }
@@ -127,7 +137,9 @@ impl OnionObjectCell {
     pub fn try_borrow_mut(&self) -> Result<std::cell::RefMut<OnionObject>, RuntimeError> {
         self.0.try_borrow_mut().map_err(|_| {
             RuntimeError::BorrowError(
-                "Failed to borrow OnionObjectCell at `try_borrow_mut`".to_string(),
+                "Failed to borrow OnionObjectCell at `try_borrow_mut`"
+                    .to_string()
+                    .into(),
             )
         })
     }
@@ -205,203 +217,178 @@ pub trait OnionObjectExt: GCTraceable<OnionObjectCell> + Debug {
 
     // Basic type conversions
     fn to_integer(&self) -> Result<i64, RuntimeError> {
-        Err(RuntimeError::InvalidType(format!(
-            "Cannot convert {:?} to Integer",
-            self
-        )))
+        Err(RuntimeError::InvalidType(
+            format!("Cannot convert {:?} to Integer", self).into(),
+        ))
     }
     fn to_float(&self) -> Result<f64, RuntimeError> {
-        Err(RuntimeError::InvalidType(format!(
-            "Cannot convert {:?} to Float",
-            self
-        )))
+        Err(RuntimeError::InvalidType(
+            format!("Cannot convert {:?} to Float", self).into(),
+        ))
     }
     #[allow(unused_variables)]
     fn to_string(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
-        Err(RuntimeError::InvalidType(format!(
-            "Cannot convert {:?} to String",
-            self
-        )))
+        Err(RuntimeError::InvalidType(
+            format!("Cannot convert {:?} to String", self).into(),
+        ))
     }
     fn to_bytes(&self) -> Result<Vec<u8>, RuntimeError> {
-        Err(RuntimeError::InvalidType(format!(
-            "Cannot convert {:?} to Bytes",
-            self
-        )))
+        Err(RuntimeError::InvalidType(
+            format!("Cannot convert {:?} to Bytes", self).into(),
+        ))
     }
     fn to_boolean(&self) -> Result<bool, RuntimeError> {
-        Err(RuntimeError::InvalidType(format!(
-            "Cannot convert {:?} to Boolean",
-            self
-        )))
+        Err(RuntimeError::InvalidType(
+            format!("Cannot convert {:?} to Boolean", self).into(),
+        ))
     }
     #[allow(unused_variables)]
     fn repr(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
         Ok(format!("{:?}", self))
     }
     fn type_of(&self) -> Result<String, RuntimeError> {
-        Err(RuntimeError::InvalidType(format!(
-            "Cannot get type of {:?}",
-            self
-        )))
+        Err(RuntimeError::InvalidType(
+            format!("Cannot get type of {:?}", self).into(),
+        ))
     }
 
     // Container operations
     fn len(&self) -> Result<OnionStaticObject, RuntimeError> {
-        Err(RuntimeError::InvalidOperation(format!(
-            "len() not supported for {:?}",
-            self
-        )))
+        Err(RuntimeError::InvalidOperation(
+            format!("len() not supported for {:?}", self).into(),
+        ))
     }
     fn contains(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
-        Err(RuntimeError::InvalidOperation(format!(
-            "contains() not supported for {:?} and {:?}",
-            self, other
-        )))
+        Err(RuntimeError::InvalidOperation(
+            format!("contains() not supported for {:?} and {:?}", self, other).into(),
+        ))
     }
     fn at(&self, index: i64) -> Result<OnionStaticObject, RuntimeError> {
-        Err(RuntimeError::InvalidOperation(format!(
-            "at() not supported for {:?} with index {}",
-            self, index
-        )))
+        Err(RuntimeError::InvalidOperation(
+            format!("at() not supported for {:?} with index {}", self, index).into(),
+        ))
     }
 
     // Key-value operations
     fn key_of(&self) -> Result<OnionStaticObject, RuntimeError> {
-        Err(RuntimeError::InvalidOperation(format!(
-            "key_of() not supported for {:?}",
-            self
-        )))
+        Err(RuntimeError::InvalidOperation(
+            format!("key_of() not supported for {:?}", self).into(),
+        ))
     }
     fn value_of(&self) -> Result<OnionStaticObject, RuntimeError> {
-        Err(RuntimeError::InvalidOperation(format!(
-            "value_of() not supported for {:?}",
-            self
-        )))
+        Err(RuntimeError::InvalidOperation(
+            format!("value_of() not supported for {:?}", self).into(),
+        ))
     }
     #[allow(unused_variables)]
     fn with_attribute<F, R>(&self, key: &OnionObject, f: &F) -> Result<R, RuntimeError>
     where
         F: Fn(&OnionObject) -> Result<R, RuntimeError>,
     {
-        Err(RuntimeError::InvalidOperation(format!(
-            "with_attribute() not supported for {:?} with key {:?}",
-            self, key
-        )))
+        Err(RuntimeError::InvalidOperation(
+            format!(
+                "with_attribute() not supported for {:?} with key {:?}",
+                self, key
+            )
+            .into(),
+        ))
     }
 
     // Comparison operations
     fn equals(&self, other: &OnionObject) -> Result<bool, RuntimeError>;
     fn is_same(&self, other: &OnionObject) -> Result<bool, RuntimeError>;
     fn binary_eq(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
-        Err(RuntimeError::InvalidOperation(format!(
-            "binary_eq() not supported for {:?} and {:?}",
-            self, other
-        )))
+        Err(RuntimeError::InvalidOperation(
+            format!("binary_eq() not supported for {:?} and {:?}", self, other).into(),
+        ))
     }
     fn binary_lt(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
-        Err(RuntimeError::InvalidOperation(format!(
-            "binary_lt() not supported for {:?} and {:?}",
-            self, other
-        )))
+        Err(RuntimeError::InvalidOperation(
+            format!("binary_lt() not supported for {:?} and {:?}", self, other).into(),
+        ))
     }
     fn binary_gt(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
-        Err(RuntimeError::InvalidOperation(format!(
-            "binary_gt() not supported for {:?} and {:?}",
-            self, other
-        )))
+        Err(RuntimeError::InvalidOperation(
+            format!("binary_gt() not supported for {:?} and {:?}", self, other).into(),
+        ))
     }
 
     // Binary arithmetic operations
     fn binary_add(&self, other: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
-        Err(RuntimeError::InvalidOperation(format!(
-            "binary_add() not supported for {:?} and {:?}",
-            self, other
-        )))
+        Err(RuntimeError::InvalidOperation(
+            format!("binary_add() not supported for {:?} and {:?}", self, other).into(),
+        ))
     }
     fn binary_sub(&self, other: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
-        Err(RuntimeError::InvalidOperation(format!(
-            "binary_sub() not supported for {:?} and {:?}",
-            self, other
-        )))
+        Err(RuntimeError::InvalidOperation(
+            format!("binary_sub() not supported for {:?} and {:?}", self, other).into(),
+        ))
     }
     fn binary_mul(&self, other: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
-        Err(RuntimeError::InvalidOperation(format!(
-            "binary_mul() not supported for {:?} and {:?}",
-            self, other
-        )))
+        Err(RuntimeError::InvalidOperation(
+            format!("binary_mul() not supported for {:?} and {:?}", self, other).into(),
+        ))
     }
     fn binary_div(&self, other: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
-        Err(RuntimeError::InvalidOperation(format!(
-            "binary_div() not supported for {:?} and {:?}",
-            self, other
-        )))
+        Err(RuntimeError::InvalidOperation(
+            format!("binary_div() not supported for {:?} and {:?}", self, other).into(),
+        ))
     }
     fn binary_mod(&self, other: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
-        Err(RuntimeError::InvalidOperation(format!(
-            "binary_mod() not supported for {:?} and {:?}",
-            self, other
-        )))
+        Err(RuntimeError::InvalidOperation(
+            format!("binary_mod() not supported for {:?} and {:?}", self, other).into(),
+        ))
     }
     fn binary_pow(&self, other: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
-        Err(RuntimeError::InvalidOperation(format!(
-            "binary_pow() not supported for {:?} and {:?}",
-            self, other
-        )))
+        Err(RuntimeError::InvalidOperation(
+            format!("binary_pow() not supported for {:?} and {:?}", self, other).into(),
+        ))
     }
 
     // Binary logical operations
     fn binary_and(&self, other: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
-        Err(RuntimeError::InvalidOperation(format!(
-            "binary_and() not supported for {:?} and {:?}",
-            self, other
-        )))
+        Err(RuntimeError::InvalidOperation(
+            format!("binary_and() not supported for {:?} and {:?}", self, other).into(),
+        ))
     }
     fn binary_or(&self, other: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
-        Err(RuntimeError::InvalidOperation(format!(
-            "binary_or() not supported for {:?} and {:?}",
-            self, other
-        )))
+        Err(RuntimeError::InvalidOperation(
+            format!("binary_or() not supported for {:?} and {:?}", self, other).into(),
+        ))
     }
     fn binary_xor(&self, other: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
-        Err(RuntimeError::InvalidOperation(format!(
-            "binary_xor() not supported for {:?} and {:?}",
-            self, other
-        )))
+        Err(RuntimeError::InvalidOperation(
+            format!("binary_xor() not supported for {:?} and {:?}", self, other).into(),
+        ))
     }
 
     // Binary shift operations
     fn binary_shl(&self, other: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
-        Err(RuntimeError::InvalidOperation(format!(
-            "binary_shl() not supported for {:?} and {:?}",
-            self, other
-        )))
+        Err(RuntimeError::InvalidOperation(
+            format!("binary_shl() not supported for {:?} and {:?}", self, other).into(),
+        ))
     }
     fn binary_shr(&self, other: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
-        Err(RuntimeError::InvalidOperation(format!(
-            "binary_shr() not supported for {:?} and {:?}",
-            self, other
-        )))
+        Err(RuntimeError::InvalidOperation(
+            format!("binary_shr() not supported for {:?} and {:?}", self, other).into(),
+        ))
     }
 
     // Unary operations
     fn unary_neg(&self) -> Result<OnionStaticObject, RuntimeError> {
-        Err(RuntimeError::InvalidOperation(format!(
-            "unary_neg() not supported for {:?}",
-            self
-        )))
+        Err(RuntimeError::InvalidOperation(
+            format!("unary_neg() not supported for {:?}", self).into(),
+        ))
     }
     fn unary_plus(&self) -> Result<OnionStaticObject, RuntimeError> {
-        Err(RuntimeError::InvalidOperation(format!(
-            "unary_plus() not supported for {:?}",
-            self
-        )))
+        Err(RuntimeError::InvalidOperation(
+            format!("unary_plus() not supported for {:?}", self).into(),
+        ))
     }
     fn unary_not(&self) -> Result<OnionStaticObject, RuntimeError> {
-        Err(RuntimeError::InvalidOperation(format!(
-            "unary_not() not supported for {:?}",
-            self
-        )))
+        Err(RuntimeError::InvalidOperation(
+            format!("unary_not() not supported for {:?}", self).into(),
+        ))
     }
 }
 
@@ -472,10 +459,9 @@ impl OnionObject {
             OnionObject::Range(start, end) => Ok(OnionStaticObject::new(OnionObject::Integer(
                 (end - start) as i64,
             ))),
-            _ => Err(RuntimeError::InvalidOperation(format!(
-                "len() not supported for {:?}",
-                self
-            ))),
+            _ => Err(RuntimeError::InvalidOperation(
+                format!("len() not supported for {:?}", self).into(),
+            )),
         })
     }
 
@@ -496,10 +482,9 @@ impl OnionObject {
                 (OnionObject::Range(start, end), OnionObject::Range(other_start, other_end)) => {
                     Ok(*other_start >= *start && *other_end <= *end)
                 }
-                _ => Err(RuntimeError::InvalidOperation(format!(
-                    "contains() not supported for {:?}",
-                    obj
-                ))),
+                _ => Err(RuntimeError::InvalidOperation(
+                    format!("contains() not supported for {:?}", obj).into(),
+                )),
             })
         })
     }
@@ -555,10 +540,9 @@ impl OnionObject {
         // 由于我们无法保证赋值后GCArcWeak指向对象的稳定性，对不可变对象进行赋值操作会导致潜在的内存安全问题。
         // Mut类型由于是被GC管理的，因此可以安全地进行赋值操作（前提是GCArcWeak指向的对象仍然存在）。
         let OnionObject::Mut(weak) = self else {
-            return Err(RuntimeError::InvalidOperation(format!(
-                "Cannot assign to non-mutable object: {:?}",
-                self
-            )));
+            return Err(RuntimeError::InvalidOperation(
+                format!("Cannot assign to non-mutable object: {:?}", self).into(),
+            ));
         };
         match weak.upgrade() {
             Some(strong) => {
@@ -579,10 +563,9 @@ impl OnionObject {
         F: FnOnce(&mut OnionObject) -> Result<T, RuntimeError>,
     {
         let OnionObject::Mut(weak) = self else {
-            return Err(RuntimeError::InvalidOperation(format!(
-                "Cannot mutate non-mutable object: {:?}",
-                self
-            )));
+            return Err(RuntimeError::InvalidOperation(
+                format!("Cannot mutate non-mutable object: {:?}", self).into(),
+            ));
         };
         match weak.upgrade() {
             Some(strong) => strong.as_ref().with_data_mut(f),
@@ -597,9 +580,9 @@ impl OnionObject {
                 *to = from.clone();
                 Ok(())
             }
-            _ => Err(RuntimeError::InvalidOperation(format!(
-                "Invalid replace_mut() operation"
-            ))),
+            _ => Err(RuntimeError::InvalidOperation(
+                format!("Invalid replace_mut() operation").into(),
+            )),
         }
     }
 
@@ -609,12 +592,11 @@ impl OnionObject {
             OnionObject::Float(f) => Ok(*f as i64),
             OnionObject::String(s) => s
                 .parse::<i64>()
-                .map_err(|e| RuntimeError::InvalidType(e.to_string())),
+                .map_err(|e| RuntimeError::InvalidType(e.to_string().into())),
             OnionObject::Boolean(b) => Ok(if *b { 1 } else { 0 }),
-            _ => Err(RuntimeError::InvalidType(format!(
-                "Cannot convert {:?} to Integer",
-                obj
-            ))),
+            _ => Err(RuntimeError::InvalidType(
+                format!("Cannot convert {:?} to Integer", obj).into(),
+            )),
         })
     }
 
@@ -624,12 +606,11 @@ impl OnionObject {
             OnionObject::Float(f) => Ok(*f),
             OnionObject::String(s) => s
                 .parse::<f64>()
-                .map_err(|e| RuntimeError::InvalidType(e.to_string())),
+                .map_err(|e| RuntimeError::InvalidType(e.to_string().into())),
             OnionObject::Boolean(b) => Ok(if *b { 1.0 } else { 0.0 }),
-            _ => Err(RuntimeError::InvalidType(format!(
-                "Cannot convert {:?} to Float",
-                obj
-            ))),
+            _ => Err(RuntimeError::InvalidType(
+                format!("Cannot convert {:?} to Float", obj).into(),
+            )),
         })
     }
 
@@ -768,7 +749,7 @@ impl OnionObject {
                             .try_borrow()
                             .map_err(|_| {
                                 RuntimeError::BorrowError(
-                                    "Failed to borrow Mut object at `repr`".to_string(),
+                                    "Failed to borrow Mut object at `repr`".to_string().into(),
                                 )
                             })?
                             .repr(&new_ptrs)?;
@@ -792,10 +773,9 @@ impl OnionObject {
             } else {
                 b"false".to_vec()
             }),
-            _ => Err(RuntimeError::InvalidType(format!(
-                "Cannot convert {:?} to Bytes",
-                obj
-            ))),
+            _ => Err(RuntimeError::InvalidType(
+                format!("Cannot convert {:?} to Bytes", obj).into(),
+            )),
         })
     }
 
@@ -808,10 +788,9 @@ impl OnionObject {
             OnionObject::Boolean(b) => Ok(*b),
             OnionObject::Null => Ok(false),
             OnionObject::Undefined(_) => Ok(false),
-            _ => Err(RuntimeError::InvalidType(format!(
-                "Cannot convert {:?} to Boolean",
-                obj
-            ))),
+            _ => Err(RuntimeError::InvalidType(
+                format!("Cannot convert {:?} to Boolean", obj).into(),
+            )),
         })
     }
     pub fn mutablize(self, gc: &mut GC<OnionObjectCell>) -> OnionStaticObject {
@@ -893,10 +872,13 @@ impl OnionObject {
                     OnionStaticObject::new(OnionObject::Range(start1 + start2, end1 + end2)),
                 ),
                 (OnionObject::Tuple(t1), _) => t1.binary_add(other_obj),
-                _ => Err(RuntimeError::InvalidOperation(format!(
-                    "Invalid binary add operation for {:?} and {:?}",
-                    obj, other_obj
-                ))),
+                _ => Err(RuntimeError::InvalidOperation(
+                    format!(
+                        "Invalid binary add operation for {:?} and {:?}",
+                        obj, other_obj
+                    )
+                    .into(),
+                )),
             })
         })
     }
@@ -916,10 +898,13 @@ impl OnionObject {
                 (OnionObject::Float(f1), OnionObject::Integer(i2)) => {
                     Ok(OnionStaticObject::new(OnionObject::Float(f1 - *i2 as f64)))
                 }
-                _ => Err(RuntimeError::InvalidOperation(format!(
-                    "Invalid binary sub operation for {:?} and {:?}",
-                    obj, other_obj
-                ))),
+                _ => Err(RuntimeError::InvalidOperation(
+                    format!(
+                        "Invalid binary sub operation for {:?} and {:?}",
+                        obj, other_obj
+                    )
+                    .into(),
+                )),
             })
         })
     }
@@ -939,10 +924,13 @@ impl OnionObject {
                 (OnionObject::Float(f1), OnionObject::Integer(i2)) => {
                     Ok(OnionStaticObject::new(OnionObject::Float(f1 * *i2 as f64)))
                 }
-                _ => Err(RuntimeError::InvalidOperation(format!(
-                    "Invalid binary mul operation for {:?} and {:?}",
-                    obj, other_obj
-                ))),
+                _ => Err(RuntimeError::InvalidOperation(
+                    format!(
+                        "Invalid binary mul operation for {:?} and {:?}",
+                        obj, other_obj
+                    )
+                    .into(),
+                )),
             })
         })
     }
@@ -953,7 +941,7 @@ impl OnionObject {
                 (OnionObject::Integer(i1), OnionObject::Integer(i2)) => {
                     if *i2 == 0 {
                         return Err(RuntimeError::InvalidOperation(
-                            "Division by zero".to_string(),
+                            "Division by zero".to_string().into(),
                         ));
                     }
                     Ok(OnionStaticObject::new(OnionObject::Integer(i1 / i2)))
@@ -967,10 +955,13 @@ impl OnionObject {
                 (OnionObject::Float(f1), OnionObject::Integer(i2)) => {
                     Ok(OnionStaticObject::new(OnionObject::Float(f1 / *i2 as f64)))
                 }
-                _ => Err(RuntimeError::InvalidOperation(format!(
-                    "Invalid binary div operation for {:?} and {:?}",
-                    obj, other_obj
-                ))),
+                _ => Err(RuntimeError::InvalidOperation(
+                    format!(
+                        "Invalid binary div operation for {:?} and {:?}",
+                        obj, other_obj
+                    )
+                    .into(),
+                )),
             })
         })
     }
@@ -981,7 +972,7 @@ impl OnionObject {
                 (OnionObject::Integer(i1), OnionObject::Integer(i2)) => {
                     if *i2 == 0 {
                         return Err(RuntimeError::InvalidOperation(
-                            "Division by zero".to_string(),
+                            "Division by zero".to_string().into(),
                         ));
                     }
                     Ok(OnionStaticObject::new(OnionObject::Integer(i1 % i2)))
@@ -995,10 +986,13 @@ impl OnionObject {
                 (OnionObject::Float(f1), OnionObject::Integer(i2)) => {
                     Ok(OnionStaticObject::new(OnionObject::Float(f1 % *i2 as f64)))
                 }
-                _ => Err(RuntimeError::InvalidOperation(format!(
-                    "Invalid binary mod operation for {:?} and {:?}",
-                    obj, other_obj
-                ))),
+                _ => Err(RuntimeError::InvalidOperation(
+                    format!(
+                        "Invalid binary mod operation for {:?} and {:?}",
+                        obj, other_obj
+                    )
+                    .into(),
+                )),
             })
         })
     }
@@ -1018,10 +1012,13 @@ impl OnionObject {
                 (OnionObject::Float(f1), OnionObject::Integer(i2)) => Ok(OnionStaticObject::new(
                     OnionObject::Float(f1.powi(*i2 as i32)),
                 )),
-                _ => Err(RuntimeError::InvalidOperation(format!(
-                    "Invalid binary pow operation for {:?} and {:?}",
-                    obj, other_obj
-                ))),
+                _ => Err(RuntimeError::InvalidOperation(
+                    format!(
+                        "Invalid binary pow operation for {:?} and {:?}",
+                        obj, other_obj
+                    )
+                    .into(),
+                )),
             })
         })
     }
@@ -1035,10 +1032,13 @@ impl OnionObject {
                 (OnionObject::Boolean(f1), OnionObject::Boolean(f2)) => {
                     Ok(OnionStaticObject::new(OnionObject::Boolean(*f1 && *f2)))
                 }
-                _ => Err(RuntimeError::InvalidOperation(format!(
-                    "Invalid binary and operation for {:?} and {:?}",
-                    obj, other_obj
-                ))),
+                _ => Err(RuntimeError::InvalidOperation(
+                    format!(
+                        "Invalid binary and operation for {:?} and {:?}",
+                        obj, other_obj
+                    )
+                    .into(),
+                )),
             })
         })
     }
@@ -1052,10 +1052,13 @@ impl OnionObject {
                 (OnionObject::Boolean(f1), OnionObject::Boolean(f2)) => {
                     Ok(OnionStaticObject::new(OnionObject::Boolean(*f1 || *f2)))
                 }
-                _ => Err(RuntimeError::InvalidOperation(format!(
-                    "Invalid binary or operation for {:?} and {:?}",
-                    obj, other_obj
-                ))),
+                _ => Err(RuntimeError::InvalidOperation(
+                    format!(
+                        "Invalid binary or operation for {:?} and {:?}",
+                        obj, other_obj
+                    )
+                    .into(),
+                )),
             })
         })
     }
@@ -1066,10 +1069,13 @@ impl OnionObject {
                 (OnionObject::Integer(i1), OnionObject::Integer(i2)) => {
                     Ok(OnionStaticObject::new(OnionObject::Integer(i1 ^ i2)))
                 }
-                _ => Err(RuntimeError::InvalidOperation(format!(
-                    "Invalid binary xor operation for {:?} and {:?}",
-                    obj, other_obj
-                ))),
+                _ => Err(RuntimeError::InvalidOperation(
+                    format!(
+                        "Invalid binary xor operation for {:?} and {:?}",
+                        obj, other_obj
+                    )
+                    .into(),
+                )),
             })
         })
     }
@@ -1080,10 +1086,13 @@ impl OnionObject {
                 (OnionObject::Integer(i1), OnionObject::Integer(i2)) => {
                     Ok(OnionStaticObject::new(OnionObject::Integer(i1 << i2)))
                 }
-                _ => Err(RuntimeError::InvalidOperation(format!(
-                    "Invalid binary shl operation for {:?} and {:?}",
-                    obj, other_obj
-                ))),
+                _ => Err(RuntimeError::InvalidOperation(
+                    format!(
+                        "Invalid binary shl operation for {:?} and {:?}",
+                        obj, other_obj
+                    )
+                    .into(),
+                )),
             })
         })
     }
@@ -1094,10 +1103,13 @@ impl OnionObject {
                 (OnionObject::Integer(i1), OnionObject::Integer(i2)) => {
                     Ok(OnionStaticObject::new(OnionObject::Integer(i1 >> i2)))
                 }
-                _ => Err(RuntimeError::InvalidOperation(format!(
-                    "Invalid binary shr operation for {:?} and {:?}",
-                    obj, other_obj
-                ))),
+                _ => Err(RuntimeError::InvalidOperation(
+                    format!(
+                        "Invalid binary shr operation for {:?} and {:?}",
+                        obj, other_obj
+                    )
+                    .into(),
+                )),
             })
         })
     }
@@ -1113,10 +1125,13 @@ impl OnionObject {
                 (OnionObject::Float(f1), OnionObject::Float(f2)) => Ok(f1 < f2),
                 (OnionObject::Integer(i1), OnionObject::Float(f2)) => Ok((*i1 as f64) < *f2),
                 (OnionObject::Float(f1), OnionObject::Integer(i2)) => Ok(*f1 < *i2 as f64),
-                _ => Err(RuntimeError::InvalidOperation(format!(
-                    "Invalid binary lt operation for {:?} and {:?}",
-                    obj, other_obj
-                ))),
+                _ => Err(RuntimeError::InvalidOperation(
+                    format!(
+                        "Invalid binary lt operation for {:?} and {:?}",
+                        obj, other_obj
+                    )
+                    .into(),
+                )),
             })
         })
     }
@@ -1128,10 +1143,13 @@ impl OnionObject {
                 (OnionObject::Float(f1), OnionObject::Float(f2)) => Ok(f1 > f2),
                 (OnionObject::Integer(i1), OnionObject::Float(f2)) => Ok((*i1 as f64) > *f2),
                 (OnionObject::Float(f1), OnionObject::Integer(i2)) => Ok(*f1 > *i2 as f64),
-                _ => Err(RuntimeError::InvalidOperation(format!(
-                    "Invalid binary gt operation for {:?} and {:?}",
-                    obj, other_obj
-                ))),
+                _ => Err(RuntimeError::InvalidOperation(
+                    format!(
+                        "Invalid binary gt operation for {:?} and {:?}",
+                        obj, other_obj
+                    )
+                    .into(),
+                )),
             })
         })
     }
@@ -1140,10 +1158,9 @@ impl OnionObject {
         self.with_data(|obj| match obj {
             OnionObject::Integer(i) => Ok(OnionStaticObject::new(OnionObject::Integer(-i))),
             OnionObject::Float(f) => Ok(OnionStaticObject::new(OnionObject::Float(-f))),
-            _ => Err(RuntimeError::InvalidOperation(format!(
-                "Invalid unary neg operation for {:?}",
-                obj
-            ))),
+            _ => Err(RuntimeError::InvalidOperation(
+                format!("Invalid unary neg operation for {:?}", obj).into(),
+            )),
         })
     }
 
@@ -1151,10 +1168,9 @@ impl OnionObject {
         self.with_data(|obj| match obj {
             OnionObject::Integer(i) => Ok(OnionStaticObject::new(OnionObject::Integer(i.abs()))),
             OnionObject::Float(f) => Ok(OnionStaticObject::new(OnionObject::Float(f.abs()))),
-            _ => Err(RuntimeError::InvalidOperation(format!(
-                "Invalid unary plus operation for {:?}",
-                obj
-            ))),
+            _ => Err(RuntimeError::InvalidOperation(
+                format!("Invalid unary plus operation for {:?}", obj).into(),
+            )),
         })
     }
 
@@ -1162,10 +1178,9 @@ impl OnionObject {
         self.with_data(|obj| match obj {
             OnionObject::Boolean(b) => Ok(OnionStaticObject::new(OnionObject::Boolean(!b))),
             OnionObject::Integer(i) => Ok(OnionStaticObject::new(OnionObject::Integer(!i))),
-            _ => Err(RuntimeError::InvalidOperation(format!(
-                "Invalid unary not operation for {:?}",
-                obj
-            ))),
+            _ => Err(RuntimeError::InvalidOperation(
+                format!("Invalid unary not operation for {:?}", obj).into(),
+            )),
         })
     }
 
@@ -1179,10 +1194,9 @@ impl OnionObject {
             OnionObject::Pair(pair) => pair.with_attribute(key, f),
             OnionObject::Lambda(lambda) => lambda.with_attribute(key, f),
             OnionObject::LazySet(lazy_set) => lazy_set.with_attribute(key, f),
-            _ => Err(RuntimeError::InvalidOperation(format!(
-                "with_attribute() not supported for {:?}",
-                self
-            ))),
+            _ => Err(RuntimeError::InvalidOperation(
+                format!("with_attribute() not supported for {:?}", self).into(),
+            )),
         })
     }
     pub fn at(&self, index: i64) -> Result<OnionStaticObject, RuntimeError> {
@@ -1190,10 +1204,9 @@ impl OnionObject {
             OnionObject::Tuple(tuple) => tuple.at(index),
             OnionObject::String(s) => {
                 if index < 0 || index >= s.len() as i64 {
-                    return Err(RuntimeError::InvalidOperation(format!(
-                        "Index out of bounds for String: {}",
-                        s
-                    )));
+                    return Err(RuntimeError::InvalidOperation(
+                        format!("Index out of bounds for String: {}", s).into(),
+                    ));
                 }
                 Ok(OnionStaticObject::new(OnionObject::String(Arc::new(
                     s.chars().nth(index as usize).unwrap().to_string(),
@@ -1201,19 +1214,17 @@ impl OnionObject {
             }
             OnionObject::Bytes(b) => {
                 if index < 0 || index >= b.len() as i64 {
-                    return Err(RuntimeError::InvalidOperation(format!(
-                        "Index out of bounds for Bytes: {:?}",
-                        b
-                    )));
+                    return Err(RuntimeError::InvalidOperation(
+                        format!("Index out of bounds for Bytes: {:?}", b).into(),
+                    ));
                 }
                 Ok(OnionStaticObject::new(OnionObject::Bytes(Arc::new(vec![
                     b[index as usize],
                 ]))))
             }
-            _ => Err(RuntimeError::InvalidOperation(format!(
-                "index_of() not supported for {:?}",
-                self
-            ))),
+            _ => Err(RuntimeError::InvalidOperation(
+                format!("index_of() not supported for {:?}", self).into(),
+            )),
         })
     }
 
@@ -1221,10 +1232,9 @@ impl OnionObject {
         self.with_data(|obj| match obj {
             OnionObject::Named(named) => Ok(named.get_key().clone().stabilize()),
             OnionObject::Pair(pair) => Ok(pair.get_key().clone().stabilize()),
-            _ => Err(RuntimeError::InvalidOperation(format!(
-                "key_of() not supported for {:?}",
-                obj
-            ))),
+            _ => Err(RuntimeError::InvalidOperation(
+                format!("key_of() not supported for {:?}", obj).into(),
+            )),
         })
     }
 
@@ -1235,10 +1245,9 @@ impl OnionObject {
             OnionObject::Undefined(s) => Ok(OnionStaticObject::new(OnionObject::String(Arc::new(
                 s.clone().unwrap_or_else(|| "".to_string()),
             )))),
-            _ => Err(RuntimeError::InvalidOperation(format!(
-                "value_of() not supported for {:?}",
-                obj
-            ))),
+            _ => Err(RuntimeError::InvalidOperation(
+                format!("value_of() not supported for {:?}", obj).into(),
+            )),
         })
     }
 
@@ -1257,10 +1266,9 @@ impl OnionObject {
             OnionObject::LazySet(_) => Ok("LazySet".to_string()),
             OnionObject::InstructionPackage(_) => Ok("InstructionPackage".to_string()),
             OnionObject::Lambda(_) => Ok("Lambda".to_string()),
-            _ => Err(RuntimeError::InvalidOperation(format!(
-                "type_of() not supported for {:?}",
-                obj
-            ))),
+            _ => Err(RuntimeError::InvalidOperation(
+                format!("type_of() not supported for {:?}", obj).into(),
+            )),
         })
     }
 
@@ -1275,7 +1283,7 @@ pub enum GCArcStorage {
     // 极其怪异的枚举类型，仅仅是修改属性都会导致性能严重下降
     None,
     Single(GCArc<OnionObjectCell>),
-    Multiple(Vec<GCArc<OnionObjectCell>>),
+    Multiple(Arc<Vec<GCArc<OnionObjectCell>>>),
 }
 
 // impl GCArcStorage {
@@ -1335,7 +1343,7 @@ impl OnionStaticObject {
             _ => {
                 let mut arcs = vec![];
                 obj.upgrade(&mut arcs);
-                GCArcStorage::Multiple(arcs)
+                GCArcStorage::Multiple(Arc::new(arcs))
             }
         };
         OnionStaticObject {
@@ -1363,11 +1371,9 @@ macro_rules! unwrap_object {
     ($obj:expr, $variant:path) => {
         match $obj {
             $variant(o) => Ok(o),
-            _ => Err(RuntimeError::InvalidType(format!(
-                "Expected {}, found {:?}",
-                stringify!($variant),
-                $obj
-            ))),
+            _ => Err(RuntimeError::InvalidType(
+                format!("Expected {}, found {:?}", stringify!($variant), $obj).into(),
+            )),
         }
     };
 }
@@ -1436,7 +1442,9 @@ mod tests {
                         (OnionObject::Integer(a), OnionObject::Integer(b)) => {
                             Ok(OnionObject::Integer(a + b).stabilize())
                         }
-                        _ => Err(RuntimeError::InvalidOperation("Type error".to_string())),
+                        _ => Err(RuntimeError::InvalidOperation(
+                            "Type error".to_string().into(),
+                        )),
                     }
                 })
             });
@@ -1445,7 +1453,7 @@ mod tests {
                 // 提取结果值（模拟VM获取计算结果）
                 if let Ok(val) = sum.weak().with_data(|data| match data {
                     OnionObject::Integer(v) => Ok(*v),
-                    _ => Err(RuntimeError::InvalidType("Not integer".to_string())),
+                    _ => Err(RuntimeError::InvalidType("Not integer".to_string().into())),
                 }) {
                     result_sum += val;
                 }
@@ -1607,7 +1615,7 @@ mod tests {
         for obj in &wrapped_integers {
             if let Ok(val) = obj.weak().with_data(|data| match data {
                 OnionObject::Integer(i) => Ok(*i),
-                _ => Err(RuntimeError::InvalidType("Not integer".to_string())),
+                _ => Err(RuntimeError::InvalidType("Not integer".to_string().into())),
             }) {
                 sum2 += val * 2;
             }

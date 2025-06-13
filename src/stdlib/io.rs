@@ -68,11 +68,11 @@ fn input(
         print!("{}", hint);
         stdout()
             .flush()
-            .map_err(|e| RuntimeError::InvalidOperation(e.to_string()))?;
+            .map_err(|e| RuntimeError::InvalidOperation(e.to_string().into()))?;
         let mut input = String::new();
         std::io::stdin()
             .read_line(&mut input)
-            .map_err(|e| RuntimeError::InvalidOperation(e.to_string()))?;
+            .map_err(|e| RuntimeError::InvalidOperation(e.to_string().into()))?;
         Ok(OnionObject::String(input.trim().to_string().into()).stabilize())
     })
 }
