@@ -15,6 +15,7 @@ The name `Onion` is inspired by the layered structure of onions, which mirrors t
 - 📦 **Modular Design** - Support for module imports and compilation caching
 - 🌊 **Lazy Evaluation** - Built-in lazy collections and streaming operations
 - 🔧 **LSP Support** - Language Server Protocol support
+- 🚀 **High Performance** - e.g., A 10 million iteration `while` count loop takes 1.17s, approx. 40% faster than RustPython's 1.91s.
 
 ## 🚀 Quick Start
 
@@ -109,8 +110,8 @@ task2 := () -> {
 };
 
 main := () -> {
-    run task1;  // asynchronous execution
-    run task2;  // asynchronous execution
+    sync task1();  // asynchronous execution
+    sync task2();  // asynchronous execution
 };
 
 async main()  // asynchronous main function
@@ -167,6 +168,10 @@ module := () -> dyn {
 };
 module := module();
 stdlib.io.println("Module version:", module.get_version());
+```
+
+```onion
+@import "./ast.onion"; // Importing AST of onion source code
 ```
 
 ### Macro System
@@ -259,9 +264,9 @@ This is an experimental programming language project, currently including:
 - ✅ Module system (static and dynamic imports)
 - ✅ Simple macro system
 - ✅ Language Server Protocol support
-- 🚧 REPL and command line tools
+- ✅ Performance optimization
+- ✅ REPL and command line tools
 - 🚧 Standard library extensions
-- 🚧 Performance optimization
 - 🚧 Documentation and toolchain refinement
 
 ## 📄 License
