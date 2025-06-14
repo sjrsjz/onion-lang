@@ -10,9 +10,11 @@ pub struct Frame {
 }
 
 impl Frame {
+    #[inline(always)]
     pub fn get_stack(&self) -> &Vec<OnionStaticObject> {
         &self.stack
     }
+    #[inline(always)]
     pub fn get_stack_mut(&mut self) -> &mut Vec<OnionStaticObject> {
         &mut self.stack
     }
@@ -83,19 +85,18 @@ impl Context {
     }
     pub fn clear_stack(&mut self) {
         if self.frames.len() > 0 {
-            self.frames.last_mut().unwrap().get_stack_mut().clear();
+            self.frames.last_mut().unwrap().stack.clear();
         }
     }
 
     pub fn push_object(&mut self, object: OnionStaticObject) -> Result<(), RuntimeError> {
-        if self.frames.len() > 0 {
-            self.frames.last_mut().unwrap().get_stack_mut().push(object);
-            Ok(())
-        } else {
-            Err(RuntimeError::DetailedError(
+        if self.frames.len() == 0 {
+            return Err(RuntimeError::DetailedError(
                 "Cannot push object to empty context".to_string().into(),
-            ))
+            ));
         }
+        self.frames.last_mut().unwrap().stack.push(object);
+        Ok(())
     }
 
     pub fn pop(&mut self) -> Result<OnionStaticObject, RuntimeError> {
