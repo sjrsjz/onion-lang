@@ -11,8 +11,8 @@ use super::object::{OnionObject, OnionObjectCell, OnionStaticObject};
 
 #[derive(Clone)]
 pub struct OnionNamed {
-    pub key: Box<OnionObject>,   // 使用 Box 避免递归
-    pub value: Box<OnionObject>, // 使用 Box 避免递归
+    key: OnionObject,
+    value: OnionObject,
 }
 
 impl GCTraceable<OnionObjectCell> for OnionNamed {
@@ -31,35 +31,31 @@ impl Debug for OnionNamed {
 impl OnionNamed {
     pub fn new(key: OnionObject, value: OnionObject) -> Self {
         OnionNamed {
-            key: Box::new(key),
-            value: Box::new(value),
+            key: key.into(),
+            value: value.into(),
         }
     }
 
     pub fn new_static(key: &OnionStaticObject, value: &OnionStaticObject) -> OnionStaticObject {
-        OnionObject::Named(OnionNamed {
-            key: Box::new(key.weak().clone()),
-            value: Box::new(value.weak().clone()),
-        })
+        OnionObject::Named(
+            OnionNamed {
+                key: key.weak().clone(),
+                value: value.weak().clone(),
+            }
+            .into(),
+        )
         .stabilize()
     }
 
+    #[inline(always)]
     pub fn get_key(&self) -> &OnionObject {
         &self.key
     }
 
-    pub fn get_key_mut(&mut self) -> &mut OnionObject {
-        &mut self.key
-    }
-
+    #[inline(always)]
     pub fn get_value(&self) -> &OnionObject {
         &self.value
     }
-
-    pub fn get_value_mut(&mut self) -> &mut OnionObject {
-        &mut self.value
-    }
-
     pub fn upgrade(&self, collected: &mut Vec<GCArc<OnionObjectCell>>) {
         self.key.upgrade(collected);
         self.value.upgrade(collected)
@@ -70,7 +66,7 @@ impl OnionNamed {
     pub fn equals(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
         match other {
             OnionObject::Named(pair) => {
-                if self.key.equals(pair.key.as_ref())? && self.value.equals(pair.value.as_ref())? {
+                if self.key.equals(&pair.key)? && self.value.equals(&pair.value)? {
                     return Ok(true);
                 }
             }
@@ -86,5 +82,16 @@ impl OnionNamed {
         self.value
             .with_attribute(key, f)
             .or_else(|_| self.key.with_attribute(key, f))
+    }
+}
+impl OnionNamed {
+    pub fn reconstruct_container(&self) -> Result<OnionObject, RuntimeError> {
+        Ok(OnionObject::Named(
+            OnionNamed {
+                key: self.key.clone(),
+                value: self.value.clone(),
+            }
+            .into(),
+        ))
     }
 }

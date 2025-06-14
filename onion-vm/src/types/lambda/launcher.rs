@@ -49,10 +49,10 @@ impl OnionLambdaRunnableLauncher {
 
         lambda_obj.weak().with_data(|obj_ref| {
             if let OnionObject::Lambda(definition) = obj_ref {
-                definition.parameter.with_data(|p_obj| {
+                definition.get_parameter().with_data(|p_obj| {
                     if let OnionObject::Tuple(tuple) = p_obj {
                         // Initialize collected_arguments and assigned based on parameter count
-                        for param in tuple.elements.as_ref() {
+                        for param in tuple.get_elements() {
                             param.with_data(|param_obj| {
                                 match param_obj {
                                     OnionObject::LazySet(lazy_set) => {
@@ -68,7 +68,7 @@ impl OnionLambdaRunnableLauncher {
                                 Ok(())
                             })?;
                         }
-                        assigned = vec![false; tuple.elements.len()];
+                        assigned = vec![false; tuple.get_elements().len()];
                         Ok(())
                     } else {
                         Err(RuntimeError::DetailedError(
@@ -262,7 +262,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
                         
                         .with_data(|arg_obj| {
                             if let OnionObject::Tuple(tuple) = arg_obj {
-                                Ok(tuple.elements.len())
+                                Ok(tuple.get_elements().len())
                             } else {
                                 Err(RuntimeError::DetailedError(
                                     "Lambda arguments must be a Tuple".to_string().into(),
@@ -289,19 +289,19 @@ impl Runnable for OnionLambdaRunnableLauncher {
                     
                     .with_data(|arg_obj| {
                         if let OnionObject::Tuple(tuple) = arg_obj {
-                            if current_arg_index < tuple.elements.len() {
-                                let arg_obj_view = &tuple.elements[current_arg_index];
+                            if current_arg_index < tuple.get_elements().len() {
+                                let arg_obj_view = &tuple.get_elements()[current_arg_index];
                 // 检查当前提供的参数是否是命名参数 (`OnionObject::Named`)
                 if let OnionObject::Named(named_arg) = arg_obj_view {
-                    let key_to_match = &named_arg.key; // 获取命名参数的名称
+                    let key_to_match = &named_arg.get_key(); // 获取命名参数的名称
 
                     // 遍历 Lambda 定义中的参数，使用 with_data 访问
                     let parameter_count =
                         self.lambda.weak().with_data(|obj_ref| {
                             if let OnionObject::Lambda(definition) = obj_ref {
-                                definition.parameter.with_data(|p_obj| {
+                                definition.get_parameter().with_data(|p_obj| {
                                     if let OnionObject::Tuple(tuple) = p_obj {
-                                        Ok(tuple.elements.len())
+                                        Ok(tuple.get_elements().len())
                                     } else {
                                         Err(RuntimeError::DetailedError(
                                             "Lambda parameters must be a Tuple".to_string().into(),
@@ -319,14 +319,14 @@ impl Runnable for OnionLambdaRunnableLauncher {
                         // 使用 with_data 访问参数定义
                         let matched = self.lambda.weak().with_data(|obj_ref| {
                             if let OnionObject::Lambda(definition) = obj_ref {
-                                definition.parameter.with_data(|p_obj| {
+                                definition.get_parameter().with_data(|p_obj| {
                                     if let OnionObject::Tuple(tuple) = p_obj {
-                                        if param_idx < tuple.elements.len() {
-                                            tuple.elements[param_idx].with_data(|param_obj| {
+                                        if param_idx < tuple.get_elements().len() {
+                                            tuple.get_elements()[param_idx].with_data(|param_obj| {
                                                 match param_obj {
                                                     // 情况 A: Lambda 定义的参数也是一个命名参数 (`name: Type`)
                                                     OnionObject::Named(param_named_def) => {
-                                                        if param_named_def.key.equals(key_to_match)? {
+                                                        if param_named_def.get_key().equals(key_to_match)? {
                                                             // 名称匹配成功！
                                                             self.collected_arguments[param_idx] = arg_obj_view.clone().stabilize();
                                                             self.assigned[param_idx] = true;
@@ -336,9 +336,9 @@ impl Runnable for OnionLambdaRunnableLauncher {
                                                     }
                                                     // 情况 B: Lambda 定义的参数是一个 LazySet (`name: {constraint}`)
                                                     OnionObject::LazySet(lazy_set) => {
-                                                        let matched_in_lazyset = lazy_set.container.with_data(|container| {
+                                                        let matched_in_lazyset = lazy_set.get_container().with_data(|container| {
                                                             if let OnionObject::Named(container_named) = container {
-                                                                if container_named.key.equals(key_to_match)? {
+                                                                if container_named.get_key().equals(key_to_match)? {
                                                                     // 名称匹配成功！
                                                                     self.collected_arguments[param_idx] = arg_obj_view.clone().stabilize();
                                                                     self.assigned[param_idx] = true;
@@ -346,11 +346,11 @@ impl Runnable for OnionLambdaRunnableLauncher {
                                                                     // 设置约束
                                                                     let argument_for_filter = OnionObject::Tuple(OnionTuple::new(vec![
                                                                         named_arg.get_value().clone(),
-                                                                    ])).stabilize();
+                                                                    ]).into()).stabilize();
 
                                                                     let runnable = Box::new(
                                                                         OnionLambdaRunnableLauncher::new_static(
-                                                                            &lazy_set.filter.clone().stabilize(),
+                                                                            &lazy_set.get_filter().clone().stabilize(),
                                                                             &argument_for_filter,
                                                                             &|r| Ok(r),
                                                                         )?,
@@ -418,7 +418,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
                         
                         .with_data(|arg_obj| {
                             if let OnionObject::Tuple(tuple) = arg_obj {
-                                Ok(tuple.elements.len())
+                                Ok(tuple.get_elements().len())
                             } else {
                                 Err(RuntimeError::DetailedError(
                                     "Lambda arguments must be a Tuple".to_string().into(),
@@ -441,7 +441,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
                 // Access the argument tuple and the specific argument within this closure
                 unwrap_step_result!(self.argument_tuple.weak().with_data(|arg_tuple_obj| {
                     let tuple_elements = if let OnionObject::Tuple(t) = arg_tuple_obj {
-                        &t.elements
+                        t.get_elements()
                     } else {
                         return Err(RuntimeError::DetailedError("Lambda arguments must be a Tuple".to_string().into()));
                     };
@@ -472,8 +472,8 @@ impl Runnable for OnionLambdaRunnableLauncher {
                                 let lambda_def = if let OnionObject::Lambda(def) = lambda_obj_ref { def }
                                 else { return Err(RuntimeError::DetailedError("Expected a Lambda definition object".to_string().into())); };
 
-                                lambda_def.parameter.with_data(|param_tuple_obj_ref| {
-                                    let param_tuple_elements = if let OnionObject::Tuple(pt) = param_tuple_obj_ref { &pt.elements }
+                                lambda_def.get_parameter().with_data(|param_tuple_obj_ref| {
+                                    let param_tuple_elements = if let OnionObject::Tuple(pt) = param_tuple_obj_ref { pt.get_elements() }
                                     else { return Err(RuntimeError::DetailedError("Lambda parameters must be a Tuple".to_string().into())); };
 
                                     if param_idx >= param_tuple_elements.len() {
@@ -487,22 +487,22 @@ impl Runnable for OnionLambdaRunnableLauncher {
                                                 // 将位置参数包装成一个新的 Named 对象，使用原始定义的名称。
                                                 // For the value of the new Named object, we use the weak reference of the provided argument.
                                                 let new_value_for_slot = OnionObject::Named(OnionNamed::new(
-                                                    original_named_def.key.as_ref().clone(),
+                                                    original_named_def.get_key().clone(),
                                                     current_provided_arg_weak.clone(), // Use weak ref here
-                                                )).stabilize();
+                                                ).into()).stabilize();
                                                 self.collected_arguments[param_idx] = new_value_for_slot;
                                                 self.assigned[param_idx] = true;
                                                 Ok(())
                                             }
                                             // 情况 B: Lambda 定义的参数是 `name: {constraint}` (LazySet)
                                             OnionObject::LazySet(lazy_set_def) => {
-                                                lazy_set_def.container.with_data(|container_obj_ref| {
+                                                lazy_set_def.get_container().with_data(|container_obj_ref| {
                                                     if let OnionObject::Named(container_named_def) = container_obj_ref {
                                                         // 将位置参数包装成 Named 对象
                                                         let new_value_for_slot = OnionObject::Named(OnionNamed::new(
-                                                            container_named_def.key.as_ref().clone(),
+                                                            container_named_def.get_key().clone(),
                                                             current_provided_arg_weak.clone(), // Use weak ref here
-                                                        )).stabilize();
+                                                        ).into()).stabilize();
                                                         self.collected_arguments[param_idx] = new_value_for_slot;
                                                         self.assigned[param_idx] = true;
 
@@ -510,9 +510,9 @@ impl Runnable for OnionLambdaRunnableLauncher {
                                                         // The argument to the filter lambda is the provided argument itself.
                                                         let argument_for_filter = OnionObject::Tuple(OnionTuple::new(vec![
                                                             current_provided_arg_weak.clone(), // Use weak ref here
-                                                        ])).stabilize();
+                                                        ]).into()).stabilize();
                                                         let runnable = Box::new(OnionLambdaRunnableLauncher::new_static(
-                                                            &lazy_set_def.filter.clone().stabilize(),
+                                                            &lazy_set_def.get_filter().clone().stabilize(),
                                                             &argument_for_filter,
                                                             &|r| Ok(r),
                                                         )?);

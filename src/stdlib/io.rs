@@ -22,7 +22,7 @@ fn println(
             println!(
                 "{}",
                 tuple
-                    .elements
+                    .get_elements()
                     .iter()
                     .map(|element| element
                         .to_string(&vec![])
@@ -30,7 +30,7 @@ fn println(
                     .collect::<Vec<_>>()
                     .join(" ")
             );
-            Ok(OnionObject::Undefined(Some("Print completed".to_string())).stabilize())
+            Ok(OnionObject::Undefined(Some("Print completed".to_string().into())).stabilize())
         })
     })?
 }
@@ -44,7 +44,7 @@ fn print(
             print!(
                 "{}",
                 tuple
-                    .elements
+                    .get_elements()
                     .iter()
                     .map(|element| element
                         .to_string(&vec![])
@@ -52,7 +52,7 @@ fn print(
                     .collect::<Vec<_>>()
                     .join(" ")
             );
-            Ok(OnionObject::Undefined(Some("Print completed".to_string())).stabilize())
+            Ok(OnionObject::Undefined(Some("Print completed".to_string().into())).stabilize())
         })
     })?
 }

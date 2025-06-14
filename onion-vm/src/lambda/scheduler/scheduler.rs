@@ -77,7 +77,7 @@ impl Runnable for Scheduler {
                             &OnionObject::Boolean(false).stabilize(),
                             &match error {
                                 RuntimeError::CustomValue(ref v) => v.as_ref().clone(),
-                                _ => OnionObject::Undefined(Some(error.to_string())).stabilize(),
+                                _ => OnionObject::Undefined(Some(error.to_string().into())).stabilize(),
                             },
                         )
                         .into(),

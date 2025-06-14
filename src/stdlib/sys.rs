@@ -1,7 +1,11 @@
 use indexmap::IndexMap;
 use onion_vm::{
     lambda::runnable::RuntimeError,
-    types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
+    types::{
+        object::{OnionObject, OnionObjectCell, OnionStaticObject},
+        pair::OnionPair,
+        tuple::OnionTuple,
+    },
     GC,
 };
 use std::env;
@@ -17,7 +21,7 @@ fn argv(
         .map(|arg| OnionObject::String(arg.into()))
         .collect();
 
-    Ok(OnionObject::Tuple(onion_vm::types::tuple::OnionTuple::new(args)).stabilize())
+    Ok(OnionObject::Tuple(OnionTuple::new(args).into()).stabilize())
 }
 
 /// 获取环境变量
@@ -92,11 +96,11 @@ fn environ(
         .map(|(key, value)| {
             let key_obj = OnionObject::String(key.into());
             let value_obj = OnionObject::String(value.into());
-            OnionObject::Pair(onion_vm::types::pair::OnionPair::new(key_obj, value_obj))
+            OnionObject::Pair(OnionPair::new(key_obj, value_obj).into())
         })
         .collect();
 
-    Ok(OnionObject::Tuple(onion_vm::types::tuple::OnionTuple::new(env_vars)).stabilize())
+    Ok(OnionObject::Tuple(OnionTuple::new(env_vars).into()).stabilize())
 }
 
 /// 获取当前工作目录

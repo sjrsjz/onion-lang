@@ -483,12 +483,8 @@ pub fn get_attr(
         Ok(
             match obj.weak().with_attribute(attr, &|attr| Ok(attr.clone())) {
                 Ok(ref value) => match value {
-                    OnionObject::Lambda(ref lambda) => {
-                        let mut lambda = lambda.clone();
-                        lambda.self_object = Box::new(obj.weak().clone());
-                        OnionObject::Lambda(lambda)
-                    }
-                    _ => value.clone(),
+                    OnionObject::Lambda(ref lambda) => lambda.clone_and_replace_self_object(obj),
+                    _ => value.clone().stabilize(),
                 },
                 Err(e) => {
                     return Err(RuntimeError::InvalidOperation(
@@ -501,8 +497,7 @@ pub fn get_attr(
                 }
             },
         )
-    }))
-    .stabilize();
+    }));
 
     unwrap_step_result!(runnable.context.discard_objects(2));
     unwrap_step_result!(runnable.context.push_object(element));

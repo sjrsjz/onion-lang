@@ -1,7 +1,7 @@
 use indexmap::IndexMap;
 use onion_vm::{
     lambda::runnable::RuntimeError,
-    types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
+    types::{object::{OnionObject, OnionObjectCell, OnionStaticObject}, tuple::OnionTuple},
     GC,
 };
 use std::{fs, io::Write, path::Path};
@@ -325,7 +325,7 @@ fn read_dir(
                         }
                     }
                     Ok(
-                        OnionObject::Tuple(onion_vm::types::tuple::OnionTuple::new(files))
+                        OnionObject::Tuple(OnionTuple::new(files).into())
                             .stabilize(),
                     )
                 }

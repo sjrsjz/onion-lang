@@ -275,7 +275,7 @@ fn parse_request_params(
         let mut headers = IndexMap::new();
         if let Ok(headers_obj) = get_attr_direct(data, "headers".to_string()) {
             if let OnionObject::Tuple(headers_tuple) = &*headers_obj.weak() {
-                for element in headers_tuple.elements.as_ref() {
+                for element in headers_tuple.get_elements() {
                     if let OnionObject::Named(named) = element {
                         let key = named.get_key().to_string(&vec![]).unwrap_or_default();
                         let value = named.get_value().to_string(&vec![]).unwrap_or_default();

@@ -50,7 +50,7 @@ impl Runnable for Mapping {
             .with_data(|container| match container {
                 OnionObject::Tuple(tuple) => {
                     // 使用索引获取当前元素
-                    if let Some(element) = tuple.elements.get(self.current_index) {
+                    if let Some(element) = tuple.get_elements().get(self.current_index) {
                         let element_clone = element.clone();
                         self.mapper.weak().with_data(|mapper_obj| match mapper_obj {
                             OnionObject::Lambda(_) => {
@@ -67,7 +67,7 @@ impl Runnable for Mapping {
                                 //     ]))?;
                                 // let runnable = lambda.create_runnable(argument, &self.mapper, gc)?;
                                 let argument =
-                                    OnionObject::Tuple(OnionTuple::new(vec![element_clone]))
+                                    OnionObject::Tuple(OnionTuple::new(vec![element_clone]).into())
                                         .stabilize();
                                 let runnable = Box::new(OnionLambdaRunnableLauncher::new_static(
                                     &self.mapper,

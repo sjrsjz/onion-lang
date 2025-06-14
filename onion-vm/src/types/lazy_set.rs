@@ -21,8 +21,8 @@ use super::{
 
 #[derive(Clone)]
 pub struct OnionLazySet {
-    pub container: Box<OnionObject>,
-    pub filter: Box<OnionObject>,
+    container: OnionObject,
+    filter: OnionObject,
 }
 
 impl GCTraceable<OnionObjectCell> for OnionLazySet {
@@ -41,8 +41,8 @@ impl Debug for OnionLazySet {
 impl OnionLazySet {
     pub fn new(container: OnionObject, filter: OnionObject) -> Self {
         OnionLazySet {
-            container: Box::new(container),
-            filter: Box::new(filter),
+            container: container.into(),
+            filter: filter.into(),
         }
     }
 
@@ -50,17 +50,22 @@ impl OnionLazySet {
         container: &OnionStaticObject,
         filter: &OnionStaticObject,
     ) -> OnionStaticObject {
-        OnionObject::LazySet(OnionLazySet {
-            container: Box::new(container.weak().clone()),
-            filter: Box::new(filter.weak().clone()),
-        })
+        OnionObject::LazySet(
+            OnionLazySet {
+                container: container.weak().clone(),
+                filter: filter.weak().clone(),
+            }
+            .into(),
+        )
         .stabilize()
     }
 
+    #[inline(always)]
     pub fn get_container(&self) -> &OnionObject {
         &self.container
     }
 
+    #[inline(always)]
     pub fn get_filter(&self) -> &OnionObject {
         &self.filter
     }
@@ -79,8 +84,8 @@ impl OnionLazySet {
             OnionObject::String(s) if s.as_str() == "filter" => f(&self.filter),
             OnionObject::String(s) if s.as_str() == "collect" => {
                 let collector = OnionLazySetCollector {
-                    container: self.container.clone().stabilize(),
-                    filter: self.filter.clone().stabilize(),
+                    container: self.container.stabilize(),
+                    filter: self.filter.stabilize(),
                     collected: Vec::new(),
                     current_index: 0,
                 };
@@ -135,7 +140,8 @@ impl Runnable for OnionLazySetCollector {
                         match &*self.container.weak() {
                             OnionObject::Tuple(tuple) => {
                                 // 如果是布尔值 true，表示需要收集当前元素
-                                if let Some(item) = tuple.elements.get(self.current_index - 1) {
+                                if let Some(item) = tuple.get_elements().get(self.current_index - 1)
+                                {
                                     self.collected.push(item.clone().stabilize());
                                     Ok(())
                                 } else {
@@ -169,7 +175,7 @@ impl Runnable for OnionLazySetCollector {
             .with_data(|container| match container {
                 OnionObject::Tuple(tuple) => {
                     // 使用索引获取当前元素
-                    if let Some(item) = tuple.elements.get(self.current_index) {
+                    if let Some(item) = tuple.get_elements().get(self.current_index) {
                         let item_clone = item.clone();
                         self.current_index += 1; // 移动到下一个元素
 
@@ -189,9 +195,10 @@ impl Runnable for OnionLazySetCollector {
                                     //         item_clone,
                                     //     ]))?;
                                     // let runnable = func.create_runnable(argument, &self.filter, gc)?;
-                                    let argument =
-                                        OnionObject::Tuple(OnionTuple::new(vec![item_clone]))
-                                            .stabilize();
+                                    let argument = OnionObject::Tuple(
+                                        OnionTuple::new(vec![item_clone]).into(),
+                                    )
+                                    .stabilize();
                                     let runnable =
                                         Box::new(OnionLambdaRunnableLauncher::new_static(
                                             &self.filter,
@@ -227,5 +234,17 @@ impl Runnable for OnionLazySetCollector {
             "collected": self.collected.iter().map(|o| o.to_string()).collect::<Vec<_>>(),
             "current_index": self.current_index,
         }));
+    }
+}
+
+impl OnionLazySet {
+    pub fn reconstruct_container(&self) -> Result<OnionObject, RuntimeError> {
+        Ok(OnionObject::LazySet(
+            OnionLazySet {
+                container: self.container.clone(),
+                filter: self.filter.clone(),
+            }
+            .into(),
+        ))
     }
 }

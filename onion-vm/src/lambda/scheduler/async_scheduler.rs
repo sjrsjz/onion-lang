@@ -25,7 +25,7 @@ impl Runnable for AsyncScheduler {
             return StepResult::Return(
                 OnionPair::new_static(
                     &OnionObject::Boolean(true).stabilize(),
-                    &OnionObject::Undefined(Some("All runnables completed".to_string()))
+                    &OnionObject::Undefined(Some("All runnables completed".to_string().into()))
                         .stabilize(),
                 )
                 .into(),
@@ -42,7 +42,7 @@ impl Runnable for AsyncScheduler {
                     self.runnables.push(new_runnable);
                     unwrap_step_result!(self.runnables[i].receive(
                         &StepResult::Return(
-                            OnionObject::Undefined(Some("Task Launched".to_string()))
+                            OnionObject::Undefined(Some("Task Launched".to_string().into()))
                                 .stabilize()
                                 .into(),
                         ),

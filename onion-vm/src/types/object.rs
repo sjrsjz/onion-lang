@@ -190,6 +190,10 @@ impl Display for OnionObjectCell {
 }
 
 #[derive(Clone)]
+/// OnionObject is the main type for all objects in the Onion VM.
+/// The VM's types are all immutable(Mut is a immutable pointer to a VM object)
+/// If we need to `mutate` an object, it is IMPOSSIBLE to mutate the object itself, we can only let the Mut object point to a `reconstructed` object.
+/// `reconstruct_container` is used to reconstruct the container object, which is used to regenerate all `Arc` references to the object.
 pub enum OnionObject {
     // immutable basic types
     Integer(i64),
@@ -199,21 +203,25 @@ pub enum OnionObject {
     Boolean(bool),
     Range(i64, i64),
     Null,
-    Undefined(Option<String>),
-    Tuple(OnionTuple),
-    Pair(OnionPair),
-    Named(OnionNamed),
-    LazySet(OnionLazySet),
+    Undefined(Option<Arc<String>>),
     InstructionPackage(Arc<VMInstructionPackage>),
-    Lambda(Box<OnionLambdaDefinition>),
 
-    // mutable types, DO NOT USE THIS TYPE DIRECTLY, use `mutablize` instead
+    // immutable container types, need `reconstruct_container` for clone to solve circular references
+    Tuple(Arc<OnionTuple>),
+    Pair(Arc<OnionPair>),
+    Named(Arc<OnionNamed>),
+    LazySet(Arc<OnionLazySet>),
+    Lambda(Arc<OnionLambdaDefinition>),
+
+    // mutable? types, DO NOT USE THIS TYPE DIRECTLY, use `mutablize` instead
     Mut(GCArcWeak<OnionObjectCell>),
 }
 
 pub trait OnionObjectExt: GCTraceable<OnionObjectCell> + Debug {
     // GC and memory management
     fn upgrade(&self, collected: &mut Vec<GCArc<OnionObjectCell>>);
+
+    fn reconstruct_container(&self) -> Result<OnionObject, RuntimeError>;
 
     // Basic type conversions
     fn to_integer(&self) -> Result<i64, RuntimeError> {
@@ -443,8 +451,8 @@ impl OnionObject {
     }
 
     #[inline(always)]
-    pub fn stabilize(self) -> OnionStaticObject {
-        OnionStaticObject::new(self)
+    pub fn stabilize(&self) -> OnionStaticObject {
+        OnionStaticObject::new(self.clone())
     }
 
     pub fn len(&self) -> Result<OnionStaticObject, RuntimeError> {
@@ -493,7 +501,7 @@ impl OnionObject {
     ///
     /// TODO: Add recursion depth limit after VM core is complete.
     pub fn clone_value(&self) -> Result<OnionStaticObject, RuntimeError> {
-        self.with_data(|obj| Ok(obj.clone().stabilize()))
+        self.with_data(|obj| Ok(obj.reconstruct_container()?.stabilize()))
     }
 
     /// Warning: This method can cause stack overflow if there are nested Mut references.
@@ -547,7 +555,7 @@ impl OnionObject {
         match weak.upgrade() {
             Some(strong) => {
                 // 先克隆要赋值的内容，避免借用冲突
-                let new_value = other.with_data(|other| Ok(other.clone()))?;
+                let new_value = other.with_data(|other| other.reconstruct_container())?;
 
                 // 然后进行赋值
                 strong.as_ref().with_data_mut(|obj| {
@@ -573,16 +581,16 @@ impl OnionObject {
         }
     }
 
-    /// Replace the value of a mutable object with another mutable object.
-    pub fn replace_mut(&mut self, other: &OnionObject) -> Result<(), RuntimeError> {
-        match (self, other) {
-            (OnionObject::Mut(to), OnionObject::Mut(from)) => {
-                *to = from.clone();
-                Ok(())
-            }
-            _ => Err(RuntimeError::InvalidOperation(
-                format!("Invalid replace_mut() operation").into(),
-            )),
+    /// 重建容器对象，主要用于 mutable_obj1 = obj2 这种赋值
+    pub fn reconstruct_container(&self) -> Result<OnionObject, RuntimeError> {
+        match self {
+            OnionObject::Tuple(tuple) => tuple.reconstruct_container(),
+            OnionObject::Pair(pair) => pair.reconstruct_container(),
+            OnionObject::Named(named) => named.reconstruct_container(),
+            OnionObject::LazySet(lazy_set) => lazy_set.reconstruct_container(),
+            OnionObject::Lambda(lambda) => lambda.reconstruct_container(),
+            _ => Ok(self.clone()), // 对于其他类型，直接克隆（由于Mut自身就是不可变地址，因此直接
+                                   // 克隆即可，并且只有容器才可能造成循环）
         }
     }
 
@@ -642,38 +650,46 @@ impl OnionObject {
                     None => "undefined".to_string(),
                 }),
                 OnionObject::Range(start, end) => Ok(format!("{}..{}", start, end)),
-                OnionObject::Tuple(tuple) => match tuple.elements.len() {
+                OnionObject::Tuple(tuple) => match tuple.get_elements().len() {
                     0 => Ok("()".to_string()),
                     1 => {
-                        let first = tuple.elements.first().unwrap();
+                        let first = tuple.get_elements().first().unwrap();
                         Ok(format!("({},)", first.repr(&new_ptrs)?))
                     }
                     _ => {
-                        let elements: Result<Vec<String>, RuntimeError> =
-                            tuple.elements.iter().map(|e| e.repr(&new_ptrs)).collect();
+                        let elements: Result<Vec<String>, RuntimeError> = tuple
+                            .get_elements()
+                            .iter()
+                            .map(|e| e.repr(&new_ptrs))
+                            .collect();
                         Ok(format!("({})", elements?.join(", ")))
                     }
                 },
                 OnionObject::Pair(pair) => {
-                    let left = pair.key.repr(&new_ptrs)?;
-                    let right = pair.value.repr(&new_ptrs)?;
+                    let left = pair.get_key().repr(&new_ptrs)?;
+                    let right = pair.get_value().repr(&new_ptrs)?;
                     Ok(format!("{} : {}", left, right))
                 }
                 OnionObject::Named(named) => {
-                    let name = named.key.repr(&new_ptrs)?;
-                    let value = named.value.repr(&new_ptrs)?;
+                    let name = named.get_key().repr(&new_ptrs)?;
+                    let value = named.get_value().repr(&new_ptrs)?;
                     Ok(format!("{} => {}", name, value))
                 }
                 OnionObject::LazySet(lazy_set) => {
-                    let container = lazy_set.container.repr(&new_ptrs)?;
-                    let filter = lazy_set.filter.repr(&new_ptrs)?;
+                    let container = lazy_set.get_container().repr(&new_ptrs)?;
+                    let filter = lazy_set.get_filter().repr(&new_ptrs)?;
                     Ok(format!("[{} | {}]", container, filter))
                 }
                 OnionObject::InstructionPackage(_) => Ok("InstructionPackage(...)".to_string()),
                 OnionObject::Lambda(lambda) => {
-                    let params = lambda.parameter.repr(&new_ptrs)?;
-                    let body = lambda.body.to_string();
-                    Ok(format!("{}::{} -> {}", lambda.signature, params, body))
+                    let params = lambda.get_parameter().repr(&new_ptrs)?;
+                    let body = lambda.get_body().to_string();
+                    Ok(format!(
+                        "{}::{} -> {}",
+                        lambda.get_signature(),
+                        params,
+                        body
+                    ))
                 }
                 _ => {
                     // 使用 Debug trait来处理其他类型的转换
@@ -707,39 +723,44 @@ impl OnionObject {
                     None => "undefined".to_string(),
                 }),
                 OnionObject::Range(start, end) => Ok(format!("{}..{}", start, end)),
-                OnionObject::Tuple(tuple) => match tuple.elements.len() {
+                OnionObject::Tuple(tuple) => match tuple.get_elements().len() {
                     0 => Ok("()".to_string()),
                     1 => {
-                        let first = tuple.elements.first().unwrap();
+                        let first = tuple.get_elements().first().unwrap();
                         Ok(format!("({},)", first.repr(&new_ptrs)?))
                     }
                     _ => {
-                        let elements: Result<Vec<String>, RuntimeError> =
-                            tuple.elements.iter().map(|e| e.repr(&new_ptrs)).collect();
+                        let elements: Result<Vec<String>, RuntimeError> = tuple
+                            .get_elements()
+                            .iter()
+                            .map(|e| e.repr(&new_ptrs))
+                            .collect();
                         Ok(format!("({})", elements?.join(", ")))
                     }
                 },
                 OnionObject::Pair(pair) => {
-                    let left = pair.key.repr(&new_ptrs)?;
-                    let right = pair.value.repr(&new_ptrs)?;
+                    let left = pair.get_key().repr(&new_ptrs)?;
+                    let right = pair.get_value().repr(&new_ptrs)?;
                     Ok(format!("{} : {}", left, right))
                 }
                 OnionObject::Named(named) => {
-                    let name = named.key.repr(&new_ptrs)?;
-                    let value = named.value.repr(&new_ptrs)?;
+                    let name = named.get_key().repr(&new_ptrs)?;
+                    let value = named.get_value().repr(&new_ptrs)?;
                     Ok(format!("{} => {}", name, value))
                 }
                 OnionObject::LazySet(lazy_set) => {
-                    let container = lazy_set.container.repr(&new_ptrs)?;
-                    let filter = lazy_set.filter.repr(&new_ptrs)?;
+                    let container = lazy_set.get_container().repr(&new_ptrs)?;
+                    let filter = lazy_set.get_filter().repr(&new_ptrs)?;
                     Ok(format!("[{} | {}]", container, filter))
                 }
                 OnionObject::InstructionPackage(_) => Ok("InstructionPackage(...)".to_string()),
                 OnionObject::Lambda(lambda) => {
-                    let params = lambda.parameter.repr(&new_ptrs)?;
+                    let params = lambda.get_parameter().repr(&new_ptrs)?;
                     Ok(format!(
                         "{}::{} -> {}",
-                        lambda.signature, params, lambda.body
+                        lambda.get_signature(),
+                        params,
+                        lambda.get_body()
                     ))
                 }
                 OnionObject::Mut(weak) => {
@@ -1243,7 +1264,9 @@ impl OnionObject {
             OnionObject::Named(named) => Ok(named.get_value().clone().stabilize()),
             OnionObject::Pair(pair) => Ok(pair.get_value().clone().stabilize()),
             OnionObject::Undefined(s) => Ok(OnionStaticObject::new(OnionObject::String(Arc::new(
-                s.clone().unwrap_or_else(|| "".to_string()),
+                s.as_ref()
+                    .map(|o| o.as_ref().clone())
+                    .unwrap_or_else(|| "".to_string()),
             )))),
             _ => Err(RuntimeError::InvalidOperation(
                 format!("value_of() not supported for {:?}", obj).into(),

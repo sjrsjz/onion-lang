@@ -455,7 +455,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut length_params = IndexMap::new();
     length_params.insert(
         "string".to_string(),
-        OnionObject::Undefined(Some("String to get length".to_string())).stabilize(),
+        OnionObject::Undefined(Some("String to get length".to_string().into())).stabilize(),
     );
     module.insert(
         "length".to_string(),
@@ -472,7 +472,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut trim_params = IndexMap::new();
     trim_params.insert(
         "string".to_string(),
-        OnionObject::Undefined(Some("String to trim".to_string())).stabilize(),
+        OnionObject::Undefined(Some("String to trim".to_string().into())).stabilize(),
     );
     module.insert(
         "trim".to_string(),
@@ -489,7 +489,8 @@ pub fn build_module() -> OnionStaticObject {
     let mut uppercase_params = IndexMap::new();
     uppercase_params.insert(
         "string".to_string(),
-        OnionObject::Undefined(Some("String to convert to uppercase".to_string())).stabilize(),
+        OnionObject::Undefined(Some("String to convert to uppercase".to_string().into()))
+            .stabilize(),
     );
     module.insert(
         "uppercase".to_string(),
@@ -506,7 +507,8 @@ pub fn build_module() -> OnionStaticObject {
     let mut lowercase_params = IndexMap::new();
     lowercase_params.insert(
         "string".to_string(),
-        OnionObject::Undefined(Some("String to convert to lowercase".to_string())).stabilize(),
+        OnionObject::Undefined(Some("String to convert to lowercase".to_string().into()))
+            .stabilize(),
     );
     module.insert(
         "lowercase".to_string(),
@@ -523,11 +525,11 @@ pub fn build_module() -> OnionStaticObject {
     let mut contains_params = IndexMap::new();
     contains_params.insert(
         "string".to_string(),
-        OnionObject::Undefined(Some("String to search within".to_string())).stabilize(),
+        OnionObject::Undefined(Some("String to search within".to_string().into())).stabilize(),
     );
     contains_params.insert(
         "substring".to_string(),
-        OnionObject::Undefined(Some("Substring to search for".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Substring to search for".to_string().into())).stabilize(),
     );
     module.insert(
         "contains".to_string(),
@@ -544,11 +546,11 @@ pub fn build_module() -> OnionStaticObject {
     let mut concat_params = IndexMap::new();
     concat_params.insert(
         "a".to_string(),
-        OnionObject::Undefined(Some("First string to concatenate".to_string())).stabilize(),
+        OnionObject::Undefined(Some("First string to concatenate".to_string().into())).stabilize(),
     );
     concat_params.insert(
         "b".to_string(),
-        OnionObject::Undefined(Some("Second string to concatenate".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Second string to concatenate".to_string().into())).stabilize(),
     );
     module.insert(
         "concat".to_string(),
@@ -565,11 +567,11 @@ pub fn build_module() -> OnionStaticObject {
     let mut split_params = IndexMap::new();
     split_params.insert(
         "string".to_string(),
-        OnionObject::Undefined(Some("String to split".to_string())).stabilize(),
+        OnionObject::Undefined(Some("String to split".to_string().into())).stabilize(),
     );
     split_params.insert(
         "delimiter".to_string(),
-        OnionObject::Undefined(Some("Delimiter to split by".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Delimiter to split by".to_string().into())).stabilize(),
     );
     module.insert(
         "split".to_string(),
@@ -586,15 +588,16 @@ pub fn build_module() -> OnionStaticObject {
     let mut replace_params = IndexMap::new();
     replace_params.insert(
         "string".to_string(),
-        OnionObject::Undefined(Some("String to perform replacement on".to_string())).stabilize(),
+        OnionObject::Undefined(Some("String to perform replacement on".to_string().into()))
+            .stabilize(),
     );
     replace_params.insert(
         "from".to_string(),
-        OnionObject::Undefined(Some("Substring to replace".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Substring to replace".to_string().into())).stabilize(),
     );
     replace_params.insert(
         "to".to_string(),
-        OnionObject::Undefined(Some("Replacement string".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Replacement string".to_string().into())).stabilize(),
     );
     module.insert(
         "replace".to_string(),
@@ -611,15 +614,16 @@ pub fn build_module() -> OnionStaticObject {
     let mut substr_params = IndexMap::new();
     substr_params.insert(
         "string".to_string(),
-        OnionObject::Undefined(Some("String to extract substring from".to_string())).stabilize(),
+        OnionObject::Undefined(Some("String to extract substring from".to_string().into()))
+            .stabilize(),
     );
     substr_params.insert(
         "start".to_string(),
-        OnionObject::Undefined(Some("Start index".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Start index".to_string().into())).stabilize(),
     );
     substr_params.insert(
         "length".to_string(),
-        OnionObject::Undefined(Some("Length of substring".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Length of substring".to_string().into())).stabilize(),
     );
     module.insert(
         "substr".to_string(),
@@ -636,11 +640,11 @@ pub fn build_module() -> OnionStaticObject {
     let mut index_of_params = IndexMap::new();
     index_of_params.insert(
         "string".to_string(),
-        OnionObject::Undefined(Some("String to search in".to_string())).stabilize(),
+        OnionObject::Undefined(Some("String to search in".to_string().into())).stabilize(),
     );
     index_of_params.insert(
         "substring".to_string(),
-        OnionObject::Undefined(Some("Substring to find".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Substring to find".to_string().into())).stabilize(),
     );
     module.insert(
         "index_of".to_string(),
@@ -657,11 +661,11 @@ pub fn build_module() -> OnionStaticObject {
     let mut starts_with_params = IndexMap::new();
     starts_with_params.insert(
         "string".to_string(),
-        OnionObject::Undefined(Some("String to check".to_string())).stabilize(),
+        OnionObject::Undefined(Some("String to check".to_string().into())).stabilize(),
     );
     starts_with_params.insert(
         "prefix".to_string(),
-        OnionObject::Undefined(Some("Prefix to check for".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Prefix to check for".to_string().into())).stabilize(),
     );
     module.insert(
         "starts_with".to_string(),
@@ -678,11 +682,11 @@ pub fn build_module() -> OnionStaticObject {
     let mut ends_with_params = IndexMap::new();
     ends_with_params.insert(
         "string".to_string(),
-        OnionObject::Undefined(Some("String to check".to_string())).stabilize(),
+        OnionObject::Undefined(Some("String to check".to_string().into())).stabilize(),
     );
     ends_with_params.insert(
         "suffix".to_string(),
-        OnionObject::Undefined(Some("Suffix to check for".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Suffix to check for".to_string().into())).stabilize(),
     );
     module.insert(
         "ends_with".to_string(),
@@ -699,11 +703,11 @@ pub fn build_module() -> OnionStaticObject {
     let mut repeat_params = IndexMap::new();
     repeat_params.insert(
         "string".to_string(),
-        OnionObject::Undefined(Some("String to repeat".to_string())).stabilize(),
+        OnionObject::Undefined(Some("String to repeat".to_string().into())).stabilize(),
     );
     repeat_params.insert(
         "count".to_string(),
-        OnionObject::Undefined(Some("Number of times to repeat".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Number of times to repeat".to_string().into())).stabilize(),
     );
     module.insert(
         "repeat".to_string(),
@@ -720,15 +724,15 @@ pub fn build_module() -> OnionStaticObject {
     let mut pad_left_params = IndexMap::new();
     pad_left_params.insert(
         "string".to_string(),
-        OnionObject::Undefined(Some("String to pad".to_string())).stabilize(),
+        OnionObject::Undefined(Some("String to pad".to_string().into())).stabilize(),
     );
     pad_left_params.insert(
         "length".to_string(),
-        OnionObject::Undefined(Some("Target length".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Target length".to_string().into())).stabilize(),
     );
     pad_left_params.insert(
         "pad_char".to_string(),
-        OnionObject::Undefined(Some("Character to pad with".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Character to pad with".to_string().into())).stabilize(),
     );
     module.insert(
         "pad_left".to_string(),
@@ -745,15 +749,15 @@ pub fn build_module() -> OnionStaticObject {
     let mut pad_right_params = IndexMap::new();
     pad_right_params.insert(
         "string".to_string(),
-        OnionObject::Undefined(Some("String to pad".to_string())).stabilize(),
+        OnionObject::Undefined(Some("String to pad".to_string().into())).stabilize(),
     );
     pad_right_params.insert(
         "length".to_string(),
-        OnionObject::Undefined(Some("Target length".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Target length".to_string().into())).stabilize(),
     );
     pad_right_params.insert(
         "pad_char".to_string(),
-        OnionObject::Undefined(Some("Character to pad with".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Character to pad with".to_string().into())).stabilize(),
     );
     module.insert(
         "pad_right".to_string(),
@@ -770,7 +774,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut is_empty_params = IndexMap::new();
     is_empty_params.insert(
         "string".to_string(),
-        OnionObject::Undefined(Some("String to check if empty".to_string())).stabilize(),
+        OnionObject::Undefined(Some("String to check if empty".to_string().into())).stabilize(),
     );
     module.insert(
         "is_empty".to_string(),
@@ -787,7 +791,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut reverse_params = IndexMap::new();
     reverse_params.insert(
         "string".to_string(),
-        OnionObject::Undefined(Some("String to reverse".to_string())).stabilize(),
+        OnionObject::Undefined(Some("String to reverse".to_string().into())).stabilize(),
     );
     module.insert(
         "reverse".to_string(),

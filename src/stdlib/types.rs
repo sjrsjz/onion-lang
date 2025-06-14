@@ -32,18 +32,16 @@ fn to_int(
         value.weak().with_data(|data| match data {
             OnionObject::String(s) => match s.trim().parse::<i64>() {
                 Ok(i) => Ok(OnionObject::Integer(i).stabilize()),
-                Err(e) => Err(RuntimeError::InvalidOperation(format!(
-                    "Cannot convert string '{}' to integer: {}",
-                    s, e
-                ).into())),
+                Err(e) => Err(RuntimeError::InvalidOperation(
+                    format!("Cannot convert string '{}' to integer: {}", s, e).into(),
+                )),
             },
             OnionObject::Float(f) => Ok(OnionObject::Integer(*f as i64).stabilize()),
             OnionObject::Integer(i) => Ok(OnionObject::Integer(*i).stabilize()),
             OnionObject::Boolean(b) => Ok(OnionObject::Integer(if *b { 1 } else { 0 }).stabilize()),
-            _ => Err(RuntimeError::InvalidOperation(format!(
-                "Cannot convert {:?} to integer",
-                data
-            ).into())),
+            _ => Err(RuntimeError::InvalidOperation(
+                format!("Cannot convert {:?} to integer", data).into(),
+            )),
         })
     })
 }
@@ -59,20 +57,18 @@ fn to_float(
         value.weak().with_data(|data| match data {
             OnionObject::String(s) => match s.trim().parse::<f64>() {
                 Ok(f) => Ok(OnionObject::Float(f).stabilize()),
-                Err(e) => Err(RuntimeError::InvalidOperation(format!(
-                    "Cannot convert string '{}' to float: {}",
-                    s, e
-                ).into())),
+                Err(e) => Err(RuntimeError::InvalidOperation(
+                    format!("Cannot convert string '{}' to float: {}", s, e).into(),
+                )),
             },
             OnionObject::Integer(i) => Ok(OnionObject::Float(*i as f64).stabilize()),
             OnionObject::Float(f) => Ok(OnionObject::Float(*f).stabilize()),
             OnionObject::Boolean(b) => {
                 Ok(OnionObject::Float(if *b { 1.0 } else { 0.0 }).stabilize())
             }
-            _ => Err(RuntimeError::InvalidOperation(format!(
-                "Cannot convert {:?} to float",
-                data
-            ).into())),
+            _ => Err(RuntimeError::InvalidOperation(
+                format!("Cannot convert {:?} to float", data).into(),
+            )),
         })
     })
 }
@@ -93,10 +89,9 @@ fn to_bool(
                 } else if s == "false" || s == "0" || s == "no" || s == "n" || s.is_empty() {
                     Ok(OnionObject::Boolean(false).stabilize())
                 } else {
-                    Err(RuntimeError::InvalidOperation(format!(
-                        "Cannot convert string '{}' to boolean",
-                        s
-                    ).into()))
+                    Err(RuntimeError::InvalidOperation(
+                        format!("Cannot convert string '{}' to boolean", s).into(),
+                    ))
                 }
             }
             OnionObject::Integer(i) => Ok(OnionObject::Boolean(*i != 0).stabilize()),
@@ -224,10 +219,9 @@ fn to_bytes(
                 vec![0u8].into()
             })
             .stabilize()),
-            _ => Err(RuntimeError::InvalidOperation(format!(
-                "Cannot convert {:?} to bytes",
-                data
-            ).into())),
+            _ => Err(RuntimeError::InvalidOperation(
+                format!("Cannot convert {:?} to bytes", data).into(),
+            )),
         })
     })
 }
@@ -248,7 +242,7 @@ fn find(
             Ok(value) => Ok(value),
             Err(RuntimeError::InvalidOperation(ref err)) => {
                 // If the attribute is not found, return undefined
-                Ok(OnionObject::Undefined(Some(err.as_ref().clone())).stabilize())
+                Ok(OnionObject::Undefined(Some(err.as_ref().clone().into())).stabilize())
             }
             Err(e) => {
                 // If any other error occurs, propagate it
@@ -266,7 +260,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut to_string_params = IndexMap::new();
     to_string_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Value to convert to string".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Value to convert to string".to_string().into())).stabilize(),
     );
     module.insert(
         "to_string".to_string(),
@@ -282,7 +276,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut to_int_params = IndexMap::new();
     to_int_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Value to convert to integer".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Value to convert to integer".to_string().into())).stabilize(),
     );
     module.insert(
         "to_int".to_string(),
@@ -298,7 +292,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut to_float_params = IndexMap::new();
     to_float_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Value to convert to float".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Value to convert to float".to_string().into())).stabilize(),
     );
     module.insert(
         "to_float".to_string(),
@@ -314,7 +308,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut to_bool_params = IndexMap::new();
     to_bool_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Value to convert to boolean".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Value to convert to boolean".to_string().into())).stabilize(),
     );
     module.insert(
         "to_bool".to_string(),
@@ -331,7 +325,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut to_bytes_params = IndexMap::new();
     to_bytes_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Value to convert to bytes".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Value to convert to bytes".to_string().into())).stabilize(),
     );
     module.insert(
         "to_bytes".to_string(),
@@ -348,7 +342,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut type_of_params = IndexMap::new();
     type_of_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Value to get type of".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Value to get type of".to_string().into())).stabilize(),
     );
     module.insert(
         "type_of".to_string(),
@@ -364,7 +358,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut is_int_params = IndexMap::new();
     is_int_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Value to check if is integer".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Value to check if is integer".to_string().into())).stabilize(),
     );
     module.insert(
         "is_int".to_string(),
@@ -380,7 +374,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut is_float_params = IndexMap::new();
     is_float_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Value to check if is float".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Value to check if is float".to_string().into())).stabilize(),
     );
     module.insert(
         "is_float".to_string(),
@@ -396,7 +390,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut is_string_params = IndexMap::new();
     is_string_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Value to check if is string".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Value to check if is string".to_string().into())).stabilize(),
     );
     module.insert(
         "is_string".to_string(),
@@ -412,7 +406,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut is_bool_params = IndexMap::new();
     is_bool_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Value to check if is boolean".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Value to check if is boolean".to_string().into())).stabilize(),
     );
     module.insert(
         "is_bool".to_string(),
@@ -429,7 +423,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut is_bytes_params = IndexMap::new();
     is_bytes_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Value to check if is bytes".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Value to check if is bytes".to_string().into())).stabilize(),
     );
     module.insert(
         "is_bytes".to_string(),
@@ -446,11 +440,11 @@ pub fn build_module() -> OnionStaticObject {
     let mut find_params = IndexMap::new();
     find_params.insert(
         "obj".to_string(),
-        OnionObject::Undefined(Some("Object to find attribute in".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Object to find attribute in".to_string().into())).stabilize(),
     );
     find_params.insert(
         "key".to_string(),
-        OnionObject::Undefined(Some("Key to find in object".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Key to find in object".to_string().into())).stabilize(),
     );
     module.insert(
         "find".to_string(),

@@ -213,7 +213,7 @@ impl OnionLambdaRunnable {
 
         argument.weak().with_data(|data| {
             if let OnionObject::Tuple(tuple) = data {
-                for item in tuple.elements.iter() {
+                for item in tuple.get_elements().iter() {
                     match item {
                         OnionObject::Named(named) => {
                             named.get_key().with_data(|key| match key {

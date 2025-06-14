@@ -338,7 +338,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut abs_params = IndexMap::new();
     abs_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Number to get absolute value".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Number to get absolute value".to_string().into())).stabilize(),
     );
     module.insert(
         "abs".to_string(),
@@ -353,7 +353,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut sin_params = IndexMap::new();
     sin_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Angle in radians".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Angle in radians".to_string().into())).stabilize(),
     );
     module.insert(
         "sin".to_string(),
@@ -370,7 +370,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut cos_params = IndexMap::new();
     cos_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Angle in radians".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Angle in radians".to_string().into())).stabilize(),
     );
     module.insert(
         "cos".to_string(),
@@ -387,7 +387,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut tan_params = IndexMap::new();
     tan_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Angle in radians".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Angle in radians".to_string().into())).stabilize(),
     );
     module.insert(
         "tan".to_string(),
@@ -404,8 +404,10 @@ pub fn build_module() -> OnionStaticObject {
     let mut log_params = IndexMap::new();
     log_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Number to calculate natural logarithm".to_string()))
-            .stabilize(),
+        OnionObject::Undefined(Some(
+            "Number to calculate natural logarithm".to_string().into(),
+        ))
+        .stabilize(),
     );
     module.insert(
         "log".to_string(),
@@ -422,7 +424,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut exp_params = IndexMap::new();
     exp_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Exponent for e^x".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Exponent for e^x".to_string().into())).stabilize(),
     );
     module.insert(
         "exp".to_string(),
@@ -439,7 +441,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut floor_params = IndexMap::new();
     floor_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Number to floor".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Number to floor".to_string().into())).stabilize(),
     );
     module.insert(
         "floor".to_string(),
@@ -456,7 +458,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut ceil_params = IndexMap::new();
     ceil_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Number to ceil".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Number to ceil".to_string().into())).stabilize(),
     );
     module.insert(
         "ceil".to_string(),
@@ -473,7 +475,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut round_params = IndexMap::new();
     round_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Number to round".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Number to round".to_string().into())).stabilize(),
     );
     module.insert(
         "round".to_string(),
@@ -490,7 +492,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut asin_params = IndexMap::new();
     asin_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Value between -1 and 1".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Value between -1 and 1".to_string().into())).stabilize(),
     );
     module.insert(
         "asin".to_string(),
@@ -507,7 +509,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut acos_params = IndexMap::new();
     acos_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Value between -1 and 1".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Value between -1 and 1".to_string().into())).stabilize(),
     );
     module.insert(
         "acos".to_string(),
@@ -524,7 +526,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut atan_params = IndexMap::new();
     atan_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Value for arctangent".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Value for arctangent".to_string().into())).stabilize(),
     );
     module.insert(
         "atan".to_string(),
@@ -541,7 +543,8 @@ pub fn build_module() -> OnionStaticObject {
     let mut sqrt_params = IndexMap::new();
     sqrt_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Number to calculate square root".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Number to calculate square root".to_string().into()))
+            .stabilize(),
     );
     module.insert(
         "sqrt".to_string(),
@@ -558,11 +561,11 @@ pub fn build_module() -> OnionStaticObject {
     let mut pow_params = IndexMap::new();
     pow_params.insert(
         "base".to_string(),
-        OnionObject::Undefined(Some("Base number".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Base number".to_string().into())).stabilize(),
     );
     pow_params.insert(
         "exponent".to_string(),
-        OnionObject::Undefined(Some("Exponent (power)".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Exponent (power)".to_string().into())).stabilize(),
     );
     module.insert(
         "pow".to_string(),
@@ -579,7 +582,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut exp_params = IndexMap::new();
     exp_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Number to calculate exponent".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Number to calculate exponent".to_string().into())).stabilize(),
     );
     module.insert(
         "exp".to_string(),
@@ -596,7 +599,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut floor_params = IndexMap::new();
     floor_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Number to round down".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Number to round down".to_string().into())).stabilize(),
     );
     module.insert(
         "floor".to_string(),
@@ -613,7 +616,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut ceil_params = IndexMap::new();
     ceil_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Number to round up".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Number to round up".to_string().into())).stabilize(),
     );
     module.insert(
         "ceil".to_string(),
@@ -630,7 +633,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut round_params = IndexMap::new();
     round_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Number to round".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Number to round".to_string().into())).stabilize(),
     );
     module.insert(
         "round".to_string(),
@@ -647,7 +650,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut asin_params = IndexMap::new();
     asin_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Value in radians".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Value in radians".to_string().into())).stabilize(),
     );
     module.insert(
         "asin".to_string(),
@@ -664,7 +667,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut acos_params = IndexMap::new();
     acos_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Value in radians".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Value in radians".to_string().into())).stabilize(),
     );
     module.insert(
         "acos".to_string(),
@@ -681,7 +684,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut atan_params = IndexMap::new();
     atan_params.insert(
         "value".to_string(),
-        OnionObject::Undefined(Some("Value in radians".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Value in radians".to_string().into())).stabilize(),
     );
     module.insert(
         "atan".to_string(),

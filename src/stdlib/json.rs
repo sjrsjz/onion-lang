@@ -29,13 +29,16 @@ fn to_json(obj: OnionObject) -> Result<Value, RuntimeError> {
             }
             OnionObject::Tuple(t) => {
                 // 检查是否所有元素都是 Pair，如果是则转换为 JSON 对象
-                let all_pairs = t.elements.iter().all(|e| matches!(e, OnionObject::Pair(_)));
+                let all_pairs = t
+                    .get_elements()
+                    .iter()
+                    .all(|e| matches!(e, OnionObject::Pair(_)));
 
-                if all_pairs && !t.elements.is_empty() {
+                if all_pairs && !t.get_elements().is_empty() {
                     // 转换为 JSON 对象 (字典)
                     let mut map = serde_json::Map::new();
-                    for element in t.elements.as_ref() {
-                        if let OnionObject::Pair(pair) = &*element {
+                    for element in t.get_elements() {
+                        if let OnionObject::Pair(pair) = element {
                             let key = pair.get_key().to_string(&vec![]).map_err(|e| {
                                 RuntimeError::InvalidOperation(e.to_string().into())
                             })?;
@@ -48,7 +51,11 @@ fn to_json(obj: OnionObject) -> Result<Value, RuntimeError> {
                     Ok(Value::Object(map))
                 } else {
                     // 转换为 JSON 数组
-                    let vec: Vec<_> = t.elements.iter().map(|e| to_json(e.clone())).collect();
+                    let vec: Vec<_> = t
+                        .get_elements()
+                        .iter()
+                        .map(|e| to_json(e.clone()))
+                        .collect();
                     Ok(Value::Array(
                         vec.into_iter()
                             .collect::<Result<Vec<_>, _>>()
@@ -85,7 +92,7 @@ fn from_json(value: Value) -> Result<OnionStaticObject, RuntimeError> {
                 .map(|v| from_json(v).map(|obj| obj.weak().clone()))
                 .collect();
             match elements {
-                Ok(elems) => Ok(OnionObject::Tuple(OnionTuple::new(elems)).stabilize()),
+                Ok(elems) => Ok(OnionObject::Tuple(OnionTuple::new(elems).into()).stabilize()),
                 Err(e) => Err(e),
             }
         }
@@ -95,11 +102,13 @@ fn from_json(value: Value) -> Result<OnionStaticObject, RuntimeError> {
                 .map(|(k, v)| {
                     let key_obj = OnionObject::String(k.into());
                     let value_obj = from_json(v)?.weak().clone();
-                    Ok(OnionObject::Pair(OnionPair::new(key_obj, value_obj)))
+                    Ok(OnionObject::Pair(OnionPair::new(key_obj, value_obj).into()))
                 })
                 .collect();
             match pairs {
-                Ok(pair_elems) => Ok(OnionObject::Tuple(OnionTuple::new(pair_elems)).stabilize()),
+                Ok(pair_elems) => {
+                    Ok(OnionObject::Tuple(OnionTuple::new(pair_elems).into()).stabilize())
+                }
                 Err(e) => Err(e),
             }
         }
@@ -135,7 +144,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut parse_params = IndexMap::new();
     parse_params.insert(
         "json_string".to_string(),
-        OnionObject::Undefined(Some("JSON string to parse".to_string())).stabilize(),
+        OnionObject::Undefined(Some("JSON string to parse".to_string().into())).stabilize(),
     );
 
     // JSON.parse 函数
@@ -167,7 +176,7 @@ pub fn build_module() -> OnionStaticObject {
     let mut stringify_params = IndexMap::new();
     stringify_params.insert(
         "object".to_string(),
-        OnionObject::Undefined(Some("Object to stringify".to_string())).stabilize(),
+        OnionObject::Undefined(Some("Object to stringify".to_string().into())).stabilize(),
     );
 
     // JSON.stringify 函数
@@ -194,7 +203,7 @@ pub fn build_module() -> OnionStaticObject {
     stringify_pretty_params.insert(
         "object".to_string(),
         OnionObject::Undefined(Some(
-            "Object to stringify with pretty formatting".to_string(),
+            "Object to stringify with pretty formatting".to_string().into(),
         ))
         .stabilize(),
     );

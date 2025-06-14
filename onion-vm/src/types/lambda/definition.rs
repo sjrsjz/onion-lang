@@ -56,11 +56,11 @@ impl Display for LambdaBody {
 
 #[derive(Clone)]
 pub struct OnionLambdaDefinition {
-    pub(crate) parameter: Box<OnionObject>,
-    pub(crate) body: LambdaBody,
-    pub(crate) capture: Box<OnionObject>,
-    pub(crate) self_object: Box<OnionObject>,
-    pub(crate) signature: String,
+    parameter: Arc<OnionObject>,
+    body: LambdaBody,
+    capture: Arc<OnionObject>,
+    self_object: Arc<OnionObject>,
+    signature: String,
 }
 
 impl OnionLambdaDefinition {
@@ -71,19 +71,24 @@ impl OnionLambdaDefinition {
         self_object: Option<&OnionStaticObject>,
         signature: String,
     ) -> OnionStaticObject {
-        OnionObject::Lambda(Box::new(OnionLambdaDefinition {
-            parameter: Box::new(parameter.weak().clone()),
-            body,
-            capture: Box::new(match capture {
-                Some(capture) => capture.weak().clone(),
-                None => OnionObject::Undefined(None),
-            }),
-            self_object: Box::new(match self_object {
-                Some(self_object) => self_object.weak().clone(),
-                None => OnionObject::Undefined(None),
-            }),
-            signature,
-        }))
+        OnionObject::Lambda(
+            OnionLambdaDefinition {
+                parameter: parameter.weak().clone().into(),
+                body,
+                capture: (match capture {
+                    Some(capture) => capture.weak().clone(),
+                    None => OnionObject::Undefined(None),
+                })
+                .into(),
+                self_object: (match self_object {
+                    Some(self_object) => self_object.weak().clone(),
+                    None => OnionObject::Undefined(None),
+                })
+                .into(),
+                signature,
+            }
+            .into(),
+        )
         .stabilize()
     }
 
@@ -123,6 +128,40 @@ impl OnionLambdaDefinition {
         }
     }
 
+    pub fn get_signature(&self) -> &str {
+        &self.signature
+    }
+
+    pub fn get_parameter(&self) -> &OnionObject {
+        &self.parameter
+    }
+
+    pub fn get_capture(&self) -> &OnionObject {
+        &self.capture
+    }
+
+    pub fn get_self_object(&self) -> &OnionObject {
+        &self.self_object
+    }
+
+    pub fn get_body(&self) -> &LambdaBody {
+        &self.body
+    }
+
+    pub fn clone_and_replace_self_object(
+        &self,
+        new_self_object: &OnionStaticObject,
+    ) -> OnionStaticObject {
+        let new_definition = OnionLambdaDefinition {
+            parameter: self.parameter.clone(),
+            body: self.body.clone(),
+            capture: self.capture.clone(),
+            self_object: new_self_object.weak().clone().into(),
+            signature: self.signature.clone(),
+        };
+        OnionObject::Lambda(new_definition.into()).stabilize()
+    }
+
     pub fn upgrade(&self, collected: &mut Vec<GCArc<OnionObjectCell>>) {
         self.parameter.upgrade(collected);
         self.capture.upgrade(collected);
@@ -140,20 +179,6 @@ impl OnionLambdaDefinition {
             OnionObject::String(s) if s.as_str() == "signature" => {
                 f(&OnionObject::String(Arc::new(self.signature.clone())))
             }
-            _ => Err(RuntimeError::InvalidOperation(
-                format!("Attribute '{:?}' not found in lambda definition", key).into(),
-            )),
-        }
-    }
-
-    pub fn with_attribute_mut<F, R>(&mut self, key: &OnionObject, f: &F) -> Result<R, RuntimeError>
-    where
-        F: Fn(&mut OnionObject) -> Result<R, RuntimeError>,
-    {
-        match key {
-            OnionObject::String(s) if s.as_str() == "parameter" => f(&mut self.parameter),
-            OnionObject::String(s) if s.as_str() == "capture" => f(&mut self.capture),
-            OnionObject::String(s) if s.as_str() == "self" => f(&mut self.self_object),
             _ => Err(RuntimeError::InvalidOperation(
                 format!("Attribute '{:?}' not found in lambda definition", key).into(),
             )),
@@ -183,5 +208,25 @@ impl Debug for OnionLambdaDefinition {
             "OnionLambdaDefinition {{ parameter: {:?}, body: {:?}, capture: {:?}, self_object: {:?} }}",
             self.parameter, self.body, self.capture, self.self_object
         )
+    }
+}
+
+impl OnionLambdaDefinition {
+    pub fn reconstruct_container(&self) -> Result<OnionObject, RuntimeError> {
+        let parameter = self.parameter.clone();
+        let body = self.body.clone();
+        let capture = self.capture.clone();
+        let self_object = self.self_object.clone();
+        let signature = self.signature.clone();
+        Ok(OnionObject::Lambda(
+            OnionLambdaDefinition {
+                parameter: parameter,
+                body,
+                capture,
+                self_object,
+                signature,
+            }
+            .into(),
+        ))
     }
 }

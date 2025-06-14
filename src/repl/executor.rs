@@ -45,7 +45,7 @@ impl ReplExecutor {
     /// 获取历史执行结果数量
     pub fn history_count(&self) -> usize {
         if let OnionObject::Tuple(tuple) = &*self.out_tuple.weak() {
-            tuple.elements.len()
+            tuple.get_elements().len()
         } else {
             0
         }
@@ -212,20 +212,15 @@ impl ReplExecutor {
     fn add_result_to_out(&mut self, result: OnionObject) {
         let new_elements = {
             if let OnionObject::Tuple(tuple) = self.out_tuple.weak() {
-                let mut elements = tuple.elements.clone();
+                let mut elements = tuple.get_elements().clone();
                 elements.push(result);
                 elements
             } else {
-                vec![result].into()
+                vec![result]
             }
         };
 
-        self.out_tuple = OnionTuple::new_static_no_ref(
-            new_elements
-                .into_iter()
-                .map(|obj| OnionStaticObject::new(obj.clone()))
-                .collect(),
-        );
+        self.out_tuple = OnionObject::Tuple(OnionTuple::new(new_elements).into()).stabilize();
     }
 }
 
