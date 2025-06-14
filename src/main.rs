@@ -336,7 +336,7 @@ fn execute_ir_package(ir_package: &IRPackage) -> Result<(), String> {
 }
 
 fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> Result<(), String> {
-    let mut gc = GC::new();
+    let mut gc = GC::new_with_memory_threshold(1024 * 1024); // 1 MB threshold
 
     match VMInstructionPackage::validate(vm_instructions_package) {
         Err(e) => return Err(format!("Invalid VM instruction package: {}", e)),

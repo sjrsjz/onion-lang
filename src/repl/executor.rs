@@ -136,7 +136,7 @@ impl ReplExecutor {
             .map_err(|e| format!("Failed to create runnable Lambda: {:?}", e))?,
         );
 
-        let mut gc = GC::new();
+        let mut gc = GC::new_with_memory_threshold(1024 * 1024);
 
         // 执行代码
         loop {
