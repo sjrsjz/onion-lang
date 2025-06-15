@@ -1,7 +1,10 @@
 use indexmap::IndexMap;
 use onion_vm::{
     lambda::runnable::RuntimeError,
-    types::{object::{OnionObject, OnionObjectCell, OnionStaticObject}, tuple::OnionTuple},
+    types::{
+        object::{OnionObject, OnionObjectCell, OnionStaticObject},
+        tuple::OnionTuple,
+    },
     GC,
 };
 use std::{fs, io::Write, path::Path};
@@ -42,7 +45,7 @@ fn write_file(
             content.weak().with_data(|content_data| {
                 match (path_data, content_data) {
                     (OnionObject::String(path_str), OnionObject::Bytes(content_bytes)) => {
-                        match fs::write(&**path_str, &**content_bytes) {
+                        match fs::write(path_str.as_ref(), content_bytes.as_ref()) {
                             Ok(_) => Ok(OnionObject::Null.stabilize()),
                             Err(e) => Err(RuntimeError::DetailedError(
                                 format!("Failed to write file '{}': {}", path_str, e).into(),
@@ -51,7 +54,7 @@ fn write_file(
                     }
                     (OnionObject::String(path_str), OnionObject::String(content_str)) => {
                         // 为了向后兼容，仍然支持字符串输入，但转换为字节
-                        match fs::write(&**path_str, content_str.as_bytes()) {
+                        match fs::write(path_str.as_ref(), content_str.as_bytes()) {
                             Ok(_) => Ok(OnionObject::Null.stabilize()),
                             Err(e) => Err(RuntimeError::DetailedError(
                                 format!("Failed to write file '{}': {}", path_str, e).into(),
@@ -85,9 +88,9 @@ fn append_file(
                         match fs::OpenOptions::new()
                             .create(true)
                             .append(true)
-                            .open(&**path_str)
+                            .open(path_str.as_ref())
                         {
-                            Ok(mut file) => match file.write_all(&**content_bytes) {
+                            Ok(mut file) => match file.write_all(content_bytes.as_ref()) {
                                 Ok(_) => Ok(OnionObject::Null.stabilize()),
                                 Err(e) => Err(RuntimeError::DetailedError(
                                     format!("Failed to append to file '{}': {}", path_str, e)
@@ -139,7 +142,7 @@ fn remove_file(
     argument.weak().with_data(|data| {
         let path = get_attr_direct(data, "path".to_string())?;
         path.weak().with_data(|path_data| match path_data {
-            OnionObject::String(path_str) => match fs::remove_file(&**path_str) {
+            OnionObject::String(path_str) => match fs::remove_file(path_str.as_ref()) {
                 Ok(_) => Ok(OnionObject::Null.stabilize()),
                 Err(e) => Err(RuntimeError::DetailedError(
                     format!("Failed to remove file '{}': {}", path_str, e).into(),
@@ -324,10 +327,7 @@ fn read_dir(
                             }
                         }
                     }
-                    Ok(
-                        OnionObject::Tuple(OnionTuple::new(files).into())
-                            .stabilize(),
-                    )
+                    Ok(OnionObject::Tuple(OnionTuple::new(files).into()).stabilize())
                 }
                 Err(e) => Err(RuntimeError::DetailedError(
                     format!("Failed to read directory '{}': {}", path_str, e).into(),
@@ -481,7 +481,7 @@ fn append_text(
                         match fs::OpenOptions::new()
                             .create(true)
                             .append(true)
-                            .open(&**path_str)
+                            .open(path_str.as_ref())
                         {
                             Ok(mut file) => match file.write_all(content_str.as_bytes()) {
                                 Ok(_) => Ok(OnionObject::Null.stabilize()),

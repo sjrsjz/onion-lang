@@ -234,7 +234,7 @@ impl Runnable for AsyncHttpRequest {
     fn format_context(&self) -> Result<serde_json::Value, RuntimeError> {
         let state = {
             let state_guard = self.state.lock().unwrap();
-            match &*state_guard {
+            match *state_guard {
                 RequestState::Pending => "Pending",
                 RequestState::InProgress => "In Progress",
                 RequestState::Completed(_) => "Completed",
@@ -274,7 +274,7 @@ fn parse_request_params(
         // 获取headers，如果有的话
         let mut headers = IndexMap::new();
         if let Ok(headers_obj) = get_attr_direct(data, "headers".to_string()) {
-            if let OnionObject::Tuple(headers_tuple) = &*headers_obj.weak() {
+            if let OnionObject::Tuple(headers_tuple) = headers_obj.weak() {
                 for element in headers_tuple.get_elements() {
                     if let OnionObject::Named(named) = element {
                         let key = named.get_key().to_string(&vec![]).unwrap_or_default();

@@ -433,7 +433,7 @@ impl OnionObject {
         match self {
             OnionObject::Mut(weak) => {
                 if let Some(strong) = weak.upgrade() {
-                    collected.push(strong.clone());
+                    collected.push(strong);
                 }
             }
             OnionObject::Tuple(tuple) => tuple.upgrade(collected),
@@ -453,6 +453,11 @@ impl OnionObject {
     #[inline(always)]
     pub fn stabilize(&self) -> OnionStaticObject {
         OnionStaticObject::new(self.clone())
+    }
+
+    #[inline(always)]
+    pub fn consume_and_stabilize(self) -> OnionStaticObject {
+        OnionStaticObject::new(self)
     }
 
     pub fn len(&self) -> Result<OnionStaticObject, RuntimeError> {
@@ -501,7 +506,7 @@ impl OnionObject {
     ///
     /// TODO: Add recursion depth limit after VM core is complete.
     pub fn clone_value(&self) -> Result<OnionStaticObject, RuntimeError> {
-        self.with_data(|obj| Ok(obj.reconstruct_container()?.stabilize()))
+        self.with_data(|obj| Ok(obj.reconstruct_container()?.consume_and_stabilize()))
     }
 
     /// Warning: This method can cause stack overflow if there are nested Mut references.
@@ -1251,8 +1256,8 @@ impl OnionObject {
 
     pub fn key_of(&self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| match obj {
-            OnionObject::Named(named) => Ok(named.get_key().clone().stabilize()),
-            OnionObject::Pair(pair) => Ok(pair.get_key().clone().stabilize()),
+            OnionObject::Named(named) => Ok(named.get_key().stabilize()),
+            OnionObject::Pair(pair) => Ok(pair.get_key().stabilize()),
             _ => Err(RuntimeError::InvalidOperation(
                 format!("key_of() not supported for {:?}", obj).into(),
             )),
@@ -1261,8 +1266,8 @@ impl OnionObject {
 
     pub fn value_of(&self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| match obj {
-            OnionObject::Named(named) => Ok(named.get_value().clone().stabilize()),
-            OnionObject::Pair(pair) => Ok(pair.get_value().clone().stabilize()),
+            OnionObject::Named(named) => Ok(named.get_value().stabilize()),
+            OnionObject::Pair(pair) => Ok(pair.get_value().stabilize()),
             OnionObject::Undefined(s) => Ok(OnionStaticObject::new(OnionObject::String(Arc::new(
                 s.as_ref()
                     .map(|o| o.as_ref().clone())
@@ -1297,7 +1302,7 @@ impl OnionObject {
 
     #[inline(always)]
     pub fn copy(&self) -> Result<OnionStaticObject, RuntimeError> {
-        self.with_data(|obj| Ok(obj.clone().stabilize()))
+        self.with_data(|obj| Ok(obj.stabilize()))
     }
 }
 
@@ -1362,7 +1367,8 @@ impl OnionStaticObject {
             | OnionObject::Bytes(_)
             | OnionObject::Null
             | OnionObject::Undefined(_)
-            | OnionObject::Range(_, _) => GCArcStorage::None,
+            | OnionObject::Range(_, _)
+            | OnionObject::InstructionPackage(_) => GCArcStorage::None,
             _ => {
                 let mut arcs = vec![];
                 obj.upgrade(&mut arcs);

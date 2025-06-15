@@ -58,11 +58,11 @@ impl OnionLambdaRunnableLauncher {
                                     OnionObject::LazySet(lazy_set) => {
                                         // If the parameter is a LazySet, we collect its container.
                                         collected_arguments
-                                            .push(lazy_set.get_container().clone().stabilize());
+                                            .push(lazy_set.get_container().stabilize());
                                     }
                                     _ => {
                                         // For other types, we just clone the parameter as is.
-                                        collected_arguments.push(param.clone().stabilize());
+                                        collected_arguments.push(param.stabilize());
                                     }
                                 }
                                 Ok(())
@@ -235,8 +235,6 @@ impl Runnable for OnionLambdaRunnableLauncher {
                                 return Err(RuntimeError::CustomValue(Box::new(
                                     constrain_result_pair
                                         .get_value()
-                                        
-                                        .clone()
                                         .stabilize(),
                                 )));
                             }
@@ -328,7 +326,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
                                                     OnionObject::Named(param_named_def) => {
                                                         if param_named_def.get_key().equals(key_to_match)? {
                                                             // 名称匹配成功！
-                                                            self.collected_arguments[param_idx] = arg_obj_view.clone().stabilize();
+                                                            self.collected_arguments[param_idx] = arg_obj_view.stabilize();
                                                             self.assigned[param_idx] = true;
                                                             return Ok(true);
                                                         }
@@ -340,17 +338,17 @@ impl Runnable for OnionLambdaRunnableLauncher {
                                                             if let OnionObject::Named(container_named) = container {
                                                                 if container_named.get_key().equals(key_to_match)? {
                                                                     // 名称匹配成功！
-                                                                    self.collected_arguments[param_idx] = arg_obj_view.clone().stabilize();
+                                                                    self.collected_arguments[param_idx] = arg_obj_view.stabilize();
                                                                     self.assigned[param_idx] = true;
 
                                                                     // 设置约束
                                                                     let argument_for_filter = OnionObject::Tuple(OnionTuple::new(vec![
                                                                         named_arg.get_value().clone(),
-                                                                    ]).into()).stabilize();
+                                                                    ]).into()).consume_and_stabilize();
 
                                                                     let runnable = Box::new(
                                                                         OnionLambdaRunnableLauncher::new_static(
-                                                                            &lazy_set.get_filter().clone().stabilize(),
+                                                                            &lazy_set.get_filter().stabilize(),
                                                                             &argument_for_filter,
                                                                             &|r| Ok(r),
                                                                         )?,
@@ -390,7 +388,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
                     // 如果遍历完所有 Lambda 定义的参数后，没有找到匹配的名称，
                     // 说明这是一个额外的命名参数。
                     self.collected_arguments
-                        .push(arg_obj_view.clone().stabilize());
+                        .push(arg_obj_view.stabilize());
                     self.assigned.push(true);
                 };
                                 Ok(())
@@ -463,7 +461,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
                         // This is a positional argument.
                         // We'll need its OnionStaticObject form for assignments or creating new objects.
                         // We clone the weak reference and stabilize it.
-                        let current_provided_arg_static = current_provided_arg_weak.clone().stabilize();
+                        let current_provided_arg_static = current_provided_arg_weak.stabilize();
 
                         // 尝试找到第一个尚未被赋值的 Lambda 定义参数槽。
                         if let Some(param_idx) = self.assigned.iter().position(|&assigned| !assigned) {
@@ -489,7 +487,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
                                                 let new_value_for_slot = OnionObject::Named(OnionNamed::new(
                                                     original_named_def.get_key().clone(),
                                                     current_provided_arg_weak.clone(), // Use weak ref here
-                                                ).into()).stabilize();
+                                                ).into()).consume_and_stabilize();
                                                 self.collected_arguments[param_idx] = new_value_for_slot;
                                                 self.assigned[param_idx] = true;
                                                 Ok(())
@@ -502,7 +500,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
                                                         let new_value_for_slot = OnionObject::Named(OnionNamed::new(
                                                             container_named_def.get_key().clone(),
                                                             current_provided_arg_weak.clone(), // Use weak ref here
-                                                        ).into()).stabilize();
+                                                        ).into()).consume_and_stabilize();
                                                         self.collected_arguments[param_idx] = new_value_for_slot;
                                                         self.assigned[param_idx] = true;
 
@@ -510,9 +508,9 @@ impl Runnable for OnionLambdaRunnableLauncher {
                                                         // The argument to the filter lambda is the provided argument itself.
                                                         let argument_for_filter = OnionObject::Tuple(OnionTuple::new(vec![
                                                             current_provided_arg_weak.clone(), // Use weak ref here
-                                                        ]).into()).stabilize();
+                                                        ]).into()).consume_and_stabilize();
                                                         let runnable = Box::new(OnionLambdaRunnableLauncher::new_static(
-                                                            &lazy_set_def.get_filter().clone().stabilize(),
+                                                            &lazy_set_def.get_filter().stabilize(),
                                                             &argument_for_filter,
                                                             &|r| Ok(r),
                                                         )?);

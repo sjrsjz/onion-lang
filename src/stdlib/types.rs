@@ -237,7 +237,7 @@ fn find(
         let key_borrowed = key.weak();
         match obj
             .weak()
-            .with_attribute(&*key_borrowed, &|obj| Ok(obj.clone().stabilize()))
+            .with_attribute(key_borrowed, &|obj| Ok(obj.stabilize()))
         {
             Ok(value) => Ok(value),
             Err(RuntimeError::InvalidOperation(ref err)) => {

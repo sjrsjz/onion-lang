@@ -36,7 +36,7 @@ pub fn build_named_dict(dict: IndexMap<String, OnionStaticObject>) -> OnionStati
 
 pub fn get_attr_direct(obj: &OnionObject, key: String) -> Result<OnionStaticObject, RuntimeError> {
     obj.with_attribute(&OnionObject::String(key.into()), &|obj| {
-        Ok(obj.clone().stabilize())
+        Ok(obj.stabilize())
     })
 }
 

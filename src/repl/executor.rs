@@ -44,7 +44,7 @@ impl ReplExecutor {
 
     /// 获取历史执行结果数量
     pub fn history_count(&self) -> usize {
-        if let OnionObject::Tuple(tuple) = &*self.out_tuple.weak() {
+        if let OnionObject::Tuple(tuple) = self.out_tuple.weak() {
             tuple.get_elements().len()
         } else {
             0
@@ -85,13 +85,13 @@ impl ReplExecutor {
     ) -> Result<(), String> {
         // 创建标准库对象
         let stdlib_pair = OnionNamed::new_static(
-            &OnionObject::String(Arc::new("stdlib".to_string())).stabilize(),
+            &OnionObject::String(Arc::new("stdlib".to_string())).consume_and_stabilize(),
             &crate::stdlib::build_module(),
         );
 
         // 创建Out参数对象 - 直接使用当前的out_tuple
         let out_pair = OnionNamed::new_static(
-            &OnionObject::String(Arc::new("Out".to_string())).stabilize(),
+            &OnionObject::String(Arc::new("Out".to_string())).consume_and_stabilize(),
             &self.out_tuple.clone(),
         );
 
@@ -104,7 +104,7 @@ impl ReplExecutor {
             "__main__".to_string(),
         );
 
-        // let OnionObject::Lambda(lambda_ref) = &*lambda
+        // let OnionObject::Lambda(lambda_ref) = lambda
         //     .weak()
         //     .try_borrow()
         //     .map_err(|e| format!("Failed to borrow Lambda definition: {:?}", e))?
@@ -118,7 +118,7 @@ impl ReplExecutor {
         // let assigned_argument: OnionStaticObject = lambda_ref
         //     .with_parameter(|param| {
         //         unwrap_object!(param, OnionObject::Tuple)?.clone_and_named_assignment(
-        //             unwrap_object!(&*args.weak().try_borrow()?, OnionObject::Tuple)?,
+        //             unwrap_object!(args.weak().try_borrow()?, OnionObject::Tuple)?,
         //         )
         //     })
         //     .map_err(|e| format!("Failed to assign arguments to Lambda: {:?}", e))?;
@@ -169,7 +169,7 @@ impl ReplExecutor {
                 }
                 StepResult::Return(ref result) => {
                     let result_borrowed = result.weak();
-                    let result = unwrap_object!(&*result_borrowed, OnionObject::Pair)
+                    let result = unwrap_object!(result_borrowed, OnionObject::Pair)
                         .map_err(|e| format!("Failed to unwrap result: {:?}", e))?;
                     let key = result.get_key();
                     let success = *unwrap_object!(key, OnionObject::Boolean)
@@ -220,7 +220,8 @@ impl ReplExecutor {
             }
         };
 
-        self.out_tuple = OnionObject::Tuple(OnionTuple::new(new_elements).into()).stabilize();
+        self.out_tuple =
+            OnionObject::Tuple(OnionTuple::new(new_elements).into()).consume_and_stabilize();
     }
 }
 

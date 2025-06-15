@@ -194,7 +194,7 @@ impl OnionLambdaRunnable {
             })?;
 
         new_context
-            .let_variable(index_self, self_object.clone().stabilize())
+            .let_variable(index_self, self_object.stabilize())
             .map_err(|e| {
                 RuntimeError::InvalidOperation(
                     format!("Failed to initialize 'self' variable: {}", e).into(),
@@ -221,7 +221,7 @@ impl OnionLambdaRunnable {
                                     match pool.iter().position(|s| s.eq(key_str.as_ref())) {
                                         Some(index) => new_context.let_variable(
                                             index,
-                                            named.get_value().clone().stabilize(),
+                                            named.get_value().stabilize(),
                                         ),
                                         None => {
                                             // do nothing because the runnable does not need this variable

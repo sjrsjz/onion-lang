@@ -43,7 +43,7 @@ pub fn load_int(
     if let OpcodeArgument::Int64(value) = opcode.operand1 {
         unwrap_step_result!(runnable
             .context
-            .push_object(OnionObject::Integer(value).stabilize()));
+            .push_object(OnionObject::Integer(value).consume_and_stabilize()));
         StepResult::Continue
     } else {
         StepResult::Error(RuntimeError::DetailedError(
@@ -61,7 +61,9 @@ pub fn load_null(
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObjectCell>,
 ) -> StepResult {
-    unwrap_step_result!(runnable.context.push_object(OnionObject::Null.stabilize()));
+    unwrap_step_result!(runnable
+        .context
+        .push_object(OnionObject::Null.consume_and_stabilize()));
     StepResult::Continue
 }
 
@@ -72,7 +74,7 @@ pub fn load_undefined(
 ) -> StepResult {
     unwrap_step_result!(runnable
         .context
-        .push_object(OnionObject::Undefined(None).stabilize()));
+        .push_object(OnionObject::Undefined(None).consume_and_stabilize()));
     StepResult::Continue
 }
 
@@ -84,7 +86,7 @@ pub fn load_float(
     if let OpcodeArgument::Float64(value) = opcode.operand1 {
         unwrap_step_result!(runnable
             .context
-            .push_object(OnionObject::Float(value).stabilize()));
+            .push_object(OnionObject::Float(value).consume_and_stabilize()));
         StepResult::Continue
     } else {
         StepResult::Error(RuntimeError::DetailedError(
@@ -106,7 +108,7 @@ pub fn load_string(
         let string = OnionObject::String(Arc::new(
             runnable.instruction.get_string_pool()[value as usize].clone(),
         ))
-        .stabilize();
+        .consume_and_stabilize();
         unwrap_step_result!(runnable.context.push_object(string));
         StepResult::Continue
     } else {
@@ -129,7 +131,7 @@ pub fn load_bytes(
         let bytes = OnionObject::Bytes(Arc::new(
             runnable.instruction.get_bytes_pool()[value as usize].clone(),
         ))
-        .stabilize();
+        .consume_and_stabilize();
         unwrap_step_result!(runnable.context.push_object(bytes));
         StepResult::Continue
     } else {
@@ -151,7 +153,7 @@ pub fn load_bool(
     if let OpcodeArgument::Int32(value) = opcode.operand1 {
         unwrap_step_result!(runnable
             .context
-            .push_object(OnionObject::Boolean(value != 0).stabilize()));
+            .push_object(OnionObject::Boolean(value != 0).consume_and_stabilize()));
         StepResult::Continue
     } else {
         StepResult::Error(RuntimeError::DetailedError(
@@ -256,7 +258,7 @@ pub fn build_range(
                 |e| RuntimeError::DetailedError(format!("Failed to build range: {}", e).into())
             )),
         )
-        .stabilize();
+        .consume_and_stabilize();
 
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
     Context::push_to_stack(stack, range);
@@ -339,10 +341,9 @@ pub fn load_lambda(
         .context
         .get_object_rev(if should_capture { 2 } else { 1 }))
     .weak()
-    .clone()
     .stabilize();
 
-    let OnionObject::Tuple(_) = &*default_parameters.weak() else {
+    let OnionObject::Tuple(_) = default_parameters.weak() else {
         return StepResult::Error(RuntimeError::DetailedError(
             format!(
                 "Lambda default parameters must be a Tuple, but found {}",
@@ -354,9 +355,8 @@ pub fn load_lambda(
 
     let instruction_package = unwrap_step_result!(runnable.context.get_object_rev(0))
         .weak()
-        .clone()
         .stabilize();
-    let OnionObject::InstructionPackage(package) = &*instruction_package.weak() else {
+    let OnionObject::InstructionPackage(package) = instruction_package.weak() else {
         return StepResult::Error(RuntimeError::DetailedError(
             format!(
                 "Lambda instruction must be an InstructionPackage, but found {}",
@@ -466,7 +466,7 @@ pub fn set_var(
 ) -> StepResult {
     let right = unwrap_step_result!(runnable.context.get_object_rev(0));
     let left = unwrap_step_result!(runnable.context.get_object_rev(1));
-    unwrap_step_result!(left.weak().assign(&*right.weak()));
+    unwrap_step_result!(left.weak().assign(right.weak()));
     // 保留左侧对象的引用，由于其是不可变的可变对象的引用，assign不会导致GC错误回收
     unwrap_step_result!(runnable.context.discard_objects(1));
     StepResult::Continue
@@ -484,7 +484,7 @@ pub fn get_attr(
             match obj.weak().with_attribute(attr, &|attr| Ok(attr.clone())) {
                 Ok(ref value) => match value {
                     OnionObject::Lambda(ref lambda) => lambda.clone_and_replace_self_object(obj),
-                    _ => value.clone().stabilize(),
+                    _ => value.stabilize(),
                 },
                 Err(e) => {
                     return Err(RuntimeError::InvalidOperation(
@@ -515,7 +515,7 @@ pub fn index_of(
 
     // Extract the integer index value
     let index_value = unwrap_step_result!(index_obj.weak().with_data(|index_ref| {
-        if let OnionObject::Integer(index) = &*index_ref {
+        if let OnionObject::Integer(index) = index_ref {
             Ok(*index)
         } else {
             Err(RuntimeError::DetailedError(
@@ -569,7 +569,10 @@ pub fn type_of(
     let stack = unwrap_step_result!(runnable.context.get_current_stack_mut());
     let obj = unwrap_step_result!(Context::get_object_from_stack(stack, 0));
     let type_name = unwrap_step_result!(obj.weak().type_of());
-    Context::replace_last_object(stack, OnionObject::String(Arc::new(type_name)).stabilize());
+    Context::replace_last_object(
+        stack,
+        OnionObject::String(Arc::new(type_name)).consume_and_stabilize(),
+    );
     StepResult::Continue
 }
 
@@ -594,11 +597,11 @@ pub fn check_is_same_object(
 ) -> StepResult {
     let obj1 = unwrap_step_result!(runnable.context.get_object_rev(0));
     let obj2 = unwrap_step_result!(runnable.context.get_object_rev(1));
-    let is_same = unwrap_step_result!(obj1.weak().is_same(&*obj2.weak()));
+    let is_same = unwrap_step_result!(obj1.weak().is_same(obj2.weak()));
     unwrap_step_result!(runnable.context.discard_objects(2));
     unwrap_step_result!(runnable
         .context
-        .push_object(OnionObject::Boolean(is_same).stabilize()));
+        .push_object(OnionObject::Boolean(is_same).consume_and_stabilize()));
     StepResult::Continue
 }
 
@@ -611,7 +614,7 @@ pub fn binary_add(
     let stack = unwrap_step_result!(runnable.context.get_current_stack_mut());
     let right = unwrap_step_result!(Context::get_object_from_stack(stack, 0));
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
-    let result = unwrap_step_result!(left.weak().binary_add(&*right.weak()));
+    let result = unwrap_step_result!(left.weak().binary_add(right.weak()));
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
     Context::push_to_stack(stack, result);
     StepResult::Continue
@@ -626,7 +629,7 @@ pub fn binary_subtract(
     let stack = unwrap_step_result!(runnable.context.get_current_stack_mut());
     let right = unwrap_step_result!(Context::get_object_from_stack(stack, 0));
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
-    let result = unwrap_step_result!(left.weak().binary_sub(&*right.weak()));
+    let result = unwrap_step_result!(left.weak().binary_sub(right.weak()));
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
     Context::push_to_stack(stack, result);
     StepResult::Continue
@@ -641,7 +644,7 @@ pub fn binary_multiply(
     let stack = unwrap_step_result!(runnable.context.get_current_stack_mut());
     let right = unwrap_step_result!(Context::get_object_from_stack(stack, 0));
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
-    let result = unwrap_step_result!(left.weak().binary_mul(&*right.weak()));
+    let result = unwrap_step_result!(left.weak().binary_mul(right.weak()));
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
     Context::push_to_stack(stack, result);
     StepResult::Continue
@@ -656,7 +659,7 @@ pub fn binary_divide(
     let stack = unwrap_step_result!(runnable.context.get_current_stack_mut());
     let right = unwrap_step_result!(Context::get_object_from_stack(stack, 0));
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
-    let result = unwrap_step_result!(left.weak().binary_div(&*right.weak()));
+    let result = unwrap_step_result!(left.weak().binary_div(right.weak()));
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
     Context::push_to_stack(stack, result);
     StepResult::Continue
@@ -671,7 +674,7 @@ pub fn binary_modulus(
     let stack = unwrap_step_result!(runnable.context.get_current_stack_mut());
     let right = unwrap_step_result!(Context::get_object_from_stack(stack, 0));
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
-    let result = unwrap_step_result!(left.weak().binary_mod(&*right.weak()));
+    let result = unwrap_step_result!(left.weak().binary_mod(right.weak()));
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
     Context::push_to_stack(stack, result);
     StepResult::Continue
@@ -686,7 +689,7 @@ pub fn binary_power(
     let stack = unwrap_step_result!(runnable.context.get_current_stack_mut());
     let right = unwrap_step_result!(Context::get_object_from_stack(stack, 0));
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
-    let result = unwrap_step_result!(left.weak().binary_pow(&*right.weak()));
+    let result = unwrap_step_result!(left.weak().binary_pow(right.weak()));
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
     Context::push_to_stack(stack, result);
     StepResult::Continue
@@ -701,7 +704,7 @@ pub fn binary_bitwise_or(
     let stack = unwrap_step_result!(runnable.context.get_current_stack_mut());
     let right = unwrap_step_result!(Context::get_object_from_stack(stack, 0));
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
-    let result = unwrap_step_result!(left.weak().binary_or(&*right.weak()));
+    let result = unwrap_step_result!(left.weak().binary_or(right.weak()));
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
     Context::push_to_stack(stack, result);
     StepResult::Continue
@@ -716,7 +719,7 @@ pub fn binary_bitwise_and(
     let stack = unwrap_step_result!(runnable.context.get_current_stack_mut());
     let right = unwrap_step_result!(Context::get_object_from_stack(stack, 0));
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
-    let result = unwrap_step_result!(left.weak().binary_and(&*right.weak()));
+    let result = unwrap_step_result!(left.weak().binary_and(right.weak()));
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
     Context::push_to_stack(stack, result);
     StepResult::Continue
@@ -731,7 +734,7 @@ pub fn binary_bitwise_xor(
     let stack = unwrap_step_result!(runnable.context.get_current_stack_mut());
     let right = unwrap_step_result!(Context::get_object_from_stack(stack, 0));
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
-    let result = unwrap_step_result!(left.weak().binary_xor(&*right.weak()));
+    let result = unwrap_step_result!(left.weak().binary_xor(right.weak()));
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
     Context::push_to_stack(stack, result);
     StepResult::Continue
@@ -746,7 +749,7 @@ pub fn binary_shift_left(
     let stack = unwrap_step_result!(runnable.context.get_current_stack_mut());
     let right = unwrap_step_result!(Context::get_object_from_stack(stack, 0));
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
-    let result = unwrap_step_result!(left.weak().binary_shl(&*right.weak()));
+    let result = unwrap_step_result!(left.weak().binary_shl(right.weak()));
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
     Context::push_to_stack(stack, result);
     StepResult::Continue
@@ -761,7 +764,7 @@ pub fn binary_shift_right(
     let stack = unwrap_step_result!(runnable.context.get_current_stack_mut());
     let right = unwrap_step_result!(Context::get_object_from_stack(stack, 0));
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
-    let result = unwrap_step_result!(left.weak().binary_shr(&*right.weak()));
+    let result = unwrap_step_result!(left.weak().binary_shr(right.weak()));
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
     Context::push_to_stack(stack, result);
     StepResult::Continue
@@ -776,9 +779,9 @@ pub fn binary_equal(
     let stack = unwrap_step_result!(runnable.context.get_current_stack_mut());
     let right = unwrap_step_result!(Context::get_object_from_stack(stack, 0));
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
-    let result = unwrap_step_result!(left.weak().binary_eq(&*right.weak()));
+    let result = unwrap_step_result!(left.weak().binary_eq(right.weak()));
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
-    Context::push_to_stack(stack, OnionObject::Boolean(result).stabilize());
+    Context::push_to_stack(stack, OnionObject::Boolean(result).consume_and_stabilize());
     StepResult::Continue
 }
 
@@ -791,9 +794,9 @@ pub fn binary_not_equal(
     let stack = unwrap_step_result!(runnable.context.get_current_stack_mut());
     let right = unwrap_step_result!(Context::get_object_from_stack(stack, 0));
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
-    let result = unwrap_step_result!(left.weak().binary_eq(&*right.weak()));
+    let result = unwrap_step_result!(left.weak().binary_eq(right.weak()));
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
-    Context::push_to_stack(stack, OnionObject::Boolean(!result).stabilize());
+    Context::push_to_stack(stack, OnionObject::Boolean(!result).consume_and_stabilize());
     StepResult::Continue
 }
 
@@ -806,9 +809,9 @@ pub fn binary_greater(
     let stack = unwrap_step_result!(runnable.context.get_current_stack_mut());
     let right = unwrap_step_result!(Context::get_object_from_stack(stack, 0));
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
-    let result = unwrap_step_result!(left.weak().binary_gt(&*right.weak()));
+    let result = unwrap_step_result!(left.weak().binary_gt(right.weak()));
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
-    Context::push_to_stack(stack, OnionObject::Boolean(result).stabilize());
+    Context::push_to_stack(stack, OnionObject::Boolean(result).consume_and_stabilize());
     StepResult::Continue
 }
 
@@ -821,9 +824,9 @@ pub fn binary_greater_equal(
     let stack = unwrap_step_result!(runnable.context.get_current_stack_mut());
     let right = unwrap_step_result!(Context::get_object_from_stack(stack, 0));
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
-    let result = unwrap_step_result!(left.weak().binary_lt(&*right.weak()));
+    let result = unwrap_step_result!(left.weak().binary_lt(right.weak()));
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
-    Context::push_to_stack(stack, OnionObject::Boolean(!result).stabilize());
+    Context::push_to_stack(stack, OnionObject::Boolean(!result).consume_and_stabilize());
     StepResult::Continue
 }
 
@@ -836,9 +839,9 @@ pub fn binary_less(
     let stack = unwrap_step_result!(runnable.context.get_current_stack_mut());
     let right = unwrap_step_result!(Context::get_object_from_stack(stack, 0));
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
-    let result = unwrap_step_result!(left.weak().binary_lt(&*right.weak()));
+    let result = unwrap_step_result!(left.weak().binary_lt(right.weak()));
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
-    Context::push_to_stack(stack, OnionObject::Boolean(result).stabilize());
+    Context::push_to_stack(stack, OnionObject::Boolean(result).consume_and_stabilize());
     StepResult::Continue
 }
 
@@ -851,9 +854,9 @@ pub fn binary_less_equal(
     let stack = unwrap_step_result!(runnable.context.get_current_stack_mut());
     let right = unwrap_step_result!(Context::get_object_from_stack(stack, 0));
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
-    let result = unwrap_step_result!(left.weak().binary_gt(&*right.weak()));
+    let result = unwrap_step_result!(left.weak().binary_gt(right.weak()));
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
-    Context::push_to_stack(stack, OnionObject::Boolean(!result).stabilize());
+    Context::push_to_stack(stack, OnionObject::Boolean(!result).consume_and_stabilize());
     StepResult::Continue
 }
 
@@ -1015,7 +1018,7 @@ pub fn is_in(
             .weak()
             .with_data(|container_ref| match container_ref {
                 OnionObject::LazySet(lazy_set) =>
-                    lazy_set.get_container().contains(&*element.weak()),
+                    lazy_set.get_container().contains(element.weak()),
                 _ => {
                     return Err(RuntimeError::DetailedError(
                         format!("Container is not a LazySet: {}", container).into(),
@@ -1028,7 +1031,7 @@ pub fn is_in(
         unwrap_step_result!(runnable.context.discard_objects(2));
         unwrap_step_result!(runnable
             .context
-            .push_object(OnionObject::Boolean(false).stabilize()));
+            .push_object(OnionObject::Boolean(false).consume_and_stabilize()));
         return StepResult::Continue;
     }
 
@@ -1039,11 +1042,11 @@ pub fn is_in(
                 let filter = lazy_set.get_filter();
                 let OnionObject::Lambda(_) = filter else {
                     // 过滤器不是 Lambda 对象，认定为惰性求值结果为 filter
-                    let filter = filter.clone().stabilize();
+                    let filter = filter.stabilize();
                     return Ok((None, filter));
                 };
                 let args = OnionTuple::new_static(vec![element]);
-                let filter = filter.clone().stabilize();
+                let filter = filter.stabilize();
                 return Ok((Some(args), filter));
             }
             _ => {
@@ -1119,7 +1122,8 @@ pub fn fork_instruction(
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObjectCell>,
 ) -> StepResult {
-    let forked = OnionObject::InstructionPackage(runnable.instruction.clone()).stabilize();
+    let forked =
+        OnionObject::InstructionPackage(runnable.instruction.clone()).consume_and_stabilize();
     unwrap_step_result!(runnable.context.push_object(forked));
     StepResult::Continue
 }
@@ -1154,7 +1158,7 @@ pub fn import(
     unwrap_step_result!(runnable.context.discard_objects(1));
     unwrap_step_result!(runnable
         .context
-        .push_object(OnionObject::InstructionPackage(Arc::new(package)).stabilize()));
+        .push_object(OnionObject::InstructionPackage(Arc::new(package)).consume_and_stabilize()));
     StepResult::Continue
 }
 

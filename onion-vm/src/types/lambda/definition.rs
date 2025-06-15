@@ -89,7 +89,7 @@ impl OnionLambdaDefinition {
             }
             .into(),
         )
-        .stabilize()
+        .consume_and_stabilize()
     }
 
     pub fn create_runnable(
@@ -159,7 +159,7 @@ impl OnionLambdaDefinition {
             self_object: new_self_object.weak().clone().into(),
             signature: self.signature.clone(),
         };
-        OnionObject::Lambda(new_definition.into()).stabilize()
+        OnionObject::Lambda(new_definition.into()).consume_and_stabilize()
     }
 
     pub fn upgrade(&self, collected: &mut Vec<GCArc<OnionObjectCell>>) {

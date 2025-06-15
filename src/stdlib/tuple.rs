@@ -65,7 +65,7 @@ fn insert(
         let value = get_attr_direct(data, "value".to_string())?;
         tuple.weak().with_data(|tuple| match tuple {
             OnionObject::Tuple(tuple) => {
-                if let OnionObject::Integer(index) = &*index.weak() {
+                if let OnionObject::Integer(index) = index.weak() {
                     let mut new_tuple = tuple.get_elements().clone();
                     if (*index as usize) <= new_tuple.len() {
                         new_tuple.insert(*index as usize, value.weak().clone());
@@ -97,7 +97,7 @@ fn remove(
         let index = get_attr_direct(data, "index".to_string())?;
         tuple.weak().with_data(|tuple| match tuple {
             OnionObject::Tuple(tuple) => {
-                if let OnionObject::Integer(index) = &*index.weak() {
+                if let OnionObject::Integer(index) = index.weak() {
                     let mut new_tuple = tuple.get_elements().clone();
                     if (*index as usize) < new_tuple.len() {
                         new_tuple.remove(*index as usize);

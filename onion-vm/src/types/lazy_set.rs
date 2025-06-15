@@ -135,14 +135,14 @@ impl Runnable for OnionLazySetCollector {
     ) -> Result<(), RuntimeError> {
         match step_result {
             StepResult::Return(result) => {
-                match &*result.weak() {
+                match result.weak() {
                     OnionObject::Boolean(true) => {
-                        match &*self.container.weak() {
+                        match self.container.weak() {
                             OnionObject::Tuple(tuple) => {
                                 // 如果是布尔值 true，表示需要收集当前元素
                                 if let Some(item) = tuple.get_elements().get(self.current_index - 1)
                                 {
-                                    self.collected.push(item.clone().stabilize());
+                                    self.collected.push(item.stabilize());
                                     Ok(())
                                 } else {
                                     // 所有元素都处理完了
@@ -183,7 +183,7 @@ impl Runnable for OnionLazySetCollector {
                             .weak()
                             .with_data(|filter: &OnionObject| match filter {
                                 OnionObject::Lambda(_) => {
-                                    // let OnionObject::Tuple(params) = &*func.parameter.try_borrow()?
+                                    // let OnionObject::Tuple(params) = func.parameter.try_borrow()?
                                     // else {
                                     //     return Err(RuntimeError::InvalidType(format!(
                                     //         "Filter's parameter must be a tuple, got {:?}",
@@ -198,7 +198,7 @@ impl Runnable for OnionLazySetCollector {
                                     let argument = OnionObject::Tuple(
                                         OnionTuple::new(vec![item_clone]).into(),
                                     )
-                                    .stabilize();
+                                    .consume_and_stabilize();
                                     let runnable =
                                         Box::new(OnionLambdaRunnableLauncher::new_static(
                                             &self.filter,
@@ -209,7 +209,7 @@ impl Runnable for OnionLazySetCollector {
                                 }
                                 OnionObject::Boolean(false) => Ok(StepResult::Continue),
                                 _ => {
-                                    self.collected.push(item_clone.stabilize());
+                                    self.collected.push(item_clone.consume_and_stabilize());
                                     Ok(StepResult::Continue)
                                 }
                             })

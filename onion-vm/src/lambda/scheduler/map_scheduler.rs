@@ -54,7 +54,7 @@ impl Runnable for Mapping {
                         let element_clone = element.clone();
                         self.mapper.weak().with_data(|mapper_obj| match mapper_obj {
                             OnionObject::Lambda(_) => {
-                                // let OnionObject::Tuple(params) = &*lambda.parameter.try_borrow()?
+                                // let OnionObject::Tuple(params) = lambda.parameter.try_borrow()?
                                 // else {
                                 //     return Err(RuntimeError::InvalidType(format!(
                                 //         "Map's parameter must be a tuple, got {:?}",

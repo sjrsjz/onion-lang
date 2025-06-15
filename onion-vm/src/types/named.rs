@@ -44,7 +44,7 @@ impl OnionNamed {
             }
             .into(),
         )
-        .stabilize()
+        .consume_and_stabilize()
     }
 
     #[inline(always)]

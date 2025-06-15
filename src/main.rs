@@ -344,7 +344,7 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
     }
     // Create standard library object
     let stdlib_pair = OnionNamed::new_static(
-        &OnionObject::String(Arc::new("stdlib".to_string())).stabilize(),
+        &OnionObject::String(Arc::new("stdlib".to_string())).consume_and_stabilize(),
         &stdlib::build_module()
             .mutablize(&mut gc)
             .map_err(|e| format!("Failed to create standard library object: {:?}", e))?,
@@ -359,7 +359,7 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
         "__main__".to_string(),
     );
 
-    // let OnionObject::Lambda(lambda_ref) = &*lambda
+    // let OnionObject::Lambda(lambda_ref) = lambda
     //     .weak()
     //     .try_borrow()
     //     .map_err(|e| format!("Failed to borrow Lambda definition: {:?}", e))?
@@ -373,7 +373,7 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
     // let assigned_argument: OnionStaticObject = lambda_ref
     //     .with_parameter(|param| {
     //         unwrap_object!(param, OnionObject::Tuple)?.clone_and_named_assignment(
-    //             unwrap_object!(&*args.weak().try_borrow()?, OnionObject::Tuple)?,
+    //             unwrap_object!(args.weak().try_borrow()?, OnionObject::Tuple)?,
     //         )
     //     })
     //     .map_err(|e| format!("Failed to assign arguments to Lambda: {:?}", e))?;
@@ -408,7 +408,7 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
             }
             StepResult::Return(ref result) => {
                 let result_borrowed = result.weak();
-                let result = unwrap_object!(&*result_borrowed, OnionObject::Pair)
+                let result = unwrap_object!(result_borrowed, OnionObject::Pair)
                     .map_err(|e| format!("Failed to unwrap result: {:?}", e))?;
                 let success = *unwrap_object!(result.get_key(), OnionObject::Boolean)
                     .map_err(|e| format!("Failed to get success key: {:?}", e))?;
