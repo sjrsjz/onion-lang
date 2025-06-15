@@ -65,8 +65,8 @@ impl OnionTuple {
         ))
     }
 
-    pub fn new_static_no_ref(elements: Vec<OnionStaticObject>) -> OnionStaticObject {
-        OnionStaticObject::new(OnionObject::Tuple(
+    pub fn new_static_no_ref(elements: &Vec<OnionStaticObject>) -> OnionStaticObject {
+        OnionObject::Tuple(
             OnionTuple {
                 elements: elements
                     .into_iter()
@@ -74,7 +74,8 @@ impl OnionTuple {
                     .collect::<Vec<_>>(),
             }
             .into(),
-        ))
+        )
+        .consume_and_stabilize()
     }
 
     #[inline(always)]
@@ -145,9 +146,12 @@ impl OnionTuple {
             OnionObject::Tuple(other_tuple) => {
                 let mut new_elements = self.elements.clone();
                 new_elements.extend(other_tuple.elements.clone());
-                Ok(OnionStaticObject::new(OnionObject::Tuple(OnionTuple {
-                    elements: new_elements,
-                }.into())))
+                Ok(OnionStaticObject::new(OnionObject::Tuple(
+                    OnionTuple {
+                        elements: new_elements,
+                    }
+                    .into(),
+                )))
             }
             _ => Ok(OnionStaticObject::new(OnionObject::Undefined(Some(
                 format!("Cannot add tuple with {:?}", other).into(),
@@ -190,8 +194,11 @@ impl OnionTuple {
         for element in &self.elements {
             cloned_elements.push(element.clone());
         }
-        Ok(OnionObject::Tuple(OnionTuple {
-            elements: cloned_elements,
-        }.into()))
+        Ok(OnionObject::Tuple(
+            OnionTuple {
+                elements: cloned_elements,
+            }
+            .into(),
+        ))
     }
 }

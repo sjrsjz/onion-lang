@@ -135,7 +135,7 @@ fn split(
                             .split(delim.as_ref())
                             .map(|part| OnionObject::String(part.to_string().into()).stabilize())
                             .collect();
-                        Ok(OnionTuple::new_static_no_ref(parts))
+                        Ok(OnionTuple::new_static_no_ref(&parts))
                     }
                     _ => Err(RuntimeError::InvalidOperation(
                         "split requires string arguments".to_string().into(),

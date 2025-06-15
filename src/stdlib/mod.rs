@@ -31,13 +31,11 @@ pub fn build_named_dict(dict: IndexMap<String, OnionStaticObject>) -> OnionStati
             &value,
         ));
     }
-    OnionTuple::new_static_no_ref(pairs)
+    OnionTuple::new_static_no_ref(&pairs)
 }
 
 pub fn get_attr_direct(obj: &OnionObject, key: String) -> Result<OnionStaticObject, RuntimeError> {
-    obj.with_attribute(&OnionObject::String(key.into()), &|obj| {
-        Ok(obj.stabilize())
-    })
+    obj.with_attribute(&OnionObject::String(key.into()), &|obj| Ok(obj.stabilize()))
 }
 
 pub struct NativeFunctionGenerator<F>
