@@ -396,6 +396,9 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
             StepResult::Continue => {
                 // Continue to next step
             }
+            StepResult::SetSelfObject(_) => {
+                // Set self object, no action needed here
+            }
             StepResult::Error(ref error) => {
                 return Err(format!("Execution error: {}", error));
             }

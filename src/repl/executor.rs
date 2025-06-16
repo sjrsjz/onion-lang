@@ -151,6 +151,10 @@ impl ReplExecutor {
                 StepResult::Continue => {
                     // 继续下一步
                 }
+                StepResult::SetSelfObject(_) => {
+                    // 设置self对象，通常在Lambda中使用
+                    // 这里不需要处理，因为REPL不涉及self对象
+                }
                 StepResult::Error(ref error) => {
                     // 处理错误
                     if self.interrupted.load(Ordering::SeqCst) {

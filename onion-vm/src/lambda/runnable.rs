@@ -35,6 +35,7 @@ pub enum StepResult {
     NewRunnable(Box<dyn Runnable>),
     ReplaceRunnable(Box<dyn Runnable>),
     Return(Box<OnionStaticObject>),
+    SetSelfObject(Box<OnionStaticObject>),
     Error(RuntimeError),
 }
 

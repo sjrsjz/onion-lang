@@ -182,6 +182,14 @@ impl Runnable for OnionLambdaRunnableLauncher {
                 // Propagate any errors received from the runnable.
                 Err(e.clone())
             }
+            StepResult::SetSelfObject(_) => {
+                // This should not happen, as this launcher is not designed to set self objects.
+                Err(RuntimeError::DetailedError(
+                    "OnionLambdaRunnableLauncher cannot set self objects"
+                        .to_string()
+                        .into(),
+                ))
+            }
         }
     }
     /// 执行 Lambda 启动器的下一步操作。
@@ -280,6 +288,14 @@ impl Runnable for OnionLambdaRunnableLauncher {
 
                     // 如果约束成功并通过 (上面返回 Ok(()) 但没有实际 return)，则会继续到下面的 phase 处理。
                     // 如果约束失败或 panic (上面返回 Err)，则整个 step 会在这里结束。
+                }
+                StepResult::SetSelfObject(_) => {
+                    // 这个启动器不支持设置 self 对象，因此返回错误。
+                    return StepResult::Error(RuntimeError::DetailedError(
+                        "OnionLambdaRunnableLauncher does not support setting self object"
+                            .to_string()
+                            .into(),
+                    ));
                 }
             }
         } // 结束 `if let Some(constrain_runnable)`

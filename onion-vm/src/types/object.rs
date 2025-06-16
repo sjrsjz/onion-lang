@@ -213,6 +213,7 @@ pub enum OnionObject {
     LazySet(Arc<OnionLazySet>),
     Lambda(Arc<OnionLambdaDefinition>),
 
+    Custom(Arc<dyn OnionObjectExt>),
     // mutable? types, DO NOT USE THIS TYPE DIRECTLY, use `mutablize` instead
     Mut(GCArcWeak<OnionObjectCell>),
 }
@@ -289,10 +290,11 @@ pub trait OnionObjectExt: GCTraceable<OnionObjectCell> + Debug {
         ))
     }
     #[allow(unused_variables)]
-    fn with_attribute<F, R>(&self, key: &OnionObject, f: &F) -> Result<R, RuntimeError>
-    where
-        F: Fn(&OnionObject) -> Result<R, RuntimeError>,
-    {
+    fn with_attribute(
+        &self,
+        key: &OnionObject,
+        f: &mut dyn FnMut(&OnionObject) -> Result<(), RuntimeError>,
+    ) -> Result<(), RuntimeError> {
         Err(RuntimeError::InvalidOperation(
             format!(
                 "with_attribute() not supported for {:?} with key {:?}",
@@ -423,6 +425,7 @@ impl GCTraceable<OnionObjectCell> for OnionObject {
             OnionObject::Named(named) => named.collect(queue),
             OnionObject::LazySet(lazy_set) => lazy_set.collect(queue),
             OnionObject::Lambda(lambda) => lambda.collect(queue),
+            OnionObject::Custom(custom) => custom.collect(queue),
 
             _ => {}
         }
@@ -441,6 +444,7 @@ impl OnionObject {
             OnionObject::Named(named) => named.upgrade(collected),
             OnionObject::LazySet(lazy_set) => lazy_set.upgrade(collected),
             OnionObject::Lambda(lambda) => lambda.upgrade(collected),
+            OnionObject::Custom(custom) => custom.upgrade(collected),
             _ => {}
         }
     }
@@ -459,7 +463,6 @@ impl OnionObject {
     pub fn consume_and_stabilize(self) -> OnionStaticObject {
         OnionStaticObject::new(self)
     }
-
     pub fn len(&self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| match obj {
             OnionObject::Tuple(tuple) => tuple.len(),
@@ -472,6 +475,7 @@ impl OnionObject {
             OnionObject::Range(start, end) => Ok(OnionStaticObject::new(OnionObject::Integer(
                 (end - start) as i64,
             ))),
+            OnionObject::Custom(custom) => custom.len(),
             _ => Err(RuntimeError::InvalidOperation(
                 format!("len() not supported for {:?}", self).into(),
             )),
@@ -495,6 +499,7 @@ impl OnionObject {
                 (OnionObject::Range(start, end), OnionObject::Range(other_start, other_end)) => {
                     Ok(*other_start >= *start && *other_end <= *end)
                 }
+                (OnionObject::Custom(custom), _) => custom.contains(other_obj),
                 _ => Err(RuntimeError::InvalidOperation(
                     format!("contains() not supported for {:?}", obj).into(),
                 )),
@@ -585,7 +590,6 @@ impl OnionObject {
             None => Err(RuntimeError::BrokenReference),
         }
     }
-
     /// 重建容器对象，主要用于 mutable_obj1 = obj2 这种赋值
     pub fn reconstruct_container(&self) -> Result<OnionObject, RuntimeError> {
         match self {
@@ -594,11 +598,11 @@ impl OnionObject {
             OnionObject::Named(named) => named.reconstruct_container(),
             OnionObject::LazySet(lazy_set) => lazy_set.reconstruct_container(),
             OnionObject::Lambda(lambda) => lambda.reconstruct_container(),
+            OnionObject::Custom(custom) => custom.reconstruct_container(),
             _ => Ok(self.clone()), // 对于其他类型，直接克隆（由于Mut自身就是不可变地址，因此直接
                                    // 克隆即可，并且只有容器才可能造成循环）
         }
     }
-
     pub fn to_integer(&self) -> Result<i64, RuntimeError> {
         self.with_data(|obj| match obj {
             OnionObject::Integer(i) => Ok(*i),
@@ -607,12 +611,12 @@ impl OnionObject {
                 .parse::<i64>()
                 .map_err(|e| RuntimeError::InvalidType(e.to_string().into())),
             OnionObject::Boolean(b) => Ok(if *b { 1 } else { 0 }),
+            OnionObject::Custom(custom) => custom.to_integer(),
             _ => Err(RuntimeError::InvalidType(
                 format!("Cannot convert {:?} to Integer", obj).into(),
             )),
         })
     }
-
     pub fn to_float(&self) -> Result<f64, RuntimeError> {
         self.with_data(|obj| match obj {
             OnionObject::Integer(i) => Ok(*i as f64),
@@ -621,6 +625,7 @@ impl OnionObject {
                 .parse::<f64>()
                 .map_err(|e| RuntimeError::InvalidType(e.to_string().into())),
             OnionObject::Boolean(b) => Ok(if *b { 1.0 } else { 0.0 }),
+            OnionObject::Custom(custom) => custom.to_float(),
             _ => Err(RuntimeError::InvalidType(
                 format!("Cannot convert {:?} to Float", obj).into(),
             )),
@@ -696,6 +701,7 @@ impl OnionObject {
                         body
                     ))
                 }
+                OnionObject::Custom(custom) => custom.to_string(&new_ptrs),
                 _ => {
                     // 使用 Debug trait来处理其他类型的转换
                     Ok(format!("{:?}", obj))
@@ -784,10 +790,13 @@ impl OnionObject {
                         Ok("Mut(BrokenReference)".to_string())
                     }
                 }
+                OnionObject::Custom(custom) => {
+                    let custom_repr = custom.repr(&new_ptrs)?;
+                    Ok(format!("Custom({})", custom_repr))
+                }
             }
         })
     }
-
     pub fn to_bytes(&self) -> Result<Vec<u8>, RuntimeError> {
         self.with_data(|obj| match obj {
             OnionObject::Integer(i) => Ok(i.to_string().into_bytes()),
@@ -799,6 +808,7 @@ impl OnionObject {
             } else {
                 b"false".to_vec()
             }),
+            OnionObject::Custom(custom) => custom.to_bytes(),
             _ => Err(RuntimeError::InvalidType(
                 format!("Cannot convert {:?} to Bytes", obj).into(),
             )),
@@ -814,6 +824,7 @@ impl OnionObject {
             OnionObject::Boolean(b) => Ok(*b),
             OnionObject::Null => Ok(false),
             OnionObject::Undefined(_) => Ok(false),
+            OnionObject::Custom(custom) => custom.to_boolean(),
             _ => Err(RuntimeError::InvalidType(
                 format!("Cannot convert {:?} to Boolean", obj).into(),
             )),
@@ -848,6 +859,7 @@ impl OnionObject {
                     (OnionObject::Tuple(t1), _) => t1.equals(other),
                     (OnionObject::Pair(p1), _) => p1.equals(other),
                     (OnionObject::Named(n1), _) => n1.equals(other),
+                    (OnionObject::Custom(c1), _) => c1.equals(other),
 
                     // 理论上Mut类型不应该出现在这里
                     _ => Ok(false),
@@ -855,7 +867,6 @@ impl OnionObject {
             })
         })
     }
-
     pub fn is_same(&self, other: &Self) -> Result<bool, RuntimeError> {
         match (self, other) {
             (OnionObject::Mut(weak1), OnionObject::Mut(weak2)) => {
@@ -865,6 +876,7 @@ impl OnionObject {
                     Ok(false)
                 }
             }
+            (OnionObject::Custom(c1), _) => c1.is_same(other),
             _ => self.equals(other),
         }
     }
@@ -898,6 +910,7 @@ impl OnionObject {
                     OnionStaticObject::new(OnionObject::Range(start1 + start2, end1 + end2)),
                 ),
                 (OnionObject::Tuple(t1), _) => t1.binary_add(other_obj),
+                (OnionObject::Custom(c1), _) => c1.binary_add(other_obj),
                 _ => Err(RuntimeError::InvalidOperation(
                     format!(
                         "Invalid binary add operation for {:?} and {:?}",
@@ -924,6 +937,7 @@ impl OnionObject {
                 (OnionObject::Float(f1), OnionObject::Integer(i2)) => {
                     Ok(OnionStaticObject::new(OnionObject::Float(f1 - *i2 as f64)))
                 }
+                (OnionObject::Custom(c1), _) => c1.binary_sub(other_obj),
                 _ => Err(RuntimeError::InvalidOperation(
                     format!(
                         "Invalid binary sub operation for {:?} and {:?}",
@@ -950,6 +964,7 @@ impl OnionObject {
                 (OnionObject::Float(f1), OnionObject::Integer(i2)) => {
                     Ok(OnionStaticObject::new(OnionObject::Float(f1 * *i2 as f64)))
                 }
+                (OnionObject::Custom(c1), _) => c1.binary_mul(other_obj),
                 _ => Err(RuntimeError::InvalidOperation(
                     format!(
                         "Invalid binary mul operation for {:?} and {:?}",
@@ -981,6 +996,7 @@ impl OnionObject {
                 (OnionObject::Float(f1), OnionObject::Integer(i2)) => {
                     Ok(OnionStaticObject::new(OnionObject::Float(f1 / *i2 as f64)))
                 }
+                (OnionObject::Custom(c1), _) => c1.binary_div(other_obj),
                 _ => Err(RuntimeError::InvalidOperation(
                     format!(
                         "Invalid binary div operation for {:?} and {:?}",
@@ -1012,6 +1028,7 @@ impl OnionObject {
                 (OnionObject::Float(f1), OnionObject::Integer(i2)) => {
                     Ok(OnionStaticObject::new(OnionObject::Float(f1 % *i2 as f64)))
                 }
+                (OnionObject::Custom(c1), _) => c1.binary_mod(other_obj),
                 _ => Err(RuntimeError::InvalidOperation(
                     format!(
                         "Invalid binary mod operation for {:?} and {:?}",
@@ -1038,6 +1055,7 @@ impl OnionObject {
                 (OnionObject::Float(f1), OnionObject::Integer(i2)) => Ok(OnionStaticObject::new(
                     OnionObject::Float(f1.powi(*i2 as i32)),
                 )),
+                (OnionObject::Custom(c1), _) => c1.binary_pow(other_obj),
                 _ => Err(RuntimeError::InvalidOperation(
                     format!(
                         "Invalid binary pow operation for {:?} and {:?}",
@@ -1058,6 +1076,7 @@ impl OnionObject {
                 (OnionObject::Boolean(f1), OnionObject::Boolean(f2)) => {
                     Ok(OnionStaticObject::new(OnionObject::Boolean(*f1 && *f2)))
                 }
+                (OnionObject::Custom(c1), _) => c1.binary_and(other_obj),
                 _ => Err(RuntimeError::InvalidOperation(
                     format!(
                         "Invalid binary and operation for {:?} and {:?}",
@@ -1078,6 +1097,7 @@ impl OnionObject {
                 (OnionObject::Boolean(f1), OnionObject::Boolean(f2)) => {
                     Ok(OnionStaticObject::new(OnionObject::Boolean(*f1 || *f2)))
                 }
+                (OnionObject::Custom(c1), _) => c1.binary_or(other_obj),
                 _ => Err(RuntimeError::InvalidOperation(
                     format!(
                         "Invalid binary or operation for {:?} and {:?}",
@@ -1095,6 +1115,7 @@ impl OnionObject {
                 (OnionObject::Integer(i1), OnionObject::Integer(i2)) => {
                     Ok(OnionStaticObject::new(OnionObject::Integer(i1 ^ i2)))
                 }
+                (OnionObject::Custom(c1), _) => c1.binary_xor(other_obj),
                 _ => Err(RuntimeError::InvalidOperation(
                     format!(
                         "Invalid binary xor operation for {:?} and {:?}",
@@ -1112,6 +1133,7 @@ impl OnionObject {
                 (OnionObject::Integer(i1), OnionObject::Integer(i2)) => {
                     Ok(OnionStaticObject::new(OnionObject::Integer(i1 << i2)))
                 }
+                (OnionObject::Custom(c1), _) => c1.binary_shl(other_obj),
                 _ => Err(RuntimeError::InvalidOperation(
                     format!(
                         "Invalid binary shl operation for {:?} and {:?}",
@@ -1129,6 +1151,7 @@ impl OnionObject {
                 (OnionObject::Integer(i1), OnionObject::Integer(i2)) => {
                     Ok(OnionStaticObject::new(OnionObject::Integer(i1 >> i2)))
                 }
+                (OnionObject::Custom(c1), _) => c1.binary_shr(other_obj),
                 _ => Err(RuntimeError::InvalidOperation(
                     format!(
                         "Invalid binary shr operation for {:?} and {:?}",
@@ -1151,6 +1174,7 @@ impl OnionObject {
                 (OnionObject::Float(f1), OnionObject::Float(f2)) => Ok(f1 < f2),
                 (OnionObject::Integer(i1), OnionObject::Float(f2)) => Ok((*i1 as f64) < *f2),
                 (OnionObject::Float(f1), OnionObject::Integer(i2)) => Ok(*f1 < *i2 as f64),
+                (OnionObject::Custom(c1), _) => c1.binary_lt(other_obj),
                 _ => Err(RuntimeError::InvalidOperation(
                     format!(
                         "Invalid binary lt operation for {:?} and {:?}",
@@ -1169,6 +1193,7 @@ impl OnionObject {
                 (OnionObject::Float(f1), OnionObject::Float(f2)) => Ok(f1 > f2),
                 (OnionObject::Integer(i1), OnionObject::Float(f2)) => Ok((*i1 as f64) > *f2),
                 (OnionObject::Float(f1), OnionObject::Integer(i2)) => Ok(*f1 > *i2 as f64),
+                (OnionObject::Custom(c1), _) => c1.binary_gt(other_obj),
                 _ => Err(RuntimeError::InvalidOperation(
                     format!(
                         "Invalid binary gt operation for {:?} and {:?}",
@@ -1184,6 +1209,7 @@ impl OnionObject {
         self.with_data(|obj| match obj {
             OnionObject::Integer(i) => Ok(OnionStaticObject::new(OnionObject::Integer(-i))),
             OnionObject::Float(f) => Ok(OnionStaticObject::new(OnionObject::Float(-f))),
+            OnionObject::Custom(custom) => custom.unary_neg(),
             _ => Err(RuntimeError::InvalidOperation(
                 format!("Invalid unary neg operation for {:?}", obj).into(),
             )),
@@ -1194,6 +1220,7 @@ impl OnionObject {
         self.with_data(|obj| match obj {
             OnionObject::Integer(i) => Ok(OnionStaticObject::new(OnionObject::Integer(i.abs()))),
             OnionObject::Float(f) => Ok(OnionStaticObject::new(OnionObject::Float(f.abs()))),
+            OnionObject::Custom(custom) => custom.unary_plus(),
             _ => Err(RuntimeError::InvalidOperation(
                 format!("Invalid unary plus operation for {:?}", obj).into(),
             )),
@@ -1204,6 +1231,7 @@ impl OnionObject {
         self.with_data(|obj| match obj {
             OnionObject::Boolean(b) => Ok(OnionStaticObject::new(OnionObject::Boolean(!b))),
             OnionObject::Integer(i) => Ok(OnionStaticObject::new(OnionObject::Integer(!i))),
+            OnionObject::Custom(custom) => custom.unary_not(),
             _ => Err(RuntimeError::InvalidOperation(
                 format!("Invalid unary not operation for {:?}", obj).into(),
             )),
@@ -1284,6 +1312,17 @@ impl OnionObject {
                     .into(),
                 ))
             }
+            OnionObject::Custom(custom) => {
+                let mut result: Result<R, RuntimeError> = Err(RuntimeError::InvalidOperation(
+                    "Custom with_attribute not called".to_string().into(),
+                ));
+                let mut closure = |obj: &OnionObject| -> Result<(), RuntimeError> {
+                    result = f(obj);
+                    Ok(())
+                };
+                custom.with_attribute(key, &mut closure)?;
+                result
+            }
             _ => Err(RuntimeError::InvalidOperation(
                 format!("with_attribute() not supported for {:?}", self).into(),
             )),
@@ -1312,6 +1351,7 @@ impl OnionObject {
                     b[index as usize],
                 ]))))
             }
+            OnionObject::Custom(custom) => custom.at(index),
             _ => Err(RuntimeError::InvalidOperation(
                 format!("index_of() not supported for {:?}", self).into(),
             )),
@@ -1322,6 +1362,7 @@ impl OnionObject {
         self.with_data(|obj| match obj {
             OnionObject::Named(named) => Ok(named.get_key().stabilize()),
             OnionObject::Pair(pair) => Ok(pair.get_key().stabilize()),
+            OnionObject::Custom(custom) => custom.key_of(),
             _ => Err(RuntimeError::InvalidOperation(
                 format!("key_of() not supported for {:?}", obj).into(),
             )),
@@ -1337,6 +1378,7 @@ impl OnionObject {
                     .map(|o| o.as_ref().clone())
                     .unwrap_or_else(|| "".to_string()),
             )))),
+            OnionObject::Custom(custom) => custom.value_of(),
             _ => Err(RuntimeError::InvalidOperation(
                 format!("value_of() not supported for {:?}", obj).into(),
             )),
@@ -1358,6 +1400,7 @@ impl OnionObject {
             OnionObject::LazySet(_) => Ok("LazySet".to_string()),
             OnionObject::InstructionPackage(_) => Ok("InstructionPackage".to_string()),
             OnionObject::Lambda(_) => Ok("Lambda".to_string()),
+            OnionObject::Custom(custom) => custom.type_of(),
             _ => Err(RuntimeError::InvalidOperation(
                 format!("type_of() not supported for {:?}", obj).into(),
             )),

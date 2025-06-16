@@ -44,6 +44,7 @@ where
         + 'static,
 {
     argument: OnionStaticObject,
+    self_object: Option<OnionStaticObject>,
     function: &'static F,
 }
 
@@ -63,21 +64,27 @@ where
         step_result: &StepResult,
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
-        if let StepResult::Return(result) = step_result {
-            self.argument = result.as_ref().clone();
-            Ok(())
-        } else {
-            Err(RuntimeError::InvalidOperation(
-                "NativeFunctionGenerator can only receive StepResult::Return"
+        match step_result {
+            StepResult::Return(result) => {
+                self.argument = result.as_ref().clone();
+                Ok(())
+            }
+            StepResult::SetSelfObject(self_object) => {
+                self.self_object = Some(self_object.as_ref().clone());
+                Ok(())
+            }
+            _ => Err(RuntimeError::DetailedError(
+                "NativeFunctionGenerator received unexpected step result"
                     .to_string()
                     .into(),
-            ))
+            )),
         }
     }
 
     fn copy(&self) -> Box<dyn Runnable> {
         Box::new(NativeFunctionGenerator {
             argument: self.argument.clone(),
+            self_object: self.self_object.clone(),
             function: self.function,
         })
     }
@@ -105,6 +112,7 @@ where
         params,
         LambdaBody::NativeFunction(Box::new(NativeFunctionGenerator {
             argument: onion_tuple!(),
+            self_object: self_object.cloned(),
             function: function,
         })),
         capture,

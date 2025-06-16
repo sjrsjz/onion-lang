@@ -30,9 +30,7 @@ impl Runnable for Scheduler {
                     StepResult::Continue
                 }
                 StepResult::ReplaceRunnable(new_runnable) => {
-                    self.runnable_stack
-                        .last_mut()
-                        .map(|r| *r = new_runnable);
+                    self.runnable_stack.last_mut().map(|r| *r = new_runnable);
                     StepResult::Continue
                 }
                 StepResult::Return(ref result) => {
@@ -71,13 +69,42 @@ impl Runnable for Scheduler {
                         )
                     }
                 }
+                StepResult::SetSelfObject(ref self_object) => {
+                    if let Some(top_runnable) = self.runnable_stack.last_mut() {
+                        match top_runnable
+                            .receive(&StepResult::SetSelfObject(self_object.clone()), gc)
+                        {
+                            Ok(_) => {}
+                            Err(RuntimeError::CustomValue(ref e)) => {
+                                return StepResult::Return(
+                                    OnionPair::new_static(
+                                        &OnionObject::Boolean(false).stabilize(),
+                                        &e,
+                                    )
+                                    .into(),
+                                )
+                            }
+                            Err(e) => {
+                                return StepResult::Return(
+                                    OnionPair::new_static(
+                                        &OnionObject::Boolean(false).stabilize(),
+                                        &OnionObject::String(Arc::new(e.to_string())).stabilize(),
+                                    )
+                                    .into(),
+                                )
+                            }
+                        }
+                    }
+                    StepResult::Continue
+                }
                 StepResult::Error(ref error) => {
                     return StepResult::Return(
                         OnionPair::new_static(
                             &OnionObject::Boolean(false).stabilize(),
                             &match error {
                                 RuntimeError::CustomValue(ref v) => v.as_ref().clone(),
-                                _ => OnionObject::Undefined(Some(error.to_string().into())).stabilize(),
+                                _ => OnionObject::Undefined(Some(error.to_string().into()))
+                                    .stabilize(),
                             },
                         )
                         .into(),
