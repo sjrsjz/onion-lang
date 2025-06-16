@@ -1220,6 +1220,70 @@ impl OnionObject {
             OnionObject::Pair(pair) => pair.with_attribute(key, f),
             OnionObject::Lambda(lambda) => lambda.with_attribute(key, f),
             OnionObject::LazySet(lazy_set) => lazy_set.with_attribute(key, f),
+            OnionObject::String(s) => {
+                if let OnionObject::String(key_str) = key {
+                    if key_str.as_ref().eq("length") {
+                        return f(&OnionObject::Integer(s.len() as i64));
+                    }
+                    if key_str.as_ref().eq("elements") {
+                        let elements = OnionTuple::new_static_no_ref(
+                            &s.chars()
+                                .map(|c| {
+                                    OnionStaticObject::new(OnionObject::String(Arc::new(
+                                        c.to_string(),
+                                    )))
+                                })
+                                .collect::<Vec<_>>(),
+                        );
+                        return f(elements.weak());
+                    }
+                }
+                Err(RuntimeError::InvalidOperation(
+                    format!("with_attribute() not supported for String: {}", s).into(),
+                ))
+            }
+            OnionObject::Bytes(b) => {
+                if let OnionObject::String(key_str) = key {
+                    if key_str.as_ref().eq("length") {
+                        return f(&OnionObject::Integer(b.len() as i64));
+                    }
+                    if key_str.as_ref().eq("elements") {
+                        let elements = OnionTuple::new_static_no_ref(
+                            &b.iter()
+                                .map(|byte| {
+                                    OnionStaticObject::new(OnionObject::Integer(*byte as i64))
+                                })
+                                .collect::<Vec<_>>(),
+                        );
+                        return f(elements.weak());
+                    }
+                }
+                Err(RuntimeError::InvalidOperation(
+                    format!("with_attribute() not supported for Bytes: {:?}", b).into(),
+                ))
+            }
+            OnionObject::Range(start, end) => {
+                if let OnionObject::String(key_str) = key {
+                    if key_str.as_ref().eq("length") {
+                        return f(&OnionObject::Integer((end - start) as i64));
+                    }
+                    if key_str.as_ref().eq("elements") {
+                        let elements = OnionTuple::new_static_no_ref(
+                            &(*start..*end)
+                                .map(|i| OnionStaticObject::new(OnionObject::Integer(i as i64)))
+                                .collect::<Vec<_>>(),
+                        );
+                        return f(elements.weak());
+                    }
+                }
+                Err(RuntimeError::InvalidOperation(
+                    format!(
+                        "with_attribute() not supported for Range: {}..{}",
+                        start, end
+                    )
+                    .into(),
+                ))
+            }
             _ => Err(RuntimeError::InvalidOperation(
                 format!("with_attribute() not supported for {:?}", self).into(),
             )),
