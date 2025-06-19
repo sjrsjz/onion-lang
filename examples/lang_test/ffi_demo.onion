@@ -1,0 +1,210 @@
+// 完整的 FFI 演示
+@required stdlib;
+
+// 演示 C 类型系统
+demo_ctypes := () -> {
+    stdlib.io.println("📦 C Types System Demo");
+    stdlib.io.println("----------------------");
+    
+    // 整数类型
+    stdlib.io.println("Integer Types:");
+    i8_val := stdlib.ffi.ctypes.i8(value => -128);
+    i16_val := stdlib.ffi.ctypes.i16(value => 32767);
+    i32_val := stdlib.ffi.ctypes.i32(value => 2147483647);
+    i64_val := stdlib.ffi.ctypes.i64(value => 9223372036854775807);
+    stdlib.io.println("  ✓ i8(-128), i16(32767), i32(2147483647), i64(9223372036854775807)");
+    
+    u8_val := stdlib.ffi.ctypes.u8(value => 255);
+    u16_val := stdlib.ffi.ctypes.u16(value => 65535);
+    u32_val := stdlib.ffi.ctypes.u32(value => 4294967295);
+    u64_val := stdlib.ffi.ctypes.u64(value => 1844674407370955161);
+    stdlib.io.println("  ✓ u8(255), u16(65535), u32(4294967295), u64(18446744073709551615)");
+    
+    // 浮点类型
+    stdlib.io.println("Floating Point Types:");
+    f32_val := stdlib.ffi.ctypes.f32(value => 3.14159);
+    f64_val := stdlib.ffi.ctypes.f64(value => 2.718281828459045);
+    stdlib.io.println("  ✓ f32(3.14159), f64(2.718281828459045)");
+    
+    // 字符类型
+    stdlib.io.println("Character Types:");
+    char_val := stdlib.ffi.ctypes.char(value => 65);  // 'A'
+    uchar_val := stdlib.ffi.ctypes.uchar(value => 255);
+    stdlib.io.println("  ✓ char(65 -> 'A'), uchar(255)");
+    
+    // 布尔类型
+    stdlib.io.println("Boolean Type:");
+    bool_true := stdlib.ffi.ctypes.bool(value => true);
+    bool_false := stdlib.ffi.ctypes.bool(value => false);
+    stdlib.io.println("  ✓ bool(true), bool(false)");
+      // 指针和特殊类型
+    stdlib.io.println("Pointer and Special Types:");
+    ptr_val := stdlib.ffi.ctypes.pointer(value => 4096);
+    void_val := stdlib.ffi.ctypes.void();
+    stdlib.io.println("  ✓ pointer(0x1000), void");
+    
+    // 字符串和缓冲区
+    stdlib.io.println("String and Buffer Types:");
+    str_val := stdlib.ffi.ctypes.string(value => "Hello, FFI World!");
+    buffer_val := stdlib.ffi.ctypes.buffer(value => "Binary data");
+    stdlib.io.println("  ✓ string(\"Hello, FFI World!\"), buffer(\"Binary data\")");
+    
+    // 大小类型
+    stdlib.io.println("Size Types:");
+    size_val := stdlib.ffi.ctypes.size(value => 1024);
+    ssize_val := stdlib.ffi.ctypes.ssize(value => -1024);
+    stdlib.io.println("  ✓ size(1024), ssize(-1024)");
+};
+
+// 演示动态库加载
+demo_library_loading := () -> {
+    stdlib.io.println("📚 Dynamic Library Loading Demo");
+    stdlib.io.println("--------------------------------");
+    
+    platform := stdlib.sys.platform();
+    stdlib.io.println("Current platform:", platform);
+    
+    // 根据平台选择库
+    lib_info := if (platform == "windows") {
+        ("msvcrt.dll", "Microsoft C Runtime Library")
+    } else if (platform == "linux") {
+        ("libc.so.6", "GNU C Library")
+    } else {
+        ("libc.dylib", "macOS C Library")
+    };
+    
+    lib_path := lib_info[0];
+    lib_desc := lib_info[1];
+    
+    stdlib.io.println("Loading:", lib_desc);
+    stdlib.io.println("Path:", lib_path);
+    
+    lib := stdlib.ffi.lib.load(path => lib_path);
+    
+    if (lib != null) {
+        stdlib.io.println("✓ Library loaded successfully!");
+        return lib;
+    } else {
+        stdlib.io.println("✗ Failed to load library");
+        return null;
+    };
+};
+
+// 演示 strlen 函数调用
+demo_strlen := (lib?) -> {
+    stdlib.io.println("Testing strlen() function:");
+    
+    strlen_handle := stdlib.ffi.lib.get_function(
+        library => lib,
+        function => "strlen",
+        return_type => "size",
+        param_types => ("string",)
+    );
+    
+    if (strlen_handle == null) {
+        stdlib.io.println("  ✗ Failed to get strlen function");
+        return;
+    };
+    
+    test_cases := (
+        "Hello",
+        "World", 
+        "FFI",
+        "Onion Language",
+        "",
+        "A",
+        "1234567890"
+    );
+    
+    i := mut 0;
+    while (i < 7) {
+        test_str := test_cases[i];
+        c_string := stdlib.ffi.ctypes.string(value => test_str);
+        
+        result := stdlib.ffi.lib.call(
+            handle => strlen_handle,
+            args => (c_string,)
+        );
+        
+        stdlib.io.println("  strlen(\"", test_str, "\") = ", valueof result);
+        i = i + 1;
+    };
+};
+
+// 演示 abs 函数调用（绝对值）
+demo_abs := (lib?) -> {
+    stdlib.io.println("Testing abs() function:");
+    
+    abs_handle := stdlib.ffi.lib.get_function(
+        library => lib,
+        function => "abs",
+        return_type => "i32",
+        param_types => ("i32",)
+    );
+    
+    if (abs_handle == null) {
+        stdlib.io.println("  ✗ Failed to get abs function");
+        return;
+    };
+    
+    test_values := (-42, -100, 0, 42, 100, -1, 1);
+    
+    i := mut 0;
+    while (i < 7) {
+        test_val := test_values[i];
+        c_int := stdlib.ffi.ctypes.i32(value => test_val);
+        
+        result := stdlib.ffi.lib.call(
+            handle => abs_handle,
+            args => (c_int,)
+        );
+        
+        stdlib.io.println("  abs(", test_val, ") = ", valueof result);
+        i = i + 1;
+    };
+};
+
+// 演示函数调用
+demo_function_calls := () -> {
+    stdlib.io.println("🔧 Function Calls Demo");
+    stdlib.io.println("-----------------------");
+    
+    // 加载库
+    lib := stdlib.ffi.lib.load(path => "msvcrt.dll");
+    
+    if (lib == null) {
+        stdlib.io.println("✗ Cannot demonstrate function calls without library");
+        return;
+    };
+    
+    // 演示 strlen 函数
+    demo_strlen(lib);
+    
+    // 演示 abs 函数（如果可用）
+    demo_abs(lib);
+};
+
+main := () -> {
+    stdlib.io.println("==================================================");
+    stdlib.io.println("=== Onion Language FFI (Foreign Function Interface) Demo ===");
+    stdlib.io.println("==================================================");
+    stdlib.io.println("");
+    
+    // 第一部分：C 类型系统演示
+    demo_ctypes();
+    stdlib.io.println("");
+    
+    // 第二部分：动态库加载演示
+    demo_library_loading();
+    stdlib.io.println("");
+    
+    // 第三部分：函数调用演示
+    demo_function_calls();
+    stdlib.io.println("");
+    
+    stdlib.io.println("==================================================");
+    stdlib.io.println("=== FFI Demo Complete ===");
+    stdlib.io.println("==================================================");
+};
+
+main();

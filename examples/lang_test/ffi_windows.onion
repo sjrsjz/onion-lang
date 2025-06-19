@@ -1,0 +1,106 @@
+// 高级 FFI 演示：调用 Windows API
+@required stdlib;
+
+main := () -> {
+    stdlib.io.println("==================================================");
+    stdlib.io.println("=== Onion FFI Advanced Demo: Windows API Calls ===");
+    stdlib.io.println("==================================================");
+    stdlib.io.println("");
+
+    // 此演示仅在 Windows 上运行
+    if (stdlib.sys.platform() != "windows") {
+        stdlib.io.println("This demo is for Windows only. Skipping.");
+        return;
+    };
+
+    stdlib.io.println("📦 Loading user32.dll...");
+    user32_lib := stdlib.ffi.lib.load(path => "user32.dll");
+
+    if (user32_lib == null) {
+        stdlib.io.println("✗ Failed to load user32.dll. Cannot proceed.");
+        return;
+    };
+    stdlib.io.println("✓ user32.dll loaded successfully!");
+    stdlib.io.println("");
+
+    // --- 演示 1: 简单的信息框 ---
+    stdlib.io.println("🔧 Demo 1: Simple Information Message Box");
+    
+    // 获取 MessageBoxA 函数句柄
+    // C 签名: int MessageBoxA(HWND hWnd, LPCSTR lpText, LPCSTR lpCaption, UINT uType);
+    // 我们使用 'A' 版本 (MessageBoxA) 是因为它接受常规的 C 字符串 (LPCSTR)，
+    // 这与我们的 `string` 类型完美匹配。
+    msgbox_handle := stdlib.ffi.lib.get_function(
+        library => user32_lib,
+        function => "MessageBoxA",
+        return_type => "i32",
+        param_types => ("pointer", "string", "string", "u32")
+    );
+
+    if (msgbox_handle == null) {
+        stdlib.io.println("✗ Failed to get MessageBoxA function handle.");
+        return;
+    };
+    stdlib.io.println("✓ Got MessageBoxA handle.");
+
+    // 准备参数
+    // hWnd (HWND): 窗口句柄，传 0 (null) 表示无所有者窗口。
+    // uType (UINT): 消息框的样式。0x40 代表 MB_ICONINFORMATION。
+    hwnd := stdlib.ffi.ctypes.pointer(value => 0);
+    text := stdlib.ffi.ctypes.string(value => "This is a message from an Onion script!");
+    caption := stdlib.ffi.ctypes.string(value => "Onion FFI Demo");
+    msg_type := stdlib.ffi.ctypes.u32(value => 64); // 0x40 for MB_ICONINFORMATION
+
+    stdlib.io.println("  Calling MessageBoxA with an informational message...");
+    stdlib.io.println("  (A dialog box should appear on your screen)");
+
+    // 调用函数
+    result := stdlib.ffi.lib.call(
+        handle => msgbox_handle,
+        args => (hwnd, text, caption, msg_type)
+    );
+
+    stdlib.io.println("  MessageBoxA returned:", valueof result, "(1 means OK was clicked)");
+    stdlib.io.println("");
+
+
+    // --- 演示 2: 带选项的确认框 ---
+    stdlib.io.println("🔧 Demo 2: Question Message Box with Yes/No/Cancel");
+
+    // 准备参数
+    // uType: MB_YESNOCANCEL | MB_ICONQUESTION (0x03 | 0x20)
+    q_text := stdlib.ffi.ctypes.string(value => "Do you enjoy using Onion Language's FFI?");
+    q_caption := stdlib.ffi.ctypes.string(value => "Question");
+    q_type := stdlib.ffi.ctypes.u32(value => 35); // 3 (MB_YESNOCANCEL) + 32 (MB_ICONQUESTION)
+
+    stdlib.io.println("  Calling MessageBoxA with a question...");
+    stdlib.io.println("  (Please click a button on the dialog box)");
+
+    // 调用函数
+    q_result_val := stdlib.ffi.lib.call(
+        handle => msgbox_handle,
+        args => (hwnd, q_text, q_caption, q_type)
+    );
+    q_result := valueof q_result_val;
+
+    stdlib.io.println("  MessageBoxA returned:", q_result);
+
+    // 解析返回值
+    // IDYES = 6, IDNO = 7, IDCANCEL = 2
+    if (q_result == 6) {
+        stdlib.io.println("  You clicked 'Yes'. That's great to hear!");
+    } else if (q_result == 7) {
+        stdlib.io.println("  You clicked 'No'. We'll keep improving!");
+    } else if (q_result == 2) {
+        stdlib.io.println("  You clicked 'Cancel'.");
+    } else {
+        stdlib.io.println("  An unexpected button was clicked or the dialog was closed.");
+    };
+    stdlib.io.println("");
+
+    stdlib.io.println("==================================================");
+    stdlib.io.println("=== Windows API Demo Complete ===");
+    stdlib.io.println("==================================================");
+};
+
+main();

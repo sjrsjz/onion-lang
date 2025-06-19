@@ -1,6 +1,6 @@
 [package]
 name = "onion-lang"
-version = "0.1.9"
+version = "0.1.10"
 edition = "2021"
 authors = ["sjrsjz <sjrsjz@gmail.com>"]
 description = "A modern functional programming language with asynchronous execution and lazy evaluation"
@@ -38,7 +38,7 @@ path = "src/main.rs"
 
 [dependencies]
 onion-frontend = { version = "0.1.5", path = "./onion-frontend" }
-onion-vm = { version = "0.1.6", path = "./onion-vm" }
+onion-vm = { version = "0.1.8", path = "./onion-vm" }
 serde = { workspace = true }
 clap = { version = "4.5", features = ["derive"] }
 colored = { workspace = true }
@@ -48,11 +48,14 @@ log = { version = "0.4.27", optional = true }
 serde_json = "1.0.140"
 url = "2.5.4"
 env_logger = { version = "0.11.8", optional = true }
+libloading = "0.8"
+libffi = "3.2"
 regex = "1.11.1"
 reqwest = { version = "0.11", features = ["json"] }
 tokio = { version = "1.0", features = ["full"] }
 indexmap = { version = "2.9.0", features = ["serde"] }
 ctrlc = "3.4.7"
+rust-arc-gc = "0.2.0"
 
 [dev-dependencies]
 criterion = { workspace = true }

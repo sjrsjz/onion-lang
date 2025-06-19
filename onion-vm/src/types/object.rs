@@ -219,6 +219,9 @@ pub enum OnionObject {
 }
 
 pub trait OnionObjectExt: GCTraceable<OnionObjectCell> + Debug {
+    // Type introspection for downcasting
+    fn as_any(&self) -> &dyn std::any::Any;
+
     // GC and memory management
     fn upgrade(&self, collected: &mut Vec<GCArc<OnionObjectCell>>);
 

@@ -22,6 +22,7 @@ mod sys;
 mod time;
 mod tuple;
 mod types;
+mod ffi;
 
 pub fn build_named_dict(dict: IndexMap<String, OnionStaticObject>) -> OnionStaticObject {
     let mut pairs = vec![];
@@ -133,5 +134,6 @@ pub fn build_module() -> OnionStaticObject {
     module.insert("json".to_string(), json::build_module());
     module.insert("os".to_string(), os::build_module());
     module.insert("sys".to_string(), sys::build_module());
+    module.insert("ffi".to_string(), ffi::build_module());
     build_named_dict(module)
 }
