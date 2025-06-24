@@ -1,7 +1,5 @@
 use std::{
-    collections::VecDeque,
-    ffi::CString,
-    sync::Arc,
+    collections::VecDeque, ffi::{CString, OsStr}, os::windows::ffi::OsStrExt, sync::Arc
 };
 
 use arc_gc::{
@@ -40,6 +38,8 @@ enum Argument {
     ISize(isize),
     #[allow(dead_code)]
     Ptr(*const u8, Option<Box<CString>>),
+    #[allow(dead_code)]
+    WidePtr(*const u16, Option<Box<Vec<u16>>>),
 }
 
 impl Argument {
@@ -58,6 +58,7 @@ impl Argument {
             Argument::USize(v) => Arg::new(v),
             Argument::ISize(v) => Arg::new(v),
             Argument::Ptr(p, _) => Arg::new(p),
+            Argument::WidePtr(p, _) => Arg::new(p), 
         }
     }
 }
@@ -348,6 +349,13 @@ impl CFunctionHandle {
                 let boxed_cstring = Box::new(c_string);
                 Ok((Type::pointer(), Argument::Ptr(ptr as *const u8, Some(boxed_cstring))))
             }
+            (CTypes::CString(s), "wstring") => {
+                let mut wide_chars: Vec<u16> = OsStr::new(s.as_str()).encode_wide().collect();
+                wide_chars.push(0); // 添加 null 终止符
+                let ptr = wide_chars.as_ptr();
+                let boxed_wstr = Box::new(wide_chars);
+                Ok((Type::pointer(), Argument::WidePtr(ptr, Some(boxed_wstr))))
+            }
             (CTypes::CBuffer(b), "buffer") => {
                 let ptr = b.as_ptr();
                 Ok((Type::pointer(), Argument::Ptr(ptr, None)))
@@ -376,7 +384,7 @@ impl CFunctionHandle {
             "uchar" => Ok(Type::u8()),
             "size" => Ok(Type::usize()),
             "ssize" => Ok(Type::isize()),
-            "pointer" | "string" | "buffer" => Ok(Type::pointer()),
+            "pointer" | "string" | "buffer" | "wstring" => Ok(Type::pointer()), 
             _ => Err(RuntimeError::InvalidOperation(
                 format!("Unsupported type: {}", type_name).into(),
             )),

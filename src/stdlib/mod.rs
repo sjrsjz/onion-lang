@@ -11,6 +11,7 @@ use onion_vm::{
     unwrap_step_result, GC,
 };
 
+mod bytes;
 mod fs;
 mod http;
 mod io;
@@ -124,6 +125,7 @@ where
 
 pub fn build_module() -> OnionStaticObject {
     let mut module = IndexMap::new();
+    module.insert("bytes".to_string(), bytes::build_module());
     module.insert("fs".to_string(), fs::build_module());
     module.insert("io".to_string(), io::build_module());
     module.insert("types".to_string(), types::build_module());
