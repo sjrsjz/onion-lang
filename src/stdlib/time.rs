@@ -247,16 +247,7 @@ impl Runnable for AsyncSleep {
         _step_result: &StepResult,
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
-        if let StepResult::Return(_) = _step_result {
-            // 异步睡眠不需要处理返回值
-            Ok(())
-        } else {
-            Err(RuntimeError::InvalidOperation(
-                "AsyncSleep can only receive StepResult::Return"
-                    .to_string()
-                    .into(),
-            ))
-        }
+        Ok(())
     }
 
     fn copy(&self) -> Box<dyn Runnable> {

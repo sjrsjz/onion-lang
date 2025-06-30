@@ -205,20 +205,10 @@ impl Runnable for AsyncHttpRequest {
 
     fn receive(
         &mut self,
-        step_result: &StepResult,
+        _step_result: &StepResult,
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
-        if let StepResult::Return(_) = step_result {
-            // 这里可以处理返回结果，但在这个实现中，我们不需要处理返回值
-            // 因为请求的状态已经在内部管理
-            Ok(())
-        } else {
-            Err(RuntimeError::InvalidOperation(
-                "AsyncHttpRequest can only receive StepResult::Return"
-                    .to_string()
-                    .into(),
-            ))
-        }
+        Ok(())
     }
 
     fn copy(&self) -> Box<dyn Runnable> {

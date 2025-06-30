@@ -59,7 +59,7 @@
             },
             "args": [
                 "run",
-                "examples/http_test.onion"
+                "examples/lang_test/http_test.onion"
             ],
             "cwd": "${workspaceFolder}"
         },

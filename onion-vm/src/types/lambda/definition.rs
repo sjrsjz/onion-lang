@@ -123,6 +123,10 @@ impl OnionLambdaDefinition {
             LambdaBody::NativeFunction(native_function) => {
                 let mut runnable = native_function.copy();
                 runnable.receive(&StepResult::Return(argument.into()), gc)?;
+                runnable.receive(
+                    &StepResult::SetSelfObject(self.self_object.stabilize().into()),
+                    gc,
+                )?;
                 Ok(runnable)
             }
         }
