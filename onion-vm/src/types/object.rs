@@ -218,7 +218,9 @@ pub enum OnionObject {
     Mut(GCArcWeak<OnionObjectCell>),
 }
 
-pub trait OnionObjectExt: GCTraceable<OnionObjectCell> + Debug {
+pub trait OnionObjectExt:
+    GCTraceable<OnionObjectCell> + Debug + Send + Sync + 'static
+{
     // Type introspection for downcasting
     fn as_any(&self) -> &dyn std::any::Any;
 
@@ -1418,7 +1420,6 @@ impl OnionObject {
 
 #[derive(Clone)]
 pub enum GCArcStorage {
-    // 极其怪异的枚举类型，仅仅是修改属性都会导致性能严重下降
     None,
     Single(GCArc<OnionObjectCell>),
     Multiple(Arc<Vec<GCArc<OnionObjectCell>>>),

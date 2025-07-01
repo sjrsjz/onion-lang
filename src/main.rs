@@ -345,9 +345,7 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
     // Create standard library object
     let stdlib_pair = OnionNamed::new_static(
         &OnionObject::String(Arc::new("stdlib".to_string())).consume_and_stabilize(),
-        &stdlib::build_module()
-            .mutablize(&mut gc)
-            .map_err(|e| format!("Failed to create standard library object: {:?}", e))?,
+        &stdlib::build_module(),
     );
 
     // Create Lambda definition
