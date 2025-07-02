@@ -1,11 +1,12 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
+    path::Path,
 };
 
 use crate::{
     compile::{build_code, compile_to_bytecode},
-    dir_stack::DirStack,
+    dir_stack::DirectoryStack,
     parser::{
         ast::{ast_token_stream, build_ast, ASTContextLessNode, ASTNodeType},
         lexer::lexer,
@@ -718,7 +719,7 @@ impl<'c> VariableContext<'c> {
 pub fn expand_macro<'n: 't, 't>(
     node: &'n ASTNode<'n>,
     cycle_detector: &mut CycleDetector<String>,
-    dir_stack: &mut DirStack,
+    dir_stack: &mut DirectoryStack,
 ) -> MacroAnalysisOutput<'n> {
     let new_node = match expand_import_to_node(node, cycle_detector, dir_stack) {
         Ok(n) => n,
@@ -942,7 +943,7 @@ pub fn analyze_ast<'n>(
     ast: &'n ASTNode<'n>,
     break_at_position: Option<usize>,
     cycle_detector: &mut CycleDetector<String>,
-    dir_stack: &mut DirStack,
+    dir_stack: &mut DirectoryStack,
 ) -> AnalysisOutput<'n> {
     let mut context = VariableContext::new();
     // 向context里初始化内置函数
@@ -1015,7 +1016,7 @@ fn analyze_node<'n: 't, 't>(
     break_at_position: Option<usize>,
     context_at_break: &mut Option<VariableContext<'n>>,
     cycle_detector: &mut CycleDetector<String>,
-    dir_stack: &mut DirStack,
+    dir_stack: &mut DirectoryStack,
 ) -> AssumedType {
     // 1. Check if analysis should stop globally (break point already found)
     if context_at_break.is_some() {
@@ -1074,7 +1075,7 @@ fn analyze_node<'n: 't, 't>(
                         for child in &node.children {
                             // 检查子节点是否为字符串
                             if let ASTNodeType::String(file_path) = &child.node_type {
-                                let absolute_path = dir_stack.get_absolute_path(file_path);
+                                let absolute_path = dir_stack.translate(&Path::new(file_path));
                                 let Ok(absolute_path) = absolute_path else {
                                     // 使用 AnalyzeWarn::CompileError 记录路径解析错误
                                     let error_message = format!(
@@ -1092,7 +1093,7 @@ fn analyze_node<'n: 't, 't>(
                                     .visit(absolute_path.to_str().unwrap_or("").to_string())
                                 {
                                     Ok(mut guard) => {
-                                        let read_file = std::fs::read_to_string(file_path);
+                                        let read_file = std::fs::read_to_string(absolute_path);
                                         if let Err(e) = read_file {
                                             // 使用 AnalyzeWarn::CompileError 记录读取错误
                                             let error_message = format!(
@@ -1105,7 +1106,7 @@ fn analyze_node<'n: 't, 't>(
                                             ));
                                         // 使用 child 作为错误关联的节点
                                         } else {
-                                            let _ = dir_stack.push_file(&file_path);
+                                            let _ = dir_stack.push_file(&Path::new(file_path));
 
                                             let code = read_file.unwrap();
                                             // 调用 build_code 函数编译代码
@@ -1726,7 +1727,7 @@ fn analyze_tuple_params<'n: 't, 't>(
     break_at_position: Option<usize>,
     context_at_break: &mut Option<VariableContext<'n>>,
     cycle_detector: &mut CycleDetector<String>,
-    dir_stack: &mut DirStack,
+    dir_stack: &mut DirectoryStack,
 ) -> Option<VariableFrame<'n>> {
     // Check break condition before processing parameters
     if context_at_break.is_some() {
@@ -2364,7 +2365,7 @@ pub fn auto_capture<'t>(
 fn import_ast_node(
     code: &str,
     cycle_detector: &mut CycleDetector<String>,
-    dir_stack: &mut DirStack,
+    dir_stack: &mut DirectoryStack,
 ) -> Result<ASTContextLessNode, String> {
     let tokens = lexer::tokenize(code);
     let tokens = lexer::reject_comment(&tokens);
@@ -2382,7 +2383,7 @@ fn import_ast_node(
 pub fn expand_import_to_node<'n: 't, 't>(
     node: &'t ASTNode<'n>,
     cycle_detector: &mut CycleDetector<String>,
-    dir_stack: &mut DirStack,
+    dir_stack: &mut DirectoryStack,
 ) -> Result<ASTNode<'n>, String> {
     match &node.node_type {
         ASTNodeType::Annotation(annotation) => {
@@ -2394,9 +2395,13 @@ pub fn expand_import_to_node<'n: 't, 't>(
                     }
                     let import_path = &node.children[0];
                     if let ASTNodeType::String(path) = &import_path.node_type {
-                        let absolute_path = dir_stack.get_absolute_path(path).map_err(|err| {
-                            format!("Failed to get absolute path for import '{}': {}", path, err)
-                        })?;
+                        let absolute_path =
+                            dir_stack.translate(&Path::new(path)).map_err(|err| {
+                                format!(
+                                    "Failed to get absolute path for import '{}': {}",
+                                    path, err
+                                )
+                            })?;
                         match cycle_detector.visit(
                             absolute_path
                                 .to_str()
@@ -2404,7 +2409,7 @@ pub fn expand_import_to_node<'n: 't, 't>(
                                 .to_string(),
                         ) {
                             Ok(mut guard) => {
-                                let read_file = std::fs::read_to_string(path);
+                                let read_file = std::fs::read_to_string(absolute_path);
                                 if let Err(e) = read_file {
                                     return Err(format!(
                                         "Failed to read import file '{}': {}",
@@ -2413,7 +2418,7 @@ pub fn expand_import_to_node<'n: 't, 't>(
                                 }
                                 let code_str = read_file.unwrap();
 
-                                dir_stack.push_file(&path).map_err(|err| {
+                                dir_stack.push_file(&Path::new(path)).map_err(|err| {
                                     format!("Failed to push import path '{}': {}", path, err)
                                 })?;
                                 let node = match import_ast_node(
@@ -2435,8 +2440,8 @@ pub fn expand_import_to_node<'n: 't, 't>(
                                         ));
                                     }
                                 };
-                                dir_stack.pop().map_err(|err| {
-                                    format!("Failed to pop import path '{}': {}", path, err)
+                                dir_stack.pop().ok_or_else(|| {
+                                    format!("Failed to pop import path '{}'", path)
                                 })?;
                                 return Ok(node);
                             }

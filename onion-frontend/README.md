@@ -35,10 +35,10 @@ Source Code → Lexer → Parser → AST → Analyzer → IR Generator → IR/By
 
 ```rust
 use onion_frontend::compile::{build_code, compile_to_bytecode};
-use onion_frontend::dir_stack::DirStack;
+use onion_frontend::dir_stack::DirectoryStack;
 
 // Compile to IR
-let mut dir_stack = DirStack::new();
+let mut dir_stack = DirectoryStack::new();
 let source = r#"
     @required stdlib;
     main := () -> {
@@ -72,17 +72,17 @@ let analysis = analyze_ast(&ast, None, &mut dir_stack);
 
 ### Main Functions
 
-- `build_code(code: &str, dir_stack: &mut DirStack) -> Result<IRPackage, String>`
+- `build_code(code: &str, dir_stack: &mut DirectoryStack) -> Result<IRPackage, String>`
   - Compiles source code to intermediate representation
   
-- `compile_to_bytecode(code: &str, dir_stack: &mut DirStack) -> Result<VMInstructionPackage, String>`
+- `compile_to_bytecode(code: &str, dir_stack: &mut DirectoryStack) -> Result<VMInstructionPackage, String>`
   - Compiles source code directly to bytecode
 
 ### Key Types
 
 - `IRPackage` - Contains intermediate representation and debug information
 - `VMInstructionPackage` - Executable bytecode package
-- `DirStack` - Manages file paths and module resolution
+- `DirectoryStack` - Manages file paths and module resolution
 
 ## 🔧 Dependencies
 

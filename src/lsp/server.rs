@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet}; // Add HashSet
 use std::io::{BufRead, Write};
 use std::panic;
+use std::path::Path;
 use std::sync::{Arc, Mutex}; // Add panic module
 
 use log::{debug, error, info, warn};
@@ -9,7 +10,7 @@ use serde_json::Value;
 use url::Url;
 
 use crate::lsp::semantic::encode_semantic_tokens;
-use onion_frontend::dir_stack::DirStack;
+use onion_frontend::dir_stack::DirectoryStack;
 use onion_frontend::parser::analyzer::{self, auto_capture_and_rebuild};
 use onion_frontend::parser::ast::build_ast;
 use onion_frontend::parser::lexer;
@@ -112,7 +113,10 @@ impl LspServer {
     /// Handles document change notification
     pub fn did_change(&mut self, params: DidChangeTextDocumentParams) {
         let uri = params.text_document.uri.clone();
-        info!("Document changed: {} (version {})", uri, params.text_document.version);
+        info!(
+            "Document changed: {} (version {})",
+            uri, params.text_document.version
+        );
 
         // Get or create document
         let document = if let Some(doc) = self.documents.get_mut(&uri) {
@@ -145,7 +149,11 @@ impl LspServer {
         for (i, change) in params.content_changes.iter().enumerate() {
             match change {
                 TextDocumentContentChangeEvent::Full { text } => {
-                    info!("Applying full change #{}: content length {} bytes", i, text.len());
+                    info!(
+                        "Applying full change #{}: content length {} bytes",
+                        i,
+                        text.len()
+                    );
                     document.update_content(text.clone());
                 }
                 TextDocumentContentChangeEvent::Incremental { range, text } => {
@@ -166,7 +174,10 @@ impl LspServer {
         // Update document version
         let old_version = document.version;
         document.version = params.text_document.version;
-        info!("Document version updated from {} to {}", old_version, document.version);
+        info!(
+            "Document version updated from {} to {}",
+            old_version, document.version
+        );
 
         // Print current document content (for debugging)
         debug!(
@@ -199,7 +210,10 @@ impl LspServer {
             // Generate diagnostics and semantic tokens
             match std::panic::catch_unwind(|| super::diagnostics::validate_document(document)) {
                 Ok((diagnostics, semantic_tokens)) => {
-                    info!("Validation complete: {} diagnostics generated", diagnostics.len());
+                    info!(
+                        "Validation complete: {} diagnostics generated",
+                        diagnostics.len()
+                    );
                     if let Some(tokens) = &semantic_tokens {
                         info!("Semantic highlighting: {} tokens generated", tokens.len());
                     } else {
@@ -354,12 +368,12 @@ impl LspServer {
                         return vec![]; // Return empty list
                     }
                 };
-                let mut dir_stack = DirStack::new(Some(&parent_dir)).unwrap();
+                let mut dir_stack = DirectoryStack::new(Some(&parent_dir)).unwrap();
 
                 let mut cycle_detector = cycle_detector::CycleDetector::new();
                 let mut visit_result = match cycle_detector.visit(
-                    match dir_stack.get_absolute_path(match file_path.to_str() {
-                        Some(path) => path,
+                    match dir_stack.translate(match file_path.to_str() {
+                        Some(path) => Path::new(path),
                         None => {
                             error!(
                                 "Failed to convert file path to string: {}",
@@ -383,7 +397,6 @@ impl LspServer {
                     }
                 };
 
-                
                 let macro_result =
                     analyzer::expand_macro(&ast, visit_result.get_detector_mut(), &mut dir_stack);
                 if !macro_result.errors.is_empty() {

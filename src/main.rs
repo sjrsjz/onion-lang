@@ -128,7 +128,7 @@ fn cmd_compile(file: PathBuf, output: Option<PathBuf>, bytecode: bool) -> Result
 
     let mut dir_stack = create_dir_stack(file.parent())?;
     let absolute_path = dir_stack
-        .get_absolute_path(file.to_str().ok_or("Invalid file path")?)
+        .translate(&file)
         .map_err(|e| format!("Failed to get absolute path: {}", e))?;
     let mut cycle_detector = CycleDetector::new();
     let mut visit_result = cycle_detector
@@ -221,7 +221,7 @@ fn cmd_display_ir(file: PathBuf) -> Result<(), String> {
     let mut dir_stack = create_dir_stack(file.parent())?;
 
     let absolute_path = dir_stack
-        .get_absolute_path(file.to_str().ok_or("Invalid file path")?)
+        .translate(&file)
         .map_err(|e| format!("Failed to get absolute path: {}", e))?;
     let mut cycle_detector = CycleDetector::new();
     let mut visit_result = cycle_detector
@@ -308,16 +308,16 @@ fn run_bytecode_file(file: &Path) -> Result<(), String> {
 
 fn create_dir_stack(
     base_dir: Option<&Path>,
-) -> Result<onion_frontend::dir_stack::DirStack, String> {
+) -> Result<onion_frontend::dir_stack::DirectoryStack, String> {
     let dir = base_dir.unwrap_or_else(|| Path::new(".")).to_path_buf();
-    onion_frontend::dir_stack::DirStack::new(Some(&dir))
+    onion_frontend::dir_stack::DirectoryStack::new(Some(&dir))
         .map_err(|e| format!("Failed to initialize directory stack: {}", e))
 }
 
 fn execute_code(
     code: &str,
     cycle_detector: &mut cycle_detector::CycleDetector<String>,
-    dir_stack: &mut onion_frontend::dir_stack::DirStack,
+    dir_stack: &mut onion_frontend::dir_stack::DirectoryStack,
 ) -> Result<(), String> {
     let ir_package = build_code(code, cycle_detector, dir_stack)
         .map_err(|e| format!("Compilation failed: {}", e))?;

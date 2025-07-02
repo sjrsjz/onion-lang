@@ -8,7 +8,7 @@ use super::document::TextDocument;
 use super::protocol::*;
 use super::semantic::SemanticTokenTypes;
 use crate::lsp::semantic::do_semantic;
-use onion_frontend::dir_stack::DirStack;
+use onion_frontend::dir_stack::DirectoryStack;
 use onion_frontend::parser::analyzer::analyze_ast;
 use onion_frontend::parser::ast::ast_token_stream;
 use onion_frontend::parser::ast::build_ast;
@@ -130,7 +130,7 @@ pub fn validate_document(
                     return (vec![], None);
                 }
             };
-            let dir_stack = DirStack::new(Some(&parent_dir));
+            let dir_stack = DirectoryStack::new(Some(&parent_dir));
             if let Err(err) = &dir_stack {
                 let err_msg = err.to_string();
                 error!("Directory stack initialization failed: {}", err_msg);

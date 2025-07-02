@@ -1,4 +1,4 @@
-use crate::dir_stack::DirStack;
+use crate::dir_stack::DirectoryStack;
 use crate::ir_generator::ir_generator;
 use crate::parser::analyzer::analyze_ast;
 use crate::parser::analyzer::auto_capture_and_rebuild;
@@ -19,7 +19,7 @@ use onion_vm::types::lambda::vm_instructions::ir_translator::IRTranslator;
 pub fn build_code(
     code: &str,
     cycle_detector: &mut CycleDetector<String>,
-    dir_stack: &mut DirStack,
+    dir_stack: &mut DirectoryStack,
 ) -> Result<IRPackage, String> {
     let tokens = lexer::tokenize(code);
     let tokens = lexer::reject_comment(&tokens);

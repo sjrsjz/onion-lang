@@ -1,6 +1,6 @@
 [package]
 name = "onion-lang"
-version = "0.1.10"
+version = "0.1.11"
 edition = "2021"
 authors = ["sjrsjz <sjrsjz@gmail.com>"]
 description = "A modern functional programming language with asynchronous execution and lazy evaluation"
@@ -37,7 +37,7 @@ name = "onion"
 path = "src/main.rs"
 
 [dependencies]
-onion-frontend = { version = "0.1.5", path = "./onion-frontend" }
+onion-frontend = { version = "0.1.6", path = "./onion-frontend" }
 onion-vm = { version = "0.1.8", path = "./onion-vm" }
 serde = { workspace = true }
 clap = { version = "4.5", features = ["derive"] }
