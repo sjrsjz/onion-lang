@@ -706,6 +706,14 @@ impl<'t> IRGenerator<'t> {
                         instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                         instructions.push((self.generate_debug_info(ast_node), IR::LengthOf));
                     }
+                    ASTNodeModifier::Share => {
+                        instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
+                        instructions.push((self.generate_debug_info(ast_node), IR::Share));
+                    }
+                    ASTNodeModifier::Launch => {
+                        instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
+                        instructions.push((self.generate_debug_info(ast_node), IR::Launch));
+                    }
                 }
                 Ok(instructions)
             }

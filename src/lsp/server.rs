@@ -292,6 +292,8 @@ impl LspServer {
             "arguments",
             "is",
             "sync",
+            "launch",
+            "share",
         ];
         for keyword in keywords {
             items.push(CompletionItem {

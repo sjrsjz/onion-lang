@@ -67,6 +67,8 @@ pub enum VMInstruction {
     Const = 61,       // 解引用
     Swap = 62,        // 交换栈两个值
     LengthOf = 63,    // 获取对象长度
+    Share = 64,      // 共享对象
+    Launch = 65,     // 启动线程
 
     // 控制流 (70-79)
     Call = 70,        // 调用函数

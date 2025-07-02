@@ -1,0 +1,23 @@
+@required stdlib;
+
+thread1 := () -> {
+    stdlib.io.println("线程1开始");
+    stdlib.time.sleep_seconds(seconds => 2);
+    stdlib.io.println("线程1完成");
+    return "Hello from thread 1";
+};
+
+thread2 := () -> {
+    stdlib.io.println("线程2开始");
+    stdlib.time.sleep_seconds(seconds => 3);
+    stdlib.io.println("线程2完成");
+    return "Hello from thread 2";
+};
+
+handle1 := launch thread1;
+handle2 := launch thread2;
+stdlib.time.sleep_seconds(seconds => 5);
+result1 := valueof handle1;
+result2 := valueof handle2;
+stdlib.io.println("线程1的结果:", result1);
+stdlib.io.println("线程2的结果:", result2);

@@ -39,18 +39,18 @@ pub struct OnionLambdaRunnableLauncher {
 
     phase: ArgumentProcessingPhase,
 
-    runnable_mapper: &'static dyn Fn(Box<dyn Runnable>) -> Result<Box<dyn Runnable>, RuntimeError>,
+    runnable_mapper: &'static (dyn Fn(Box<dyn Runnable>) -> Result<Box<dyn Runnable>, RuntimeError> + Sync + Send),
     constrain_runnable: Option<Box<dyn Runnable>>,
 }
 
 impl OnionLambdaRunnableLauncher {
-    pub fn new_static<F: 'static>(
+    pub fn new_static<F: 'static + Sync + Send>(
         lambda_obj: &OnionStaticObject,
         argument_tuple_obj: &OnionStaticObject,
         runnable_mapper: &'static F,
     ) -> Result<OnionLambdaRunnableLauncher, RuntimeError>
     where
-        F: Fn(Box<dyn Runnable>) -> Result<Box<dyn Runnable>, RuntimeError>,
+        F: Fn(Box<dyn Runnable>) -> Result<Box<dyn Runnable>, RuntimeError> + Sync + Send,
     {
         // Initialize collected_arguments based on parameter count
         let mut collected_arguments = Vec::new();

@@ -419,6 +419,16 @@ impl IRTranslator {
                         Opcode32::build_opcode(VMInstruction::Const as u8, 0, 0, 0).get_opcode(),
                     );
                 }
+                IR::Share => {
+                    self.code.push(
+                        Opcode32::build_opcode(VMInstruction::Share as u8, 0, 0, 0).get_opcode(),
+                    );
+                }
+                IR::Launch => {
+                    self.code.push(
+                        Opcode32::build_opcode(VMInstruction::Launch as u8, 0, 0, 0).get_opcode(),
+                    );
+                }
                 IR::Assert => {
                     self.code.push(
                         Opcode32::build_opcode(VMInstruction::Assert as u8, 0, 0, 0).get_opcode(),

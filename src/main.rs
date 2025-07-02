@@ -38,7 +38,7 @@ mod stdlib;
 #[derive(Parser)]
 #[command(name = "onion-lang")]
 #[command(about = "The Onion Programming Language CLI", long_about = None)]
-#[command(version = "0.1.0")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
 struct Cli {
     #[command(subcommand)]
     command: Commands,

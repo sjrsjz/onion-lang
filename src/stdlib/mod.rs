@@ -12,6 +12,7 @@ use onion_vm::{
 };
 
 mod bytes;
+mod ffi;
 mod fs;
 mod http;
 mod io;
@@ -23,7 +24,6 @@ mod sys;
 mod time;
 mod tuple;
 mod types;
-mod ffi;
 
 pub fn build_named_dict(dict: IndexMap<String, OnionStaticObject>) -> OnionStaticObject {
     let mut pairs = vec![];
@@ -53,6 +53,8 @@ where
 impl<F> Runnable for NativeFunctionGenerator<F>
 where
     F: Fn(&OnionStaticObject, &mut GC<OnionObjectCell>) -> Result<OnionStaticObject, RuntimeError>
+        + Send
+        + Sync
         + 'static,
 {
     fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> StepResult {
@@ -108,6 +110,8 @@ pub fn wrap_native_function<F>(
 ) -> OnionStaticObject
 where
     F: Fn(&OnionStaticObject, &mut GC<OnionObjectCell>) -> Result<OnionStaticObject, RuntimeError>
+        + Send
+        + Sync
         + 'static,
 {
     OnionLambdaDefinition::new_static(

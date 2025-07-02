@@ -63,7 +63,7 @@ macro_rules! unwrap_step_result {
 }
 
 #[allow(unused_variables)]
-pub trait Runnable {
+pub trait Runnable: Send + Sync + 'static {
     fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> StepResult;
     fn receive(
         &mut self,

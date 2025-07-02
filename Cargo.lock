@@ -824,6 +824,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "io-uring"
+version = "0.7.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b86e202f00093dcba4275d4636b93ef9dd75d025ae560d2521b45ea28ab49013"
+dependencies = [
+ "bitflags 2.9.1",
+ "cfg-if",
+ "libc",
+]
+
+[[package]]
 name = "ipnet"
 version = "2.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1082,7 +1093,7 @@ checksum = "a4895175b425cb1f87721b59f0f286c2092bd4af812243672510e1ac53e2e0ad"
 
 [[package]]
 name = "onion-frontend"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "base64 0.22.1",
  "colored",
@@ -1094,7 +1105,7 @@ dependencies = [
 
 [[package]]
 name = "onion-lang"
-version = "0.1.11"
+version = "0.2.0"
 dependencies = [
  "clap",
  "colored",
@@ -1121,7 +1132,7 @@ dependencies = [
 
 [[package]]
 name = "onion-vm"
-version = "0.1.8"
+version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
  "bincode",
@@ -1432,9 +1443,9 @@ dependencies = [
 
 [[package]]
 name = "rust-arc-gc"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4f09424d5919bfdbcfcff9ace93d55cf18119dfee81730571e378b194523df4"
+checksum = "244510e1d478f661e535c6ab7ff8ffcb3d31d39af7873cf268b3bdf98479e44c"
 dependencies = [
  "rustc-hash",
 ]
@@ -1763,17 +1774,19 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.45.1"
+version = "1.46.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75ef51a33ef1da925cea3e4eb122833cb377c61439ca401b770f54902b806779"
+checksum = "1140bb80481756a8cbe10541f37433b459c5aa1e727b4c020fbfebdc25bf3ec4"
 dependencies = [
  "backtrace",
  "bytes",
+ "io-uring",
  "libc",
  "mio",
  "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",
+ "slab",
  "socket2",
  "tokio-macros",
  "windows-sys 0.52.0",

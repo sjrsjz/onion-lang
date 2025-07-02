@@ -17,8 +17,9 @@ use crate::{
         lambda::launcher::OnionLambdaRunnableLauncher,
         lazy_set::OnionLazySet,
         named::OnionNamed,
-        object::{OnionObject, OnionObjectCell},
+        object::{OnionObject, OnionObjectCell, OnionStaticObject},
         pair::OnionPair,
+        thread_handle::OnionThreadHandle,
         tuple::OnionTuple,
     },
     unwrap_step_result,
@@ -1017,8 +1018,7 @@ pub fn is_in(
         unwrap_step_result!(container
             .weak()
             .with_data(|container_ref| match container_ref {
-                OnionObject::LazySet(lazy_set) =>
-                    lazy_set.get_container().contains(element.weak()),
+                OnionObject::LazySet(lazy_set) => lazy_set.get_container().contains(element.weak()),
                 _ => {
                     return Err(RuntimeError::DetailedError(
                         format!("Container is not a LazySet: {}", container).into(),
@@ -1219,4 +1219,78 @@ pub fn raise(
     // 获取抛出对象
     let value = unwrap_step_result!(runnable.context.pop());
     return StepResult::Error(RuntimeError::CustomValue(Box::new(value)));
+}
+
+pub fn launch_thread(
+    runnable: &mut LambdaRunnable,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObjectCell>,
+) -> StepResult {
+    let value = unwrap_step_result!(runnable.context.pop());
+
+    // 检查 value 是否为 Lambda 对象
+    let lambda_obj = unwrap_step_result!(value.weak().with_data(|data| {
+        match data {
+            OnionObject::Lambda(_) => Ok(value.clone()),
+            _ => Err(RuntimeError::DetailedError(
+                format!(
+                    "launch_thread requires a Lambda object, but found {}",
+                    value
+                )
+                .into(),
+            )),
+        }
+    }));
+
+    // 在新线程中启动 Lambda
+    let handle: std::thread::JoinHandle<Result<Box<OnionStaticObject>, RuntimeError>> =
+        std::thread::spawn(move || {
+            use crate::lambda::runnable::Runnable;
+            use crate::lambda::scheduler::scheduler::Scheduler;
+            use crate::types::tuple::OnionTuple;
+
+            let mut gc = GC::new_with_memory_threshold(1024 * 1024); // 1 MB threshold
+
+            // 创建空参数元组
+            let args = OnionTuple::new_static(vec![]);
+
+            // 创建调度器运行 Lambda
+            let mut scheduler: Box<dyn Runnable> = Box::new(
+                OnionLambdaRunnableLauncher::new_static(&lambda_obj, &args, &|r| {
+                    Ok(Box::new(Scheduler::new(vec![r])))
+                })?,
+            );
+
+            // 执行循环
+            loop {
+                match scheduler.step(&mut gc) {
+                    StepResult::Continue => {
+                        // 继续执行下一步
+                    }
+                    StepResult::SetSelfObject(_) => {
+                        // 设置 self 对象，这里无需额外操作
+                    }
+                    StepResult::Error(ref error) => return Err(error.clone()),
+                    StepResult::NewRunnable(_) => {
+                        // 添加新的可运行对象到调度器
+                        unreachable!()
+                    }
+                    StepResult::ReplaceRunnable(runnable) => {
+                        // 启动器完成并被替换为实际的可运行对象
+                        scheduler = runnable.copy();
+                    }
+                    StepResult::Return(v) => {
+                        // 线程执行完成，退出
+                        return Ok(v);
+                    }
+                }
+            }
+        });
+
+    // 创建线程句柄对象并推入栈
+    let thread_handle = OnionThreadHandle::new(handle);
+    let handle_object = OnionObject::Custom(Arc::new(thread_handle)).consume_and_stabilize();
+    unwrap_step_result!(runnable.context.push_object(handle_object));
+
+    StepResult::Continue
 }

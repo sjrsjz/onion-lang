@@ -1,9 +1,8 @@
 use std::{
-    cell::RefCell,
     collections::VecDeque,
     fmt::{Debug, Display},
     ptr::addr_eq,
-    sync::Arc,
+    sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 
 use arc_gc::{
@@ -26,8 +25,7 @@ use super::{
 };
 
 // Newtype wrapper to allow implementing GCTraceable for RefCell<OnionObject>
-#[derive(Clone)]
-pub struct OnionObjectCell(pub RefCell<OnionObject>);
+pub struct OnionObjectCell(pub RwLock<OnionObject>);
 
 impl OnionObjectCell {
     #[inline(always)]
@@ -36,7 +34,7 @@ impl OnionObjectCell {
         F: FnOnce(&OnionObject) -> Result<T, RuntimeError>,
     {
         self.0
-            .try_borrow()
+            .read()
             .map_err(|_| {
                 RuntimeError::BorrowError(
                     "Failed to borrow OnionObjectCell at `with_data`"
@@ -52,7 +50,7 @@ impl OnionObjectCell {
         F: FnOnce(&mut OnionObject) -> Result<T, RuntimeError>,
     {
         self.0
-            .try_borrow_mut()
+            .write()
             .map_err(|_| {
                 RuntimeError::BorrowError(
                     "Failed to borrow OnionObjectCell at `with_data_mut`"
@@ -69,7 +67,7 @@ impl OnionObjectCell {
         F: FnOnce(&mut OnionObject) -> Result<T, RuntimeError>,
     {
         self.0
-            .try_borrow_mut()
+            .write()
             .map_err(|_| {
                 RuntimeError::BorrowError(
                     "Failed to borrow OnionObjectCell at `with_data_ref_mut`"
@@ -86,7 +84,7 @@ impl OnionObjectCell {
         F: Fn(&OnionObject) -> Result<T, RuntimeError>,
     {
         self.0
-            .try_borrow()
+            .read()
             .map_err(|_| {
                 RuntimeError::BorrowError(
                     "Failed to borrow OnionObjectCell at `with_attribute`"
@@ -99,7 +97,7 @@ impl OnionObjectCell {
 
     #[inline(always)]
     pub fn upgrade(&self, collected: &mut Vec<GCArc<OnionObjectCell>>) {
-        match self.0.try_borrow() {
+        match self.0.read() {
             Ok(obj) => obj.upgrade(collected),
             Err(_) => {
                 // 如果无法借用，可能是因为对象已经被回收或正在被其他线程使用
@@ -110,7 +108,7 @@ impl OnionObjectCell {
 
     #[inline(always)]
     pub fn stabilize(self) -> OnionStaticObject {
-        OnionStaticObject::new(self.borrow().clone())
+        OnionStaticObject::new(self.try_borrow().unwrap().clone())
     }
 
     #[inline(always)]
@@ -124,8 +122,8 @@ impl OnionObjectCell {
     }
 
     #[inline(always)]
-    pub fn try_borrow(&self) -> Result<std::cell::Ref<OnionObject>, RuntimeError> {
-        self.0.try_borrow().map_err(|_| {
+    pub fn try_borrow(&self) -> Result<RwLockReadGuard<OnionObject>, RuntimeError> {
+        self.0.read().map_err(|_| {
             RuntimeError::BorrowError(
                 "Failed to borrow OnionObjectCell at `try_borrow`"
                     .to_string()
@@ -134,8 +132,8 @@ impl OnionObjectCell {
         })
     }
     #[inline(always)]
-    pub fn try_borrow_mut(&self) -> Result<std::cell::RefMut<OnionObject>, RuntimeError> {
-        self.0.try_borrow_mut().map_err(|_| {
+    pub fn try_borrow_mut(&self) -> Result<RwLockWriteGuard<OnionObject>, RuntimeError> {
+        self.0.write().map_err(|_| {
             RuntimeError::BorrowError(
                 "Failed to borrow OnionObjectCell at `try_borrow_mut`"
                     .to_string()
@@ -146,7 +144,7 @@ impl OnionObjectCell {
 }
 
 impl std::ops::Deref for OnionObjectCell {
-    type Target = RefCell<OnionObject>;
+    type Target = RwLock<OnionObject>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -159,33 +157,35 @@ impl std::ops::DerefMut for OnionObjectCell {
     }
 }
 
-impl From<RefCell<OnionObject>> for OnionObjectCell {
-    fn from(cell: RefCell<OnionObject>) -> Self {
+impl From<RwLock<OnionObject>> for OnionObjectCell {
+    fn from(cell: RwLock<OnionObject>) -> Self {
         OnionObjectCell(cell)
     }
 }
 
 impl From<OnionObject> for OnionObjectCell {
     fn from(obj: OnionObject) -> Self {
-        OnionObjectCell(RefCell::new(obj))
+        OnionObjectCell(RwLock::new(obj))
     }
 }
 
 impl GCTraceable<OnionObjectCell> for OnionObjectCell {
     fn collect(&self, queue: &mut VecDeque<GCArcWeak<OnionObjectCell>>) {
-        self.0.borrow().collect(queue);
-    }
+            if let Ok(obj) = self.0.read() {
+                obj.collect(queue);
+            }
+        }
 }
 
 impl Debug for OnionObjectCell {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.0.borrow())
+        write!(f, "{:?}", self.0.read())
     }
 }
 
 impl Display for OnionObjectCell {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.0.borrow())
+        write!(f, "{:?}", self.0.read())
     }
 }
 
@@ -218,9 +218,7 @@ pub enum OnionObject {
     Mut(GCArcWeak<OnionObjectCell>),
 }
 
-pub trait OnionObjectExt:
-    GCTraceable<OnionObjectCell> + Debug + Send + Sync + 'static
-{
+pub trait OnionObjectExt: GCTraceable<OnionObjectCell> + Debug + Send + Sync + 'static {
     // Type introspection for downcasting
     fn as_any(&self) -> &dyn std::any::Any;
 
@@ -456,7 +454,7 @@ impl OnionObject {
 
     #[inline(always)]
     pub fn to_cell(self) -> OnionObjectCell {
-        OnionObjectCell(RefCell::new(self))
+        OnionObjectCell(RwLock::new(self))
     }
 
     #[inline(always)]

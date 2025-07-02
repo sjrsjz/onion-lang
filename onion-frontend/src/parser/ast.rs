@@ -524,6 +524,8 @@ pub enum ASTNodeModifier {
     Await,
     BindSelf,
     LengthOf, // LengthOf
+    Share,    // Share
+    Launch,   // Launch
 }
 
 #[derive(Debug, Clone)]
@@ -536,15 +538,19 @@ pub struct ASTNode<'t> {
 
 #[derive(Debug, Clone)]
 pub struct ASTContextLessNode {
-    pub node_type: ASTNodeType,             // Type of the node
-    pub children: Vec<ASTContextLessNode>,         // Children of the node
+    pub node_type: ASTNodeType,            // Type of the node
+    pub children: Vec<ASTContextLessNode>, // Children of the node
 }
 
 impl<'t> From<ASTNode<'t>> for ASTContextLessNode {
     fn from(node: ASTNode<'t>) -> Self {
         ASTContextLessNode {
             node_type: node.node_type,
-            children: node.children.into_iter().map(|child| child.into()).collect(),
+            children: node
+                .children
+                .into_iter()
+                .map(|child| child.into())
+                .collect(),
         }
     }
 }
@@ -565,7 +571,11 @@ impl ASTContextLessNode {
             node_type: self.node_type,
             start_token: None,
             end_token: None,
-            children: self.children.into_iter().map(|child| child.into_ast_node()).collect(),
+            children: self
+                .children
+                .into_iter()
+                .map(|child| child.into_ast_node())
+                .collect(),
         }
     }
 
@@ -575,7 +585,11 @@ impl ASTContextLessNode {
             node_type: self.node_type.clone(),
             start_token: None,
             end_token: None,
-            children: self.children.iter().map(|child| child.to_ast_node()).collect(),
+            children: self
+                .children
+                .iter()
+                .map(|child| child.to_ast_node())
+                .collect(),
         }
     }
 }
@@ -614,7 +628,6 @@ impl PartialEq for ASTContextLessNode {
         self.node_type == other.node_type && self.children == other.children
     }
 }
-
 
 impl PartialEq for ASTNode<'_> {
     fn eq(&self, other: &Self) -> bool {
@@ -2663,7 +2676,7 @@ fn match_modifier<'t>(
     if tokens[current].len() == 1
         && vec![
             "deepcopy", "copy", "mut", "const", "keyof", "valueof", "assert", "import", "typeof",
-            "await", "bind", "lengthof", "dynamic", "static",
+            "await", "bind", "lengthof", "dynamic", "static", "share", "launch",
         ]
         .contains(&tokens[current].first().unwrap().token)
     {
@@ -2731,6 +2744,8 @@ fn match_modifier<'t>(
             "await" => ASTNodeModifier::Await,
             "bind" => ASTNodeModifier::BindSelf,
             "lengthof" => ASTNodeModifier::LengthOf,
+            "share" => ASTNodeModifier::Share,
+            "launch" => ASTNodeModifier::Launch,
             _ => return Ok((None, 0)),
         };
         return Ok((

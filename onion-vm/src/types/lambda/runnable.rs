@@ -95,6 +95,7 @@ static INSTRUCTION_TABLE: std::sync::LazyLock<Vec<InstructionHandler>> =
         instruction_table[VMInstruction::Const as usize] = vm_instructions::immutablize;
         instruction_table[VMInstruction::ForkInstruction as usize] =
             vm_instructions::fork_instruction;
+        instruction_table[VMInstruction::Launch as usize] = vm_instructions::launch_thread;
 
         // 控制流
         instruction_table[VMInstruction::Call as usize] = vm_instructions::call_lambda;
@@ -219,10 +220,8 @@ impl OnionLambdaRunnable {
                             named.get_key().with_data(|key| match key {
                                 OnionObject::String(key_str) => {
                                     match pool.iter().position(|s| s.eq(key_str.as_ref())) {
-                                        Some(index) => new_context.let_variable(
-                                            index,
-                                            named.get_value().stabilize(),
-                                        ),
+                                        Some(index) => new_context
+                                            .let_variable(index, named.get_value().stabilize()),
                                         None => {
                                             // do nothing because the runnable does not need this variable
                                             Ok(())
