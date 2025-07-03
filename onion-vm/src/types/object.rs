@@ -37,53 +37,46 @@ pub struct OnionObjectCell(pub RwLock<OnionObject>);
 
 impl OnionObjectCell {
     #[inline(always)]
+    /// 严格遵循幂等律的情况下，Cell里不可能出现Mut对象。
+    /// 如果出现了Mut对象，说明VM对象分配或GC逻辑有bug
     pub fn with_data<T, F>(&self, f: F) -> Result<T, RuntimeError>
     where
         F: FnOnce(&OnionObject) -> Result<T, RuntimeError>,
     {
-        self.0
-            .read()
-            .map_err(|_| {
-                RuntimeError::BorrowError(
-                    "Failed to borrow OnionObjectCell at `with_data`"
-                        .to_string()
-                        .into(),
-                )
-            })?
-            .with_data(f)
+        match self.0.read() {
+            Ok(guard) => match &*guard {
+                OnionObject::Mut(_) => {
+                    panic!("CRITICAL: OnionObjectCell contains Mut object. This indicates a bug in VM object allocation or GC logic. Check mutablize() and object creation paths.")
+                }
+                obj => f(obj),
+            },
+            Err(_) => Err(RuntimeError::BorrowError(
+                "Failed to borrow OnionObjectCell at `with_data`"
+                    .to_string()
+                    .into(),
+            )),
+        }
     }
     #[inline(always)]
+    /// 严格遵循幂等律的情况下，Cell里不可能出现Mut对象。
+    /// 如果出现了Mut对象，说明VM对象分配或GC逻辑有bug
     pub fn with_data_mut<T, F>(&self, f: F) -> Result<T, RuntimeError>
     where
         F: FnOnce(&mut OnionObject) -> Result<T, RuntimeError>,
     {
-        self.0
-            .write()
-            .map_err(|_| {
-                RuntimeError::BorrowError(
-                    "Failed to borrow OnionObjectCell at `with_data_mut`"
-                        .to_string()
-                        .into(),
-                )
-            })?
-            .with_data_mut(f)
-    }
-
-    #[inline(always)]
-    pub fn with_data_ref_mut<T, F>(&self, f: F) -> Result<T, RuntimeError>
-    where
-        F: FnOnce(&mut OnionObject) -> Result<T, RuntimeError>,
-    {
-        self.0
-            .write()
-            .map_err(|_| {
-                RuntimeError::BorrowError(
-                    "Failed to borrow OnionObjectCell at `with_data_ref_mut`"
-                        .to_string()
-                        .into(),
-                )
-            })?
-            .with_data_ref_mut(f)
+        match self.0.write() {
+            Ok(mut guard) => match &mut *guard {
+                OnionObject::Mut(_) => {
+                    panic!("CRITICAL: OnionObjectCell contains Mut object. This indicates a bug in VM object allocation or GC logic. Check mutablize() and object creation paths.")
+                }
+                obj => f(obj),
+            },
+            Err(_) => Err(RuntimeError::BorrowError(
+                "Failed to borrow OnionObjectCell at `with_data_mut`"
+                    .to_string()
+                    .into(),
+            )),
+        }
     }
 
     #[inline(always)]
@@ -518,16 +511,7 @@ impl OnionObject {
         })
     }
 
-    /// Warning: This method can cause stack overflow if there are nested Mut references.
-    ///
-    /// TODO: Add recursion depth limit after VM core is complete.
-    pub fn clone_value(&self) -> Result<OnionStaticObject, RuntimeError> {
-        self.with_data(|obj| Ok(obj.reconstruct_container()?.consume_and_stabilize()))
-    }
-
-    /// Warning: This method can cause stack overflow if there are nested Mut references.
-    ///
-    /// TODO: Add recursion depth limit after VM core is complete.
+    #[inline(always)]
     pub fn with_data<T, F>(&self, f: F) -> Result<T, RuntimeError>
     where
         F: FnOnce(&OnionObject) -> Result<T, RuntimeError>,
@@ -535,7 +519,6 @@ impl OnionObject {
         match self {
             OnionObject::Mut(weak) => {
                 if let Some(strong) = weak.upgrade() {
-                    // FIXME: Potential infinite recursion if Mut contains another Mut
                     strong.as_ref().with_data(f)
                 } else {
                     Err(RuntimeError::BrokenReference)
@@ -545,9 +528,7 @@ impl OnionObject {
         }
     }
 
-    /// Warning: This method can cause stack overflow if there are nested Mut references.
-    ///
-    /// TODO: Add recursion depth limit after VM core is complete.
+    #[inline(always)]
     pub fn with_data_mut<T, F>(&mut self, f: F) -> Result<T, RuntimeError>
     where
         F: FnOnce(&mut OnionObject) -> Result<T, RuntimeError>,
@@ -555,7 +536,6 @@ impl OnionObject {
         match self {
             OnionObject::Mut(weak) => {
                 if let Some(strong) = weak.upgrade() {
-                    // FIXME: Potential infinite recursion if Mut contains another Mut
                     strong.as_ref().with_data_mut(f)
                 } else {
                     Err(RuntimeError::BrokenReference)
@@ -564,6 +544,8 @@ impl OnionObject {
             _ => f(self),
         }
     }
+
+    #[inline(always)]
     /// Assign a new value to a mutable object.
     pub fn assign(&self, other: &OnionObject) -> Result<(), RuntimeError> {
         // 由于我们无法保证赋值后GCArcWeak指向对象的稳定性，对不可变对象进行赋值操作会导致潜在的内存安全问题。
@@ -587,20 +569,7 @@ impl OnionObject {
             None => Err(RuntimeError::BrokenReference),
         }
     }
-    pub fn with_data_ref_mut<T, F>(&self, f: F) -> Result<T, RuntimeError>
-    where
-        F: FnOnce(&mut OnionObject) -> Result<T, RuntimeError>,
-    {
-        let OnionObject::Mut(weak) = self else {
-            return Err(RuntimeError::InvalidOperation(
-                format!("Cannot mutate non-mutable object: {:?}", self).into(),
-            ));
-        };
-        match weak.upgrade() {
-            Some(strong) => strong.as_ref().with_data_mut(f),
-            None => Err(RuntimeError::BrokenReference),
-        }
-    }
+
     /// 重建容器对象，主要用于 mutable_obj1 = obj2 这种赋值
     pub fn reconstruct_container(&self) -> Result<OnionObject, RuntimeError> {
         match self {
@@ -841,7 +810,9 @@ impl OnionObject {
             )),
         })
     }
-    pub fn mutablize(self, gc: &mut GC<OnionObjectCell>) -> OnionStaticObject {
+
+    #[inline(always)]
+    fn mutablize(self, gc: &mut GC<OnionObjectCell>) -> OnionStaticObject {
         let arc = gc.create(OnionObjectCell::from(self));
         OnionStaticObject {
             obj: OnionObject::Mut(arc.as_weak()),
@@ -1994,11 +1965,29 @@ impl OnionStaticObject {
     }
 
     #[inline(always)]
-    pub fn mutablize(
-        &self,
-        gc: &mut GC<OnionObjectCell>,
-    ) -> Result<OnionStaticObject, RuntimeError> {
-        self.obj.with_data(|obj| Ok(obj.clone().mutablize(gc)))
+    /// 将值装箱成可变容器，严格遵循幂等律的情况下，Cell里不可能出现Mut对象。
+    /// 也就是说，mut mut x和mut x是等价的。
+    pub fn mutablize(self, gc: &mut GC<OnionObjectCell>) -> OnionStaticObject {
+        match self.weak() {
+            OnionObject::Mut(_) => self,
+            v => v.clone().mutablize(gc),
+        }
+    }
+
+    #[inline(always)]
+    /// 将值从可变容器中卸载，严格遵循幂等律
+    /// 也就是说，const const x和const x是等价的。
+    pub fn immutablize(self) -> Result<OnionStaticObject, RuntimeError> {
+        match self.weak() {
+            OnionObject::Mut(v) => match v.upgrade() {
+                None => Err(RuntimeError::BrokenReference),
+                Some(arc) => match arc.as_ref().0.read() {
+                    Ok(data) => Ok(OnionStaticObject::new(data.clone())),
+                    Err(_) => Err(RuntimeError::BrokenReference),
+                },
+            },
+            _ => Ok(self),
+        }
     }
 }
 

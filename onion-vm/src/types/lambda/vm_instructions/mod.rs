@@ -1001,7 +1001,6 @@ pub fn assert(
             .into(),
         ));
     }
-    unwrap_step_result!(runnable.context.discard_objects(1));
     StepResult::Continue
 }
 
@@ -1089,10 +1088,8 @@ pub fn mutablize(
     _opcode: &ProcessedOpcode,
     gc: &mut GC<OnionObjectCell>,
 ) -> StepResult {
-    let heap =
-        unwrap_step_result!(unwrap_step_result!(runnable.context.get_object_rev(0)).mutablize(gc));
-    unwrap_step_result!(runnable.context.discard_objects(1));
-    unwrap_step_result!(runnable.context.push_object(heap));
+    let obj = unwrap_step_result!(runnable.context.pop());
+    unwrap_step_result!(runnable.context.push_object(obj.mutablize(gc)));
     StepResult::Continue
 }
 
@@ -1101,10 +1098,10 @@ pub fn immutablize(
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObjectCell>,
 ) -> StepResult {
-    let obj = unwrap_step_result!(runnable.context.get_object_rev(0));
-    let immutable_obj = unwrap_step_result!(obj.weak().clone_value());
-    unwrap_step_result!(runnable.context.discard_objects(1));
-    unwrap_step_result!(runnable.context.push_object(immutable_obj));
+    let obj = unwrap_step_result!(runnable.context.pop());
+    unwrap_step_result!(runnable
+        .context
+        .push_object(unwrap_step_result!(obj.immutablize())));
     StepResult::Continue
 }
 
