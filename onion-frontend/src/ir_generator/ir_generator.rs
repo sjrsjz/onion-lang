@@ -2,6 +2,44 @@ use crate::parser::ast::{ASTNode, ASTNodeModifier, ASTNodeOperation, ASTNodeType
 use base64::{self, Engine};
 use onion_vm::types::lambda::vm_instructions::ir::{DebugInfo, Functions, IROperation, IR};
 
+/// Parse integer literals in various formats: decimal, hex (0x), octal (0o), binary (0b)
+fn parse_integer_literal(number_str: &str) -> Option<i64> {
+    let trimmed = number_str.trim();
+
+    if trimmed.len() < 2 {
+        // Too short for any prefix, try as decimal
+        return trimmed.parse::<i64>().ok();
+    }
+
+    // Check for prefixes using character iteration for UTF-8 safety
+    let chars: Vec<char> = trimmed.chars().collect();
+    if chars.len() >= 2 && chars[0] == '0' {
+        match chars[1] {
+            'x' | 'X' => {
+                // Hexadecimal
+                let hex_part = &trimmed[2..];
+                return i64::from_str_radix(hex_part, 16).ok();
+            }
+            'o' | 'O' => {
+                // Octal
+                let octal_part = &trimmed[2..];
+                return i64::from_str_radix(octal_part, 8).ok();
+            }
+            'b' | 'B' => {
+                // Binary
+                let binary_part = &trimmed[2..];
+                return i64::from_str_radix(binary_part, 2).ok();
+            }
+            _ => {
+                // No recognized prefix, fall through to decimal
+            }
+        }
+    }
+
+    // Default to decimal parsing
+    trimmed.parse::<i64>().ok()
+}
+
 #[derive(Debug)]
 enum Scope {
     Frame,
@@ -411,11 +449,14 @@ impl<'t> IRGenerator<'t> {
                 Ok(instructions)
             }
             ASTNodeType::Number(number_str) => {
-                // check if number_str is float or int
+                // check if number_str is float or int, supporting hex, octal, binary, and decimal
                 let mut instructions = Vec::new();
-                if let Ok(number) = number_str.parse::<i64>() {
-                    instructions.push((self.generate_debug_info(ast_node), IR::LoadInt(number)));
+
+                // First try to parse as various integer formats
+                if let Some(integer_value) = parse_integer_literal(number_str) {
+                    instructions.push((self.generate_debug_info(ast_node), IR::LoadInt(integer_value)));
                 } else if let Ok(number) = number_str.parse::<f64>() {
+                    // Fall back to float parsing for decimal floats and scientific notation
                     instructions.push((self.generate_debug_info(ast_node), IR::LoadFloat(number)));
                 } else {
                     return Err(IRGeneratorError::InvalidASTNodeType(

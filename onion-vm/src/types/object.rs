@@ -12,7 +12,15 @@ use arc_gc::{
 };
 use base64::{engine::general_purpose, Engine as _};
 
-use crate::lambda::runnable::RuntimeError;
+use crate::{
+    lambda::runnable::RuntimeError,
+    onion_tuple,
+    types::lambda::native::{
+        native_bool_converter, native_bytes_converter, native_elements_method,
+        native_float_converter, native_int_converter, native_length_method,
+        native_string_converter, wrap_native_function,
+    },
+};
 
 use super::{
     lambda::{
@@ -171,10 +179,10 @@ impl From<OnionObject> for OnionObjectCell {
 
 impl GCTraceable<OnionObjectCell> for OnionObjectCell {
     fn collect(&self, queue: &mut VecDeque<GCArcWeak<OnionObjectCell>>) {
-            if let Ok(obj) = self.0.read() {
-                obj.collect(queue);
-            }
+        if let Ok(obj) = self.0.read() {
+            obj.collect(queue);
         }
+    }
 }
 
 impl Debug for OnionObjectCell {
@@ -1246,71 +1254,561 @@ impl OnionObject {
         F: Fn(&OnionObject) -> Result<R, RuntimeError>,
     {
         self.with_data(|obj| match obj {
-            OnionObject::Tuple(tuple) => tuple.with_attribute(key, f),
-            OnionObject::Named(named) => named.with_attribute(key, f),
-            OnionObject::Pair(pair) => pair.with_attribute(key, f),
-            OnionObject::Lambda(lambda) => lambda.with_attribute(key, f),
-            OnionObject::LazySet(lazy_set) => lazy_set.with_attribute(key, f),
-            OnionObject::String(s) => {
+            OnionObject::Integer(_) => {
                 if let OnionObject::String(key_str) = key {
-                    if key_str.as_ref().eq("length") {
-                        return f(&OnionObject::Integer(s.len() as i64));
-                    }
-                    if key_str.as_ref().eq("elements") {
-                        let elements = OnionTuple::new_static_no_ref(
-                            &s.chars()
-                                .map(|c| {
-                                    OnionStaticObject::new(OnionObject::String(Arc::new(
-                                        c.to_string(),
-                                    )))
-                                })
-                                .collect::<Vec<_>>(),
-                        );
-                        return f(elements.weak());
-                    }
-                }
-                Err(RuntimeError::InvalidOperation(
-                    format!("with_attribute() not supported for String: {}", s).into(),
-                ))
-            }
-            OnionObject::Bytes(b) => {
-                if let OnionObject::String(key_str) = key {
-                    if key_str.as_ref().eq("length") {
-                        return f(&OnionObject::Integer(b.len() as i64));
-                    }
-                    if key_str.as_ref().eq("elements") {
-                        let elements = OnionTuple::new_static_no_ref(
-                            &b.iter()
-                                .map(|byte| {
-                                    OnionStaticObject::new(OnionObject::Integer(*byte as i64))
-                                })
-                                .collect::<Vec<_>>(),
-                        );
-                        return f(elements.weak());
-                    }
-                }
-                Err(RuntimeError::InvalidOperation(
-                    format!("with_attribute() not supported for Bytes: {:?}", b).into(),
-                ))
-            }
-            OnionObject::Range(start, end) => {
-                if let OnionObject::String(key_str) = key {
-                    if key_str.as_ref().eq("length") {
-                        return f(&OnionObject::Integer((end - start) as i64));
-                    }
-                    if key_str.as_ref().eq("elements") {
-                        let elements = OnionTuple::new_static_no_ref(
-                            &(*start..*end)
-                                .map(|i| OnionStaticObject::new(OnionObject::Integer(i as i64)))
-                                .collect::<Vec<_>>(),
-                        );
-                        return f(elements.weak());
+                    match key_str.as_str() {
+                        "int" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::int".to_string(),
+                                &native_int_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "float" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::float".to_string(),
+                                &native_float_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "string" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::string".to_string(),
+                                &native_string_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "bool" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::bool".to_string(),
+                                &native_bool_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "bytes" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::bytes".to_string(),
+                                &native_bytes_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        _ => {}
                     }
                 }
                 Err(RuntimeError::InvalidOperation(
                     format!(
-                        "with_attribute() not supported for Range: {}..{}",
-                        start, end
+                        "Attribute '{}' not found for Integer",
+                        match key {
+                            OnionObject::String(s) => s.as_ref(),
+                            _ => "<non-string>",
+                        }
+                    )
+                    .into(),
+                ))
+            }
+            OnionObject::Float(_) => {
+                if let OnionObject::String(key_str) = key {
+                    match key_str.as_str() {
+                        "int" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::int".to_string(),
+                                &native_int_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "float" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::float".to_string(),
+                                &native_float_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "string" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::string".to_string(),
+                                &native_string_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "bool" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::bool".to_string(),
+                                &native_bool_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "bytes" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::bytes".to_string(),
+                                &native_bytes_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        _ => {}
+                    }
+                }
+                Err(RuntimeError::InvalidOperation(
+                    format!(
+                        "Attribute '{}' not found for Float",
+                        match key {
+                            OnionObject::String(s) => s.as_ref(),
+                            _ => "<non-string>",
+                        }
+                    )
+                    .into(),
+                ))
+            }
+            OnionObject::Boolean(_) => {
+                if let OnionObject::String(key_str) = key {
+                    match key_str.as_str() {
+                        "int" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::int".to_string(),
+                                &native_int_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "float" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::float".to_string(),
+                                &native_float_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "string" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::string".to_string(),
+                                &native_string_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "bool" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::bool".to_string(),
+                                &native_bool_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "bytes" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::bytes".to_string(),
+                                &native_bytes_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        _ => {}
+                    }
+                }
+                Err(RuntimeError::InvalidOperation(
+                    format!(
+                        "Attribute '{}' not found for Boolean",
+                        match key {
+                            OnionObject::String(s) => s.as_ref(),
+                            _ => "<non-string>",
+                        }
+                    )
+                    .into(),
+                ))
+            }
+            OnionObject::Tuple(tuple) => {
+                // 先检查原型链/自定义属性
+                if let Ok(result) = tuple.with_attribute(key, f) {
+                    return Ok(result);
+                }
+
+                // 再检查native方法
+                if let OnionObject::String(key_str) = key {
+                    match key_str.as_str() {
+                        "int" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::int".to_string(),
+                                &native_int_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "float" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::float".to_string(),
+                                &native_float_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "string" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::string".to_string(),
+                                &native_string_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "bool" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::bool".to_string(),
+                                &native_bool_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "bytes" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::bytes".to_string(),
+                                &native_bytes_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "length" => {
+                            let length_method = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "builtin::length".to_string(),
+                                &native_length_method,
+                            );
+                            return f(length_method.weak());
+                        }
+                        "elements" => {
+                            let elements_method = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "builtin::elements".to_string(),
+                                &native_elements_method,
+                            );
+                            return f(elements_method.weak());
+                        }
+                        _ => {}
+                    }
+                }
+                Err(RuntimeError::InvalidOperation(
+                    format!(
+                        "Attribute '{}' not found for Tuple",
+                        match key {
+                            OnionObject::String(s) => s.as_ref(),
+                            _ => "<non-string>",
+                        }
+                    )
+                    .into(),
+                ))
+            }
+            OnionObject::Named(named) => named.with_attribute(key, f),
+            OnionObject::Pair(pair) => pair.with_attribute(key, f),
+            OnionObject::Lambda(lambda) => lambda.with_attribute(key, f),
+            OnionObject::LazySet(lazy_set) => lazy_set.with_attribute(key, f),
+            OnionObject::String(_) => {
+                if let OnionObject::String(key_str) = key {
+                    match key_str.as_str() {
+                        "int" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::int".to_string(),
+                                &native_int_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "float" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::float".to_string(),
+                                &native_float_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "string" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::string".to_string(),
+                                &native_string_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "bool" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::bool".to_string(),
+                                &native_bool_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "bytes" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::bytes".to_string(),
+                                &native_bytes_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "length" => {
+                            let length_method = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "builtin::length".to_string(),
+                                &native_length_method,
+                            );
+                            return f(length_method.weak());
+                        }
+                        "elements" => {
+                            let elements_method = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "builtin::elements".to_string(),
+                                &native_elements_method,
+                            );
+                            return f(elements_method.weak());
+                        }
+                        _ => {}
+                    }
+                }
+                Err(RuntimeError::InvalidOperation(
+                    format!(
+                        "Attribute '{}' not found for String",
+                        match key {
+                            OnionObject::String(s) => s.as_ref(),
+                            _ => "<non-string>",
+                        }
+                    )
+                    .into(),
+                ))
+            }
+            OnionObject::Bytes(_) => {
+                if let OnionObject::String(key_str) = key {
+                    match key_str.as_str() {
+                        "int" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::int".to_string(),
+                                &native_int_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "float" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::float".to_string(),
+                                &native_float_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "string" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::string".to_string(),
+                                &native_string_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "bool" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::bool".to_string(),
+                                &native_bool_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "bytes" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::bytes".to_string(),
+                                &native_bytes_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "length" => {
+                            let length_method = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "builtin::length".to_string(),
+                                &native_length_method,
+                            );
+                            return f(length_method.weak());
+                        }
+                        "elements" => {
+                            let elements_method = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "builtin::elements".to_string(),
+                                &native_elements_method,
+                            );
+                            return f(elements_method.weak());
+                        }
+                        _ => {}
+                    }
+                }
+                Err(RuntimeError::InvalidOperation(
+                    format!(
+                        "Attribute '{}' not found for Bytes",
+                        match key {
+                            OnionObject::String(s) => s.as_ref(),
+                            _ => "<non-string>",
+                        }
+                    )
+                    .into(),
+                ))
+            }
+            OnionObject::Range(_, _) => {
+                if let OnionObject::String(key_str) = key {
+                    match key_str.as_str() {
+                        "int" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::int".to_string(),
+                                &native_int_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "float" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::float".to_string(),
+                                &native_float_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "string" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::string".to_string(),
+                                &native_string_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "bool" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::bool".to_string(),
+                                &native_bool_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "bytes" => {
+                            let converter = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "converter::bytes".to_string(),
+                                &native_bytes_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "length" => {
+                            let length_method = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "builtin::length".to_string(),
+                                &native_length_method,
+                            );
+                            return f(length_method.weak());
+                        }
+                        "elements" => {
+                            let elements_method = wrap_native_function(
+                                &onion_tuple!(),
+                                None,
+                                Some(&self.stabilize()),
+                                "builtin::elements".to_string(),
+                                &native_elements_method,
+                            );
+                            return f(elements_method.weak());
+                        }
+                        _ => {}
+                    }
+                }
+                Err(RuntimeError::InvalidOperation(
+                    format!(
+                        "Attribute '{}' not found for Range",
+                        match key {
+                            OnionObject::String(s) => s.as_ref(),
+                            _ => "<non-string>",
+                        }
                     )
                     .into(),
                 ))

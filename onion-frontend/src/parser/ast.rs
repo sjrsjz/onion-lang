@@ -1081,6 +1081,12 @@ fn match_all<'t>(
 
     node_matcher.add_matcher(Box::new(
         |tokens, current| -> Result<(Option<ASTNode<'t>>, usize), ParserError<'t>> {
+            match_as(tokens, current)
+        },
+    ));
+
+    node_matcher.add_matcher(Box::new(
+        |tokens, current| -> Result<(Option<ASTNode<'t>>, usize), ParserError<'t>> {
             match_modifier(tokens, current)
         },
     ));
@@ -3314,6 +3320,92 @@ fn match_is<'t>(
             Some(vec![left, right]),
         )),
         right_offset + 2,
+    ))
+}
+
+fn match_as<'t>(
+    tokens: &Vec<GatheredTokens<'t>>,
+    current: usize,
+) -> Result<(Option<ASTNode<'t>>, usize), ParserError<'t>> {
+    // 搜索 `as` 关键字
+    if current + 2 >= tokens.len() {
+        return Ok((None, 0));
+    }
+
+    // 从右向左扫描 `as` 关键字所在的位置
+    let mut offset: usize = tokens.len() - current - 1;
+    let mut operator_pos: usize = 0;
+    let mut found = false;
+
+    while offset > 0 {
+        let pos = current + offset;
+        if is_identifier(&tokens[pos], "as") {
+            operator_pos = pos;
+            found = true;
+            break;
+        }
+        offset -= 1;
+    }
+
+    if !found {
+        return Ok((None, 0));
+    }
+
+    // 解析左侧表达式（要转换的值）
+    let left_tokens = &tokens[current..operator_pos].to_vec();
+    let (left, left_offset) = match_all(left_tokens, 0)?;
+
+    if left.is_none() {
+        return Ok((None, 0));
+    }
+
+    let left = left.unwrap();
+    if left_offset != left_tokens.len() {
+        return Err(ParserError::NotFullyMatched(
+            left_tokens.first().unwrap().first().unwrap(),
+            left_tokens.last().unwrap().last().unwrap(),
+        ));
+    }
+
+    // 解析右侧表达式（目标类型，应该是一个变量如 int, string 等）
+    let right_tokens = &tokens[operator_pos + 1..].to_vec();
+    let (right, right_offset) = match_all(right_tokens, 0)?;
+
+    if right.is_none() {
+        return Ok((None, 0));
+    }
+
+    let right = right.unwrap();
+    if right_offset != right_tokens.len() {
+        return Err(ParserError::NotFullyMatched(
+            right_tokens.first().unwrap().first().unwrap(),
+            right_tokens.last().unwrap().last().unwrap(),
+        ));
+    }
+
+    // 将 x as int 转换为 int(x) 的 AST 结构
+    // 即：LambdaCall(right, Tuple(left))
+
+    // right 应该是类型名变量，如 int、string 等
+    // 将 left 作为参数包装成元组
+    let args_tuple = ASTNode::new(
+        ASTNodeType::Tuple,
+        left.start_token,
+        left.end_token,
+        Some(vec![left]),
+    );
+
+    // 创建函数调用 type_name(value)
+    let function_call = ASTNode::new(
+        ASTNodeType::LambdaCall,
+        Some(&tokens[current].first().unwrap()),
+        Some(&tokens.last().unwrap().last().unwrap()),
+        Some(vec![right, args_tuple]),
+    );
+
+    Ok((
+        Some(function_call),
+        tokens.len() - current, // 返回整个匹配长度
     ))
 }
 

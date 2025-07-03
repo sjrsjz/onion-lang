@@ -147,6 +147,50 @@ pub mod lexer {
             }
             
             let substring: String = chars[pos..].iter().collect();
+            
+            // 检查十六进制数字 (0x 或 0X 前缀)
+            if substring.len() >= 2 {
+                let first_two_chars: String = substring.chars().take(2).collect();
+                if first_two_chars.to_lowercase() == "0x" {
+                    let hex_pattern = r"^0[xX][0-9a-fA-F]+";
+                    let re = regex::Regex::new(hex_pattern).unwrap();
+                    if let Some(matched) = re.find(&substring) {
+                        let end_pos = matched.end();
+                        let char_count = substring[..end_pos].chars().count();
+                        return char_count;
+                    }
+                }
+            }
+            
+            // 检查八进制数字 (0o 或 0O 前缀)
+            if substring.len() >= 2 {
+                let first_two_chars: String = substring.chars().take(2).collect();
+                if first_two_chars.to_lowercase() == "0o" {
+                    let oct_pattern = r"^0[oO][0-7]+";
+                    let re = regex::Regex::new(oct_pattern).unwrap();
+                    if let Some(matched) = re.find(&substring) {
+                        let end_pos = matched.end();
+                        let char_count = substring[..end_pos].chars().count();
+                        return char_count;
+                    }
+                }
+            }
+            
+            // 检查二进制数字 (0b 或 0B 前缀)
+            if substring.len() >= 2 {
+                let first_two_chars: String = substring.chars().take(2).collect();
+                if first_two_chars.to_lowercase() == "0b" {
+                    let bin_pattern = r"^0[bB][01]+";
+                    let re = regex::Regex::new(bin_pattern).unwrap();
+                    if let Some(matched) = re.find(&substring) {
+                        let end_pos = matched.end();
+                        let char_count = substring[..end_pos].chars().count();
+                        return char_count;
+                    }
+                }
+            }
+            
+            // 处理十进制数字（包括浮点数和科学计数法）
             let number_pattern = r"^\d*\.?\d+([eE][-+]?\d+)?";
             let re = regex::Regex::new(number_pattern).unwrap();
             
@@ -244,7 +288,7 @@ pub mod lexer {
 
                 if *curr_pos < chars.len() {
                     *curr_pos += 1; // 跳过 '('
-                    let end_divider = format!(")){}", divider);
+                    let end_divider = format!("){}", divider);
 
                     while *curr_pos < chars.len() && !test_string(&(end_divider.clone() + "\""), *curr_pos) {
                         current_token.push(chars[*curr_pos]);
@@ -253,7 +297,7 @@ pub mod lexer {
 
                     if *curr_pos < chars.len() {
                         *curr_pos += end_divider.len() + 1; // +1 for the closing quote
-                        original_token = format!("R\"{}({}){}", divider, current_token, end_divider);
+                        original_token = format!("R\"{}({}){}\"", divider, current_token, end_divider);
                         return Some((current_token, original_token));
                     }
                 }
@@ -281,8 +325,79 @@ pub mod lexer {
 
                             match escape_char {
                                 'n' => current_token.push('\n'),
+                                'r' => current_token.push('\r'),
                                 't' => current_token.push('\t'),
+                                'b' => current_token.push('\x08'),
+                                'f' => current_token.push('\x0C'),
+                                'v' => current_token.push('\x0B'),
+                                'a' => current_token.push('\x07'),
                                 '"' | '\\' => current_token.push(escape_char),
+                                'u' => {
+                                    *curr_pos += 1;
+                                    if *curr_pos + 4 <= chars.len() {
+                                        let hex_str: String = chars[*curr_pos..*curr_pos + 4].iter().collect();
+                                        if let Ok(unicode_value) = u32::from_str_radix(&hex_str, 16) {
+                                            if let Some(unicode_char) = std::char::from_u32(unicode_value) {
+                                                current_token.push(unicode_char);
+                                                original_token.push_str(&hex_str);
+                                                *curr_pos += 3;
+                                            } else {
+                                                return None;
+                                            }
+                                        } else {
+                                            return None;
+                                        }
+                                    } else {
+                                        return None;
+                                    }
+                                }
+                                _ => {
+                                    current_token.push('\\');
+                                    current_token.push(escape_char);
+                                }
+                            }
+                            *curr_pos += 1;
+                        } else {
+                            return None;
+                        }
+                    } else {
+                        let c = chars[*curr_pos];
+                        current_token.push(c);
+                        original_token.push(c);
+                        *curr_pos += 1;
+                    }
+                }
+                return None;
+            }
+
+            // 处理 '''...''' 三单引号字符串
+            if test_string("'''", *curr_pos) {
+                *curr_pos += 3;
+                original_token.push_str("'''");
+
+                while *curr_pos < chars.len() {
+                    if test_string("'''", *curr_pos) {
+                        *curr_pos += 3;
+                        original_token.push_str("'''");
+                        return Some((current_token, original_token));
+                    }
+
+                    if chars[*curr_pos] == '\\' {
+                        original_token.push('\\');
+                        *curr_pos += 1;
+                        if *curr_pos < chars.len() {
+                            let escape_char = chars[*curr_pos];
+                            original_token.push(escape_char);
+
+                            match escape_char {
+                                'n' => current_token.push('\n'),
+                                'r' => current_token.push('\r'),
+                                't' => current_token.push('\t'),
+                                'b' => current_token.push('\x08'),
+                                'f' => current_token.push('\x0C'),
+                                'v' => current_token.push('\x0B'),
+                                'a' => current_token.push('\x07'),
+                                '\'' | '\\' => current_token.push(escape_char),
                                 'u' => {
                                     *curr_pos += 1;
                                     if *curr_pos + 4 <= chars.len() {
@@ -323,7 +438,7 @@ pub mod lexer {
 
             // 处理普通引号字符串
             let quote_pairs: std::collections::HashMap<char, char> =
-                [('"', '"'), ('\'', '\''), ('"', '"')]
+                [('"', '"'), ('\'', '\''), ('`', '`')]
                     .iter()
                     .cloned()
                     .collect();
@@ -346,8 +461,13 @@ pub mod lexer {
 
                                 match escape_char {
                                     'n' => current_token.push('\n'),
+                                    'r' => current_token.push('\r'),
                                     't' => current_token.push('\t'),
-                                    '"' | '\'' | '\\' => current_token.push(escape_char),
+                                    'b' => current_token.push('\x08'),
+                                    'f' => current_token.push('\x0C'),
+                                    'v' => current_token.push('\x0B'),
+                                    'a' => current_token.push('\x07'),
+                                    '"' | '\'' | '\\' | '`' => current_token.push(escape_char),
                                     'u' => {
                                         *curr_pos += 1;
                                         if *curr_pos + 4 <= chars.len() {
