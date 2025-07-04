@@ -25,6 +25,7 @@ impl Runnable for Scheduler {
         if let Some(runnable) = self.runnable_stack.last_mut() {
             match runnable.step(gc) {
                 StepResult::Continue => StepResult::Continue,
+                v @ StepResult::SpawnRunnable(_) => return v,
                 StepResult::NewRunnable(new_runnable) => {
                     self.runnable_stack.push(new_runnable);
                     StepResult::Continue
@@ -98,6 +99,10 @@ impl Runnable for Scheduler {
                     StepResult::Continue
                 }
                 StepResult::Error(ref error) => {
+                    if let RuntimeError::Pending = error {
+                        // 如果是 Pending 状态，继续等待
+                        return StepResult::Error(RuntimeError::Pending);
+                    }
                     return StepResult::Return(
                         OnionPair::new_static(
                             &OnionObject::Boolean(false).stabilize(),
@@ -108,7 +113,7 @@ impl Runnable for Scheduler {
                             },
                         )
                         .into(),
-                    )
+                    );
                 }
             }
         } else {

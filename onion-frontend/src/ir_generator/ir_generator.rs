@@ -755,6 +755,10 @@ impl<'t> IRGenerator<'t> {
                         instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                         instructions.push((self.generate_debug_info(ast_node), IR::Launch));
                     }
+                    ASTNodeModifier::Spawn => {
+                        instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
+                        instructions.push((self.generate_debug_info(ast_node), IR::Spawn));
+                    }
                 }
                 Ok(instructions)
             }

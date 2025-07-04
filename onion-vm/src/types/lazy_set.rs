@@ -160,6 +160,11 @@ impl Runnable for OnionLazySetCollector {
                     }
                 }
             }
+            StepResult::SetSelfObject(_) => {
+                // 如果是 SetSelfObject，表示需要设置当前对象
+                // 这里我们不需要做任何操作，因为我们已经在构造函数中设置了 self_object
+                Ok(())
+            }
             _ => Err(RuntimeError::DetailedError(
                 "Unexpected step result in lazy set collector"
                     .to_string()

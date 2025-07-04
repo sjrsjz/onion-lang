@@ -96,6 +96,7 @@ static INSTRUCTION_TABLE: std::sync::LazyLock<Vec<InstructionHandler>> =
         instruction_table[VMInstruction::ForkInstruction as usize] =
             vm_instructions::fork_instruction;
         instruction_table[VMInstruction::Launch as usize] = vm_instructions::launch_thread;
+        instruction_table[VMInstruction::Spawn as usize] = vm_instructions::spawn_task;
 
         // 控制流
         instruction_table[VMInstruction::Call as usize] = vm_instructions::call_lambda;
@@ -296,6 +297,7 @@ impl Runnable for OnionLambdaRunnable {
 
             // 使用 unsafe 从原始指针创建切片
             let code = unsafe { std::slice::from_raw_parts(code_ptr, code_len) };
+            let pending_ip = ip;
             let opcode = get_processed_opcode(code, &mut ip);
 
             let handler = unsafe { *INSTRUCTION_TABLE.get_unchecked(opcode.instruction as usize) };
@@ -303,6 +305,11 @@ impl Runnable for OnionLambdaRunnable {
 
             match handler(self, &opcode, gc) {
                 StepResult::Continue => continue,
+                StepResult::Error(RuntimeError::Pending) => {
+                    // 如果是 Pending 状态，继续等待
+                    self.ip = pending_ip as isize; // 恢复 IP
+                    return StepResult::Error(RuntimeError::Pending);
+                }
                 v => return v,
             }
         }

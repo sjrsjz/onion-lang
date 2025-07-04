@@ -526,6 +526,7 @@ pub enum ASTNodeModifier {
     LengthOf, // LengthOf
     Share,    // Share
     Launch,   // Launch
+    Spawn,    // Spawn
 }
 
 #[derive(Debug, Clone)]
@@ -2682,7 +2683,7 @@ fn match_modifier<'t>(
     if tokens[current].len() == 1
         && vec![
             "deepcopy", "copy", "mut", "const", "keyof", "valueof", "assert", "import", "typeof",
-            "await", "bind", "lengthof", "dynamic", "static", "share", "launch",
+            "await", "bind", "lengthof", "dynamic", "static", "share", "launch", "spawn",
         ]
         .contains(&tokens[current].first().unwrap().token)
     {
@@ -2752,6 +2753,7 @@ fn match_modifier<'t>(
             "lengthof" => ASTNodeModifier::LengthOf,
             "share" => ASTNodeModifier::Share,
             "launch" => ASTNodeModifier::Launch,
+            "spawn" => ASTNodeModifier::Spawn,
             _ => return Ok((None, 0)),
         };
         return Ok((

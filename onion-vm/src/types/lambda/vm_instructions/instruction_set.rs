@@ -69,6 +69,7 @@ pub enum VMInstruction {
     LengthOf = 63,    // 获取对象长度
     Share = 64,      // 共享对象
     Launch = 65,     // 启动线程
+    Spawn = 66,      // 启动任务
 
     // 控制流 (70-79)
     Call = 70,        // 调用函数

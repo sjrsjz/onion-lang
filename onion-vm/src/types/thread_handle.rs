@@ -6,58 +6,74 @@ use std::{
     thread::JoinHandle,
 };
 
-use arc_gc::{arc::GCArc, arc::GCArcWeak, traceable::GCTraceable};
+use arc_gc::{
+    arc::{GCArc, GCArcWeak},
+    gc::GC,
+    traceable::GCTraceable,
+};
 
-use crate::{lambda::runnable::RuntimeError, types::object::OnionStaticObject};
+use crate::{
+    lambda::runnable::RuntimeError,
+    types::object::{GCArcStorage, OnionStaticObject},
+};
 
 use super::object::{OnionObject, OnionObjectCell, OnionObjectExt};
 
 /// A wrapper around JoinHandle to make it work with OnionObject
 pub struct OnionThreadHandle {
-    handle: Mutex<Option<JoinHandle<Result<Box<OnionStaticObject>, RuntimeError>>>>,
-    is_finished: Mutex<bool>,
-    cached_result: Mutex<Option<Result<OnionStaticObject, RuntimeError>>>,
+    inner: Arc<
+        Mutex<(
+            Option<JoinHandle<Result<Box<OnionStaticObject>, RuntimeError>>>,
+            bool,
+            GCArcWeak<OnionObjectCell>,
+        )>,
+    >,
 }
 
 impl OnionThreadHandle {
-    pub fn new(handle: JoinHandle<Result<Box<OnionStaticObject>, RuntimeError>>) -> Self {
-        Self {
-            handle: Mutex::new(Some(handle)),
-            is_finished: Mutex::new(false),
-            cached_result: Mutex::new(None),
-        }
+    pub fn new(
+        handle: JoinHandle<Result<Box<OnionStaticObject>, RuntimeError>>,
+        gc: &mut GC<OnionObjectCell>,
+    ) -> (Self, GCArcStorage) {
+        let tmp = gc.create(OnionObjectCell::from(OnionObject::Undefined(None)));
+        (
+            Self {
+                inner: Arc::new(Mutex::new((Some(handle), false, tmp.as_weak()))),
+            },
+            GCArcStorage::Single(tmp),
+        )
     }
     /// Check if the thread has finished without blocking
     pub fn is_finished(&self) -> bool {
-        *self.is_finished.lock().unwrap() || self.handle.lock().unwrap().is_none()
+        let guard = self.inner.lock().unwrap();
+        guard.1 || guard.0.is_none()
     }
 }
 
 impl Clone for OnionThreadHandle {
     fn clone(&self) -> Self {
-        // JoinHandle cannot be cloned, so we create a new handle that's already finished
         Self {
-            handle: Mutex::new(None),
-            is_finished: Mutex::new(*self.is_finished.lock().unwrap()),
-            cached_result: Mutex::new(self.cached_result.lock().unwrap().clone()),
+            inner: self.inner.clone(),
         }
     }
 }
 
 impl Debug for OnionThreadHandle {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let guard = self.inner.lock().unwrap();
         write!(
             f,
             "OnionThreadHandle(finished: {}, has_handle: {})",
-            self.is_finished(),
-            self.handle.lock().unwrap().is_some()
+            guard.1 || guard.0.is_none(),
+            guard.0.is_some()
         )
     }
 }
 
 impl GCTraceable<OnionObjectCell> for OnionThreadHandle {
-    fn collect(&self, _queue: &mut VecDeque<GCArcWeak<OnionObjectCell>>) {
-        // Thread handles don't contain OnionObjects, so nothing to collect
+    fn collect(&self, queue: &mut VecDeque<GCArcWeak<OnionObjectCell>>) {
+        let guard = self.inner.lock().unwrap();
+        queue.push_back(guard.2.clone());
     }
 }
 
@@ -70,23 +86,15 @@ impl OnionObjectExt for OnionThreadHandle {
         Ok(format!("ThreadHandle(finished: {})", self.is_finished()))
     }
 
-    fn equals(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
-        // Thread handles are only equal if they're the exact same handle
-        if let OnionObject::Custom(other_custom) = other {
-            if let Some(_other_handle) = other_custom.as_any().downcast_ref::<OnionThreadHandle>() {
-                // Since we can't compare JoinHandles directly, we consider them not equal
-                // unless they're the exact same Arc (which would be checked by is_same)
-                Ok(false)
-            } else {
-                Ok(false)
-            }
-        } else {
-            Ok(false)
-        }
+    fn equals(&self, _other: &OnionObject) -> Result<bool, RuntimeError> {
+        Ok(false)
     }
 
-    fn upgrade(&self, _collected: &mut Vec<GCArc<OnionObjectCell>>) {
-        // Thread handles don't contain OnionObjects, so nothing to upgrade
+    fn upgrade(&self, collected: &mut Vec<GCArc<OnionObjectCell>>) {
+        let guard = self.inner.lock().unwrap();
+        if let Some(strong) = guard.2.upgrade() {
+            collected.push(strong);
+        }
     }
 
     fn reconstruct_container(&self) -> Result<OnionObject, RuntimeError> {
@@ -116,33 +124,53 @@ impl OnionObjectExt for OnionThreadHandle {
     }
 
     fn value_of(&self) -> Result<OnionStaticObject, RuntimeError> {
-        // 检查是否已有缓存结果
-        if let Some(ref cached) = *self.cached_result.lock().unwrap() {
-            return cached.clone();
+        let mut guard = self.inner.lock().unwrap();
+        // 句柄已经被取走，意味着线程已经结束
+        if guard.0.is_none() {
+            return if let Some(strong_ref) = guard.2.upgrade() {
+                strong_ref.as_ref().with_data(|data| Ok(data.stabilize()))
+            } else {
+                Err(RuntimeError::BrokenReference)
+            };
+        }
+        // 非阻塞地检查线程是否结束，通过handle来检查
+        if let Some(handle) = guard.0.as_ref() {
+            if !handle.is_finished() {
+                return Err(RuntimeError::Pending);
+            }
         }
 
-        // 阻塞并获取线程结果
-        let mut handle_guard = self.handle.lock().unwrap();
-        if let Some(handle) = handle_guard.take() {
-            *self.is_finished.lock().unwrap() = true;
-            drop(handle_guard); // 释放锁
-
-            let result = match handle.join() {
+        // 线程已经完成，可以安全地 join 并获取结果
+        if let Some(handle) = guard.0.take() {
+            guard.1 = true;
+            drop(guard); // 释放锁
+            match handle.join() {
                 Ok(result) => match result {
-                    Ok(object) => Ok(object.as_ref().clone()),
+                    Ok(obj) => {
+                        // 由于Handle是抽象的Mut容器，因此应当将结果写入GCArcWeak中
+                        // 为了保证幂等律，我们对result使用with_data
+                        match self.inner.lock().unwrap().2.upgrade() {
+                            Some(arc) => arc.as_ref().with_data_mut(|to| {
+                                obj.weak().with_data(|obj| {
+                                    *to = obj.reconstruct_container()?;
+                                    Ok(())
+                                })
+                            })?,
+                            None => return Err(RuntimeError::BrokenReference),
+                        }
+                        return Ok(*obj);
+                    }
                     Err(err) => Err(err),
                 },
                 Err(_) => Err(RuntimeError::DetailedError(
-                    "Thread panicked during execution".to_string().into(),
+                    "Thread join failed".to_string().into(),
                 )),
-            };
-
-            // 缓存结果
-            *self.cached_result.lock().unwrap() = Some(result.clone());
-            result
+            }
         } else {
             Err(RuntimeError::DetailedError(
-                "Thread has already finished".to_string().into(),
+                "Failed to take thread handle after finished check"
+                    .to_string()
+                    .into(),
             ))
         }
     }
@@ -156,37 +184,14 @@ impl OnionObjectExt for OnionThreadHandle {
             OnionObject::String(s) => match s.as_str() {
                 "is_finished" => f(&OnionObject::Boolean(self.is_finished())),
                 "has_handle" => {
-                    let has_handle = self.handle.lock().unwrap().is_some();
+                    let guard = self.inner.lock().unwrap();
+                    let has_handle = guard.0.is_some();
                     f(&OnionObject::Boolean(has_handle))
                 }
                 "has_result" => {
-                    let has_result = self.cached_result.lock().unwrap().is_some();
+                    let guard = self.inner.lock().unwrap();
+                    let has_result = guard.2.upgrade().is_some();
                     f(&OnionObject::Boolean(has_result))
-                }
-                "is_success" => {
-                    if let Some(ref cached) = *self.cached_result.lock().unwrap() {
-                        f(&OnionObject::Boolean(cached.is_ok()))
-                    } else {
-                        f(&OnionObject::Boolean(false)) // 还没有结果
-                    }
-                }
-                "is_error" => {
-                    if let Some(ref cached) = *self.cached_result.lock().unwrap() {
-                        f(&OnionObject::Boolean(cached.is_err()))
-                    } else {
-                        f(&OnionObject::Boolean(false)) // 还没有结果
-                    }
-                }
-                "error" => {
-                    // 只返回错误信息，如果成功或未完成则返回 null
-                    if let Some(ref cached) = *self.cached_result.lock().unwrap() {
-                        match cached {
-                            Ok(_) => f(&OnionObject::Null),
-                            Err(err) => f(&OnionObject::String(format!("{}", err).into())),
-                        }
-                    } else {
-                        f(&OnionObject::Null)
-                    }
                 }
                 _ => Err(RuntimeError::InvalidOperation(
                     format!("Attribute '{}' not found in ThreadHandle", s).into(),

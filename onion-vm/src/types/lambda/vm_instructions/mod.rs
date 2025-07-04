@@ -10,10 +10,14 @@ use crate::{
     lambda::{
         runnable::{RuntimeError, StepResult},
         scheduler::{
-            async_scheduler::AsyncScheduler, map_scheduler::Mapping, scheduler::Scheduler,
+            async_scheduler::{AsyncScheduler, Task},
+            map_scheduler::Mapping,
+            scheduler::Scheduler,
         },
     },
+    onion_tuple,
     types::{
+        async_handle::OnionAsyncHandle,
         lambda::launcher::OnionLambdaRunnableLauncher,
         lazy_set::OnionLazySet,
         named::OnionNamed,
@@ -556,6 +560,7 @@ pub fn value_of(
 ) -> StepResult {
     let stack = unwrap_step_result!(runnable.context.get_current_stack_mut());
     let obj = unwrap_step_result!(Context::get_object_from_stack(stack, 0));
+    // 这里可能触发 Pending 错误，交给调用者处理
     let value = unwrap_step_result!(obj.weak().value_of());
     Context::replace_last_object(stack, value);
     StepResult::Continue
@@ -1166,11 +1171,9 @@ pub fn sync_call(
 ) -> StepResult {
     let lambda = unwrap_step_result!(runnable.context.get_object_rev(1));
     let args = unwrap_step_result!(runnable.context.get_object_rev(0));
-    let new_runnable = Box::new(unwrap_step_result!(
-        OnionLambdaRunnableLauncher::new_static(lambda, args, &|r| Ok(Box::new(Scheduler::new(
-            vec![r]
-        ))),)
-    ));
+    let new_runnable = Box::new(Scheduler::new(vec![Box::new(unwrap_step_result!(
+        OnionLambdaRunnableLauncher::new_static(lambda, args, |r| Ok(r))
+    ))]));
     unwrap_step_result!(runnable.context.discard_objects(2));
     StepResult::NewRunnable(new_runnable)
 }
@@ -1195,15 +1198,18 @@ pub fn map_to(
 pub fn async_call(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObjectCell>,
+    gc: &mut GC<OnionObjectCell>,
 ) -> StepResult {
     let lambda = unwrap_step_result!(runnable.context.get_object_rev(1));
     let args = unwrap_step_result!(runnable.context.get_object_rev(0));
-    let new_runnable = Box::new(unwrap_step_result!(
-        OnionLambdaRunnableLauncher::new_static(lambda, args, &|r| Ok(Box::new(
-            AsyncScheduler::new(vec![r])
-        )),)
-    ));
+    let new_task_handler = OnionAsyncHandle::new(gc);
+    let new_runnable = Box::new(AsyncScheduler::new(Task::new(
+        Box::new(Scheduler::new(vec![Box::new(unwrap_step_result!(
+            OnionLambdaRunnableLauncher::new_static(lambda, args, |r| Ok(r))
+        ))])),
+        new_task_handler.clone(),
+        0,
+    )));
     unwrap_step_result!(runnable.context.discard_objects(2));
     StepResult::NewRunnable(new_runnable)
 }
@@ -1218,12 +1224,38 @@ pub fn raise(
     return StepResult::Error(RuntimeError::CustomValue(Box::new(value)));
 }
 
+pub fn spawn_task(
+    runnable: &mut LambdaRunnable,
+    _opcode: &ProcessedOpcode,
+    gc: &mut GC<OnionObjectCell>,
+) -> StepResult {
+    let lambda = unwrap_step_result!(runnable.context.get_object_rev(0));
+
+    let lambda_obj = unwrap_step_result!(lambda.weak().with_data(|data| {
+        match data {
+            OnionObject::Lambda(_) => Ok(lambda.clone()),
+            _ => Err(RuntimeError::DetailedError(
+                format!("spawn_task requires a Lambda object, but found {}", lambda).into(),
+            )),
+        }
+    }));
+    let new_runnable = Box::new(Scheduler::new(vec![Box::new(unwrap_step_result!(
+        OnionLambdaRunnableLauncher::new_static(&lambda_obj, &onion_tuple!(), &|r| Ok(r))
+    ))]));
+    let task_handler = OnionAsyncHandle::new(gc);
+    let task = Task::new(new_runnable, task_handler.clone(), 0);
+    unwrap_step_result!(runnable.context.discard_objects(1));
+    let task_object = OnionObject::Custom(Arc::new(task_handler.clone().0)).consume_and_stabilize();
+    unwrap_step_result!(runnable.context.push_object(task_object));
+    StepResult::SpawnRunnable(task.into())
+}
+
 pub fn launch_thread(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObjectCell>,
+    gc: &mut GC<OnionObjectCell>,
 ) -> StepResult {
-    let value = unwrap_step_result!(runnable.context.pop());
+    let value = unwrap_step_result!(runnable.context.get_object_rev(0));
 
     // 检查 value 是否为 Lambda 对象
     let lambda_obj = unwrap_step_result!(value.weak().with_data(|data| {
@@ -1252,14 +1284,14 @@ pub fn launch_thread(
             let args = OnionTuple::new_static(vec![]);
 
             // 创建调度器运行 Lambda
-            let mut scheduler: Box<dyn Runnable> = Box::new(
-                OnionLambdaRunnableLauncher::new_static(&lambda_obj, &args, &|r| {
-                    Ok(Box::new(Scheduler::new(vec![r])))
-                })?,
-            );
+            let mut scheduler: Box<dyn Runnable> = Box::new(Scheduler::new(vec![Box::new(
+                OnionLambdaRunnableLauncher::new_static(&lambda_obj, &args, |r| Ok(r))?,
+            )]));
 
             // 执行循环
             loop {
+                #[cfg(debug_assertions)]
+                gc.collect();
                 match scheduler.step(&mut gc) {
                     StepResult::Continue => {
                         // 继续执行下一步
@@ -1267,14 +1299,27 @@ pub fn launch_thread(
                     StepResult::SetSelfObject(_) => {
                         // 设置 self 对象，这里无需额外操作
                     }
-                    StepResult::Error(ref error) => return Err(error.clone()),
+                    StepResult::SpawnRunnable(_) => {
+                        // 处理 SpawnRunnable 结果，由于同步调度器上级没有异步调度器，应当直接报错
+                        return Err(RuntimeError::InvalidOperation(
+                            "Cannot spawn async task in sync context".to_string().into(),
+                        ));
+                    }
+                    StepResult::Error(ref error) => match error {
+                        RuntimeError::Pending => {
+                            // 处理挂起错误，继续等待
+                            continue;
+                        }
+                        _ => {
+                            // 返回错误
+                            return Err(error.clone());
+                        }
+                    },
                     StepResult::NewRunnable(_) => {
-                        // 添加新的可运行对象到调度器
                         unreachable!()
                     }
-                    StepResult::ReplaceRunnable(runnable) => {
-                        // 启动器完成并被替换为实际的可运行对象
-                        scheduler = runnable.copy();
+                    StepResult::ReplaceRunnable(_) => {
+                        unreachable!()
                     }
                     StepResult::Return(v) => {
                         // 线程执行完成，退出
@@ -1285,9 +1330,9 @@ pub fn launch_thread(
         });
 
     // 创建线程句柄对象并推入栈
-    let thread_handle = OnionThreadHandle::new(handle);
-    let handle_object = OnionObject::Custom(Arc::new(thread_handle)).consume_and_stabilize();
+    let thread_handle = OnionThreadHandle::new(handle, gc);
+    let handle_object = OnionObject::Custom(Arc::new(thread_handle.0)).consume_and_stabilize();
+    unwrap_step_result!(runnable.context.discard_objects(1));
     unwrap_step_result!(runnable.context.push_object(handle_object));
-
     StepResult::Continue
 }

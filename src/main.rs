@@ -357,39 +357,16 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
         "__main__".to_string(),
     );
 
-    // let OnionObject::Lambda(lambda_ref) = lambda
-    //     .weak()
-    //     .try_borrow()
-    //     .map_err(|e| format!("Failed to borrow Lambda definition: {:?}", e))?
-    // else {
-    //     return Err("Failed to create Lambda definition".to_string());
-    // };
-
     let args = OnionTuple::new_static(vec![]);
 
-    // 绑定参数
-    // let assigned_argument: OnionStaticObject = lambda_ref
-    //     .with_parameter(|param| {
-    //         unwrap_object!(param, OnionObject::Tuple)?.clone_and_named_assignment(
-    //             unwrap_object!(args.weak().try_borrow()?, OnionObject::Tuple)?,
-    //         )
-    //     })
-    //     .map_err(|e| format!("Failed to assign arguments to Lambda: {:?}", e))?;
-
-    // let lambda = lambda_ref
-    //     .create_runnable(assigned_argument, &lambda, &mut GC::new())
-    //     .map_err(|e| format!("Failed to create runnable Lambda: {:?}", e))?;
-
-    // 初始化调度器和GC
-    // let mut scheduler = Scheduler::new(vec![lambda]);
-    let mut scheduler: Box<dyn Runnable> = Box::new(
-        OnionLambdaRunnableLauncher::new_static(&lambda, &args, &|r| {
-            Ok(Box::new(Scheduler::new(vec![r])))
-        })
-        .map_err(|e| format!("Failed to create runnable Lambda: {:?}", e))?,
-    );
+    let mut scheduler: Box<dyn Runnable> = Box::new(Scheduler::new(vec![Box::new(
+        OnionLambdaRunnableLauncher::new_static(&lambda, &args, |r| Ok(r))
+            .map_err(|e| format!("Failed to create runnable Lambda: {:?}", e))?,
+    )]));
     // Execute code
     loop {
+        #[cfg(debug_assertions)]
+        gc.collect();
         match scheduler.step(&mut gc) {
             StepResult::Continue => {
                 // Continue to next step
@@ -397,15 +374,21 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
             StepResult::SetSelfObject(_) => {
                 // Set self object, no action needed here
             }
+            StepResult::SpawnRunnable(_) => {
+                return Err("Cannot spawn async task in sync context".to_string());
+            }
             StepResult::Error(ref error) => {
+                if let RuntimeError::Pending = error {
+                    // Pending error, continue to next step
+                    continue;
+                }
                 return Err(format!("Execution error: {}", error));
             }
             StepResult::NewRunnable(_) => {
-                // Add new runnable to scheduler
                 unreachable!()
             }
-            StepResult::ReplaceRunnable(ref r) => {
-                scheduler = r.copy();
+            StepResult::ReplaceRunnable(_) => {
+                unreachable!()
             }
             StepResult::Return(ref result) => {
                 let result_borrowed = result.weak();

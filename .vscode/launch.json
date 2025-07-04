@@ -59,7 +59,7 @@
             },
             "args": [
                 "run",
-                "examples/lang_test/const_test.onion"
+                "examples/lang_test/test.onion"
             ],
             "cwd": "${workspaceFolder}"
         },

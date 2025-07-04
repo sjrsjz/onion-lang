@@ -39,18 +39,19 @@ pub struct OnionLambdaRunnableLauncher {
 
     phase: ArgumentProcessingPhase,
 
-    runnable_mapper: &'static (dyn Fn(Box<dyn Runnable>) -> Result<Box<dyn Runnable>, RuntimeError> + Sync + Send),
+    runnable_mapper:
+        Arc<dyn Fn(Box<dyn Runnable>) -> Result<Box<dyn Runnable>, RuntimeError> + Sync + Send>,
     constrain_runnable: Option<Box<dyn Runnable>>,
 }
 
 impl OnionLambdaRunnableLauncher {
-    pub fn new_static<F: 'static + Sync + Send>(
+    pub fn new_static<F: Sync + Send + 'static>(
         lambda_obj: &OnionStaticObject,
         argument_tuple_obj: &OnionStaticObject,
-        runnable_mapper: &'static F,
+        runnable_mapper: F,
     ) -> Result<OnionLambdaRunnableLauncher, RuntimeError>
     where
-        F: Fn(Box<dyn Runnable>) -> Result<Box<dyn Runnable>, RuntimeError> + Sync + Send,
+        F: Fn(Box<dyn Runnable>) -> Result<Box<dyn Runnable>, RuntimeError> + Sync + Send + 'static,
     {
         // Initialize collected_arguments based on parameter count
         let mut collected_arguments = Vec::new();
@@ -121,7 +122,7 @@ impl OnionLambdaRunnableLauncher {
             assigned,
             phase: ArgumentProcessingPhase::NamedArguments,
             current_argument_index: 0,
-            runnable_mapper: runnable_mapper,
+            runnable_mapper: Arc::new(runnable_mapper),
             constrain_runnable: None,
         })
     }
@@ -139,7 +140,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
             assigned: self.assigned.clone(),
             phase: self.phase.clone(),
             current_argument_index: self.current_argument_index,
-            runnable_mapper: self.runnable_mapper,
+            runnable_mapper: self.runnable_mapper.clone(),
             constrain_runnable: match &self.constrain_runnable {
                 Some(runnable) => Some(runnable.copy()),
                 None => None,
@@ -190,6 +191,14 @@ impl Runnable for OnionLambdaRunnableLauncher {
                         .into(),
                 ))
             }
+            StepResult::SpawnRunnable(_) => {
+                // This should not happen, as this launcher is not designed to spawn new runnables.
+                Err(RuntimeError::DetailedError(
+                    "OnionLambdaRunnableLauncher cannot spawn new runnables"
+                        .to_string()
+                        .into(),
+                ))
+            }
         }
     }
     /// 执行 Lambda 启动器的下一步操作。
@@ -220,23 +229,12 @@ impl Runnable for OnionLambdaRunnableLauncher {
                 StepResult::Continue => {
                     return StepResult::Continue;
                 }
-                // 约束执行过程中不应该产生新的可运行对象或替换自身。
-                StepResult::NewRunnable(_) => {
-                    return StepResult::Error(RuntimeError::DetailedError(
-                        "OnionLambdaRunnableLauncher's constrain_runnable cannot yield new runnables".to_string().into(),
-                    ));
-                }
-                StepResult::ReplaceRunnable(_) => {
-                    return StepResult::Error(RuntimeError::DetailedError(
-                        "OnionLambdaRunnableLauncher's constrain_runnable cannot replace runnables"
-                            .to_string()
-                            .into(),
-                    ));
-                }
-                StepResult::Error(e) => {
-                    // 如果约束执行过程中发生错误，直接返回该错误。
-                    return StepResult::Error(e.clone());
-                }
+                // 约束执行过程中不应产生新的可运行对象或替换自身。
+                v @ StepResult::NewRunnable(_) => return v,
+                v @ StepResult::SpawnRunnable(_) => return v,
+                v @ StepResult::Error(_) => return v,
+                StepResult::ReplaceRunnable(runnable) => self.constrain_runnable = Some(runnable),
+
                 // 约束执行完成并返回了一个值。
                 // 约束的返回值约定为一个 Pair：(布尔值表示是否panic, 布尔值表示约束是否通过)
                 StepResult::Return(ref v) => {

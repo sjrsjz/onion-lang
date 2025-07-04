@@ -104,42 +104,18 @@ impl ReplExecutor {
             "__main__".to_string(),
         );
 
-        // let OnionObject::Lambda(lambda_ref) = lambda
-        //     .weak()
-        //     .try_borrow()
-        //     .map_err(|e| format!("Failed to borrow Lambda definition: {:?}", e))?
-        // else {
-        //     return Err("Failed to create Lambda definition".to_string());
-        // };
-
         let args = OnionTuple::new_static(vec![]);
-
-        // 绑定参数
-        // let assigned_argument: OnionStaticObject = lambda_ref
-        //     .with_parameter(|param| {
-        //         unwrap_object!(param, OnionObject::Tuple)?.clone_and_named_assignment(
-        //             unwrap_object!(args.weak().try_borrow()?, OnionObject::Tuple)?,
-        //         )
-        //     })
-        //     .map_err(|e| format!("Failed to assign arguments to Lambda: {:?}", e))?;
-
-        // let lambda = lambda_ref
-        //     .create_runnable(assigned_argument, &lambda, &mut GC::new())
-        //     .map_err(|e| format!("Failed to create runnable Lambda: {:?}", e))?;
-
-        // 初始化调度器和GC
-        // let mut scheduler = Scheduler::new(vec![lambda]);
-        let mut scheduler: Box<dyn Runnable> = Box::new(
-            OnionLambdaRunnableLauncher::new_static(&lambda, &args, &|r| {
-                Ok(Box::new(Scheduler::new(vec![r])))
-            })
-            .map_err(|e| format!("Failed to create runnable Lambda: {:?}", e))?,
-        );
+        let mut scheduler: Box<dyn Runnable> = Box::new(Scheduler::new(vec![Box::new(
+            OnionLambdaRunnableLauncher::new_static(&lambda, &args, |r| Ok(r))
+                .map_err(|e| format!("Failed to create runnable Lambda: {:?}", e))?,
+        )]));
 
         let mut gc = GC::new_with_memory_threshold(1024 * 1024);
 
         // 执行代码
         loop {
+            #[cfg(debug_assertions)]
+            gc.collect();
             // 检查中断信号
             if self.interrupted.load(Ordering::SeqCst) {
                 // 重置中断标志，以便下次执行可以正常进行
@@ -155,6 +131,9 @@ impl ReplExecutor {
                     // 设置self对象，通常在Lambda中使用
                     // 这里不需要处理，因为REPL不涉及self对象
                 }
+                StepResult::SpawnRunnable(_) => {
+                    return Err("Cannot spawn async task in sync context".to_string());
+                }
                 StepResult::Error(ref error) => {
                     // 处理错误
                     if self.interrupted.load(Ordering::SeqCst) {
@@ -162,14 +141,17 @@ impl ReplExecutor {
                         // self.interrupted.store(false, Ordering::SeqCst); // 由 REPL 循环在每个命令开始时重置
                         return Err("Execution interrupted by Ctrl+C".to_string());
                     }
+                    if let RuntimeError::Pending = error {
+                        // 如果是 Pending 状态，继续等待
+                        continue;
+                    }
                     return Err(format!("Execution error: {}", error));
                 }
                 StepResult::NewRunnable(_) => {
-                    // 添加新的可执行对象到调度器
                     unreachable!()
                 }
-                StepResult::ReplaceRunnable(ref r) => {
-                    scheduler = r.copy();
+                StepResult::ReplaceRunnable(_) => {
+                    unreachable!()
                 }
                 StepResult::Return(ref result) => {
                     let result_borrowed = result.weak();

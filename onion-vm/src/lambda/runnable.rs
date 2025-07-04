@@ -3,10 +3,12 @@ use std::fmt::Display;
 use arc_gc::gc::GC;
 use serde_json::Value;
 
-use crate::types::object::{OnionObjectCell, OnionStaticObject};
+use crate::{lambda::scheduler::async_scheduler::Task, types::object::{OnionObjectCell, OnionStaticObject}};
 
 #[derive(Clone, Debug)]
 pub enum RuntimeError {
+    Pending, // 当前指令需要重复检查直到条件满足，考虑到大部分函数返回值是 `Result`，因此 Pending 只是取代 StepResult::Pending 的一个方式，告诉VM需要
+    // 重复检查当前指令直到条件满足
     StepError(Box<String>),
     DetailedError(Box<String>),
     InvalidType(Box<String>),
@@ -19,6 +21,7 @@ pub enum RuntimeError {
 impl Display for RuntimeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            RuntimeError::Pending => write!(f, "Pending: The operation is not yet complete"),
             RuntimeError::StepError(msg) => write!(f, "Step Error: {}", msg),
             RuntimeError::DetailedError(msg) => write!(f, "Detailed Error: {}", msg),
             RuntimeError::InvalidType(msg) => write!(f, "Invalid type: {}", msg),
@@ -34,6 +37,7 @@ pub enum StepResult {
     Continue,
     NewRunnable(Box<dyn Runnable>),
     ReplaceRunnable(Box<dyn Runnable>),
+    SpawnRunnable(Box<Task>),
     Return(Box<OnionStaticObject>),
     SetSelfObject(Box<OnionStaticObject>),
     Error(RuntimeError),

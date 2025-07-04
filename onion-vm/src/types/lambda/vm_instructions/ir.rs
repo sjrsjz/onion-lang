@@ -70,6 +70,7 @@ pub enum IR {
     Const,                    // make value constant
     Share,                    // share value, make it shared
     Launch,                   // launch a new thread with the value
+    Spawn,                    // spawn a new task with the value
     Assert,                   // assert value
     Import,                   // import module from file
     RedirectJump(String),     // redirect ir, not for vm just for ir generation

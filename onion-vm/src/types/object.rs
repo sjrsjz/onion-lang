@@ -1905,8 +1905,8 @@ pub enum GCArcStorage {
 
 #[derive(Clone)]
 pub struct OnionStaticObject {
-    _arcs: GCArcStorage,
-    obj: OnionObject,
+    pub(crate) _arcs: GCArcStorage,
+    pub(crate) obj: OnionObject,
 }
 
 impl Default for OnionStaticObject {
