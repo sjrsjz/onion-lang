@@ -26,8 +26,24 @@ fn system(
 
                 match Command::new(shell).arg(flag).arg(cmd_str.as_ref()).output() {
                     Ok(output) => {
-                        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-                        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+                        #[cfg(target_os = "windows")]
+                        fn decode_bytes(bytes: &[u8]) -> String {
+                            // 优先尝试GBK解码
+                            use encoding_rs::GBK;
+                            let (cow, _, had_errors) = GBK.decode(bytes);
+                            if !had_errors {
+                                cow.into_owned()
+                            } else {
+                                String::from_utf8_lossy(bytes).to_string()
+                            }
+                        }
+                        #[cfg(not(target_os = "windows"))]
+                        fn decode_bytes(bytes: &[u8]) -> String {
+                            String::from_utf8_lossy(bytes).to_string()
+                        }
+
+                        let stdout = decode_bytes(&output.stdout);
+                        let stderr = decode_bytes(&output.stderr);
                         let status = output.status.code().unwrap_or(-1);
 
                         let mut result = IndexMap::new();
