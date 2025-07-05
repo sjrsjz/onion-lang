@@ -9,7 +9,6 @@ use crate::lambda::runnable::RuntimeError;
 
 use super::object::{OnionObject, OnionObjectCell, OnionStaticObject};
 
-#[derive(Clone)]
 pub struct OnionPair {
     key: OnionObject,   // 使用 Box 避免递归
     value: OnionObject, // 使用 Box 避免递归

@@ -9,7 +9,6 @@ use crate::lambda::runnable::RuntimeError;
 
 use super::object::{OnionObject, OnionObjectCell, OnionStaticObject};
 
-#[derive(Clone)]
 pub struct OnionNamed {
     key: OnionObject,
     value: OnionObject,

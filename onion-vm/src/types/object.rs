@@ -193,8 +193,8 @@ impl Display for OnionObjectCell {
 #[derive(Clone)]
 /// OnionObject is the main type for all objects in the Onion VM.
 /// The VM's types are all immutable(Mut is a immutable pointer to a VM object)
-/// If we need to `mutate` an object, it is IMPOSSIBLE to mutate the object itself, we can only let the Mut object point to a `reconstructed` object.
-/// `reconstruct_container` is used to reconstruct the container object, which is used to regenerate all `Arc` references to the object.
+/// If we need to `mutate` an object, it is IMPOSSIBLE to mutate the object itself, we can only let the Mut object point to a new object.
+/// So all types in OnionObject do not implement `Clone`, because cloning an object is volition of the immutability principle.
 pub enum OnionObject {
     // immutable basic types
     Integer(i64),
@@ -207,15 +207,16 @@ pub enum OnionObject {
     Undefined(Option<Arc<String>>),
     InstructionPackage(Arc<VMInstructionPackage>),
 
-    // immutable container types, need `reconstruct_container` for clone to solve circular references
+    // immutable container types
     Tuple(Arc<OnionTuple>),
     Pair(Arc<OnionPair>),
     Named(Arc<OnionNamed>),
     LazySet(Arc<OnionLazySet>),
     Lambda(Arc<OnionLambdaDefinition>),
-
     Custom(Arc<dyn OnionObjectExt>),
+
     // mutable? types, DO NOT USE THIS TYPE DIRECTLY, use `mutablize` instead
+    // `Mut` is just a container for a weak reference to an OnionObjectCell,
     Mut(GCArcWeak<OnionObjectCell>),
 }
 
@@ -225,8 +226,6 @@ pub trait OnionObjectExt: GCTraceable<OnionObjectCell> + Debug + Send + Sync + '
 
     // GC and memory management
     fn upgrade(&self, collected: &mut Vec<GCArc<OnionObjectCell>>);
-
-    fn reconstruct_container(&self) -> Result<OnionObject, RuntimeError>;
 
     // Basic type conversions
     fn to_integer(&self) -> Result<i64, RuntimeError> {
@@ -558,7 +557,7 @@ impl OnionObject {
         match weak.upgrade() {
             Some(strong) => {
                 // 先克隆要赋值的内容，避免借用冲突
-                let new_value = other.with_data(|other| other.reconstruct_container())?;
+                let new_value = other.with_data(|other| Ok(other.clone()))?;
 
                 // 然后进行赋值
                 strong.as_ref().with_data_mut(|obj| {
@@ -570,19 +569,6 @@ impl OnionObject {
         }
     }
 
-    /// 重建容器对象，主要用于 mutable_obj1 = obj2 这种赋值
-    pub fn reconstruct_container(&self) -> Result<OnionObject, RuntimeError> {
-        match self {
-            OnionObject::Tuple(tuple) => tuple.reconstruct_container(),
-            OnionObject::Pair(pair) => pair.reconstruct_container(),
-            OnionObject::Named(named) => named.reconstruct_container(),
-            OnionObject::LazySet(lazy_set) => lazy_set.reconstruct_container(),
-            OnionObject::Lambda(lambda) => lambda.reconstruct_container(),
-            OnionObject::Custom(custom) => custom.reconstruct_container(),
-            _ => Ok(self.clone()), // 对于其他类型，直接克隆（由于Mut自身就是不可变地址，因此直接
-                                   // 克隆即可，并且只有容器才可能造成循环）
-        }
-    }
     pub fn to_integer(&self) -> Result<i64, RuntimeError> {
         self.with_data(|obj| match obj {
             OnionObject::Integer(i) => Ok(*i),

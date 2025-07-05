@@ -139,10 +139,6 @@ impl OnionObjectExt for CLib {
 
     fn upgrade(&self, _collected: &mut Vec<GCArc<OnionObjectCell>>) {}
 
-    fn reconstruct_container(&self) -> Result<OnionObject, RuntimeError> {
-        Ok(OnionObject::Custom(Arc::new(self.clone())))
-    }
-
     fn is_same(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
         if let OnionObject::Custom(other_custom) = other {
             if let Some(other_lib) = other_custom.as_any().downcast_ref::<CLib>() {
@@ -413,10 +409,6 @@ impl OnionObjectExt for CFunctionHandle {
     }
 
     fn upgrade(&self, _collected: &mut Vec<GCArc<OnionObjectCell>>) {}
-
-    fn reconstruct_container(&self) -> Result<OnionObject, RuntimeError> {
-        Ok(OnionObject::Custom(Arc::new(self.clone())))
-    }
 
     fn is_same(&self, _other: &OnionObject) -> Result<bool, RuntimeError> {
         Ok(false)

@@ -2,7 +2,7 @@ use std::{
     any::Any,
     collections::VecDeque,
     fmt::{Debug, Formatter},
-    sync::{Arc, Mutex},
+    sync::Mutex,
     thread::JoinHandle,
 };
 
@@ -21,13 +21,11 @@ use super::object::{OnionObject, OnionObjectCell, OnionObjectExt};
 
 /// A wrapper around JoinHandle to make it work with OnionObject
 pub struct OnionThreadHandle {
-    inner: Arc<
-        Mutex<(
-            Option<JoinHandle<Result<Box<OnionStaticObject>, RuntimeError>>>,
-            bool,
-            GCArcWeak<OnionObjectCell>,
-        )>,
-    >,
+    inner: Mutex<(
+        Option<JoinHandle<Result<Box<OnionStaticObject>, RuntimeError>>>,
+        bool,
+        GCArcWeak<OnionObjectCell>,
+    )>,
 }
 
 impl OnionThreadHandle {
@@ -38,7 +36,7 @@ impl OnionThreadHandle {
         let tmp = gc.create(OnionObjectCell::from(OnionObject::Undefined(None)));
         (
             Self {
-                inner: Arc::new(Mutex::new((Some(handle), false, tmp.as_weak()))),
+                inner: Mutex::new((Some(handle), false, tmp.as_weak())),
             },
             GCArcStorage::Single(tmp),
         )
@@ -47,14 +45,6 @@ impl OnionThreadHandle {
     pub fn is_finished(&self) -> bool {
         let guard = self.inner.lock().unwrap();
         guard.1 || guard.0.is_none()
-    }
-}
-
-impl Clone for OnionThreadHandle {
-    fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-        }
     }
 }
 
@@ -96,11 +86,6 @@ impl OnionObjectExt for OnionThreadHandle {
             collected.push(strong);
         }
     }
-
-    fn reconstruct_container(&self) -> Result<OnionObject, RuntimeError> {
-        Ok(OnionObject::Custom(Arc::new(self.clone())))
-    }
-
     fn is_same(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
         if let OnionObject::Custom(other_custom) = other {
             if let Some(other_handle) = other_custom.as_any().downcast_ref::<OnionThreadHandle>() {
@@ -148,16 +133,28 @@ impl OnionObjectExt for OnionThreadHandle {
                 Ok(result) => match result {
                     Ok(obj) => {
                         // 由于Handle是抽象的Mut容器，因此应当将结果写入GCArcWeak中
-                        // 为了保证幂等律，我们对result使用with_data
+
+                        // 步骤 1: 克隆结果，不持有任何目标锁。
+                        // 我们从 obj 中提取出最终要写入的值。
+                        // 这里的 clone() 是浅拷贝，非常快。
+                        // 这一步之后，new_value 就与 obj 的锁解耦了。
+                        let new_value = obj.weak().clone();
+
+                        // 步骤 2: 获取目标锁并写入。
                         match self.inner.lock().unwrap().2.upgrade() {
-                            Some(arc) => arc.as_ref().with_data_mut(|to| {
-                                obj.weak().with_data(|obj| {
-                                    *to = obj.reconstruct_container()?;
+                            Some(arc) => {
+                                // 现在我们可以安全地获取写锁，因为我们不再需要访问 obj。
+                                arc.as_ref().with_data_mut(|to| {
+                                    *to = new_value;
                                     Ok(())
-                                })
-                            })?,
+                                })?;
+                            }
                             None => return Err(RuntimeError::BrokenReference),
-                        }
+                        };
+
+                        // 注意：这里返回的 obj 是 join 的原始结果，
+                        // 而不是我们刚刚写入的值，这在逻辑上是正确的。
+                        // Ok(*obj) 表示线程成功返回了这个 OnionStaticObject。
                         return Ok(*obj);
                     }
                     Err(err) => Err(err),

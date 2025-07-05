@@ -18,26 +18,20 @@ use crate::{
 
 use super::object::{OnionObject, OnionObjectCell, OnionObjectExt};
 
-#[derive(Clone)]
 pub struct OnionAsyncHandle {
-    inner: Arc<Mutex<(GCArcWeak<OnionObjectCell>, bool)>>,
+    inner: Mutex<(GCArcWeak<OnionObjectCell>, bool)>,
 }
 
 impl OnionAsyncHandle {
     // 创建一个新的异步句柄，此时没有缓存结果
-    pub fn new(gc: &mut GC<OnionObjectCell>) -> (Self, GCArcStorage) {
+    pub fn new(gc: &mut GC<OnionObjectCell>) -> (Arc<Self>, GCArcStorage) {
         let tmp = gc.create(OnionObjectCell::from(OnionObject::Undefined(None)));
         (
-            Self {
-                inner: Arc::new(Mutex::new((tmp.as_weak(), false))),
-            },
+            Arc::new(Self {
+                inner: Mutex::new((tmp.as_weak(), false)),
+            }),
             GCArcStorage::Single(tmp),
         )
-    }
-
-    /// 检查两个句柄是否指向同一个内部状态
-    pub fn is_same_handle(&self, other: &OnionAsyncHandle) -> bool {
-        Arc::ptr_eq(&self.inner, &other.inner)
     }
 
     /// 检查 handle 是否完成（供调度器使用）
@@ -107,11 +101,6 @@ impl OnionObjectExt for OnionAsyncHandle {
         }
     }
 
-    fn reconstruct_container(&self) -> Result<OnionObject, RuntimeError> {
-        // 直接克隆 Arc<Mutex<...>>，所有副本共享状态
-        Ok(OnionObject::Custom(Arc::new(self.clone())))
-    }
-
     fn is_same(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
         if let OnionObject::Custom(other_custom) = other {
             if let Some(other_handle) = other_custom.as_any().downcast_ref::<OnionAsyncHandle>() {
@@ -126,7 +115,7 @@ impl OnionObjectExt for OnionAsyncHandle {
     }
 
     fn to_boolean(&self) -> Result<bool, RuntimeError> {
-        // A thread handle is "truthy" if it hasn't finished yet
+        // A async handle is "truthy" if it hasn't finished yet
         Ok(!self.is_finished())
     }
 

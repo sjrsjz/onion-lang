@@ -64,22 +64,27 @@ a + (b * c]  // 括号类型不匹配
 Onion 语言的类型系统在Rust中实现为一个枚举类型，包含了所有的基本类型和复合类型。每个类型都对应于一个枚举变体。
 ```rust
 pub enum OnionObject {
+    // immutable basic types
     Integer(i64),
     Float(f64),
-    String(String),
-    Bytes(Vec<u8>),
+    String(Arc<String>),
+    Bytes(Arc<Vec<u8>>),
     Boolean(bool),
     Range(i64, i64),
     Null,
-    Undefined(Option<String>),
-    Tuple(OnionTuple),
-    Pair(OnionPair),
-    Named(OnionNamed),
-    LazySet(OnionLazySet),
-    InstructionPackage(VMInstructionPackage),
-    Lambda(OnionLambdaDefinition),
+    Undefined(Option<Arc<String>>),
+    InstructionPackage(Arc<VMInstructionPackage>),
+
+    Tuple(Arc<OnionTuple>),
+    Pair(Arc<OnionPair>),
+    Named(Arc<OnionNamed>),
+    LazySet(Arc<OnionLazySet>),
+    Lambda(Arc<OnionLambdaDefinition>),
+    Custom(Arc<dyn OnionObjectExt>),
+
     Mut(GCArcWeak<OnionObjectCell>),
 }
+
 ```
 其中各自在 Onion 语言中的定义如下：
 - `Integer`: 整数类型，64 位有符号整数。语法：`42`, `-123`
@@ -100,6 +105,7 @@ pub enum OnionObject {
 - `Lambda`: Lambda 函数类型，表示一个匿名函数。语法：
   - `<params-atom> -> <body-atom>` （普通 lambda）
   - `<params-atom> -> &<capture-atom> <body-atom>` （带捕获的 lambda）
+- `Custom`: 自定义类型，表示由宿主环境定义的类型，可以是任何实现了 `OnionObjectExt` trait 的类型。
 - `Mut`: 可变引用类型，表示*将值装载到堆上（受GC控制管理生命周期）并获得可变引用*。语法：`mut <atoms>`，例如 `mut x`。如果要卸载对象并获得不可变值，可以使用 `const <atoms>`，例如 `const x`。*可变对象一定是在堆上分配的*。
 
 = 表达式
@@ -449,12 +455,12 @@ x := "hello"; // 在同一作用域内重新定义变量 x，类型从 Integer �
 函数的实参也会直接绑定到当前函数作用域，因此实参也能被遮蔽。
 
 === 可变性
-在 Onion 语言中，变量默认是不可变的。如果需要创建一个可变变量，可以使用 `mut` 关键字。
+在 Onion 语言中，变量默认是不可变的。如果需要创建一个“可变”变量，可以使用 `mut` 关键字。
 ```onion
 // 定义一个可变变量
 x := mut 42;
-// 修改可变变量的值
-x = 100; // 允许修改
+// 替换可变变量的值
+x = 100; // 允许替换
 
 // 定义一个不可变变量
 y := 50; // 默认不可变
@@ -467,25 +473,38 @@ y = 60; // 错误: Cannot assign to immutable variable
 
 当值被 `mut` 修饰时，Onion 语言会将其存储在堆上，并返回一个隐式的可变引用。
 
-如果需要将可变变量转换为不可变变量，可以使用 `const` 修饰符。该操作会拷贝当前值并返回一个不可变的副本。
-
-Onion 的可变性控制会导致以下行为：
-- `mut tuple` 是使得元组自身可变，但元组中的元素仍然不可变，除非元素本身也是可变的。
-- `mut pair` 是使得键值对自身可变，但键和值仍然不可变，除非它们本身也是可变的。
-- `mut named` 是使得命名键值对自身可变，但键和值仍然不可变，除非它们本身也是可变的。
-- `mut lazyset` 是使得懒加载集合自身可变，但容器和过滤器仍然不可变，除非它们本身也是可变的。
-容器的可变性仅指自身的可变性（可以修改容器拥有哪些值），容器元素的可变性取决于元素本身是否是可变的而并不受容器的可变性影响。
+如果需要将可变变量转换为不可变变量，可以使用 `const` 修饰符。该操作会拷贝当前值并返回一个不可变的共享。
 
 ```onion
 // 可变元组
-x := mut (1, 2, 3); // 创建一个可变元组
+x := mut (1, 2, 3); // 创建一个可变元组，让其移动到堆上并获得一个mut指针
 // x[0] = 10; // panic!，元组元素不可变，无法直接修改
-x = (10, 2, 3); // 允许修改整个元组
+x = (10, 2, 3); // 允许替换mut指向的槽位的值
 
 x := (mut 1, 2, 3); // 创建一个不可变元组，但第一个元素是可变的
-x[0] = 10; // 允许修改第一个元素
-// x = (10, 2, 3); // panic!，无法修改整个元组，因为元组本身是不可变的
+x[0] = 10; // 允许替换第一个元素的值
+// x = (10, 2, 3); // panic!，无法替换x的值，因为x本身是不可变的
 ```
+
+=== 幂等律
+
+Onion VM 在对象设计上严格遵循不可变性，`mut` 关键字用于创建一个指针，其值指向一个被GC管理的堆对象。而 `const` 关键字用于创建一个栈上的不可变对象。
+
+为了保证幂等性，Onion VM的设计确保了以下几点：
+- mut (mut x) 等价于 mut x
+- const (const x) 等价于 const x
+
+这意味着
+- `mut` 操作符: 接受一个值。如果该值已经是 mut 引用，则直接返回该引用（幂等律）。如果该值是不可变的，则创建一个新的 mut 引用，使其指向该值的共享，并返回这个新的 mut 引用。
+- `const` 操作符: 接受一个值。如果该值已经是不可变的，则直接返回该值（幂等律）。如果该值是一个 mut 引用，则读取该引用指向的值，并返回该值的共享。
+
+*共享*是因为OnionObject内部的`Arc`设计，它允许多个引用共享同一个堆对象，而不会导致数据的意外修改。在 `const` 和 `mut` 的过程中，原始对象从不产生副本，产生副本的是对原始对象的引用（除了数值类型）
+
+尽管如此，不应当认为 `mut` 是可变对象，其本质是一个地址不可变的指针，指向一个允许被*替换*的堆对象。应当将 `mut` 理解为一个万能容器。
+
+幂等律严格确保了堆上对象不可能存在直接的 `mut` 容器，如果出现了 `mut` 容器，则VM会直接抛出内部逻辑异常的错误。
+
+同时幂等律和不可变性相结合，确保了在任何情况下，原始值都不会被意外修改。并且允许以极高的效率共享原始值。
 
 == 元组
 元组是 Onion 语言中的一种复合数据类型，用于存储多个值的有序集合。元组可以包含不同类型的值，并且支持嵌套。

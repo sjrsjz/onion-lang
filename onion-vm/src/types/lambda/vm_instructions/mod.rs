@@ -1207,7 +1207,7 @@ pub fn async_call(
         Box::new(Scheduler::new(vec![Box::new(unwrap_step_result!(
             OnionLambdaRunnableLauncher::new_static(lambda, args, |r| Ok(r))
         ))])),
-        new_task_handler.clone(),
+        new_task_handler,
         0,
     )));
     unwrap_step_result!(runnable.context.discard_objects(2));
@@ -1243,9 +1243,9 @@ pub fn spawn_task(
         OnionLambdaRunnableLauncher::new_static(&lambda_obj, &onion_tuple!(), &|r| Ok(r))
     ))]));
     let task_handler = OnionAsyncHandle::new(gc);
-    let task = Task::new(new_runnable, task_handler.clone(), 0);
+    let task_object = OnionObject::Custom(task_handler.0.clone()).consume_and_stabilize();
+    let task = Task::new(new_runnable, task_handler, 0);
     unwrap_step_result!(runnable.context.discard_objects(1));
-    let task_object = OnionObject::Custom(Arc::new(task_handler.clone().0)).consume_and_stabilize();
     unwrap_step_result!(runnable.context.push_object(task_object));
     StepResult::SpawnRunnable(task.into())
 }

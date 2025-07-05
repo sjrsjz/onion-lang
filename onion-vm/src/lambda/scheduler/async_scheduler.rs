@@ -1,5 +1,5 @@
 use arc_gc::gc::GC;
-use std::collections::VecDeque;
+use std::{collections::VecDeque, sync::Arc};
 
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
@@ -20,14 +20,14 @@ fn generate_sched_step(n: usize) -> u64 {
 
 pub struct Task {
     runnable: Box<dyn Runnable>,
-    task_handler: (OnionAsyncHandle, GCArcStorage),
+    task_handler: (Arc<OnionAsyncHandle>, GCArcStorage),
     priority: usize, // 优先级，决定调度间隔
 }
 
 impl Task {
     pub fn new(
         runnable: Box<dyn Runnable>,
-        task_handler: (OnionAsyncHandle, GCArcStorage),
+        task_handler: (Arc<OnionAsyncHandle>, GCArcStorage),
         priority: usize,
     ) -> Self {
         Self {
@@ -54,8 +54,8 @@ impl Task {
 
 pub struct AsyncScheduler {
     queue: VecDeque<Task>,
-    main_task_handler: (OnionAsyncHandle, GCArcStorage), // 主任务处理器
-    step: u64,                                           // 当前调度步数
+    main_task_handler: (Arc<OnionAsyncHandle>, GCArcStorage), // 主任务处理器
+    step: u64,                                                // 当前调度步数
 }
 
 impl AsyncScheduler {

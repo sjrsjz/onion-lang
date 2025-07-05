@@ -54,7 +54,6 @@ impl Display for LambdaBody {
     }
 }
 
-#[derive(Clone)]
 pub struct OnionLambdaDefinition {
     parameter: Arc<OnionObject>,
     body: LambdaBody,

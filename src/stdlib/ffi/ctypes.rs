@@ -135,10 +135,6 @@ impl OnionObjectExt for CTypes {
         // CTypes 不需要特殊的升级逻辑，因为它们是基本类型
     }
 
-    fn reconstruct_container(&self) -> Result<OnionObject, RuntimeError> {
-        return Ok(OnionObject::Custom(Arc::new(self.clone())));
-    }
-
     fn is_same(&self, _other: &OnionObject) -> Result<bool, RuntimeError> {
         Ok(false)
     }

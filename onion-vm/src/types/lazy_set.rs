@@ -19,7 +19,6 @@ use super::{
     tuple::OnionTuple,
 };
 
-#[derive(Clone)]
 pub struct OnionLazySet {
     container: OnionObject,
     filter: OnionObject,
