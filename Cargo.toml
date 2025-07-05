@@ -37,7 +37,7 @@ name = "onion"
 path = "src/main.rs"
 
 [dependencies]
-onion-frontend = { version = "0.1.9", path = "./onion-frontend" }
+onion-frontend = { version = "0.2.0", path = "./onion-frontend" }
 onion-vm = { version = "0.2.4", path = "./onion-vm" }
 serde = { workspace = true }
 clap = { version = "4.5", features = ["derive"] }

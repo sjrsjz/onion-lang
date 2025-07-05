@@ -27,7 +27,7 @@ pub fn build_code(
     let ast = match build_ast(gathered) {
         Ok(ast) => ast,
         Err(err_token) => {
-            return Err(err_token.format(&tokens, code.to_string()).to_string());
+            return Err(err_token.format().to_string());
         }
     };
     let macro_result = expand_macro(&ast, cycle_detector, dir_stack);
@@ -35,14 +35,14 @@ pub fn build_code(
     let mut errors = "".to_string();
     for error in &macro_result.errors {
         //println!("{}", error.format(code.to_string()).bright_red());
-        errors.push_str(&error.format(code.to_string()));
+        errors.push_str(&error.format());
         errors.push_str("\n");
     }
     if !macro_result.errors.is_empty() {
         return Err(format!("{}AST analysis failed", errors));
     }
     for warn in &macro_result.warnings {
-        println!("{}", warn.format(code.to_string()).bright_yellow());
+        println!("{}", warn.format().bright_yellow());
     }
 
     let ast = auto_capture_and_rebuild(&macro_result.result_node).1;
@@ -52,14 +52,14 @@ pub fn build_code(
     let mut errors = "".to_string();
     for error in &analyse_result.errors {
         //println!("{}", error.format(code.to_string()).bright_red());
-        errors.push_str(&error.format(code.to_string()));
+        errors.push_str(&error.format());
         errors.push_str("\n");
     }
     if !analyse_result.errors.is_empty() {
         return Err(format!("{}AST analysis failed", errors));
     }
     for warn in &analyse_result.warnings {
-        println!("{}", warn.format(code.to_string()).bright_yellow());
+        println!("{}", warn.format().bright_yellow());
     }
 
     let namespace = ir_generator::NameSpace::new("Main".to_string(), None);
@@ -74,7 +74,7 @@ pub fn build_code(
     };
 
     let mut ir = ir;
-    ir.push((DebugInfo { code_position: 0 }, IR::Return));
+    ir.push((DebugInfo::new((0, 0)), IR::Return));
     functions.append("__main__".to_string(), ir);
 
     Ok(functions.build_instructions(Some(code.to_string())))

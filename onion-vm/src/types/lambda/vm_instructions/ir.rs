@@ -24,7 +24,13 @@ pub enum IROperation {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DebugInfo {
-    pub code_position: usize,
+    token_span: (usize, usize),        // The span of the token
+}
+
+impl DebugInfo {
+    pub fn new(token_span: (usize, usize)) -> Self {
+        DebugInfo { token_span }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

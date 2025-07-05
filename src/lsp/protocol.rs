@@ -102,6 +102,22 @@ pub struct Diagnostic {
     pub related_information: Option<Vec<DiagnosticRelatedInformation>>,
 }
 
+impl Default for Diagnostic {
+    fn default() -> Self {
+        Diagnostic {
+            range: Range {
+                start: Position { line: 0, character: 0 },
+                end: Position { line: 0, character: 0 },
+            },
+            severity: Some(DiagnosticSeverity::Error),
+            code: None,
+            source: Some("onion-lsp".to_string()),
+            message: "An error occurred".to_string(),
+            related_information: None,
+        }
+    }
+}
+
 /// LSP 诊断相关信息
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]

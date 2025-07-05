@@ -66,6 +66,26 @@
         {
             "type": "lldb",
             "request": "launch",
+            "name": "Debug executable 'onion-lang' REPL",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=onion",
+                    "--package=onion-lang"
+                ],
+                "filter": {
+                    "name": "onion",
+                    "kind": "bin"
+                }
+            },
+            "args": [
+                "repl",
+            ],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
             "name": "Debug unit tests in executable 'onion-lang'",
             "cargo": {
                 "args": [

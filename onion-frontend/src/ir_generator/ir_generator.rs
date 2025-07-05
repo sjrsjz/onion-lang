@@ -138,12 +138,10 @@ impl<'t> IRGenerator<'t> {
     }
 
     fn generate_debug_info(&mut self, ast_node: &ASTNode) -> DebugInfo {
-        DebugInfo {
-            code_position: match ast_node.start_token {
-                Some(token) => token.position,
-                None => 0,
-            },
-        }
+        DebugInfo::new(match ast_node.start_token {
+            Some(ref token) => token.token_span(),
+            None => (0, 0),
+        })
     }
 
     pub fn generate_without_redirect(
@@ -195,7 +193,7 @@ impl<'t> IRGenerator<'t> {
                         IR::LoadLambda(
                             "__main__".to_string(),
                             match ast_node.start_token {
-                                Some(token) => token.position,
+                                Some(ref token) => token.token_span().0,
                                 None => 0,
                             },
                             *is_capture,
@@ -227,7 +225,7 @@ impl<'t> IRGenerator<'t> {
                         IR::LoadLambda(
                             full_signature,
                             match ast_node.start_token {
-                                Some(token) => token.position,
+                                Some(ref token) => token.token_span().0,
                                 None => 0,
                             },
                             *is_capture,
@@ -454,7 +452,10 @@ impl<'t> IRGenerator<'t> {
 
                 // First try to parse as various integer formats
                 if let Some(integer_value) = parse_integer_literal(number_str) {
-                    instructions.push((self.generate_debug_info(ast_node), IR::LoadInt(integer_value)));
+                    instructions.push((
+                        self.generate_debug_info(ast_node),
+                        IR::LoadInt(integer_value),
+                    ));
                 } else if let Ok(number) = number_str.parse::<f64>() {
                     // Fall back to float parsing for decimal floats and scientific notation
                     instructions.push((self.generate_debug_info(ast_node), IR::LoadFloat(number)));
@@ -878,18 +879,10 @@ impl<'t> IRGenerator<'t> {
         Ok(reduced_irs)
     }
 
-    /// 生成并优化IR指令
-    ///
-    /// # Arguments
-    ///
-    /// * `ast_node` - AST节点
-    ///
-    /// # Returns
-    ///
-    /// 优化后的IR指令列表
+    /// 生成IR指令
     pub fn generate(
         &mut self,
-        ast_node: &ASTNode<'t>,
+        ast_node: &ASTNode,
     ) -> Result<Vec<(DebugInfo, IR)>, IRGeneratorError> {
         let irs = self.generate_without_redirect(ast_node)?;
         self.redirect_jump(irs)
