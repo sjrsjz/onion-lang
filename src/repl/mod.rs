@@ -44,7 +44,7 @@ impl Highlighter for ReplHelper {
     }
 
     fn highlight_hint<'h>(&self, hint: &'h str) -> std::borrow::Cow<'h, str> {
-        self.highlighter.highlight_hint(hint)
+        std::borrow::Cow::Owned(hint.dimmed().italic().to_string())
     }
 
     fn highlight<'l>(&self, line: &'l str, pos: usize) -> std::borrow::Cow<'l, str> {
