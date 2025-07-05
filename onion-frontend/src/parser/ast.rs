@@ -1,3 +1,4 @@
+use super::diagnostics::find_line_and_col_from_source;
 use crate::parser::lexer::{Token, TokenType};
 use colored::*;
 use std::{fmt::Debug, vec};
@@ -85,14 +86,17 @@ impl ParserError {
                 let message = "Input was not fully parsed. Unprocessed tokens remain.";
 
                 let source_str = start.source_code_str();
-                let lines: Vec<&str> = source_str.lines().collect();
 
                 let (start_char_idx, _) = start.origin_token_span();
                 let (end_char_idx, _) = end.origin_token_span();
 
                 let (start_line_idx, start_col_char) =
-                    Self::find_line_and_col(start_char_idx, &lines);
-                let (end_line_idx, end_col_char) = Self::find_line_and_col(end_char_idx, &lines);
+                    find_line_and_col_from_source(start_char_idx, &source_str);
+                let (end_line_idx, end_col_char) =
+                    find_line_and_col_from_source(end_char_idx, &source_str);
+
+                // 为了生成报告，我们仍然需要分行处理
+                let lines: Vec<&str> = source_str.lines().collect();
 
                 // 使用一个可变字符串来构建复杂的输出
                 let mut report = String::new();
@@ -190,11 +194,13 @@ impl ParserError {
         help_text: &str,
     ) -> String {
         let source_str = token.source_code_str();
-        let lines: Vec<&str> = source_str.lines().collect();
         let (char_index, _) = token.origin_token_span();
 
         // 找到 Token 所在的行和列（基于字符数）
-        let (line_idx, col_char) = Self::find_line_and_col(char_index, &lines);
+        let (line_idx, col_char) = find_line_and_col_from_source(char_index, &source_str);
+
+        // 为了生成报告，我们仍然需要分行处理
+        let lines: Vec<&str> = source_str.lines().collect();
         let line_text = lines.get(line_idx).unwrap_or(&"");
 
         // 2. 关键修正：计算正确的显示宽度
@@ -227,23 +233,6 @@ impl ParserError {
                 help_text
             )
         }
-    }
-    /// 内部辅助函数，根据字符索引查找它所在的行号和列号。
-    /// 这是保证错误位置准确的关键。
-    fn find_line_and_col(char_pos: usize, lines: &[&str]) -> (usize, usize) {
-        let mut processed_chars = 0;
-        for (line_idx, line) in lines.iter().enumerate() {
-            // `lines()` 会移除换行符，我们需要把它加回来计算。
-            // 在此简化为所有换行符都占一个字符（LF），这在 macOS/Linux 上是准确的。
-            let line_len_with_newline = line.chars().count() + 1;
-            if processed_chars + line_len_with_newline > char_pos {
-                let col = char_pos - processed_chars;
-                return (line_idx, col);
-            }
-            processed_chars += line_len_with_newline;
-        }
-        // 如果因为某些原因没找到（比如位置超出源码长度），就默认指向最后一行
-        (lines.len().saturating_sub(1), 0)
     }
 }
 
@@ -995,7 +984,7 @@ fn match_annotation(
 
     let right = right.unwrap();
     let node = ASTNode::new(
-        ASTNodeType::Annotation(annotation),
+        ASTNodeType::Annotation(annotation.clone()),
         tokens[current].first().cloned(),
         tokens[current + right_offset + 1].last().cloned(),
         Some(vec![right]),
@@ -3263,7 +3252,7 @@ fn match_variable(
     if tokens[current].len() == 1 && tokens[current].first().unwrap() == TokenType::STRING {
         return Ok((
             Some(ASTNode::new(
-                ASTNodeType::String(tokens[current].first().unwrap().token()),
+                ASTNodeType::String(tokens[current].first().unwrap().token().clone()),
                 tokens[current].first().cloned(),
                 tokens[current].last().cloned(),
                 None,
@@ -3276,7 +3265,7 @@ fn match_variable(
     if tokens[current].len() == 1 && tokens[current].first().unwrap() == TokenType::NUMBER {
         return Ok((
             Some(ASTNode::new(
-                ASTNodeType::Number(tokens[current].first().unwrap().token()),
+                ASTNodeType::Number(tokens[current].first().unwrap().token().clone()),
                 tokens[current].first().cloned(),
                 tokens[current].last().cloned(),
                 None,
@@ -3289,7 +3278,7 @@ fn match_variable(
     if tokens[current].len() == 1 && tokens[current].first().unwrap() == TokenType::BASE64 {
         return Ok((
             Some(ASTNode::new(
-                ASTNodeType::Base64(tokens[current].first().unwrap().token()),
+                ASTNodeType::Base64(tokens[current].first().unwrap().token().clone()),
                 tokens[current].first().cloned(),
                 tokens[current].last().cloned(),
                 None,
@@ -3354,7 +3343,7 @@ fn match_variable(
     if tokens[current].len() == 1 && tokens[current].first().unwrap() == TokenType::IDENTIFIER {
         return Ok((
             Some(ASTNode::new(
-                ASTNodeType::Variable(tokens[current].first().unwrap().token()),
+                ASTNodeType::Variable(tokens[current].first().unwrap().token().clone()),
                 tokens[current].first().cloned(),
                 tokens[current].last().cloned(),
                 None,

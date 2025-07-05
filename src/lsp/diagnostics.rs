@@ -159,7 +159,7 @@ fn process_analysis_results<T: AnalysisResult>(
                     "Undefined variable: '{}'",
                     node.start_token
                         .as_ref()
-                        .map_or("".to_string(), |t| t.token())
+                        .map_or("".to_string(), |t| t.origin_token())
                 ),
                 ..Default::default()
             },

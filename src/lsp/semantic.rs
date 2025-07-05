@@ -115,7 +115,13 @@ pub fn do_semantic(
     };
 
     // 4. 严格遵循先序遍历，在字节图上标记类型。
-    process_node(&ast, &mut semantic_tokens, code, &char_to_byte_map, root_source.as_ref())?;
+    process_node(
+        &ast,
+        &mut semantic_tokens,
+        code,
+        &char_to_byte_map,
+        root_source.as_ref(),
+    )?;
 
     // 5. 最后覆盖注释，确保最高优先级。
     for token in tokens_with_comment {
@@ -164,16 +170,37 @@ fn process_node(
 
         // 3. 先序处理：首先标记父节点范围 (并跳过空白)
         mark_byte_range_as(start_byte, end_byte, semantic_type, tokens, true, code);
+    }
 
-        // 4. 特殊覆盖逻辑：对特定节点类型进行更精确的着色
-        match &node.node_type {
-            ASTNodeType::Let(_) => {
-                if let Some(token) = &node.start_token {
-                    if let Some((start, end)) = get_byte_span(token.origin_token_span(), char_map) {
+    // 4. 递归处理子节点
+    for child in &node.children {
+        process_node(child, tokens, code, char_map, root_source)?;
+    }
+
+    // 5. 特殊覆盖逻辑：对特定节点类型进行更精确的着色
+    match &node.node_type {
+        ASTNodeType::Let(_) => {
+            if let Some(token) = &node.start_token {
+                if let Some((start, end)) = get_byte_span(token.origin_token_span(), char_map) {
+                    mark_byte_range_as(
+                        start,
+                        end,
+                        SemanticTokenTypes::Variable,
+                        tokens,
+                        true,
+                        code,
+                    );
+                }
+            }
+        }
+        ASTNodeType::LambdaCall => {
+            if let Some(child) = node.children.get(0) {
+                if let ASTNodeType::Variable(_) = child.node_type {
+                    if let Some((start, end)) = calculate_node_byte_range(child, char_map) {
                         mark_byte_range_as(
                             start,
                             end,
-                            SemanticTokenTypes::Variable,
+                            SemanticTokenTypes::LambdaCall,
                             tokens,
                             true,
                             code,
@@ -181,61 +208,40 @@ fn process_node(
                     }
                 }
             }
-            ASTNodeType::LambdaCall => {
-                if let Some(child) = node.children.get(0) {
-                    if let ASTNodeType::Variable(_) = child.node_type {
-                        if let Some((start, end)) = calculate_node_byte_range(child, char_map) {
-                            mark_byte_range_as(
-                                start,
-                                end,
-                                SemanticTokenTypes::LambdaCall,
-                                tokens,
-                                true,
-                                code,
-                            );
-                        }
-                    }
-                }
-            }
-            ASTNodeType::AsyncLambdaCall => {
-                if let Some(child) = node.children.get(0) {
-                    if let ASTNodeType::Variable(_) = child.node_type {
-                        if let Some((start, end)) = calculate_node_byte_range(child, char_map) {
-                            mark_byte_range_as(
-                                start,
-                                end,
-                                SemanticTokenTypes::AsyncLambdaCall,
-                                tokens,
-                                true,
-                                code,
-                            );
-                        }
-                    }
-                }
-            }
-            ASTNodeType::GetAttr => {
-                if let Some(child) = node.children.get(1) {
-                    if let ASTNodeType::String(_) = child.node_type {
-                        if let Some((start, end)) = calculate_node_byte_range(child, char_map) {
-                            mark_byte_range_as(
-                                start,
-                                end,
-                                SemanticTokenTypes::GetAttr,
-                                tokens,
-                                true,
-                                code,
-                            );
-                        }
-                    }
-                }
-            }
-            _ => {}
         }
-    }
-
-    // 5. 递归处理子节点
-    for child in &node.children {
-        process_node(child, tokens, code, char_map, root_source)?;
+        ASTNodeType::AsyncLambdaCall => {
+            if let Some(child) = node.children.get(0) {
+                if let ASTNodeType::Variable(_) = child.node_type {
+                    if let Some((start, end)) = calculate_node_byte_range(child, char_map) {
+                        mark_byte_range_as(
+                            start,
+                            end,
+                            SemanticTokenTypes::AsyncLambdaCall,
+                            tokens,
+                            true,
+                            code,
+                        );
+                    }
+                }
+            }
+        }
+        ASTNodeType::GetAttr => {
+            if let Some(child) = node.children.get(1) {
+                if let ASTNodeType::String(_) = child.node_type {
+                    if let Some((start, end)) = calculate_node_byte_range(child, char_map) {
+                        mark_byte_range_as(
+                            start,
+                            end,
+                            SemanticTokenTypes::GetAttr,
+                            tokens,
+                            true,
+                            code,
+                        );
+                    }
+                }
+            }
+        }
+        _ => {}
     }
 
     Ok(())
@@ -334,7 +340,7 @@ fn is_node_from_current_file(node: &ASTNode, root_source: &std::sync::Arc<Vec<ch
             return false;
         }
     }
-    
+
     // 检查end_token
     if let Some(end_token) = &node.end_token {
         let node_source: std::sync::Arc<Vec<char>> = end_token.source_code().clone().into();
@@ -342,7 +348,7 @@ fn is_node_from_current_file(node: &ASTNode, root_source: &std::sync::Arc<Vec<ch
             return false;
         }
     }
-    
+
     true
 }
 

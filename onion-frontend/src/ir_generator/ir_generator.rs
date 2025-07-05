@@ -139,7 +139,7 @@ impl<'t> IRGenerator<'t> {
 
     fn generate_debug_info(&mut self, ast_node: &ASTNode) -> DebugInfo {
         DebugInfo::new(match ast_node.start_token {
-            Some(ref token) => token.token_span(),
+            Some(ref token) => token.origin_token_span(),
             None => (0, 0),
         })
     }
@@ -193,7 +193,7 @@ impl<'t> IRGenerator<'t> {
                         IR::LoadLambda(
                             "__main__".to_string(),
                             match ast_node.start_token {
-                                Some(ref token) => token.token_span().0,
+                                Some(ref token) => token.origin_token_span().0,
                                 None => 0,
                             },
                             *is_capture,
@@ -225,7 +225,7 @@ impl<'t> IRGenerator<'t> {
                         IR::LoadLambda(
                             full_signature,
                             match ast_node.start_token {
-                                Some(ref token) => token.token_span().0,
+                                Some(ref token) => token.origin_token_span().0,
                                 None => 0,
                             },
                             *is_capture,

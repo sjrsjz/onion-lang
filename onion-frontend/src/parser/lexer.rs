@@ -24,15 +24,8 @@ impl TokenType {
 
 impl PartialEq for TokenType {
     fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (TokenType::NUMBER, TokenType::NUMBER) => true,
-            (TokenType::STRING, TokenType::STRING) => true,
-            (TokenType::IDENTIFIER, TokenType::IDENTIFIER) => true,
-            (TokenType::SYMBOL, TokenType::SYMBOL) => true,
-            (TokenType::COMMENT, TokenType::COMMENT) => true,
-            (TokenType::BASE64, TokenType::BASE64) => true,
-            _ => false,
-        }
+        // Deriving PartialEq would be simpler, but this works too.
+        std::mem::discriminant(self) == std::mem::discriminant(other)
     }
 }
 
@@ -72,34 +65,29 @@ impl Deref for Source {
 
 #[derive(Debug, Clone)]
 pub struct Token {
-    token_span: (usize, usize),        // The span of the token
-    origin_token_span: (usize, usize), // The original token span
-    source_code: Source,               // The source code as a vector of characters
+    token: String,                     // The processed token value
+    origin_token_span: (usize, usize), // The original token span in source
+    source_code: Source,               // The shared source code
     token_type: TokenType,             // The type of the token
 }
 
 impl Token {
     pub fn new(
-        token_span: (usize, usize),
+        token: String,
         origin_token_span: (usize, usize),
         source_code: Arc<Vec<char>>,
         token_type: TokenType,
     ) -> Token {
         Token {
-            token_span,
+            token,
             origin_token_span,
             source_code: source_code.into(),
             token_type,
         }
     }
 
-    pub fn token_span(&self) -> (usize, usize) {
-        self.token_span
-    }
-
-    pub fn token(&self) -> String {
-        let (start, end) = self.token_span;
-        self.source_code[start..end].iter().collect()
+    pub fn token(&self) -> &String {
+        &self.token
     }
 
     pub fn origin_token_span(&self) -> (usize, usize) {
@@ -120,12 +108,6 @@ impl Token {
 
     pub fn token_type(&self) -> TokenType {
         self.token_type.clone()
-    }
-}
-
-impl PartialEq<String> for Token {
-    fn eq(&self, other: &String) -> bool {
-        self.token() == *other
     }
 }
 
@@ -171,14 +153,12 @@ pub mod lexer {
 
     // Tokenize the input code
     pub fn tokenize(code: &str) -> Vec<Token> {
-        // Create a single Source instance that will be shared across all tokens.
         let source = Source::from(code.to_string());
-        let chars: &Vec<char> = &source; // Get a reference to the character vector.
+        let chars: &Vec<char> = &source;
 
         let tokens = RefCell::new(Vec::<super::Token>::new());
         let curr_pos = RefCell::new(0usize);
 
-        // Skip whitespace
         let skip_space = || {
             let mut curr_pos = curr_pos.borrow_mut();
             while *curr_pos < chars.len() && chars[*curr_pos].is_whitespace() {
@@ -187,15 +167,8 @@ pub mod lexer {
         };
 
         // All `read_*` helper functions now return a tuple of:
-        // (processed_value, original_text_from_source)
-        // The `original_text_from_source` is used to determine the token's span.
-        // NOTE: The new `Token` struct's `token()` method re-slices the source code.
-        // This means it will return a string slice with escapes (e.g., "a\\nb")
-        // rather than the processed string value (e.g., "a\nb"). This is a
-        // direct consequence of the provided `Token` struct's design.
-
-        // test_string and test_number closures remain the same as they operate on `chars`
-        // and `curr_pos`, which are correctly defined.
+        // (processed_token_string, origin_token_span)
+        // This makes the main loop cleaner and encapsulates span calculation.
 
         let test_string = |test_str: &str, pos| -> bool {
             let test_chars: Vec<char> = test_str.chars().collect();
@@ -215,7 +188,6 @@ pub mod lexer {
             if pos >= chars.len() {
                 return 0;
             }
-
             let substring: String = chars[pos..].iter().collect();
 
             if substring.len() >= 2 {
@@ -224,44 +196,41 @@ pub mod lexer {
                     let hex_pattern = r"^0[xX][0-9a-fA-F]+";
                     if let Some(matched) = regex::Regex::new(hex_pattern).unwrap().find(&substring)
                     {
-                        return substring[..matched.end()].chars().count();
+                        return matched.end();
                     }
                 }
             }
-
             if substring.len() >= 2 {
                 let first_two_chars: String = substring.chars().take(2).collect();
                 if first_two_chars.to_lowercase() == "0o" {
                     let oct_pattern = r"^0[oO][0-7]+";
                     if let Some(matched) = regex::Regex::new(oct_pattern).unwrap().find(&substring)
                     {
-                        return substring[..matched.end()].chars().count();
+                        return matched.end();
                     }
                 }
             }
-
             if substring.len() >= 2 {
                 let first_two_chars: String = substring.chars().take(2).collect();
                 if first_two_chars.to_lowercase() == "0b" {
                     let bin_pattern = r"^0[bB][01]+";
                     if let Some(matched) = regex::Regex::new(bin_pattern).unwrap().find(&substring)
                     {
-                        return substring[..matched.end()].chars().count();
+                        return matched.end();
                     }
                 }
             }
 
             let number_pattern = r"^\d*\.?\d+([eE][-+]?\d+)?";
             if let Some(matched) = regex::Regex::new(number_pattern).unwrap().find(&substring) {
-                return substring[..matched.end()].chars().count();
+                return matched.end();
             }
 
             0
         };
 
-        // The logic inside the `read_*` functions is mostly unchanged, as they correctly
-        // advance `curr_pos` and produce the token strings.
-        let read_number = || -> Option<(String, String)> {
+        let read_number = || -> Option<(String, (usize, usize))> {
+            let start_pos = *curr_pos.borrow();
             let mut pos = curr_pos.borrow_mut();
             let len = test_number(*pos);
             if len == 0 {
@@ -269,12 +238,12 @@ pub mod lexer {
             }
             let token: String = chars[*pos..*pos + len].iter().collect();
             *pos += len;
-            Some((token.clone(), token)) // token, original token
+            Some((token, (start_pos, *pos)))
         };
 
-        let read_base64 = || -> Option<(String, String)> {
+        let read_base64 = || -> Option<(String, (usize, usize))> {
+            let start_pos = *curr_pos.borrow();
             let mut pos = curr_pos.borrow_mut();
-            let start_pos = *pos;
             if !test_string("$\"", start_pos) {
                 return None;
             }
@@ -316,149 +285,188 @@ pub mod lexer {
                         }
                         *pos += 1;
                     } else {
-                        // Incomplete escape sequence
                         *pos = start_pos; // backtrack
                         return None;
                     }
                 } else if chars[*pos] == '"' {
                     *pos += 1; // consume closing quote
-                    let original_token: String = chars[start_pos..*pos].iter().collect();
-                    return Some((current_token, original_token));
+                    return Some((current_token, (start_pos, *pos)));
                 } else {
                     current_token.push(chars[*pos]);
                     *pos += 1;
                 }
             }
-            // unclosed string, backtrack and fail
-            *pos = start_pos;
+            *pos = start_pos; // unclosed string, backtrack
             None
         };
 
-        // The rest of the read_* functions (read_string, read_comment, etc.) are assumed to be correct
-        // in their logic for parsing and advancing `curr_pos`. They are used as-is from the prompt.
-        // (The full code for these is long, so it's omitted here for brevity, but would be included in the final file)
-
-        let read_string = || -> Option<(String, String)> {
-            let mut curr_pos = curr_pos.borrow_mut();
+        let read_string = || -> Option<(String, (usize, usize))> {
             let mut current_token = String::new();
-            let original_token;
+            let start_char_pos = *curr_pos.borrow();
 
-            // 处理 R"..." 原始字符串
-            if test_string("R\"", *curr_pos) {
-                let start_of_raw = *curr_pos;
-                *curr_pos += 2;
-                let mut divider = String::new();
-
-                // 读取分隔符
-                while *curr_pos < chars.len() && chars[*curr_pos] != '(' {
-                    divider.push(chars[*curr_pos]);
-                    *curr_pos += 1;
+            let process_escape = |curr_pos: &mut usize, current_token: &mut String| -> bool {
+                if *curr_pos >= chars.len() {
+                    return false;
                 }
-
-                if *curr_pos < chars.len() && chars[*curr_pos] == '(' {
-                    *curr_pos += 1; // 跳过 '('
-                    let end_divider = format!("){}", divider);
-                    let end_sequence = format!("{}\"", end_divider);
-
-                    while *curr_pos < chars.len() && !test_string(&end_sequence, *curr_pos) {
-                        current_token.push(chars[*curr_pos]);
+                let escape_char = chars[*curr_pos];
+                match escape_char {
+                    'n' => current_token.push('\n'),
+                    'r' => current_token.push('\r'),
+                    't' => current_token.push('\t'),
+                    '\\' | '"' | '\'' | '`' => current_token.push(escape_char),
+                    '0' => current_token.push('\0'),
+                    'b' => current_token.push('\x08'),
+                    'f' => current_token.push('\x0C'),
+                    'v' => current_token.push('\x0B'),
+                    'a' => current_token.push('\x07'),
+                    'x' => {
                         *curr_pos += 1;
+                        if *curr_pos + 1 < chars.len() {
+                            let hex_str: String = chars[*curr_pos..*curr_pos + 2].iter().collect();
+                            if let Ok(hex_val) = u8::from_str_radix(&hex_str, 16) {
+                                current_token.push(hex_val as char);
+                                *curr_pos += 1;
+                            } else {
+                                current_token.push_str("\\x");
+                                *curr_pos -= 1;
+                            }
+                        } else {
+                            current_token.push_str("\\x");
+                            *curr_pos -= 1;
+                        }
                     }
-
-                    if *curr_pos < chars.len() {
-                        *curr_pos += end_sequence.len();
-                        original_token = chars[start_of_raw..*curr_pos].iter().collect();
-                        return Some((current_token, original_token));
+                    'u' => {
+                        *curr_pos += 1;
+                        if *curr_pos + 3 < chars.len() {
+                            let unicode_str: String =
+                                chars[*curr_pos..*curr_pos + 4].iter().collect();
+                            if let Ok(val) = u32::from_str_radix(&unicode_str, 16) {
+                                if let Some(c) = std::char::from_u32(val) {
+                                    current_token.push(c);
+                                    *curr_pos += 3;
+                                } else {
+                                    current_token.push_str("\\u");
+                                    *curr_pos -= 1;
+                                }
+                            } else {
+                                current_token.push_str("\\u");
+                                *curr_pos -= 1;
+                            }
+                        } else {
+                            current_token.push_str("\\u");
+                            *curr_pos -= 1;
+                        }
+                    }
+                    'U' => {
+                        *curr_pos += 1;
+                        if *curr_pos + 7 < chars.len() {
+                            let unicode_str: String =
+                                chars[*curr_pos..*curr_pos + 8].iter().collect();
+                            if let Ok(val) = u32::from_str_radix(&unicode_str, 16) {
+                                if let Some(c) = std::char::from_u32(val) {
+                                    current_token.push(c);
+                                    *curr_pos += 7;
+                                } else {
+                                    current_token.push_str("\\U");
+                                    *curr_pos -= 1;
+                                }
+                            } else {
+                                current_token.push_str("\\U");
+                                *curr_pos -= 1;
+                            }
+                        } else {
+                            current_token.push_str("\\U");
+                            *curr_pos -= 1;
+                        }
+                    }
+                    _ => {
+                        current_token.push('\\');
+                        current_token.push(escape_char);
                     }
                 }
-                *curr_pos = start_of_raw; // backtrack on failure
+                *curr_pos += 1;
+                true
+            };
+            if test_string("R\"", start_char_pos) {
+                let mut pos = curr_pos.borrow_mut();
+                *pos += 2;
+                let mut divider = String::new();
+                while *pos < chars.len() && chars[*pos] != '(' {
+                    divider.push(chars[*pos]);
+                    *pos += 1;
+                }
+                if *pos < chars.len() && chars[*pos] == '(' {
+                    *pos += 1;
+                    let end_sequence = format!("){}\"", divider);
+                    while *pos < chars.len() && !test_string(&end_sequence, *pos) {
+                        current_token.push(chars[*pos]);
+                        *pos += 1;
+                    }
+                    if *pos < chars.len() {
+                        *pos += end_sequence.len();
+                        return Some((current_token, (start_char_pos, *pos)));
+                    }
+                }
+                *curr_pos.borrow_mut() = start_char_pos;
                 return None;
             }
-
-            // Other string types... (full implementation from prompt)
-            let start_char_pos = *curr_pos;
-
-            if test_string("\"\"\"", *curr_pos) || test_string("'''", *curr_pos) {
-                let quote_seq: String = chars[*curr_pos..*curr_pos + 3].iter().collect();
-                *curr_pos += 3;
-
-                while *curr_pos < chars.len() {
-                    if test_string(&quote_seq, *curr_pos) {
-                        *curr_pos += 3;
-                        let original_token: String =
-                            chars[start_char_pos..*curr_pos].iter().collect();
-                        return Some((current_token, original_token));
+            if test_string("\"\"\"", start_char_pos) || test_string("'''", start_char_pos) {
+                let quote_seq: String = chars[start_char_pos..start_char_pos + 3].iter().collect();
+                let mut pos = curr_pos.borrow_mut();
+                *pos += 3;
+                while *pos < chars.len() {
+                    if test_string(&quote_seq, *pos) {
+                        *pos += 3;
+                        return Some((current_token, (start_char_pos, *pos)));
                     }
-
-                    if chars[*curr_pos] == '\\' {
-                        *curr_pos += 1;
-                        if *curr_pos < chars.len() {
-                            let escape_char = chars[*curr_pos];
-                            match escape_char {
-                                'n' => current_token.push('\n'),
-                                'r' => current_token.push('\r'),
-                                't' => current_token.push('\t'),
-                                _ => current_token.push(escape_char), // Simplified for example
-                            }
-                            *curr_pos += 1;
-                        } else {
-                            *curr_pos = start_char_pos;
+                    if chars[*pos] == '\\' {
+                        *pos += 1;
+                        if !process_escape(&mut pos, &mut current_token) {
+                            *curr_pos.borrow_mut() = start_char_pos;
                             return None;
                         }
                     } else {
-                        current_token.push(chars[*curr_pos]);
-                        *curr_pos += 1;
+                        current_token.push(chars[*pos]);
+                        *pos += 1;
                     }
                 }
-                *curr_pos = start_char_pos; // Unclosed string
+                *curr_pos.borrow_mut() = start_char_pos;
                 return None;
             }
-
             let quote_pairs: std::collections::HashMap<char, char> =
                 [('"', '"'), ('\'', '\''), ('`', '`')]
                     .iter()
                     .cloned()
                     .collect();
-
-            if *curr_pos < chars.len() {
-                let start_char = chars[*curr_pos];
+            if start_char_pos < chars.len() {
+                let start_char = chars[start_char_pos];
                 if quote_pairs.contains_key(&start_char) {
-                    *curr_pos += 1;
-                    while *curr_pos < chars.len() {
-                        if chars[*curr_pos] == '\\' {
-                            *curr_pos += 1;
-                            if *curr_pos < chars.len() {
-                                let escape_char = chars[*curr_pos];
-                                match escape_char {
-                                    'n' => current_token.push('\n'),
-                                    'r' => current_token.push('\r'),
-                                    't' => current_token.push('\t'),
-                                    _ => current_token.push(escape_char), // Simplified
-                                }
-                                *curr_pos += 1;
-                            } else {
-                                *curr_pos = start_char_pos;
+                    let mut pos = curr_pos.borrow_mut();
+                    *pos += 1;
+                    while *pos < chars.len() {
+                        if chars[*pos] == '\\' {
+                            *pos += 1;
+                            if !process_escape(&mut pos, &mut current_token) {
+                                *curr_pos.borrow_mut() = start_char_pos;
                                 return None;
                             }
-                        } else if chars[*curr_pos] == start_char {
-                            *curr_pos += 1;
-                            let original_token: String =
-                                chars[start_char_pos..*curr_pos].iter().collect();
-                            return Some((current_token, original_token));
+                        } else if chars[*pos] == start_char {
+                            *pos += 1;
+                            return Some((current_token, (start_char_pos, *pos)));
                         } else {
-                            current_token.push(chars[*curr_pos]);
-                            *curr_pos += 1;
+                            current_token.push(chars[*pos]);
+                            *pos += 1;
                         }
                     }
-                    *curr_pos = start_char_pos; // unclosed string
+                    *curr_pos.borrow_mut() = start_char_pos;
                 }
             }
             None
         };
 
-        let read_comment = || -> Option<(String, String)> {
+        let read_comment = || -> Option<(String, (usize, usize))> {
+            let start_pos = *curr_pos.borrow();
             let mut pos = curr_pos.borrow_mut();
-            let start_pos = *pos;
             if test_string("//", *pos) {
                 *pos += 2;
                 let mut current_token = String::new();
@@ -466,8 +474,7 @@ pub mod lexer {
                     current_token.push(chars[*pos]);
                     *pos += 1;
                 }
-                let original_token = chars[start_pos..*pos].iter().collect();
-                return Some((current_token, original_token));
+                return Some((current_token, (start_pos, *pos)));
             }
             if test_string("/*", *pos) {
                 *pos += 2;
@@ -478,43 +485,43 @@ pub mod lexer {
                 }
                 if *pos < chars.len() {
                     *pos += 2;
-                    let original_token = chars[start_pos..*pos].iter().collect();
-                    return Some((current_token, original_token));
+                    return Some((current_token, (start_pos, *pos)));
                 }
             }
-            *pos = start_pos; // backtrack
+            *pos = start_pos;
             None
         };
 
-        let read_operator = || -> Option<(String, String)> {
+        let read_operator = || -> Option<(String, (usize, usize))> {
+            let start_pos = *curr_pos.borrow();
             let mut pos = curr_pos.borrow_mut();
             if *pos + 2 < chars.len() {
                 let three_chars: String = chars[*pos..*pos + 3].iter().collect();
                 if is_operator(&three_chars) {
                     *pos += 3;
-                    return Some((three_chars.clone(), three_chars));
+                    return Some((three_chars, (start_pos, *pos)));
                 }
             }
             if *pos + 1 < chars.len() {
                 let two_chars: String = chars[*pos..*pos + 2].iter().collect();
                 if is_operator(&two_chars) {
                     *pos += 2;
-                    return Some((two_chars.clone(), two_chars));
+                    return Some((two_chars, (start_pos, *pos)));
                 }
             }
             if *pos < chars.len() {
                 let one_char = chars[*pos].to_string();
                 if is_operator(&one_char) {
                     *pos += 1;
-                    return Some((one_char.clone(), one_char));
+                    return Some((one_char, (start_pos, *pos)));
                 }
             }
             None
         };
 
-        let read_token = || -> Option<(String, String)> {
+        let read_token = || -> Option<(String, (usize, usize))> {
+            let start_pos = *curr_pos.borrow();
             let mut pos = curr_pos.borrow_mut();
-            let start_pos = *pos;
             if *pos < chars.len() {
                 let first_char = chars[*pos];
                 if first_char.is_alphabetic() || first_char == '_' {
@@ -533,7 +540,7 @@ pub mod lexer {
                         }
                     }
                     let token: String = chars[start_pos..*pos].iter().collect();
-                    return Some((token.clone(), token));
+                    return Some((token, (start_pos, *pos)));
                 }
             }
             None
@@ -542,113 +549,76 @@ pub mod lexer {
         // Main tokenization loop
         loop {
             skip_space();
-            let start_pos = *curr_pos.borrow();
-            if start_pos >= chars.len() {
+            if *curr_pos.borrow() >= chars.len() {
                 break;
             }
 
-            // The logic is now:
+            // The logic now is:
             // 1. Try to read a token of a certain type.
-            // 2. If successful, the `read_*` function updates `curr_pos`.
-            // 3. The `origin_token` string gives us the character count to calculate the end span.
-            // 4. We calculate the `token_span` (the content) and `origin_token_span` (the full text).
-            // 5. We create a new `Token` with these spans and the shared `source` Arc.
+            // 2. If successful, the `read_*` function returns the processed string and its original span.
+            // 3. Create a new `Token` with these values and the shared `source` Arc.
 
-            if let Some((_token, origin_token)) = read_number() {
-                let end_pos = start_pos + origin_token.chars().count();
-                let span = (start_pos, end_pos);
+            if let Some((token, origin_span)) = read_comment() {
                 tokens.borrow_mut().push(super::Token::new(
-                    span, // For numbers, token and origin spans are the same
-                    span,
-                    source.0.clone(),
-                    super::TokenType::NUMBER,
-                ));
-                continue;
-            }
-
-            if let Some((_token, origin_token)) = read_base64() {
-                let end_pos = start_pos + origin_token.chars().count();
-                let origin_token_span = (start_pos, end_pos);
-                // Content is between `$` and `"`
-                let token_span = (start_pos + 2, end_pos - 1);
-                tokens.borrow_mut().push(super::Token::new(
-                    token_span,
-                    origin_token_span,
-                    source.0.clone(),
-                    super::TokenType::BASE64,
-                ));
-                continue;
-            }
-
-            if let Some((_token, origin_token)) = read_string() {
-                let end_pos = start_pos + origin_token.chars().count();
-                let origin_token_span = (start_pos, end_pos);
-
-                let token_span = if origin_token.starts_with("R\"") {
-                    let first_paren = origin_token.find('(').unwrap_or(2);
-                    let prefix_len = first_paren + 1;
-                    let suffix_len =
-                        origin_token.len() - origin_token.rfind(')').unwrap_or(end_pos);
-                    (start_pos + prefix_len, end_pos - suffix_len)
-                } else if origin_token.starts_with("\"\"\"") || origin_token.starts_with("'''") {
-                    (start_pos + 3, end_pos - 3)
-                } else {
-                    (start_pos + 1, end_pos - 1)
-                };
-
-                tokens.borrow_mut().push(super::Token::new(
-                    token_span,
-                    origin_token_span,
-                    source.0.clone(),
-                    super::TokenType::STRING,
-                ));
-                continue;
-            }
-
-            if let Some((_token, origin_token)) = read_comment() {
-                let end_pos = start_pos + origin_token.chars().count();
-                let origin_token_span = (start_pos, end_pos);
-
-                let token_span = if origin_token.starts_with("/*") {
-                    (start_pos + 2, end_pos - 2)
-                } else {
-                    // Handles `//`
-                    (start_pos + 2, end_pos)
-                };
-
-                tokens.borrow_mut().push(super::Token::new(
-                    token_span,
-                    origin_token_span,
+                    token,
+                    origin_span,
                     source.0.clone(),
                     super::TokenType::COMMENT,
                 ));
                 continue;
             }
 
-            if let Some((_token, origin_token)) = read_operator() {
-                let end_pos = start_pos + origin_token.chars().count();
-                let span = (start_pos, end_pos);
+            if let Some((token, origin_span)) = read_number() {
                 tokens.borrow_mut().push(super::Token::new(
-                    span,
-                    span,
+                    token,
+                    origin_span,
+                    source.0.clone(),
+                    super::TokenType::NUMBER,
+                ));
+                continue;
+            }
+
+            if let Some((token, origin_span)) = read_base64() {
+                tokens.borrow_mut().push(super::Token::new(
+                    token,
+                    origin_span,
+                    source.0.clone(),
+                    super::TokenType::BASE64,
+                ));
+                continue;
+            }
+
+            if let Some((token, origin_span)) = read_string() {
+                tokens.borrow_mut().push(super::Token::new(
+                    token,
+                    origin_span,
+                    source.0.clone(),
+                    super::TokenType::STRING,
+                ));
+                continue;
+            }
+
+            if let Some((token, origin_span)) = read_operator() {
+                tokens.borrow_mut().push(super::Token::new(
+                    token,
+                    origin_span,
                     source.0.clone(),
                     super::TokenType::SYMBOL,
                 ));
                 continue;
             }
 
-            if let Some((_token, origin_token)) = read_token() {
-                let end_pos = start_pos + origin_token.chars().count();
-                let span = (start_pos, end_pos);
+            if let Some((token, origin_span)) = read_token() {
                 tokens.borrow_mut().push(super::Token::new(
-                    span,
-                    span,
+                    token,
+                    origin_span,
                     source.0.clone(),
                     super::TokenType::IDENTIFIER,
                 ));
                 continue;
             } else {
                 // If all parsers fail, advance by one character to avoid an infinite loop.
+                // This handles unrecognized characters.
                 let mut curr_pos = curr_pos.borrow_mut();
                 if *curr_pos < chars.len() {
                     *curr_pos += 1;
@@ -660,7 +630,6 @@ pub mod lexer {
     }
 
     /// Reject comments from the token list.
-    /// The signature is corrected to not use a lifetime parameter, as the new Token struct is self-contained.
     pub fn reject_comment(tokens: &Vec<super::Token>) -> Vec<super::Token> {
         tokens
             .iter()

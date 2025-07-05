@@ -277,7 +277,10 @@ impl AnalyzeError {
             Self::ParserError(parser_err) => parser_err.format(),
 
             Self::UndefinedVariable(node) => {
-                let var_name = node.start_token.as_ref().map_or("".to_string(), |t| t.token());
+                let var_name = node
+                    .start_token
+                    .as_ref()
+                    .map_or("".to_string(), |t| t.origin_token());
                 diagnostics::format_node_based_report(
                     diagnostics::ReportSeverity::Error, // 传入严重性
                     "Semantic Error",
@@ -355,7 +358,6 @@ pub struct MacroAnalysisOutput {
     pub warnings: Vec<AnalyzeWarn>,
     pub result_node: ASTNode,
 }
-
 
 impl AnalysisResult for AnalysisOutput {
     fn errors(&self) -> &[AnalyzeError] {
