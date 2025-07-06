@@ -1,5 +1,5 @@
 use std::{
-    collections::VecDeque, ffi::{CString, OsStr}, os::windows::ffi::OsStrExt, sync::Arc
+    collections::VecDeque, ffi::CString, sync::Arc
 };
 
 use arc_gc::{
@@ -21,6 +21,11 @@ use onion_vm::{
 use crate::stdlib::{build_named_dict, get_attr_direct, wrap_native_function};
 
 use super::ctypes::CTypes;
+
+/// 跨平台的字符串到 UTF-16 转换函数
+fn string_to_utf16(s: &str) -> Vec<u16> {
+    s.encode_utf16().collect()
+}
 
 // Helper enum to manage argument lifetimes and types for libffi calls
 enum Argument {
@@ -346,7 +351,7 @@ impl CFunctionHandle {
                 Ok((Type::pointer(), Argument::Ptr(ptr as *const u8, Some(boxed_cstring))))
             }
             (CTypes::CString(s), "wstring") => {
-                let mut wide_chars: Vec<u16> = OsStr::new(s.as_str()).encode_wide().collect();
+                let mut wide_chars: Vec<u16> = string_to_utf16(s.as_str());
                 wide_chars.push(0); // 添加 null 终止符
                 let ptr = wide_chars.as_ptr();
                 let boxed_wstr = Box::new(wide_chars);

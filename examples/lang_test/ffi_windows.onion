@@ -26,22 +26,22 @@ main := () -> {
     // --- 演示 1: 简单的信息框 ---
     stdlib.io.println("🔧 Demo 1: Simple Information Message Box");
     
-    // 获取 MessageBoxA 函数句柄
-    // C 签名: int MessageBoxA(HWND hWnd, LPCSTR lpText, LPCSTR lpCaption, UINT uType);
-    // 我们使用 'A' 版本 (MessageBoxA) 是因为它接受常规的 C 字符串 (LPCSTR)，
-    // 这与我们的 `string` 类型完美匹配。
+    // 获取 MessageBoxW 函数句柄
+    // C 签名: int MessageBoxW(HWND hWnd, LPCWSTR lpText, LPCWSTR lpCaption, UINT uType);
+    // 我们使用 'W' 版本 (MessageBoxW) 是因为它接受宽字符字符串 (LPCWSTR)，
+    // 这与我们的 `wstring` 类型完美匹配。
     msgbox_handle := stdlib.ffi.lib.get_function(
         library => user32_lib,
-        function => "MessageBoxA",
+        function => "MessageBoxW",
         return_type => "i32",
-        param_types => ("pointer", "string", "string", "u32")
+        param_types => ("pointer", "wstring", "wstring", "u32")
     );
 
     if (msgbox_handle == null) {
-        stdlib.io.println("✗ Failed to get MessageBoxA function handle.");
+        stdlib.io.println("✗ Failed to get MessageBoxW function handle.");
         return;
     };
-    stdlib.io.println("✓ Got MessageBoxA handle.");
+    stdlib.io.println("✓ Got MessageBoxW handle.");
 
     // 准备参数
     // hWnd (HWND): 窗口句柄，传 0 (null) 表示无所有者窗口。
