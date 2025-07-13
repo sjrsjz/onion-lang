@@ -407,7 +407,7 @@ pub mod lexer {
                         return Some((current_token, (start_char_pos, *pos)));
                     }
                 }
-                *curr_pos.borrow_mut() = start_char_pos;
+                *pos = start_char_pos;
                 return None;
             }
             if test_string("\"\"\"", start_char_pos) || test_string("'''", start_char_pos) {
@@ -422,7 +422,7 @@ pub mod lexer {
                     if chars[*pos] == '\\' {
                         *pos += 1;
                         if !process_escape(&mut pos, &mut current_token) {
-                            *curr_pos.borrow_mut() = start_char_pos;
+                            *pos = start_char_pos;
                             return None;
                         }
                     } else {
@@ -430,7 +430,7 @@ pub mod lexer {
                         *pos += 1;
                     }
                 }
-                *curr_pos.borrow_mut() = start_char_pos;
+                *pos = start_char_pos;
                 return None;
             }
             let quote_pairs: std::collections::HashMap<char, char> =
@@ -447,7 +447,7 @@ pub mod lexer {
                         if chars[*pos] == '\\' {
                             *pos += 1;
                             if !process_escape(&mut pos, &mut current_token) {
-                                *curr_pos.borrow_mut() = start_char_pos;
+                                *pos = start_char_pos;
                                 return None;
                             }
                         } else if chars[*pos] == start_char {
@@ -458,7 +458,7 @@ pub mod lexer {
                             *pos += 1;
                         }
                     }
-                    *curr_pos.borrow_mut() = start_char_pos;
+                    *pos = start_char_pos;
                 }
             }
             None
@@ -524,7 +524,12 @@ pub mod lexer {
             let mut pos = curr_pos.borrow_mut();
             if *pos < chars.len() {
                 let first_char = chars[*pos];
-                if first_char.is_alphabetic() || first_char == '_' {
+                if first_char.is_alphabetic()
+                    || first_char == '_'
+                    || (first_char as u32 >= 0x4E00 && first_char as u32 <= 0x9FFF)
+                    || (first_char as u32 >= 0x3400 && first_char as u32 <= 0x4DBF)
+                    || (first_char as u32 >= 0xF900 && first_char as u32 <= 0xFAFF)
+                {
                     *pos += 1;
                     while *pos < chars.len() {
                         let c = chars[*pos];

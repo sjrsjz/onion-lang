@@ -787,14 +787,25 @@ fn check_postorder_break(
     // check if we've reached or passed the break position
     if let Some(break_pos) = break_at_position {
         if let Some(ref token) = node.start_token {
-            // 使用 token.position (开始字节偏移)
-            // 检查断点是否在 token 的范围内 [start, end)
-            if break_pos >= token.origin_token_span().0 && break_pos < token.origin_token_span().1 {
-                // 我们已经到达或超过了目标位置。在完成此节点分析之后捕获上下文。
-                *context_at_break = Some(context.clone()); // 克隆上下文状态
+            let (start_char, end_char) = token.origin_token_span();
+            let source_code = token.source_code_str();
+            // 将 char span 转为字节 span
+            let start_byte = source_code
+                .char_indices()
+                .nth(start_char)
+                .map(|(b, _)| b)
+                .unwrap_or(source_code.len());
+            let end_byte = source_code
+                .char_indices()
+                .nth(end_char)
+                .map(|(b, _)| b)
+                .unwrap_or(source_code.len());
+
+            // 检查 break_pos 是否在字节范围内
+            if break_pos >= start_byte && break_pos <= end_byte {
+                *context_at_break = Some(context.clone());
             }
         }
-        // 可选：如果需要，处理没有 start_token 的节点，尽管大多数相关节点应该有它。
     }
 }
 

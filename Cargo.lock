@@ -1093,11 +1093,12 @@ checksum = "a4895175b425cb1f87721b59f0f286c2092bd4af812243672510e1ac53e2e0ad"
 
 [[package]]
 name = "onion-frontend"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "base64 0.22.1",
  "colored",
  "criterion",
+ "once_cell",
  "onion-vm",
  "regex",
  "unicode-segmentation",
@@ -1106,7 +1107,7 @@ dependencies = [
 
 [[package]]
 name = "onion-lang"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "clap",
  "colored",
