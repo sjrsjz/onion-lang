@@ -236,7 +236,9 @@ impl CFunctionHandle {
         let mut arg_values = Vec::new(); // Vec<Argument>
 
         for (i, arg) in args.iter().enumerate() {
-            let (ffi_type, value) = self.prepare_arg_for_call(arg, &self.param_types[i])?;
+            let (ffi_type, value) = unsafe {
+                self.prepare_arg_for_call(arg, &self.param_types[i])
+            }?;
             arg_types.push(ffi_type);
             arg_values.push(value);
         }
@@ -250,78 +252,80 @@ impl CFunctionHandle {
         let args_for_ffi: Vec<Arg> = arg_values.iter().map(|val| val.as_arg()).collect();
 
         // 调用函数并处理返回值
-        match self.return_type.as_str() {
-            "void" => {
-                cif.call::<()>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                Ok(CTypes::CVoid)
+        unsafe {
+            match self.return_type.as_str() {
+                "void" => {
+                    cif.call::<()>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
+                    Ok(CTypes::CVoid)
+                }
+                "i8" => {
+                    let result = cif.call::<i8>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
+                    Ok(CTypes::CInt8(result))
+                }
+                "i16" => {
+                    let result = cif.call::<i16>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
+                    Ok(CTypes::CInt16(result))
+                }
+                "i32" => {
+                    let result = cif.call::<i32>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
+                    Ok(CTypes::CInt32(result))
+                }
+                "i64" => {
+                    let result = cif.call::<i64>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
+                    Ok(CTypes::CInt64(result))
+                }
+                "u8" => {
+                    let result = cif.call::<u8>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
+                    Ok(CTypes::CUInt8(result))
+                }
+                "u16" => {
+                    let result = cif.call::<u16>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
+                    Ok(CTypes::CUInt16(result))
+                }
+                "u32" => {
+                    let result = cif.call::<u32>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
+                    Ok(CTypes::CUInt32(result))
+                }
+                "u64" => {
+                    let result = cif.call::<u64>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
+                    Ok(CTypes::CUInt64(result))
+                }
+                "f32" => {
+                    let result = cif.call::<f32>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
+                    Ok(CTypes::CFloat(result))
+                }
+                "f64" => {
+                    let result = cif.call::<f64>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
+                    Ok(CTypes::CDouble(result))
+                }
+                "bool" => {
+                    let result = cif.call::<u8>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
+                    Ok(CTypes::CBool(result != 0))
+                }
+                "char" => {
+                    let result = cif.call::<i8>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
+                    Ok(CTypes::CChar(result))
+                }
+                "uchar" => {
+                    let result = cif.call::<u8>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
+                    Ok(CTypes::CUChar(result))
+                }
+                "size" => {
+                    let result = cif.call::<usize>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
+                    Ok(CTypes::CSize(result))
+                }
+                "ssize" => {
+                    let result = cif.call::<isize>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
+                    Ok(CTypes::CSSize(result))
+                }
+                "pointer" => {
+                    let result = cif.call::<*const u8>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
+                    Ok(CTypes::CPointer(result as usize))
+                }
+                _ => Err(RuntimeError::InvalidOperation(
+                    format!("Unsupported return type: {}", self.return_type).into(),
+                )),
             }
-            "i8" => {
-                let result = cif.call::<i8>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                Ok(CTypes::CInt8(result))
-            }
-            "i16" => {
-                let result = cif.call::<i16>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                Ok(CTypes::CInt16(result))
-            }
-            "i32" => {
-                let result = cif.call::<i32>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                Ok(CTypes::CInt32(result))
-            }
-            "i64" => {
-                let result = cif.call::<i64>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                Ok(CTypes::CInt64(result))
-            }
-            "u8" => {
-                let result = cif.call::<u8>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                Ok(CTypes::CUInt8(result))
-            }
-            "u16" => {
-                let result = cif.call::<u16>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                Ok(CTypes::CUInt16(result))
-            }
-            "u32" => {
-                let result = cif.call::<u32>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                Ok(CTypes::CUInt32(result))
-            }
-            "u64" => {
-                let result = cif.call::<u64>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                Ok(CTypes::CUInt64(result))
-            }
-            "f32" => {
-                let result = cif.call::<f32>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                Ok(CTypes::CFloat(result))
-            }
-            "f64" => {
-                let result = cif.call::<f64>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                Ok(CTypes::CDouble(result))
-            }
-            "bool" => {
-                let result = cif.call::<u8>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                Ok(CTypes::CBool(result != 0))
-            }
-            "char" => {
-                let result = cif.call::<i8>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                Ok(CTypes::CChar(result))
-            }
-            "uchar" => {
-                let result = cif.call::<u8>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                Ok(CTypes::CUChar(result))
-            }
-            "size" => {
-                let result = cif.call::<usize>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                Ok(CTypes::CSize(result))
-            }
-            "ssize" => {
-                let result = cif.call::<isize>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                Ok(CTypes::CSSize(result))
-            }
-            "pointer" => {
-                let result = cif.call::<*const u8>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                Ok(CTypes::CPointer(result as usize))
-            }
-            _ => Err(RuntimeError::InvalidOperation(
-                format!("Unsupported return type: {}", self.return_type).into(),
-            )),
         }
     }    /// 准备参数用于调用
     unsafe fn prepare_arg_for_call(&self, ctype: &CTypes, expected_type: &str) -> Result<(Type, Argument), RuntimeError> {

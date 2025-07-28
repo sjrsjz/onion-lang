@@ -1,12 +1,12 @@
 use indexmap::IndexMap;
 use onion_vm::{
+    GC,
     lambda::runnable::RuntimeError,
     types::{
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         pair::OnionPair,
         tuple::OnionTuple,
     },
-    GC,
 };
 use std::env;
 
@@ -57,7 +57,9 @@ fn setenv(
                 .weak()
                 .with_data(|value_data| match (key_data, value_data) {
                     (OnionObject::String(key_str), OnionObject::String(value_str)) => {
-                        env::set_var(key_str.as_ref(), value_str.as_ref());
+                        unsafe {
+                            env::set_var(key_str.as_ref(), value_str.as_ref());
+                        }
                         Ok(OnionObject::Null.stabilize())
                     }
                     _ => Err(RuntimeError::InvalidType(
@@ -77,7 +79,9 @@ fn unsetenv(
         let key = get_attr_direct(data, "key".to_string())?;
         key.weak().with_data(|key_data| match key_data {
             OnionObject::String(key_str) => {
-                env::remove_var(key_str.as_ref());
+                unsafe {
+                    env::remove_var(key_str.as_ref());
+                }
                 Ok(OnionObject::Null.stabilize())
             }
             _ => Err(RuntimeError::InvalidType(

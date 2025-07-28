@@ -46,7 +46,7 @@ impl Runnable for Scheduler {
                                         &e,
                                     )
                                     .into(),
-                                )
+                                );
                             }
                             Err(e) => {
                                 return StepResult::Return(
@@ -55,7 +55,7 @@ impl Runnable for Scheduler {
                                         &OnionObject::String(Arc::new(e.to_string())).stabilize(),
                                     )
                                     .into(),
-                                )
+                                );
                             }
                         };
                         StepResult::Continue
@@ -83,7 +83,7 @@ impl Runnable for Scheduler {
                                         &e,
                                     )
                                     .into(),
-                                )
+                                );
                             }
                             Err(e) => {
                                 return StepResult::Return(
@@ -92,7 +92,7 @@ impl Runnable for Scheduler {
                                         &OnionObject::String(Arc::new(e.to_string())).stabilize(),
                                     )
                                     .into(),
-                                )
+                                );
                             }
                         }
                     }
@@ -107,7 +107,7 @@ impl Runnable for Scheduler {
                         OnionPair::new_static(
                             &OnionObject::Boolean(false).stabilize(),
                             &match error {
-                                RuntimeError::CustomValue(ref v) => v.as_ref().clone(),
+                                RuntimeError::CustomValue(v) => v.as_ref().clone(),
                                 _ => OnionObject::Undefined(Some(error.to_string().into()))
                                     .stabilize(),
                             },

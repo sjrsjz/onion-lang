@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use arc_gc::gc::GC;
+use unicode_width::UnicodeWidthStr;
 
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
@@ -11,7 +12,7 @@ use crate::{
         },
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
     },
-    util::find_line_and_col_from_source,
+    utils::find_line_and_col_from_source,
 };
 
 use super::{
@@ -128,6 +129,7 @@ static INSTRUCTION_TABLE: std::sync::LazyLock<Vec<InstructionHandler>> =
 pub struct OnionLambdaRunnable {
     pub(crate) context: Context,
     pub(crate) ip: isize, // Instruction pointer
+    pub(crate) ip_before_step: isize, // previous instruction pointer
     pub(crate) instruction: Arc<VMInstructionPackage>,
 }
 
@@ -247,6 +249,7 @@ impl OnionLambdaRunnable {
         Ok(OnionLambdaRunnable {
             context: new_context,
             ip,
+            ip_before_step: ip,
             instruction,
         })
     }
@@ -300,13 +303,18 @@ impl Runnable for OnionLambdaRunnable {
 
             let handler = unsafe { *INSTRUCTION_TABLE.get_unchecked(opcode.instruction as usize) };
             self.ip = ip as isize;
+            self.ip_before_step = pending_ip as isize; // 保存上一步的 IP
 
             match handler(self, &opcode, gc) {
                 StepResult::Continue => continue,
-                StepResult::Error(RuntimeError::Pending) => {
-                    // 如果是 Pending 状态，继续等待
+                // StepResult::Error(RuntimeError::Pending) => {
+                //     // 如果是 Pending 状态，继续等待
+                //     self.ip = pending_ip as isize; // 恢复 IP
+                //     return StepResult::Error(RuntimeError::Pending);
+                // }
+                StepResult::Error(e) => {
                     self.ip = pending_ip as isize; // 恢复 IP
-                    return StepResult::Error(RuntimeError::Pending);
+                    return StepResult::Error(e);
                 }
                 v => return v,
             }
@@ -316,7 +324,7 @@ impl Runnable for OnionLambdaRunnable {
     }
 
     fn format_context(&self) -> String {
-        let ip = self.ip as usize;
+        let ip = self.ip_before_step as usize;
         let mut parts = Vec::new();
 
         // 尝试获取详细的源码位置信息
@@ -327,17 +335,13 @@ impl Runnable for OnionLambdaRunnable {
         } else {
             // --- Part 1 (回退): 原始的、无源码的上下文 ---
             let disassembly = disassemble_instruction(&self.instruction, ip); // 假设这个函数存在
-            parts.push(format!(
-                "-> Executing VM Code: {:?} at ip: {}",
-                self.instruction, ip
-            ));
+            parts.push(format!("-> Executing VM Code at ip: {}", ip));
             parts.push(format!("  - Current Instruction: {}", disassembly));
         }
 
         // --- Part 2: VM 调用栈和操作数栈状态 ---
-        // 这部分保持不变，它提供了 VM 的内部状态
         let context_state = self.context.format_context(self.instruction.as_ref());
-        parts.push("\n--- VM Internals ---".to_string());
+        parts.push("\n--- Lambda Execution State ---".to_string());
         parts.push(context_state);
 
         parts.join("\n")
@@ -421,7 +425,6 @@ pub fn disassemble_instruction(package: &VMInstructionPackage, ip: usize) -> Str
         format!("{} {}", instruction_name, operands_str)
     }
 }
-// 一个结构体，用于存放格式化好的源码位置信息
 #[derive(Debug)]
 pub struct SourceLocation {
     pub line: usize,
@@ -432,7 +435,6 @@ pub struct SourceLocation {
     pub code_snippet: String,
 }
 
-/// 主要工具函数：根据 IP 获取完整的源码位置信息
 pub fn get_source_location_for_ip(
     package: &VMInstructionPackage,
     ip: usize,
@@ -441,39 +443,44 @@ pub fn get_source_location_for_ip(
     let debug_info = package.get_debug_info().get(&ip)?;
 
     let (span_start, span_end) = debug_info.token_span();
-    let (line, column) = find_line_and_col_from_source(span_start, source);
-    let line_content = source.lines().nth(line).unwrap_or("");
 
-    // --- [新的、动态的实现] ---
+    if span_start >= span_end {
+        return None;
+    }
 
-    // 1. 定义行号部分的宽度，例如 5 位，可以支持到 99999 行
+    let (line_idx, col_char_idx) = find_line_and_col_from_source(span_start, source);
+    let line_content = source.lines().nth(line_idx).unwrap_or("");
+
+    let error_token_text: String = source
+        .chars()
+        .skip(span_start)
+        .take(span_end - span_start)
+        .collect();
+
+    let display_offset = line_content
+        .chars()
+        .take(col_char_idx)
+        .collect::<String>()
+        .width();
+
+    let underline_width = error_token_text.width();
+
     let line_num_width = 5;
+    let line_num = line_idx + 1;
 
-    // 2. 创建第一行（代码行）的前缀
-    let code_line_prefix = format!(" {:>width$} | ", line, width = line_num_width);
-
-    // 3. 创建第二行（高亮行）的前缀，它的长度和第一行前缀完全一样，但内容是空格
-    let highlight_line_prefix = " ".repeat(code_line_prefix.chars().count() - 2) + "| ";
-
-    // 4. 计算高亮下划线
-    let highlight_start_col = column;
-    let highlight_len = (span_end - span_start).max(1);
-    let highlight_padding = " ".repeat(highlight_start_col);
-    let highlight_underline = "^".repeat(highlight_len);
-
-    // 5. 组装最终的代码片段
     let code_snippet = format!(
-        "{}{}\n{}{}{}",
-        code_line_prefix, // 例如 "   3 | "
+        " {:>width$} | {}\n {empty:>width$} | {padding}{underline}",
+        line_num,
         line_content,
-        highlight_line_prefix, // 例如 "     | "
-        highlight_padding,
-        highlight_underline
+        empty = "",
+        padding = " ".repeat(display_offset),
+        underline = "^".repeat(underline_width),
+        width = line_num_width
     );
 
     Some(SourceLocation {
-        line,
-        column,
+        line: line_num,
+        column: col_char_idx + 1,
         code_snippet,
     })
 }

@@ -10,7 +10,7 @@ use crate::{
     parser::{
         ast::{ast_token_stream, build_ast, ASTNodeType, ParserError},
         diagnostics,
-        lexer::lexer,
+        lexer::{lexer, Source},
     },
     utils::cycle_detector::CycleDetector,
 };
@@ -758,6 +758,7 @@ pub fn analyze_ast(
     let mut context_at_break: Option<VariableContext> = None;
 
     analyze_node(
+        &ast.start_token.as_ref().map(|t| t.source_code().clone()),
         ast,
         &mut context,
         &mut errors,   // 传递 errors Vec
@@ -778,15 +779,24 @@ pub fn analyze_ast(
 
 // Helper function for post-order traversal break check
 fn check_postorder_break(
+    source: &Option<Source>,
     node: &ASTNode,
     break_at_position: Option<usize>,
     context: &VariableContext,
     context_at_break: &mut Option<VariableContext>,
 ) {
+    if source.is_none() || context_at_break.is_some() {
+        return; // 如果没有源代码或已经找到断点，直接返回
+    }
+    let source = source.as_ref().unwrap();
     // Post-order traversal check: After analyzing the current node and its children,
     // check if we've reached or passed the break position
     if let Some(break_pos) = break_at_position {
         if let Some(ref token) = node.start_token {
+            if token.source_code().ne(source) {
+                return; // 如果 token 的源代码与当前源代码不匹配，跳过检查
+            }
+
             let (start_char, end_char) = token.origin_token_span();
             let source_code = token.source_code_str();
             // 将 char span 转为字节 span
@@ -810,6 +820,7 @@ fn check_postorder_break(
 }
 
 fn analyze_node(
+    source: &Option<Source>,
     node: &ASTNode,
     context: &mut VariableContext,
     errors: &mut Vec<AnalyzeError>,
@@ -831,6 +842,7 @@ fn analyze_node(
             if let Some(value_node) = node.children.first() {
                 // Analyze the value expression first
                 let assumed_type = analyze_node(
+                    source,
                     value_node,
                     context,
                     errors,   // Pass errors
@@ -851,11 +863,11 @@ fn analyze_node(
                 let _ = context.define_variable(&var);
 
                 // Post-order check after processing the let statement
-                check_postorder_break(node, break_at_position, context, context_at_break);
+                check_postorder_break(source, node, break_at_position, context, context_at_break);
                 assumed_type
             } else {
                 // Post-order check for incomplete let statements
-                check_postorder_break(node, break_at_position, context, context_at_break);
+                check_postorder_break(source, node, break_at_position, context, context_at_break);
                 AssumedType::Unknown
             }
         }
@@ -1007,6 +1019,7 @@ fn analyze_node(
                             }
                             // 仍然分析子节点本身，即使它是 @compile 的参数
                             analyze_node(
+                                source,
                                 child,
                                 context,
                                 errors,   // Pass errors
@@ -1047,6 +1060,7 @@ fn analyze_node(
                             }
                             // 仍然分析子节点，以允许在路径字符串内部设置断点
                             analyze_node(
+                                source,
                                 child,
                                 context,
                                 errors,
@@ -1110,6 +1124,7 @@ fn analyze_node(
             } // 对非 @compile 注解或在断点分析时的 @compile 注解执行常规分析
             for child in &node.children {
                 assumed_type = analyze_node(
+                    source,
                     child,
                     context,
                     errors,     // Pass errors
@@ -1125,7 +1140,7 @@ fn analyze_node(
                 }
             }
 
-            check_postorder_break(node, break_at_position, context, context_at_break);
+            check_postorder_break(source, node, break_at_position, context, context_at_break);
             return assumed_type;
         }
         ASTNodeType::Variable(var_name) => {
@@ -1137,7 +1152,7 @@ fn analyze_node(
             }
 
             // Post-order check after processing the variable
-            check_postorder_break(node, break_at_position, context, context_at_break);
+            check_postorder_break(source, node, break_at_position, context, context_at_break);
 
             // Return variable type or Unknown
             if let Some(var) = context.get_variable_current_context(var_name) {
@@ -1152,6 +1167,7 @@ fn analyze_node(
             let mut assumed_type = AssumedType::Unknown;
             for child in &node.children {
                 assumed_type = analyze_node(
+                    source,
                     child,
                     context,
                     errors,   // Pass errors
@@ -1170,7 +1186,7 @@ fn analyze_node(
             // Only pop frame if break didn't happen inside this scope
             if context_at_break.is_none() {
                 let _ = context.pop_frame(); // 弹出当前上下文的帧
-                check_postorder_break(node, break_at_position, context, context_at_break);
+                check_postorder_break(source, node, break_at_position, context, context_at_break);
             }
             return assumed_type;
         }
@@ -1179,6 +1195,7 @@ fn analyze_node(
                 // 检查 child[1]
                 if let Some(func_node) = node.children.get(1) {
                     analyze_node(
+                        source,
                         func_node,
                         context,
                         errors,   // Pass errors
@@ -1198,6 +1215,7 @@ fn analyze_node(
             let mut args_frame = None;
             if let Some(params) = node.children.first() {
                 args_frame = analyze_tuple_params(
+                    source,
                     params,
                     context,
                     errors,   // Pass errors
@@ -1216,6 +1234,7 @@ fn analyze_node(
             if *is_dynamic_gen {
                 context.push_frame();
                 analyze_node(
+                    source,
                     &node.children.last().unwrap(),
                     context,
                     errors,   // Pass errors
@@ -1234,7 +1253,7 @@ fn analyze_node(
                 if context.pop_frame().is_err() {
                     panic!("Failed to pop frame after Lambda definition");
                 }
-                check_postorder_break(node, break_at_position, context, context_at_break);
+                check_postorder_break(source, node, break_at_position, context, context_at_break);
                 return AssumedType::Lambda;
             } else {
                 if args_frame.is_none() {
@@ -1243,7 +1262,13 @@ fn analyze_node(
                         node.clone(),
                         "LambdaDef without parameters".to_string(),
                     ));
-                    check_postorder_break(node, break_at_position, context, context_at_break);
+                    check_postorder_break(
+                        source,
+                        node,
+                        break_at_position,
+                        context,
+                        context_at_break,
+                    );
                     return AssumedType::Lambda;
                 }
                 let args = args_frame.unwrap();
@@ -1269,6 +1294,7 @@ fn analyze_node(
                 if node.children.len() > 1 {
                     // Lambda 体可能创建自己的帧 (push_frame/pop_frame)
                     analyze_node(
+                        source,
                         &node.children.last().unwrap(),
                         context,
                         errors,   // Pass errors
@@ -1288,7 +1314,13 @@ fn analyze_node(
                 // 只有在没有中断的情况下才弹出 Lambda 的上下文
                 if context_at_break.is_none() {
                     let _ = context.pop_context(); // 退出 Lambda，恢复到父上下文
-                    check_postorder_break(node, break_at_position, context, context_at_break);
+                    check_postorder_break(
+                        source,
+                        node,
+                        break_at_position,
+                        context,
+                        context_at_break,
+                    );
                 }
             }
 
@@ -1298,6 +1330,7 @@ fn analyze_node(
             let mut last_type = AssumedType::Unknown;
             for child in &node.children {
                 last_type = analyze_node(
+                    source,
                     child,
                     context,
                     errors,   // Pass errors
@@ -1312,13 +1345,14 @@ fn analyze_node(
                     return AssumedType::Unknown;
                 }
             }
-            check_postorder_break(node, break_at_position, context, context_at_break);
+            check_postorder_break(source, node, break_at_position, context, context_at_break);
             return last_type;
         }
         ASTNodeType::Assign => {
             if node.children.len() >= 2 {
                 // Analyze RHS first
                 let assumed_type = analyze_node(
+                    source,
                     &node.children[1],
                     context,
                     errors,   // Pass errors
@@ -1335,6 +1369,7 @@ fn analyze_node(
 
                 // Analyze LHS (e.g., variable, index, attr) to check for errors, but its type doesn't override RHS
                 analyze_node(
+                    source,
                     &node.children[0],
                     context,
                     errors,   // Pass errors
@@ -1353,14 +1388,15 @@ fn analyze_node(
                 // This requires LHS analysis to return info about what was assigned to.
                 // For now, assignment doesn't update context type info here.
 
-                check_postorder_break(node, break_at_position, context, context_at_break);
+                check_postorder_break(source, node, break_at_position, context, context_at_break);
                 return assumed_type;
             }
-            check_postorder_break(node, break_at_position, context, context_at_break);
+            check_postorder_break(source, node, break_at_position, context, context_at_break);
             return AssumedType::Unknown;
         }
         ASTNodeType::KeyValue => {
             let _ = analyze_node(
+                source,
                 &node.children[0],
                 context,
                 errors,   // Pass errors
@@ -1375,6 +1411,7 @@ fn analyze_node(
                 return AssumedType::KeyVal; // Return KeyVal even if break occurred inside
             }
             let _ = analyze_node(
+                source,
                 &node.children[1],
                 context,
                 errors,   // Pass errors
@@ -1388,13 +1425,14 @@ fn analyze_node(
             if context_at_break.is_some() {
                 return AssumedType::KeyVal; // Return KeyVal even if break occurred inside
             }
-            check_postorder_break(node, break_at_position, context, context_at_break);
+            check_postorder_break(source, node, break_at_position, context, context_at_break);
             return AssumedType::KeyVal; // Return KeyVal type
         }
         ASTNodeType::Set => {
             for child in &node.children {
                 // Iterate through all children for Set
                 analyze_node(
+                    source,
                     child,
                     context,
                     errors,   // Pass errors
@@ -1409,11 +1447,12 @@ fn analyze_node(
                     return AssumedType::Set; // Return Set even if break occurred inside
                 }
             }
-            check_postorder_break(node, break_at_position, context, context_at_break);
+            check_postorder_break(source, node, break_at_position, context, context_at_break);
             return AssumedType::Set; // Return Set type
         }
         ASTNodeType::NamedTo => {
             let _ = analyze_node(
+                source,
                 &node.children[0],
                 context,
                 errors,   // Pass errors
@@ -1428,6 +1467,7 @@ fn analyze_node(
                 return AssumedType::NamedArgument; // Return NamedArgument even if break occurred inside
             }
             let _ = analyze_node(
+                source,
                 &node.children[1],
                 context,
                 errors,   // Pass errors
@@ -1441,44 +1481,45 @@ fn analyze_node(
             if context_at_break.is_some() {
                 return AssumedType::NamedArgument; // Return NamedArgument even if break occurred inside
             }
-            check_postorder_break(node, break_at_position, context, context_at_break);
+            check_postorder_break(source, node, break_at_position, context, context_at_break);
             return AssumedType::NamedArgument; // Return NamedArgument type
         } // Simple types don't have children to analyze recursively
         ASTNodeType::String(_) => {
-            check_postorder_break(node, break_at_position, context, context_at_break);
+            check_postorder_break(source, node, break_at_position, context, context_at_break);
             AssumedType::String
         }
         ASTNodeType::Boolean(_) => {
-            check_postorder_break(node, break_at_position, context, context_at_break);
+            check_postorder_break(source, node, break_at_position, context, context_at_break);
             AssumedType::Boolean
         }
         ASTNodeType::Number(_) => {
-            check_postorder_break(node, break_at_position, context, context_at_break);
+            check_postorder_break(source, node, break_at_position, context, context_at_break);
             AssumedType::Number
         }
         ASTNodeType::Base64(_) => {
-            check_postorder_break(node, break_at_position, context, context_at_break);
+            check_postorder_break(source, node, break_at_position, context, context_at_break);
             AssumedType::Base64
         }
         ASTNodeType::Null => {
-            check_postorder_break(node, break_at_position, context, context_at_break);
+            check_postorder_break(source, node, break_at_position, context, context_at_break);
             AssumedType::Null
         }
         ASTNodeType::Undefined => {
-            check_postorder_break(node, break_at_position, context, context_at_break);
+            check_postorder_break(source, node, break_at_position, context, context_at_break);
             AssumedType::Undefined
         }
         ASTNodeType::Range => {
-            check_postorder_break(node, break_at_position, context, context_at_break);
+            check_postorder_break(source, node, break_at_position, context, context_at_break);
             AssumedType::Range
         }
         ASTNodeType::None => {
-            check_postorder_break(node, break_at_position, context, context_at_break);
+            check_postorder_break(source, node, break_at_position, context, context_at_break);
             AssumedType::Undefined
         }
         ASTNodeType::Is => {
             for child in &node.children {
                 let _ = analyze_node(
+                    source,
                     child,
                     context,
                     errors,   // Pass errors
@@ -1493,13 +1534,14 @@ fn analyze_node(
                     return AssumedType::Unknown;
                 }
             }
-            check_postorder_break(node, break_at_position, context, context_at_break);
+            check_postorder_break(source, node, break_at_position, context, context_at_break);
             return AssumedType::Boolean; // 'is' checks return a boolean
         } // Default case for other node types
         _ => {
             let mut last_type = AssumedType::Unknown;
             for child in &node.children {
                 last_type = analyze_node(
+                    source,
                     child,
                     context,
                     errors,   // Pass errors
@@ -1514,13 +1556,14 @@ fn analyze_node(
                     return AssumedType::Unknown;
                 }
             }
-            check_postorder_break(node, break_at_position, context, context_at_break);
+            check_postorder_break(source, node, break_at_position, context, context_at_break);
             return last_type;
         }
     }
 }
 
 fn analyze_tuple_params(
+    source: &Option<Source>,
     params: &ASTNode,
     context: &mut VariableContext,
     errors: &mut Vec<AnalyzeError>,  // Renamed
@@ -1554,6 +1597,7 @@ fn analyze_tuple_params(
                     if param.children.len() >= 2 {
                         // Analyze default value first
                         let assumed_type = analyze_node(
+                            source,
                             &param.children[1],
                             context,
                             errors,   // Pass errors
@@ -1578,6 +1622,7 @@ fn analyze_tuple_params(
                         } else {
                             // Analyze complex parameter structure (e.g., destructuring) - might need specific handling
                             analyze_node(
+                                source,
                                 &param.children[0],
                                 context,
                                 errors,   // Pass errors
@@ -1603,6 +1648,7 @@ fn analyze_tuple_params(
                                 if first.children.len() >= 2 {
                                     // Analyze default value first
                                     let assumed_type = analyze_node(
+                                        source,
                                         &first.children[1],
                                         context,
                                         errors,   // Pass errors
@@ -1629,6 +1675,7 @@ fn analyze_tuple_params(
                                     } else {
                                         // Analyze complex parameter structure (e.g., destructuring)
                                         analyze_node(
+                                            source,
                                             &first.children[0],
                                             context,
                                             errors,   // Pass errors
@@ -1648,6 +1695,7 @@ fn analyze_tuple_params(
                             _ => {
                                 // If first child is not NamedTo, analyze it directly
                                 analyze_node(
+                                    source,
                                     first,
                                     context,
                                     errors,   // Pass errors
@@ -1666,6 +1714,7 @@ fn analyze_tuple_params(
                         // 分析剩下的节点
                         for child in &param.children[1..] {
                             analyze_node(
+                                source,
                                 child,
                                 context,
                                 errors,   // Pass errors
@@ -1685,6 +1734,7 @@ fn analyze_tuple_params(
                 // Handle other param types if necessary
                 _ => {
                     analyze_node(
+                        source,
                         param,
                         context,
                         errors,   // Pass errors
@@ -1702,7 +1752,7 @@ fn analyze_tuple_params(
             }
 
             // Post-order check after processing each parameter
-            check_postorder_break(param, break_at_position, context, context_at_break);
+            check_postorder_break(source, param, break_at_position, context, context_at_break);
             if context_at_break.is_some() {
                 return None;
             }
@@ -1710,7 +1760,7 @@ fn analyze_tuple_params(
     }
 
     // Post-order check after processing all parameters
-    check_postorder_break(params, break_at_position, context, context_at_break);
+    check_postorder_break(source, params, break_at_position, context, context_at_break);
     if context_at_break.is_some() {
         return None;
     }

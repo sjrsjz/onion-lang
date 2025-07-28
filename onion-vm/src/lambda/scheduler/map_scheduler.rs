@@ -7,7 +7,7 @@ use crate::{
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         tuple::OnionTuple,
     },
-    util::format_object_summary,
+    utils::format_object_summary,
 };
 
 #[derive(Clone)]

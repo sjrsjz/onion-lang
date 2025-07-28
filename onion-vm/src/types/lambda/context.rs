@@ -4,7 +4,7 @@ use crate::{
     lambda::runnable::RuntimeError,
     types::{
         lambda::vm_instructions::instruction_set::VMInstructionPackage, object::OnionStaticObject,
-    }, util::format_object_summary,
+    }, utils::format_object_summary,
 };
 
 #[derive(Clone, Debug)]

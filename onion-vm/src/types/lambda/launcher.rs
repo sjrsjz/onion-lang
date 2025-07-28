@@ -13,7 +13,7 @@ use crate::{
         tuple::OnionTuple,
     },
     unwrap_step_result,
-    util::format_object_summary,
+    utils::format_object_summary,
 };
 
 #[derive(Debug, Clone)]
