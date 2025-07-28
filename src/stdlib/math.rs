@@ -344,8 +344,7 @@ pub fn build_module() -> OnionStaticObject {
         "abs".to_string(),
         wrap_native_function(
             &build_named_dict(abs_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "math::abs".to_string(),
             &abs,
         ),
@@ -359,8 +358,7 @@ pub fn build_module() -> OnionStaticObject {
         "sin".to_string(),
         wrap_native_function(
             &build_named_dict(sin_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "math::sin".to_string(),
             &sin,
         ),
@@ -376,8 +374,7 @@ pub fn build_module() -> OnionStaticObject {
         "cos".to_string(),
         wrap_native_function(
             &build_named_dict(cos_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "math::cos".to_string(),
             &cos,
         ),
@@ -393,8 +390,7 @@ pub fn build_module() -> OnionStaticObject {
         "tan".to_string(),
         wrap_native_function(
             &build_named_dict(tan_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "math::tan".to_string(),
             &tan,
         ),
@@ -413,8 +409,7 @@ pub fn build_module() -> OnionStaticObject {
         "log".to_string(),
         wrap_native_function(
             &build_named_dict(log_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "math::log".to_string(),
             &log,
         ),
@@ -430,8 +425,7 @@ pub fn build_module() -> OnionStaticObject {
         "exp".to_string(),
         wrap_native_function(
             &build_named_dict(exp_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "math::exp".to_string(),
             &exp,
         ),
@@ -447,8 +441,7 @@ pub fn build_module() -> OnionStaticObject {
         "floor".to_string(),
         wrap_native_function(
             &build_named_dict(floor_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "math::floor".to_string(),
             &floor,
         ),
@@ -464,8 +457,7 @@ pub fn build_module() -> OnionStaticObject {
         "ceil".to_string(),
         wrap_native_function(
             &build_named_dict(ceil_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "math::ceil".to_string(),
             &ceil,
         ),
@@ -481,8 +473,7 @@ pub fn build_module() -> OnionStaticObject {
         "round".to_string(),
         wrap_native_function(
             &build_named_dict(round_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "math::round".to_string(),
             &round,
         ),
@@ -498,8 +489,7 @@ pub fn build_module() -> OnionStaticObject {
         "asin".to_string(),
         wrap_native_function(
             &build_named_dict(asin_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "math::asin".to_string(),
             &asin,
         ),
@@ -515,8 +505,7 @@ pub fn build_module() -> OnionStaticObject {
         "acos".to_string(),
         wrap_native_function(
             &build_named_dict(acos_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "math::acos".to_string(),
             &acos,
         ),
@@ -532,8 +521,7 @@ pub fn build_module() -> OnionStaticObject {
         "atan".to_string(),
         wrap_native_function(
             &build_named_dict(atan_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "math::atan".to_string(),
             &atan,
         ),
@@ -550,8 +538,7 @@ pub fn build_module() -> OnionStaticObject {
         "sqrt".to_string(),
         wrap_native_function(
             &build_named_dict(sqrt_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "math::sqrt".to_string(),
             &sqrt,
         ),
@@ -571,8 +558,7 @@ pub fn build_module() -> OnionStaticObject {
         "pow".to_string(),
         wrap_native_function(
             &build_named_dict(pow_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "math::pow".to_string(),
             &pow,
         ),
@@ -588,8 +574,7 @@ pub fn build_module() -> OnionStaticObject {
         "exp".to_string(),
         wrap_native_function(
             &build_named_dict(exp_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "math::exp".to_string(),
             &exp,
         ),
@@ -605,8 +590,7 @@ pub fn build_module() -> OnionStaticObject {
         "floor".to_string(),
         wrap_native_function(
             &build_named_dict(floor_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "math::floor".to_string(),
             &floor,
         ),
@@ -622,8 +606,7 @@ pub fn build_module() -> OnionStaticObject {
         "ceil".to_string(),
         wrap_native_function(
             &build_named_dict(ceil_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "math::ceil".to_string(),
             &ceil,
         ),
@@ -639,8 +622,7 @@ pub fn build_module() -> OnionStaticObject {
         "round".to_string(),
         wrap_native_function(
             &build_named_dict(round_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "math::round".to_string(),
             &round,
         ),
@@ -656,8 +638,7 @@ pub fn build_module() -> OnionStaticObject {
         "asin".to_string(),
         wrap_native_function(
             &build_named_dict(asin_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "math::asin".to_string(),
             &asin,
         ),
@@ -673,8 +654,7 @@ pub fn build_module() -> OnionStaticObject {
         "acos".to_string(),
         wrap_native_function(
             &build_named_dict(acos_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "math::acos".to_string(),
             &acos,
         ),
@@ -690,8 +670,7 @@ pub fn build_module() -> OnionStaticObject {
         "atan".to_string(),
         wrap_native_function(
             &build_named_dict(atan_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "math::atan".to_string(),
             &atan,
         ),

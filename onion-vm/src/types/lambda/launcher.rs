@@ -13,24 +13,24 @@ use crate::{
         tuple::OnionTuple,
     },
     unwrap_step_result,
+    util::format_object_summary,
 };
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 enum ArgumentProcessingPhase {
     NamedArguments,
     PositionalArguments,
     Done,
 }
 
+#[allow(unused)]
 pub struct OnionLambdaRunnableLauncher {
     lambda: OnionStaticObject, // The OnionObject::Lambda itself
 
     parameter_tuple: Arc<OnionTuple>, // The parameter tuple from the lambda definition
-    #[allow(unused_attributes)]
     parameter_arcs: Vec<GCArc<OnionObjectCell>>, // The parameter arcs from the lambda definition
 
     argument_tuple: Arc<OnionTuple>, // The provided argument tuple object
-    #[allow(unused_attributes)]
     argument_arcs: Vec<GCArc<OnionObjectCell>>, // The provided argument arcs from the argument tuple
 
     collected_arguments: Vec<OnionStaticObject>, // Arguments collected during processing
@@ -58,7 +58,7 @@ impl OnionLambdaRunnableLauncher {
         let mut assigned = Vec::new();
 
         let (parameter_tuple, parameter_arcs) = lambda_obj.weak().with_data(|obj_ref| {
-            if let OnionObject::Lambda(definition) = obj_ref {
+            if let OnionObject::Lambda((definition, _)) = obj_ref {
                 definition.get_parameter().with_data(|p_obj| {
                     if let OnionObject::Tuple(tuple) = p_obj {
                         // Initialize collected_arguments and assigned based on parameter count
@@ -129,25 +129,6 @@ impl OnionLambdaRunnableLauncher {
 }
 
 impl Runnable for OnionLambdaRunnableLauncher {
-    fn copy(&self) -> Box<dyn Runnable> {
-        Box::new(OnionLambdaRunnableLauncher {
-            lambda: self.lambda.clone(),
-            parameter_tuple: self.parameter_tuple.clone(),
-            parameter_arcs: self.parameter_arcs.clone(),
-            argument_tuple: self.argument_tuple.clone(),
-            argument_arcs: self.argument_arcs.clone(),
-            collected_arguments: self.collected_arguments.clone(),
-            assigned: self.assigned.clone(),
-            phase: self.phase.clone(),
-            current_argument_index: self.current_argument_index,
-            runnable_mapper: self.runnable_mapper.clone(),
-            constrain_runnable: match &self.constrain_runnable {
-                Some(runnable) => Some(runnable.copy()),
-                None => None,
-            },
-        })
-    }
-
     fn receive(
         &mut self,
         step_result: &StepResult,
@@ -542,10 +523,10 @@ impl Runnable for OnionLambdaRunnableLauncher {
 
                 // 获取原始 Lambda 定义对象。
                 unwrap_step_result!(self.lambda.weak().with_data(|obj| {
-                    if let OnionObject::Lambda(lambda_def) = obj {
+                    if let OnionObject::Lambda((lambda_def, self_object)) = obj {
                         // 使用最终的参数元组和 Lambda 定义来创建实际的 Lambda 可运行实例。
                         let runnable = lambda_def
-                            .create_runnable(final_args_static, &self.lambda, gc)
+                            .create_runnable(final_args_static, &self.lambda, self_object, gc)
                             .map_err(|e| {
                                 RuntimeError::InvalidType(
                                     format!("Failed to create runnable from lambda: {}", e).into(),
@@ -568,12 +549,84 @@ impl Runnable for OnionLambdaRunnableLauncher {
         }
     }
 
-    fn format_context(&self) -> Result<serde_json::Value, RuntimeError> {
-        // 此启动器不提供上下文格式化功能。
-        Err(RuntimeError::DetailedError(
-            "OnionLambdaRunnableLauncher does not support context formatting"
-                .to_string()
-                .into(),
-        ))
+    fn format_context(&self) -> String {
+        let mut parts = Vec::new();
+
+        // 1. 核心信息：为哪个 Lambda 工作
+        parts.push(format!(
+            "-> Launching Lambda: {}",
+            format_object_summary(self.lambda.weak())
+        ));
+
+        // 2. 当前状态机阶段
+        parts.push(format!(
+            "  - Phase: {:?} (at argument index {})",
+            // 使用 Debug trait 来打印枚举变体名称
+            self.phase,
+            self.current_argument_index
+        ));
+
+        // 3. 是否在等待约束
+        if let Some(constrain_runnable) = &self.constrain_runnable {
+            parts.push("  - Status: Waiting for parameter constraint to resolve".to_string());
+            // 递归地获取约束 runnable 的上下文，并缩进
+            let constrain_context = constrain_runnable.format_context();
+            for line in constrain_context.lines() {
+                parts.push(format!("    {}", line));
+            }
+        } else {
+            parts.push("  - Status: Processing arguments".to_string());
+        }
+
+        // 4. 传入的参数概览
+        parts.push(format!(
+            "  - Provided Arguments ({} total):",
+            self.argument_tuple.get_elements().len()
+        ));
+        for (i, arg) in self.argument_tuple.get_elements().iter().enumerate() {
+            let indicator = if i == self.current_argument_index - 1 {
+                "<- current"
+            } else {
+                ""
+            };
+            parts.push(format!(
+                "    - [{}]: {} {}",
+                i,
+                format_object_summary(arg),
+                indicator
+            ));
+        }
+
+        // 5. Lambda 的参数定义概览
+        parts.push(format!(
+            "  - Lambda Parameters ({} total):",
+            self.parameter_tuple.get_elements().len()
+        ));
+        for (i, param) in self.parameter_tuple.get_elements().iter().enumerate() {
+            parts.push(format!("    - [{}]: {}", i, format_object_summary(param)));
+        }
+
+        // 6. 已收集和分配的参数状态
+        parts.push(format!(
+            "  - Collected/Assigned Arguments ({} slots):",
+            self.collected_arguments.len()
+        ));
+        for i in 0..self.collected_arguments.len() {
+            let assigned_status = if i < self.assigned.len() && self.assigned[i] {
+                "Assigned"
+            } else if i < self.assigned.len() {
+                "Not Assigned (default)"
+            } else {
+                "Appended"
+            };
+            parts.push(format!(
+                "    - Slot [{}]: {} ({})",
+                i,
+                format_object_summary(self.collected_arguments[i].weak()),
+                assigned_status
+            ));
+        }
+
+        parts.join("\n")
     }
 }

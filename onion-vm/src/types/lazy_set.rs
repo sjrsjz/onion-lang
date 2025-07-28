@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, fmt::Debug};
+use std::{collections::VecDeque, fmt::Debug, sync::Arc};
 
 use arc_gc::{
     arc::{GCArc, GCArcWeak},
@@ -90,9 +90,11 @@ impl OnionLazySet {
                 };
                 let collector = OnionLambdaDefinition::new_static(
                     &onion_tuple!(),
-                    LambdaBody::NativeFunction(Box::new(collector)),
-                    None,
-                    None,
+                    LambdaBody::NativeFunction(Arc::new({
+                        let collector = collector.clone();
+                        move || Box::new(collector.clone())
+                    })),
+                    &OnionObject::Undefined(None),
                     "collector".to_string(),
                 );
                 // Keep the collector alive until after we use its weak reference
@@ -118,15 +120,6 @@ pub struct OnionLazySetCollector {
 }
 
 impl Runnable for OnionLazySetCollector {
-    fn copy(&self) -> Box<dyn Runnable> {
-        Box::new(OnionLazySetCollector {
-            container: self.container.clone(),
-            filter: self.filter.clone(),
-            collected: self.collected.clone(),
-            current_index: self.current_index,
-        })
-    }
-
     fn receive(
         &mut self,
         step_result: &StepResult,
@@ -230,25 +223,35 @@ impl Runnable for OnionLazySetCollector {
             }))
     }
 
-    fn format_context(&self) -> Result<serde_json::Value, RuntimeError> {
-        return Ok(serde_json::json!({
-            "type": "LazySetCollector",
-            "container": self.container.to_string(),
-            "filter": self.filter.to_string(),
-            "collected": self.collected.iter().map(|o| o.to_string()).collect::<Vec<_>>(),
-            "current_index": self.current_index,
-        }));
-    }
-}
+    fn format_context(&self) -> String {
+        // 尝试获取容器的总长度，用于进度报告
+        let container_len = self.container.weak().with_data(|c| {
+            Ok(if let OnionObject::Tuple(t) = c {
+                t.get_elements().len()
+            } else {
+                0 // 如果容器不是元组或弱引用失效，返回0
+            })
+        }).unwrap_or(0);
 
-impl OnionLazySet {
-    pub fn reconstruct_container(&self) -> Result<OnionObject, RuntimeError> {
-        Ok(OnionObject::LazySet(
-            OnionLazySet {
-                container: self.container.clone(),
-                filter: self.filter.clone(),
-            }
-            .into(),
-        ))
+        // 使用 format! 宏构建一个清晰、多行的字符串
+        format!(
+            "-> Collecting from LazySet:\n   - Filter Function: {:?}\n   - From Container: {:?}\n   - Progress: Checking element {} / {}\n   - Items Collected: {}",
+            
+            // 1. 过滤器信息
+            // 使用 Debug 格式打印 filter 对象，以识别是哪个 lambda
+            self.filter,
+
+            // 2. 容器信息
+            // 使用 Debug 格式打印 container 对象
+            self.container,
+
+            // 3. 进度信息
+            // current_index 告诉我们下一个要检查的元素索引
+            self.current_index,
+            container_len,
+
+            // 4. 已收集结果的数量
+            self.collected.len()
+        )
     }
 }

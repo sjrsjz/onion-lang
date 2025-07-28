@@ -652,8 +652,7 @@ pub fn build_module() -> OnionStaticObject {
         "load".to_string(),
         wrap_native_function(
             &build_named_dict(load_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "lib::load".to_string(),
             &lib_load,
         ),    );
@@ -679,8 +678,7 @@ pub fn build_module() -> OnionStaticObject {
         "get_function".to_string(),
         wrap_native_function(
             &build_named_dict(get_function_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "lib::get_function".to_string(),
             &lib_get_function,
         ),
@@ -699,8 +697,7 @@ pub fn build_module() -> OnionStaticObject {
         "call".to_string(),
         wrap_native_function(
             &build_named_dict(call_function_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "lib::call".to_string(),
             &lib_call_function,
         ),    );

@@ -92,6 +92,22 @@ impl DecodedOpcode {
             self.operand3
         )
     }
+
+    pub fn instruction(&self) -> u8 {
+        self.instruction
+    }
+
+    pub fn operand1(&self) -> u8 {
+        self.operand1
+    }
+
+    pub fn operand2(&self) -> u8 {
+        self.operand2
+    }
+
+    pub fn operand3(&self) -> u8 {
+        self.operand3
+    }
 }
 
 #[derive(Debug, Clone)]

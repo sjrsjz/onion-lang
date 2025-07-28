@@ -337,9 +337,9 @@ pub fn load_lambda(
     let should_capture = flags & 0x01 != 0;
 
     let captured_value = if should_capture {
-        Some(unwrap_step_result!(runnable.context.get_object_rev(1)))
+        unwrap_step_result!(runnable.context.get_object_rev(1)).weak()
     } else {
-        None
+        &OnionObject::Undefined(None)
     };
 
     let default_parameters = unwrap_step_result!(runnable
@@ -375,7 +375,6 @@ pub fn load_lambda(
         &default_parameters,
         LambdaBody::Instruction(package.clone()),
         captured_value,
-        None,
         signature,
     );
 
@@ -484,25 +483,25 @@ pub fn get_attr(
 ) -> StepResult {
     let attr = unwrap_step_result!(runnable.context.get_object_rev(0)).weak();
     let obj = unwrap_step_result!(runnable.context.get_object_rev(1));
-    let element = unwrap_step_result!(attr.with_data(|attr| {
-        Ok(
-            match obj.weak().with_attribute(attr, &|attr| Ok(attr.clone())) {
-                Ok(ref value) => match value {
-                    OnionObject::Lambda(ref lambda) => lambda.clone_and_replace_self_object(obj),
-                    _ => value.stabilize(),
-                },
-                Err(e) => {
-                    return Err(RuntimeError::InvalidOperation(
-                        format!(
-                            "Cannot access attribute {:?} on object {}: {}",
-                            attr, obj, e
-                        )
-                        .into(),
-                    ));
+    let element = unwrap_step_result!(obj.weak().with_data(|inner| attr.with_data(|attr| {
+        Ok(match inner.with_attribute(attr, &|attr| Ok(attr.clone())) {
+            Ok(value) => match value {
+                OnionObject::Lambda((lambda, _)) => {
+                    OnionObject::Lambda((lambda.clone(), inner.clone().into())).stabilize()
                 }
+                _ => value.stabilize(),
             },
-        )
-    }));
+            Err(e) => {
+                return Err(RuntimeError::InvalidOperation(
+                    format!(
+                        "Cannot access attribute {:?} on object {:?}: {}",
+                        attr, inner, e
+                    )
+                    .into(),
+                ));
+            }
+        })
+    })));
 
     unwrap_step_result!(runnable.context.discard_objects(2));
     unwrap_step_result!(runnable.context.push_object(element));

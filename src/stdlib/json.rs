@@ -152,8 +152,7 @@ pub fn build_module() -> OnionStaticObject {
         "parse".to_string(),
         wrap_native_function(
             &build_named_dict(parse_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "json_parse".to_string(),
             &|args, _gc| {
                 args.weak().with_data(|data| {
@@ -184,8 +183,7 @@ pub fn build_module() -> OnionStaticObject {
         "stringify".to_string(),
         wrap_native_function(
             &build_named_dict(stringify_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "json_stringify".to_string(),
             &|args, _gc| {
                 args.weak().with_data(|data| {
@@ -213,8 +211,7 @@ pub fn build_module() -> OnionStaticObject {
         "stringify_pretty".to_string(),
         wrap_native_function(
             &build_named_dict(stringify_pretty_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "json_stringify_pretty".to_string(),
             &|args, _gc| {
                 args.weak().with_data(|data| {

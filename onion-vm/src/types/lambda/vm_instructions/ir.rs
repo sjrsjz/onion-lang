@@ -31,6 +31,10 @@ impl DebugInfo {
     pub fn new(token_span: (usize, usize)) -> Self {
         DebugInfo { token_span }
     }
+
+    pub fn token_span(&self) -> (usize, usize) {
+        self.token_span
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

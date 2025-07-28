@@ -328,8 +328,7 @@ pub fn build_module() -> OnionStaticObject {
         "alloc".to_string(),
         wrap_native_function(
             &build_named_dict(alloc_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "mem::alloc".to_string(),
             &mem_alloc,
         ),
@@ -349,8 +348,7 @@ pub fn build_module() -> OnionStaticObject {
         "free".to_string(),
         wrap_native_function(
             &build_named_dict(free_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "mem::free".to_string(),
             &mem_free,
         ),
@@ -370,8 +368,7 @@ pub fn build_module() -> OnionStaticObject {
         "calloc".to_string(),
         wrap_native_function(
             &build_named_dict(calloc_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "mem::calloc".to_string(),
             &mem_calloc,
         ),
@@ -391,8 +388,7 @@ pub fn build_module() -> OnionStaticObject {
         "read".to_string(),
         wrap_native_function(
             &build_named_dict(read_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "mem::read".to_string(),
             &mem_read,
         ),
@@ -412,8 +408,7 @@ pub fn build_module() -> OnionStaticObject {
         "write".to_string(),
         wrap_native_function(
             &build_named_dict(write_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "mem::write".to_string(),
             &mem_write,
         ),
@@ -437,8 +432,7 @@ pub fn build_module() -> OnionStaticObject {
         "copy".to_string(),
         wrap_native_function(
             &build_named_dict(copy_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "mem::copy".to_string(),
             &mem_copy,
         ),

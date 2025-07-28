@@ -636,8 +636,7 @@ pub fn build_module() -> OnionStaticObject {
         "i8".to_string(),
         wrap_native_function(
             &build_named_dict(int8_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "ctypes::i8".to_string(),
             &c_int8,
         ),
@@ -655,8 +654,7 @@ pub fn build_module() -> OnionStaticObject {
         "i16".to_string(),
         wrap_native_function(
             &build_named_dict(int16_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "ctypes::i16".to_string(),
             &c_int16,
         ),
@@ -671,8 +669,7 @@ pub fn build_module() -> OnionStaticObject {
         "i32".to_string(),
         wrap_native_function(
             &build_named_dict(int32_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "ctypes::i32".to_string(),
             &c_int32,
         ),
@@ -687,8 +684,7 @@ pub fn build_module() -> OnionStaticObject {
         "i64".to_string(),
         wrap_native_function(
             &build_named_dict(int64_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "ctypes::i64".to_string(),
             &c_int64,
         ),
@@ -705,8 +701,7 @@ pub fn build_module() -> OnionStaticObject {
         "u8".to_string(),
         wrap_native_function(
             &build_named_dict(uint8_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "ctypes::u8".to_string(),
             &c_uint8,
         ),
@@ -724,8 +719,7 @@ pub fn build_module() -> OnionStaticObject {
         "u16".to_string(),
         wrap_native_function(
             &build_named_dict(uint16_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "ctypes::u16".to_string(),
             &c_uint16,
         ),
@@ -740,8 +734,7 @@ pub fn build_module() -> OnionStaticObject {
         "u32".to_string(),
         wrap_native_function(
             &build_named_dict(uint32_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "ctypes::u32".to_string(),
             &c_uint32,
         ),
@@ -756,8 +749,7 @@ pub fn build_module() -> OnionStaticObject {
         "u64".to_string(),
         wrap_native_function(
             &build_named_dict(uint64_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "ctypes::u64".to_string(),
             &c_uint64,
         ),
@@ -773,8 +765,7 @@ pub fn build_module() -> OnionStaticObject {
         "f32".to_string(),
         wrap_native_function(
             &build_named_dict(float_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "ctypes::f32".to_string(),
             &c_float,
         ),
@@ -789,8 +780,7 @@ pub fn build_module() -> OnionStaticObject {
         "f64".to_string(),
         wrap_native_function(
             &build_named_dict(double_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "ctypes::f64".to_string(),
             &c_double,
         ),
@@ -807,8 +797,7 @@ pub fn build_module() -> OnionStaticObject {
         "char".to_string(),
         wrap_native_function(
             &build_named_dict(char_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "ctypes::char".to_string(),
             &c_char,
         ),
@@ -828,8 +817,7 @@ pub fn build_module() -> OnionStaticObject {
         "uchar".to_string(),
         wrap_native_function(
             &build_named_dict(uchar_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "ctypes::uchar".to_string(),
             &c_uchar,
         ),
@@ -845,8 +833,7 @@ pub fn build_module() -> OnionStaticObject {
         "bool".to_string(),
         wrap_native_function(
             &build_named_dict(bool_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "ctypes::bool".to_string(),
             &c_bool,
         ),
@@ -862,8 +849,7 @@ pub fn build_module() -> OnionStaticObject {
         "string".to_string(),
         wrap_native_function(
             &build_named_dict(string_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "ctypes::string".to_string(),
             &c_string,
         ),
@@ -877,8 +863,7 @@ pub fn build_module() -> OnionStaticObject {
         "buffer".to_string(),
         wrap_native_function(
             &build_named_dict(buffer_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "ctypes::buffer".to_string(),
             &c_buffer,
         ),
@@ -894,8 +879,7 @@ pub fn build_module() -> OnionStaticObject {
         "pointer".to_string(),
         wrap_native_function(
             &build_named_dict(pointer_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "ctypes::pointer".to_string(),
             &c_pointer,
         ),
@@ -912,8 +896,7 @@ pub fn build_module() -> OnionStaticObject {
         "size".to_string(),
         wrap_native_function(
             &build_named_dict(size_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "ctypes::size".to_string(),
             &c_size,
         ),
@@ -928,8 +911,7 @@ pub fn build_module() -> OnionStaticObject {
         "ssize".to_string(),
         wrap_native_function(
             &build_named_dict(ssize_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "ctypes::ssize".to_string(),
             &c_ssize,
         ),
@@ -940,8 +922,7 @@ pub fn build_module() -> OnionStaticObject {
         "void".to_string(),
         wrap_native_function(
             &build_named_dict(IndexMap::new()),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "ctypes::void".to_string(),
             &c_void,
         ),
@@ -951,8 +932,7 @@ pub fn build_module() -> OnionStaticObject {
         "null".to_string(),
         wrap_native_function(
             &build_named_dict(IndexMap::new()),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "ctypes::null".to_string(),
             &c_null,
         ),

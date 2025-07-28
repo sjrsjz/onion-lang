@@ -352,8 +352,7 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
     let lambda = OnionLambdaDefinition::new_static(
         &OnionTuple::new_static(vec![&stdlib_pair]),
         LambdaBody::Instruction(Arc::new(vm_instructions_package.clone())),
-        None,
-        None,
+        &OnionObject::Undefined(None),
         "__main__".to_string(),
     );
 
@@ -379,10 +378,24 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
             }
             StepResult::Error(ref error) => {
                 if let RuntimeError::Pending = error {
-                    // Pending error, continue to next step
+                    // Pending 状态，正常继续
                     continue;
                 }
-                return Err(format!("Execution error: {}", error));
+                eprintln!("\n{}", "--- Runtime Error Occurred ---".red().bold());
+                eprintln!("An unrecoverable error was caught at the top level.");
+
+                eprintln!("\n{}", "Error Details:".yellow().underline());
+                eprintln!("{}", error);
+
+                eprintln!(
+                    "\n{}",
+                    "Full Execution Context at Time of Crash:"
+                        .yellow()
+                        .underline()
+                );
+                eprintln!("{}", scheduler.format_context());
+
+                return Err("Execution failed. See details above.".to_string());
             }
             StepResult::NewRunnable(_) => {
                 unreachable!()
@@ -397,15 +410,25 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
                 let success = *unwrap_object!(result.get_key(), OnionObject::Boolean)
                     .map_err(|e| format!("Failed to get success key: {:?}", e))?;
                 if !success {
-                    println!(
+                    // 这是程序逻辑上的失败（例如，断言失败），而不是 VM 崩溃
+                    // 我们也可以在这里利用 format_context
+                    eprintln!(
                         "{} {}",
-                        "Error:".red().bold(),
+                        "Execution returned a failure value:".red().bold(),
                         result
                             .get_value()
                             .to_string(&vec![])
                             .map_err(|e| { format!("Failed to get error message: {:?}", e) })?
                     );
-                    return Err("Execution failed".to_string());
+
+                    // 打印上下文以帮助调试为什么会返回失败
+                    eprintln!(
+                        "\n{}",
+                        "Context at Time of Failure Return:".yellow().underline()
+                    );
+                    eprintln!("{}", scheduler.format_context());
+
+                    return Err("Execution failed with a returned error value.".to_string());
                 }
                 let is_undefined = result
                     .get_value()

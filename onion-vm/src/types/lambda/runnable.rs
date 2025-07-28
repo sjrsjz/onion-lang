@@ -5,9 +5,13 @@ use arc_gc::gc::GC;
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
     types::{
-        lambda::vm_instructions::opcode::get_processed_opcode,
+        lambda::vm_instructions::opcode::{
+            self, build_operand_argument, decode_opcode, get_operand_arg, get_processed_opcode,
+            OpcodeArgument,
+        },
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
     },
+    util::find_line_and_col_from_source,
 };
 
 use super::{
@@ -122,9 +126,6 @@ static INSTRUCTION_TABLE: std::sync::LazyLock<Vec<InstructionHandler>> =
     });
 
 pub struct OnionLambdaRunnable {
-    pub(crate) argument: OnionStaticObject,
-    pub(crate) result: OnionStaticObject,
-    pub(crate) this_lambda: OnionStaticObject,
     pub(crate) context: Context,
     pub(crate) ip: isize, // Instruction pointer
     pub(crate) instruction: Arc<VMInstructionPackage>,
@@ -244,9 +245,6 @@ impl OnionLambdaRunnable {
         })?;
 
         Ok(OnionLambdaRunnable {
-            argument,
-            this_lambda: this_lambda.clone(),
-            result: OnionStaticObject::default(),
             context: new_context,
             ip,
             instruction,
@@ -316,33 +314,168 @@ impl Runnable for OnionLambdaRunnable {
 
         StepResult::Continue
     }
-    fn copy(&self) -> Box<dyn Runnable> {
-        Box::new(OnionLambdaRunnable {
-            argument: self.argument.clone(),
-            this_lambda: self.this_lambda.clone(),
-            result: self.result.clone(),
-            context: self.context.clone(),
-            ip: self.ip,
-            instruction: self.instruction.clone(),
-        })
+
+    fn format_context(&self) -> String {
+        let ip = self.ip as usize;
+        let mut parts = Vec::new();
+
+        // 尝试获取详细的源码位置信息
+        if let Some(location) = get_source_location_for_ip(&self.instruction, ip) {
+            // --- Part 1: 高级、人类可读的上下文 ---
+            parts.push(format!("-> at {}:{}", location.line, location.column));
+            parts.push(location.code_snippet);
+        } else {
+            // --- Part 1 (回退): 原始的、无源码的上下文 ---
+            let disassembly = disassemble_instruction(&self.instruction, ip); // 假设这个函数存在
+            parts.push(format!(
+                "-> Executing VM Code: {:?} at ip: {}",
+                self.instruction, ip
+            ));
+            parts.push(format!("  - Current Instruction: {}", disassembly));
+        }
+
+        // --- Part 2: VM 调用栈和操作数栈状态 ---
+        // 这部分保持不变，它提供了 VM 的内部状态
+        let context_state = self.context.format_context(self.instruction.as_ref());
+        parts.push("\n--- VM Internals ---".to_string());
+        parts.push(context_state);
+
+        parts.join("\n")
+    }
+}
+
+/// 反汇编函数：将给定 IP 位置的指令转换为人类可读的字符串。
+///
+/// 此版本适配了变长指令集，其中第一个 u32 word 是元数据，
+/// 后续的 words 是操作数的实际值。
+pub fn disassemble_instruction(package: &VMInstructionPackage, ip: usize) -> String {
+    let code = package.get_code();
+    if ip >= code.len() {
+        return format!("<IP:{} out of bounds>", ip);
     }
 
-    fn format_context(&self) -> Result<serde_json::Value, RuntimeError> {
-        let mut stack_json_array = serde_json::Value::Array(vec![]);
-        for frame in &self.context.frames {
-            let frame_json = frame.format_context();
-            stack_json_array.as_array_mut().unwrap().push(frame_json);
+    // --- 1. 解码元数据 ---
+    // 我们需要一个可变的指针来模拟执行过程，但不能影响原始 ip
+    let mut temp_ip = ip;
+    let opcode_word = opcode::take_u32(code, &mut temp_ip);
+    let decoded_opcode = decode_opcode(opcode_word);
+
+    // --- 2. 获取操作数的原始值 ---
+    // 注意：这里我们只读取值，但不解释它们，因为格式化依赖于标志
+    let mut next_ip = temp_ip; // 保存操作数开始的位置
+    let raw_operand1 = get_operand_arg(code, &mut next_ip, decoded_opcode.operand1());
+    let raw_operand2 = get_operand_arg(code, &mut next_ip, decoded_opcode.operand2());
+    let raw_operand3 = get_operand_arg(code, &mut next_ip, decoded_opcode.operand3());
+
+    // --- 3. 格式化每个操作数 ---
+    // 这是一个辅助闭包，用于将单个操作数格式化为字符串
+    let format_operand = |flag: u8, raw_value: u64| -> Option<String> {
+        // 使用你的 `build_operand_argument` 来获取结构化的操作数类型
+        let arg = build_operand_argument(flag, raw_value);
+
+        match arg {
+            OpcodeArgument::None => None,
+            OpcodeArgument::Int32(v) => Some(format!("{}", v)),
+            OpcodeArgument::Int64(v) => Some(format!("{}L", v)), // 'L' for long
+            OpcodeArgument::Float32(v) => Some(format!("{}f", v)), // 'f' for float
+            OpcodeArgument::Float64(v) => Some(format!("{}", v)),
+            OpcodeArgument::String(idx) => {
+                let s = package
+                    .get_string_pool()
+                    .get(idx as usize)
+                    .map(|s| format!("Str({}) -> \"{}\"", idx, s))
+                    .unwrap_or_else(|| format!("Str({}) -> <Invalid>", idx));
+                Some(s)
+            }
+            OpcodeArgument::ByteArray(idx) => {
+                let b = package
+                    .get_bytes_pool()
+                    .get(idx as usize)
+                    .map(|b| format!("Bytes({}) -> {:X?}", idx, b))
+                    .unwrap_or_else(|| format!("Bytes({}) -> <Invalid>", idx));
+                Some(b)
+            }
         }
-        // {type: "OnionLambdaRunnable", frames: frame_json_array}
-        Ok(serde_json::json!({
-            "type": "lambda_runnable",
-            "frames": stack_json_array,
-            "ip": self.ip,
-            "argument": self.argument.to_string(),
-            "this_lambda": self.this_lambda.to_string(),
-            "result": self.result.to_string(),
-        }))
+    };
+
+    let op1_str = format_operand(decoded_opcode.operand1(), raw_operand1);
+    let op2_str = format_operand(decoded_opcode.operand2(), raw_operand2);
+    let op3_str = format_operand(decoded_opcode.operand3(), raw_operand3);
+
+    // --- 4. 组合最终的字符串 ---
+    let instruction_name = VMInstruction::from_opcode(decoded_opcode.instruction())
+        .map(|instr| format!("{:?}", instr))
+        .unwrap_or_else(|| format!("Invalid({})", decoded_opcode.instruction()));
+
+    let parts = vec![op1_str, op2_str, op3_str];
+    // 过滤掉 None 的操作数
+    let operands_str = parts
+        .into_iter()
+        .filter_map(|p| p)
+        .collect::<Vec<String>>()
+        .join(", ");
+
+    if operands_str.is_empty() {
+        instruction_name
+    } else {
+        format!("{} {}", instruction_name, operands_str)
     }
+}
+// 一个结构体，用于存放格式化好的源码位置信息
+#[derive(Debug)]
+pub struct SourceLocation {
+    pub line: usize,
+    pub column: usize,
+    // 包含高亮的代码片段，例如：
+    //   "  12 | let x = 10 / 0;\n"
+    //   "     |         ^^^^^^"
+    pub code_snippet: String,
+}
+
+/// 主要工具函数：根据 IP 获取完整的源码位置信息
+pub fn get_source_location_for_ip(
+    package: &VMInstructionPackage,
+    ip: usize,
+) -> Option<SourceLocation> {
+    let source = package.get_source().as_ref()?;
+    let debug_info = package.get_debug_info().get(&ip)?;
+
+    let (span_start, span_end) = debug_info.token_span();
+    let (line, column) = find_line_and_col_from_source(span_start, source);
+    let line_content = source.lines().nth(line).unwrap_or("");
+
+    // --- [新的、动态的实现] ---
+
+    // 1. 定义行号部分的宽度，例如 5 位，可以支持到 99999 行
+    let line_num_width = 5;
+
+    // 2. 创建第一行（代码行）的前缀
+    let code_line_prefix = format!(" {:>width$} | ", line, width = line_num_width);
+
+    // 3. 创建第二行（高亮行）的前缀，它的长度和第一行前缀完全一样，但内容是空格
+    let highlight_line_prefix = " ".repeat(code_line_prefix.chars().count() - 2) + "| ";
+
+    // 4. 计算高亮下划线
+    let highlight_start_col = column;
+    let highlight_len = (span_end - span_start).max(1);
+    let highlight_padding = " ".repeat(highlight_start_col);
+    let highlight_underline = "^".repeat(highlight_len);
+
+    // 5. 组装最终的代码片段
+    let code_snippet = format!(
+        "{}{}\n{}{}{}",
+        code_line_prefix, // 例如 "   3 | "
+        line_content,
+        highlight_line_prefix, // 例如 "     | "
+        highlight_padding,
+        highlight_underline
+    );
+
+    Some(SourceLocation {
+        line,
+        column,
+        code_snippet,
+    })
 }
 #[cfg(test)]
 mod size_tests {

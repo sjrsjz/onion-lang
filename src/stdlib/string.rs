@@ -461,8 +461,7 @@ pub fn build_module() -> OnionStaticObject {
         "length".to_string(),
         wrap_native_function(
             &build_named_dict(length_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "string::length".to_string(),
             &length,
         ),
@@ -478,8 +477,7 @@ pub fn build_module() -> OnionStaticObject {
         "trim".to_string(),
         wrap_native_function(
             &build_named_dict(trim_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "string::trim".to_string(),
             &trim,
         ),
@@ -496,8 +494,7 @@ pub fn build_module() -> OnionStaticObject {
         "uppercase".to_string(),
         wrap_native_function(
             &build_named_dict(uppercase_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "string::uppercase".to_string(),
             &uppercase,
         ),
@@ -514,8 +511,7 @@ pub fn build_module() -> OnionStaticObject {
         "lowercase".to_string(),
         wrap_native_function(
             &build_named_dict(lowercase_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "string::lowercase".to_string(),
             &lowercase,
         ),
@@ -535,8 +531,7 @@ pub fn build_module() -> OnionStaticObject {
         "contains".to_string(),
         wrap_native_function(
             &build_named_dict(contains_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "string::contains".to_string(),
             &contains,
         ),
@@ -556,8 +551,7 @@ pub fn build_module() -> OnionStaticObject {
         "concat".to_string(),
         wrap_native_function(
             &build_named_dict(concat_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "string::concat".to_string(),
             &concat,
         ),
@@ -577,8 +571,7 @@ pub fn build_module() -> OnionStaticObject {
         "split".to_string(),
         wrap_native_function(
             &build_named_dict(split_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "string::split".to_string(),
             &split,
         ),
@@ -603,8 +596,7 @@ pub fn build_module() -> OnionStaticObject {
         "replace".to_string(),
         wrap_native_function(
             &build_named_dict(replace_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "string::replace".to_string(),
             &replace,
         ),
@@ -629,8 +621,7 @@ pub fn build_module() -> OnionStaticObject {
         "substr".to_string(),
         wrap_native_function(
             &build_named_dict(substr_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "string::substr".to_string(),
             &substr,
         ),
@@ -650,8 +641,7 @@ pub fn build_module() -> OnionStaticObject {
         "index_of".to_string(),
         wrap_native_function(
             &build_named_dict(index_of_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "string::index_of".to_string(),
             &index_of,
         ),
@@ -671,8 +661,7 @@ pub fn build_module() -> OnionStaticObject {
         "starts_with".to_string(),
         wrap_native_function(
             &build_named_dict(starts_with_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "string::starts_with".to_string(),
             &starts_with,
         ),
@@ -692,8 +681,7 @@ pub fn build_module() -> OnionStaticObject {
         "ends_with".to_string(),
         wrap_native_function(
             &build_named_dict(ends_with_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "string::ends_with".to_string(),
             &ends_with,
         ),
@@ -713,8 +701,7 @@ pub fn build_module() -> OnionStaticObject {
         "repeat".to_string(),
         wrap_native_function(
             &build_named_dict(repeat_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "string::repeat".to_string(),
             &repeat,
         ),
@@ -738,8 +725,7 @@ pub fn build_module() -> OnionStaticObject {
         "pad_left".to_string(),
         wrap_native_function(
             &build_named_dict(pad_left_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "string::pad_left".to_string(),
             &pad_left,
         ),
@@ -763,8 +749,7 @@ pub fn build_module() -> OnionStaticObject {
         "pad_right".to_string(),
         wrap_native_function(
             &build_named_dict(pad_right_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "string::pad_right".to_string(),
             &pad_right,
         ),
@@ -780,8 +765,7 @@ pub fn build_module() -> OnionStaticObject {
         "is_empty".to_string(),
         wrap_native_function(
             &build_named_dict(is_empty_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "string::is_empty".to_string(),
             &is_empty,
         ),
@@ -797,8 +781,7 @@ pub fn build_module() -> OnionStaticObject {
         "reverse".to_string(),
         wrap_native_function(
             &build_named_dict(reverse_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "string::reverse".to_string(),
             &reverse,
         ),

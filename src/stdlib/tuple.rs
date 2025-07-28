@@ -138,8 +138,7 @@ pub fn build_module() -> OnionStaticObject {
         "push".to_string(),
         wrap_native_function(
             &build_named_dict(push_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "tuple::push".to_string(),
             &push,
         ),
@@ -154,8 +153,7 @@ pub fn build_module() -> OnionStaticObject {
         "pop".to_string(),
         wrap_native_function(
             &build_named_dict(pop_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "tuple::pop".to_string(),
             &pop,
         ),
@@ -178,8 +176,7 @@ pub fn build_module() -> OnionStaticObject {
         "insert".to_string(),
         wrap_native_function(
             &build_named_dict(insert_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "tuple::insert".to_string(),
             &insert,
         ),
@@ -198,8 +195,7 @@ pub fn build_module() -> OnionStaticObject {
         "remove".to_string(),
         wrap_native_function(
             &build_named_dict(remove_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "tuple::remove".to_string(),
             &remove,
         ),

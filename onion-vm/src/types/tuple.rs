@@ -186,18 +186,3 @@ impl OnionTuple {
         }
     }
 }
-
-impl OnionTuple {
-    pub fn reconstruct_container(&self) -> Result<OnionObject, RuntimeError> {
-        let mut cloned_elements = Vec::with_capacity(self.elements.len());
-        for element in &self.elements {
-            cloned_elements.push(element.clone());
-        }
-        Ok(OnionObject::Tuple(
-            OnionTuple {
-                elements: cloned_elements,
-            }
-            .into(),
-        ))
-    }
-}

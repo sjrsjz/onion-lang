@@ -36,20 +36,6 @@ impl Task {
             priority,
         }
     }
-
-    pub fn copy(&self) -> Task {
-        Task {
-            runnable: self.runnable.copy(),
-            task_handler: self.task_handler.clone(),
-            priority: self.priority,
-        }
-    }
-
-    pub fn format_context(&self) -> Result<serde_json::Value, RuntimeError> {
-        let mut context = self.runnable.format_context()?;
-        context["priority"] = serde_json::json!(self.priority);
-        Ok(context)
-    }
 }
 
 pub struct AsyncScheduler {
@@ -145,26 +131,56 @@ impl Runnable for AsyncScheduler {
             "AsyncScheduler does not support receive".to_string().into(),
         ))
     }
+    
+    fn format_context(&self) -> String {
+        let mut output = Vec::new();
 
-    fn copy(&self) -> Box<dyn Runnable> {
-        let new_queue = self.queue.iter().map(|r| r.copy()).collect();
-        Box::new(AsyncScheduler {
-            queue: new_queue,
-            main_task_handler: self.main_task_handler.clone(),
-            step: self.step,
-        })
-    }
+        // 1. 调度器自身的状态
+        output.push(format!(
+            "-> AsyncScheduler Status:\n   - Current Step: {}\n   - Total Tasks in Queue: {}",
+            self.step,
+            self.queue.len()
+        ));
 
-    fn format_context(&self) -> Result<serde_json::Value, RuntimeError> {
-        let mut tasks_json_array = serde_json::Value::Array(vec![]);
-        for task in &self.queue {
-            let frame_json = task.format_context()?;
-            tasks_json_array.as_array_mut().unwrap().push(frame_json);
+        // 2. 遍历队列中的所有任务
+        if self.queue.is_empty() {
+            output.push("   - Queue is empty.".to_string());
+        } else {
+            output.push("--- Task Queue Details ---".to_string());
+            for (index, task) in self.queue.iter().enumerate() {
+                // 下一次轮到该任务执行的步数
+                let next_run_step = {
+                    let sched_interval = generate_sched_step(task.priority);
+                    // 计算下一个能被 sched_interval 整除的 step
+                    if self.step % sched_interval == 0 {
+                        self.step // 就是当前步
+                    } else {
+                        self.step - (self.step % sched_interval) + sched_interval
+                    }
+                };
+
+                // 获取 Runnable 的类型名
+                let runnable_type = std::any::type_name_of_val(&*task.runnable);
+
+                // 3. 为每个任务创建一个摘要条目
+                let task_summary = format!(
+                    "  [Task #{}] Priority: {} (Next run at step {}), Type: {}",
+                    index,
+                    task.priority,
+                    next_run_step,
+                    runnable_type.split("::").last().unwrap_or(runnable_type) // 简化类型名显示
+                );
+                output.push(task_summary);
+
+                // 4. 获取并缩进该任务内部的上下文
+                let inner_context = task.runnable.format_context();
+                for line in inner_context.lines() {
+                    // 为内部上下文的每一行添加缩进，以保持层次结构清晰
+                    output.push(format!("    {}", line));
+                }
+            }
         }
-        Ok(serde_json::json!({
-            "type": "AsyncScheduler",
-            "tasks": tasks_json_array,
-            "step": self.step
-        }))
+
+        output.join("\n")
     }
 }

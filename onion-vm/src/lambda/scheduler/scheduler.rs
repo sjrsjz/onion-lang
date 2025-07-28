@@ -136,22 +136,26 @@ impl Runnable for Scheduler {
         }
     }
 
-    fn copy(&self) -> Box<dyn Runnable> {
-        Box::new(Scheduler {
-            runnable_stack: self.runnable_stack.iter().map(|r| r.copy()).collect(),
-        })
-    }
-
-    fn format_context(&self) -> Result<serde_json::Value, RuntimeError> {
-        let mut stack_json_array = serde_json::Value::Array(vec![]);
-        for runnable in &self.runnable_stack {
-            let frame_json = runnable.format_context()?;
-            stack_json_array.as_array_mut().unwrap().push(frame_json);
+    fn format_context(&self) -> String {
+        if self.runnable_stack.is_empty() {
+            return "Scheduler: No active runnables.".to_string();
         }
-        // {type: "Scheduler", frames: frame_json_array}
-        Ok(serde_json::json!({
-            "type": "Scheduler",
-            "frames": stack_json_array
-        }))
+
+        // 我们将从栈顶（最近的调用）开始，一直到栈底
+        // 所以我们倒序遍历 `runnable_stack`
+        let contexts: Vec<String> = self
+            .runnable_stack
+            .iter()
+            .rev() // .rev() is crucial for correct stack trace order
+            .enumerate() // Use enumerate to add frame numbers
+            .map(|(index, runnable)| {
+                let header = format!("--- Frame #{} ---", index);
+                let inner_context = runnable.format_context();
+                format!("{}\n{}", header, inner_context)
+            })
+            .collect();
+
+        // 将所有帧的上下文用换行符连接起来
+        contexts.join("\n\n") // Use double newline to separate frames
     }
 }

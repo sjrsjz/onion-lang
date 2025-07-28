@@ -83,15 +83,19 @@ pub fn build_module() -> OnionStaticObject {
         "println".to_string(),
         wrap_native_function(
             &onion_tuple!(),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "io::println".to_string(),
             &println,
         ),
     );
     module.insert(
         "print".to_string(),
-        wrap_native_function(&onion_tuple!(), None, None, "io::print".to_string(), &print),
+        wrap_native_function(
+            &onion_tuple!(),
+            &OnionObject::Undefined(None),
+            "io::print".to_string(),
+            &print,
+        ),
     );
 
     let mut input_params = IndexMap::new();
@@ -103,8 +107,7 @@ pub fn build_module() -> OnionStaticObject {
         "input".to_string(),
         wrap_native_function(
             &build_named_dict(input_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "io::input".to_string(),
             &input,
         ),

@@ -84,15 +84,3 @@ impl OnionPair {
             .or_else(|_| self.key.with_attribute(key, f))
     }
 }
-
-impl OnionPair {
-    pub fn reconstruct_container(&self) -> Result<OnionObject, RuntimeError> {
-        Ok(OnionObject::Pair(
-            OnionPair {
-                key: self.key.clone(),
-                value: self.value.clone(),
-            }
-            .into(),
-        ))
-    }
-}

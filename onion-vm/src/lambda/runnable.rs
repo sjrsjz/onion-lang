@@ -1,9 +1,11 @@
 use std::fmt::Display;
 
 use arc_gc::gc::GC;
-use serde_json::Value;
 
-use crate::{lambda::scheduler::async_scheduler::Task, types::object::{OnionObjectCell, OnionStaticObject}};
+use crate::{
+    lambda::scheduler::async_scheduler::Task,
+    types::object::{OnionObjectCell, OnionStaticObject},
+};
 
 #[derive(Clone, Debug)]
 pub enum RuntimeError {
@@ -78,12 +80,8 @@ pub trait Runnable: Send + Sync + 'static {
             "receive not implemented".to_string().into(),
         ))
     }
-    fn copy_with_gc(&self, gc: &mut GC<OnionObjectCell>) -> Box<dyn Runnable> {
-        panic!("copy_with_gc is not implemented for this Runnable")
-    }
-    fn copy(&self) -> Box<dyn Runnable>;
 
-    fn format_context(&self) -> Result<Value, RuntimeError>;
+    fn format_context(&self) -> String;
 }
 
 #[cfg(test)]

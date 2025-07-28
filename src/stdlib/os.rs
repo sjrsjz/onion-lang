@@ -265,8 +265,7 @@ pub fn build_module() -> OnionStaticObject {
         "system".to_string(),
         wrap_native_function(
             &build_named_dict(system_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "os::system".to_string(),
             &system,
         ),
@@ -282,8 +281,7 @@ pub fn build_module() -> OnionStaticObject {
         "system_code".to_string(),
         wrap_native_function(
             &build_named_dict(system_code_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "os::system_code".to_string(),
             &system_code,
         ),
@@ -299,8 +297,7 @@ pub fn build_module() -> OnionStaticObject {
         "chdir".to_string(),
         wrap_native_function(
             &build_named_dict(chdir_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "os::chdir".to_string(),
             &chdir,
         ),
@@ -311,8 +308,7 @@ pub fn build_module() -> OnionStaticObject {
         "username".to_string(),
         wrap_native_function(
             &build_named_dict(IndexMap::new()),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "os::username".to_string(),
             &username,
         ),
@@ -323,8 +319,7 @@ pub fn build_module() -> OnionStaticObject {
         "home_dir".to_string(),
         wrap_native_function(
             &build_named_dict(IndexMap::new()),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "os::home_dir".to_string(),
             &home_dir,
         ),
@@ -335,8 +330,7 @@ pub fn build_module() -> OnionStaticObject {
         "temp_dir".to_string(),
         wrap_native_function(
             &build_named_dict(IndexMap::new()),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "os::temp_dir".to_string(),
             &temp_dir,
         ),
@@ -352,8 +346,7 @@ pub fn build_module() -> OnionStaticObject {
         "path_exists".to_string(),
         wrap_native_function(
             &build_named_dict(path_exists_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "os::path_exists".to_string(),
             &path_exists,
         ),
@@ -369,8 +362,7 @@ pub fn build_module() -> OnionStaticObject {
         "is_dir".to_string(),
         wrap_native_function(
             &build_named_dict(is_dir_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "os::is_dir".to_string(),
             &is_dir,
         ),
@@ -386,8 +378,7 @@ pub fn build_module() -> OnionStaticObject {
         "is_file".to_string(),
         wrap_native_function(
             &build_named_dict(is_file_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "os::is_file".to_string(),
             &is_file,
         ),
@@ -407,8 +398,7 @@ pub fn build_module() -> OnionStaticObject {
         "path_join".to_string(),
         wrap_native_function(
             &build_named_dict(path_join_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "os::path_join".to_string(),
             &path_join,
         ),

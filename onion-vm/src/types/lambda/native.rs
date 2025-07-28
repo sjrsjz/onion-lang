@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use arc_gc::gc::GC;
 
 use crate::{
@@ -65,19 +67,29 @@ where
         }
     }
 
-    fn copy(&self) -> Box<dyn Runnable> {
-        Box::new(NativeMethodGenerator {
-            argument: self.argument.clone(),
-            self_object: self.self_object.clone(),
-            function: self.function,
-        })
-    }
+    fn format_context(&self) -> String {
+        // Get the type name of the closure/function pointer. This is the best
+        // static information we have to identify which native code is running.
+        let full_type_name = std::any::type_name_of_val(self.function);
 
-    fn format_context(&self) -> Result<serde_json::Value, RuntimeError> {
-        Ok(serde_json::json!({
-            "type": "NativeMethodGenerator",
-            "argument": self.argument.to_string(),
-        }))
+        // Often, the full type name is very long (e.g., my_app::modules::math::add::{{closure}}).
+        // Let's try to show just the most specific part for readability.
+        let short_type_name = full_type_name.split("::").last().unwrap_or(full_type_name);
+
+        // Format the 'self' object, gracefully handling the Option.
+        let self_info = match &self.self_object {
+            Some(obj) => format!("{:?}", obj),
+            None => "(None)".to_string(),
+        };
+
+        // Assemble all the information into a clear, multi-line string.
+        format!(
+        "-> Executing Native Method:\n   - Function: {} (Full Type: {})\n   - Self (this): {}\n   - Argument: {:?}",
+        short_type_name,
+        full_type_name, // It's good to include the full name for detailed debugging
+        self_info,
+        self.argument
+    )
     }
 }
 
@@ -488,8 +500,8 @@ pub(crate) fn native_elements_method(
 
 pub(crate) fn wrap_native_function<F>(
     params: &OnionStaticObject,
-    capture: Option<&OnionStaticObject>,
-    self_object: Option<&OnionStaticObject>,
+    capture: &OnionObject,
+    self_object: &OnionObject,
     signature: String,
     function: &'static F,
 ) -> OnionStaticObject
@@ -503,12 +515,14 @@ where
         + Sync
         + 'static,
 {
-    OnionLambdaDefinition::new_static(
+    OnionLambdaDefinition::new_static_with_self(
         params,
-        LambdaBody::NativeFunction(Box::new(NativeMethodGenerator {
-            argument: onion_tuple!(),
-            self_object: self_object.cloned(),
-            function: function,
+        LambdaBody::NativeFunction(Arc::new(|| {
+            Box::new(NativeMethodGenerator {
+                argument: onion_tuple!(),
+                self_object: None,
+                function: function,
+            })
         })),
         capture,
         self_object,

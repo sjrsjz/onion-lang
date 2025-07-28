@@ -212,7 +212,7 @@ pub enum OnionObject {
     Pair(Arc<OnionPair>),
     Named(Arc<OnionNamed>),
     LazySet(Arc<OnionLazySet>),
-    Lambda(Arc<OnionLambdaDefinition>),
+    Lambda((Arc<OnionLambdaDefinition>, Arc<OnionObject>)), // (definition, self_object)
     Custom(Arc<dyn OnionObjectExt>),
 
     // mutable? types, DO NOT USE THIS TYPE DIRECTLY, use `mutablize` instead
@@ -427,7 +427,10 @@ impl GCTraceable<OnionObjectCell> for OnionObject {
             OnionObject::Pair(pair) => pair.collect(queue),
             OnionObject::Named(named) => named.collect(queue),
             OnionObject::LazySet(lazy_set) => lazy_set.collect(queue),
-            OnionObject::Lambda(lambda) => lambda.collect(queue),
+            OnionObject::Lambda(lambda) => {
+                lambda.0.collect(queue);
+                lambda.1.collect(queue);
+            }
             OnionObject::Custom(custom) => custom.collect(queue),
 
             _ => {}
@@ -446,7 +449,10 @@ impl OnionObject {
             OnionObject::Pair(pair) => pair.upgrade(collected),
             OnionObject::Named(named) => named.upgrade(collected),
             OnionObject::LazySet(lazy_set) => lazy_set.upgrade(collected),
-            OnionObject::Lambda(lambda) => lambda.upgrade(collected),
+            OnionObject::Lambda(lambda) => {
+                lambda.0.upgrade(collected);
+                lambda.1.upgrade(collected);
+            }
             OnionObject::Custom(custom) => custom.upgrade(collected),
             _ => {}
         }
@@ -658,11 +664,11 @@ impl OnionObject {
                 }
                 OnionObject::InstructionPackage(_) => Ok("InstructionPackage(...)".to_string()),
                 OnionObject::Lambda(lambda) => {
-                    let params = lambda.get_parameter().repr(&new_ptrs)?;
-                    let body = lambda.get_body().to_string();
+                    let params = lambda.0.get_parameter().repr(&new_ptrs)?;
+                    let body = lambda.0.get_body().to_string();
                     Ok(format!(
                         "{}::{} -> {}",
-                        lambda.get_signature(),
+                        lambda.0.get_signature(),
                         params,
                         body
                     ))
@@ -732,12 +738,12 @@ impl OnionObject {
                 }
                 OnionObject::InstructionPackage(_) => Ok("InstructionPackage(...)".to_string()),
                 OnionObject::Lambda(lambda) => {
-                    let params = lambda.get_parameter().repr(&new_ptrs)?;
+                    let params = lambda.0.get_parameter().repr(&new_ptrs)?;
                     Ok(format!(
                         "{}::{} -> {}",
-                        lambda.get_signature(),
+                        lambda.0.get_signature(),
                         params,
-                        lambda.get_body()
+                        lambda.0.get_body()
                     ))
                 }
                 OnionObject::Mut(weak) => {
@@ -1217,8 +1223,8 @@ impl OnionObject {
                         "int" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::int".to_string(),
                                 &native_int_converter,
                             );
@@ -1227,8 +1233,8 @@ impl OnionObject {
                         "float" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::float".to_string(),
                                 &native_float_converter,
                             );
@@ -1237,8 +1243,8 @@ impl OnionObject {
                         "string" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::string".to_string(),
                                 &native_string_converter,
                             );
@@ -1247,8 +1253,8 @@ impl OnionObject {
                         "bool" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::bool".to_string(),
                                 &native_bool_converter,
                             );
@@ -1257,8 +1263,8 @@ impl OnionObject {
                         "bytes" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::bytes".to_string(),
                                 &native_bytes_converter,
                             );
@@ -1284,8 +1290,8 @@ impl OnionObject {
                         "int" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::int".to_string(),
                                 &native_int_converter,
                             );
@@ -1294,8 +1300,8 @@ impl OnionObject {
                         "float" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::float".to_string(),
                                 &native_float_converter,
                             );
@@ -1304,8 +1310,8 @@ impl OnionObject {
                         "string" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::string".to_string(),
                                 &native_string_converter,
                             );
@@ -1314,8 +1320,8 @@ impl OnionObject {
                         "bool" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::bool".to_string(),
                                 &native_bool_converter,
                             );
@@ -1324,8 +1330,8 @@ impl OnionObject {
                         "bytes" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::bytes".to_string(),
                                 &native_bytes_converter,
                             );
@@ -1351,8 +1357,8 @@ impl OnionObject {
                         "int" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::int".to_string(),
                                 &native_int_converter,
                             );
@@ -1361,8 +1367,8 @@ impl OnionObject {
                         "float" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::float".to_string(),
                                 &native_float_converter,
                             );
@@ -1371,8 +1377,8 @@ impl OnionObject {
                         "string" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::string".to_string(),
                                 &native_string_converter,
                             );
@@ -1381,8 +1387,8 @@ impl OnionObject {
                         "bool" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::bool".to_string(),
                                 &native_bool_converter,
                             );
@@ -1391,8 +1397,8 @@ impl OnionObject {
                         "bytes" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::bytes".to_string(),
                                 &native_bytes_converter,
                             );
@@ -1424,8 +1430,8 @@ impl OnionObject {
                         "int" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::int".to_string(),
                                 &native_int_converter,
                             );
@@ -1434,8 +1440,8 @@ impl OnionObject {
                         "float" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::float".to_string(),
                                 &native_float_converter,
                             );
@@ -1444,8 +1450,8 @@ impl OnionObject {
                         "string" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::string".to_string(),
                                 &native_string_converter,
                             );
@@ -1454,8 +1460,8 @@ impl OnionObject {
                         "bool" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::bool".to_string(),
                                 &native_bool_converter,
                             );
@@ -1464,8 +1470,8 @@ impl OnionObject {
                         "bytes" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::bytes".to_string(),
                                 &native_bytes_converter,
                             );
@@ -1474,8 +1480,8 @@ impl OnionObject {
                         "length" => {
                             let length_method = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "builtin::length".to_string(),
                                 &native_length_method,
                             );
@@ -1484,8 +1490,8 @@ impl OnionObject {
                         "elements" => {
                             let elements_method = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "builtin::elements".to_string(),
                                 &native_elements_method,
                             );
@@ -1507,7 +1513,7 @@ impl OnionObject {
             }
             OnionObject::Named(named) => named.with_attribute(key, f),
             OnionObject::Pair(pair) => pair.with_attribute(key, f),
-            OnionObject::Lambda(lambda) => lambda.with_attribute(key, f),
+            OnionObject::Lambda(lambda) => lambda.0.with_attribute(key, f),
             OnionObject::LazySet(lazy_set) => lazy_set.with_attribute(key, f),
             OnionObject::String(_) => {
                 if let OnionObject::String(key_str) = key {
@@ -1515,8 +1521,8 @@ impl OnionObject {
                         "int" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::int".to_string(),
                                 &native_int_converter,
                             );
@@ -1525,8 +1531,8 @@ impl OnionObject {
                         "float" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::float".to_string(),
                                 &native_float_converter,
                             );
@@ -1535,8 +1541,8 @@ impl OnionObject {
                         "string" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::string".to_string(),
                                 &native_string_converter,
                             );
@@ -1545,8 +1551,8 @@ impl OnionObject {
                         "bool" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::bool".to_string(),
                                 &native_bool_converter,
                             );
@@ -1555,8 +1561,8 @@ impl OnionObject {
                         "bytes" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::bytes".to_string(),
                                 &native_bytes_converter,
                             );
@@ -1565,8 +1571,8 @@ impl OnionObject {
                         "length" => {
                             let length_method = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "builtin::length".to_string(),
                                 &native_length_method,
                             );
@@ -1575,8 +1581,8 @@ impl OnionObject {
                         "elements" => {
                             let elements_method = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "builtin::elements".to_string(),
                                 &native_elements_method,
                             );
@@ -1602,8 +1608,8 @@ impl OnionObject {
                         "int" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::int".to_string(),
                                 &native_int_converter,
                             );
@@ -1612,8 +1618,8 @@ impl OnionObject {
                         "float" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::float".to_string(),
                                 &native_float_converter,
                             );
@@ -1622,8 +1628,8 @@ impl OnionObject {
                         "string" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::string".to_string(),
                                 &native_string_converter,
                             );
@@ -1632,8 +1638,8 @@ impl OnionObject {
                         "bool" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::bool".to_string(),
                                 &native_bool_converter,
                             );
@@ -1642,8 +1648,8 @@ impl OnionObject {
                         "bytes" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::bytes".to_string(),
                                 &native_bytes_converter,
                             );
@@ -1652,8 +1658,8 @@ impl OnionObject {
                         "length" => {
                             let length_method = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "builtin::length".to_string(),
                                 &native_length_method,
                             );
@@ -1662,8 +1668,8 @@ impl OnionObject {
                         "elements" => {
                             let elements_method = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "builtin::elements".to_string(),
                                 &native_elements_method,
                             );
@@ -1689,8 +1695,8 @@ impl OnionObject {
                         "int" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::int".to_string(),
                                 &native_int_converter,
                             );
@@ -1699,8 +1705,8 @@ impl OnionObject {
                         "float" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::float".to_string(),
                                 &native_float_converter,
                             );
@@ -1709,8 +1715,8 @@ impl OnionObject {
                         "string" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::string".to_string(),
                                 &native_string_converter,
                             );
@@ -1719,8 +1725,8 @@ impl OnionObject {
                         "bool" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::bool".to_string(),
                                 &native_bool_converter,
                             );
@@ -1729,8 +1735,8 @@ impl OnionObject {
                         "bytes" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "converter::bytes".to_string(),
                                 &native_bytes_converter,
                             );
@@ -1739,8 +1745,8 @@ impl OnionObject {
                         "length" => {
                             let length_method = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "builtin::length".to_string(),
                                 &native_length_method,
                             );
@@ -1749,8 +1755,8 @@ impl OnionObject {
                         "elements" => {
                             let elements_method = wrap_native_function(
                                 &onion_tuple!(),
-                                None,
-                                Some(&self.stabilize()),
+                                &OnionObject::Undefined(None),
+                                obj,
                                 "builtin::elements".to_string(),
                                 &native_elements_method,
                             );

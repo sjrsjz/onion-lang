@@ -1,4 +1,5 @@
 use std::{
+    sync::Arc,
     thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -250,21 +251,26 @@ impl Runnable for AsyncSleep {
         Ok(())
     }
 
-    fn copy(&self) -> Box<dyn Runnable> {
-        Box::new(AsyncSleep {
-            millis: self.millis,
-            start_time: self.start_time,
-        })
-    }
+    fn format_context(&self) -> String {
+        // Safely calculate the elapsed time since the sleep started.
+        // `unwrap_or_default` is a safe fallback if the system clock has issues (e.g., moves backward).
+        let elapsed = self.start_time.elapsed().unwrap_or_default();
+        let elapsed_ms = elapsed.as_millis();
 
-    fn format_context(&self) -> Result<serde_json::Value, RuntimeError> {
-        Ok(serde_json::json!({
-            "millis": self.millis,
-            "start_time": self.start_time
-                .duration_since(UNIX_EPOCH)
-                .map(|d| d.as_millis())
-                .unwrap_or(0),
-        }))
+        let total_duration_ms = self.millis as u128;
+
+        // Calculate the remaining time, using saturating_sub to prevent underflow
+        // if the task has already been asleep for longer than requested due to scheduler latency.
+        let remaining_ms = total_duration_ms.saturating_sub(elapsed_ms);
+
+        // Format everything into a clear, informative string.
+        format!(
+        "-> Pausing execution (sleep):\n   - Total Duration: {}ms\n   - Progress: {}ms / {}ms\n   - Time Remaining: ~{}ms",
+        total_duration_ms,
+        elapsed_ms,
+        total_duration_ms,
+        remaining_ms
+    )
     }
 }
 
@@ -287,12 +293,13 @@ fn async_sleep(
 
     Ok(OnionLambdaDefinition::new_static(
         &onion_tuple!(),
-        LambdaBody::NativeFunction(Box::new(AsyncSleep {
-            millis,
-            start_time: SystemTime::now(),
+        LambdaBody::NativeFunction(Arc::new(move || {
+            Box::new(AsyncSleep {
+                millis: millis.clone(),
+                start_time: SystemTime::now(),
+            })
         })),
-        None,
-        None,
+        &OnionObject::Undefined(None),
         "time::async_sleep".to_string(),
     ))
 }
@@ -304,8 +311,7 @@ pub fn build_module() -> OnionStaticObject {
         "timestamp".to_string(),
         wrap_native_function(
             &onion_tuple!(),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "time::timestamp".to_string(),
             &timestamp,
         ),
@@ -316,8 +322,7 @@ pub fn build_module() -> OnionStaticObject {
         "timestamp_millis".to_string(),
         wrap_native_function(
             &onion_tuple!(),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "time::timestamp_millis".to_string(),
             &timestamp_millis,
         ),
@@ -328,8 +333,7 @@ pub fn build_module() -> OnionStaticObject {
         "timestamp_nanos".to_string(),
         wrap_native_function(
             &onion_tuple!(),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "time::timestamp_nanos".to_string(),
             &timestamp_nanos,
         ),
@@ -342,8 +346,7 @@ pub fn build_module() -> OnionStaticObject {
         "sleep_seconds".to_string(),
         wrap_native_function(
             &build_named_dict(sleep_seconds_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "time::sleep_seconds".to_string(),
             &sleep_seconds,
         ),
@@ -356,8 +359,7 @@ pub fn build_module() -> OnionStaticObject {
         "sleep_millis".to_string(),
         wrap_native_function(
             &build_named_dict(sleep_millis_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "time::sleep_millis".to_string(),
             &sleep_millis,
         ),
@@ -373,8 +375,7 @@ pub fn build_module() -> OnionStaticObject {
         "sleep_micros".to_string(),
         wrap_native_function(
             &build_named_dict(sleep_micros_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "time::sleep_micros".to_string(),
             &sleep_micros,
         ),
@@ -383,8 +384,7 @@ pub fn build_module() -> OnionStaticObject {
         "now_utc".to_string(),
         wrap_native_function(
             &onion_tuple!(),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "time::now_utc".to_string(),
             &now_utc,
         ),
@@ -397,8 +397,7 @@ pub fn build_module() -> OnionStaticObject {
         "format_time".to_string(),
         wrap_native_function(
             &build_named_dict(format_time_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "time::format_time".to_string(),
             &format_time,
         ),
@@ -412,8 +411,7 @@ pub fn build_module() -> OnionStaticObject {
         "time_diff".to_string(),
         wrap_native_function(
             &build_named_dict(time_diff_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "time::time_diff".to_string(),
             &time_diff,
         ),
@@ -426,8 +424,7 @@ pub fn build_module() -> OnionStaticObject {
         "async_sleep".to_string(),
         wrap_native_function(
             &build_named_dict(async_sleep_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "time::async_sleep".to_string(),
             &async_sleep,
         ),

@@ -83,14 +83,3 @@ impl OnionNamed {
             .or_else(|_| self.key.with_attribute(key, f))
     }
 }
-impl OnionNamed {
-    pub fn reconstruct_container(&self) -> Result<OnionObject, RuntimeError> {
-        Ok(OnionObject::Named(
-            OnionNamed {
-                key: self.key.clone(),
-                value: self.value.clone(),
-            }
-            .into(),
-        ))
-    }
-}

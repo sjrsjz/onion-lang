@@ -519,8 +519,7 @@ pub fn build_module() -> OnionStaticObject {
         "read_file".to_string(),
         wrap_native_function(
             &build_named_dict(read_file_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "fs::read_file".to_string(),
             &read_file,
         ),
@@ -540,8 +539,7 @@ pub fn build_module() -> OnionStaticObject {
         "write_file".to_string(),
         wrap_native_function(
             &build_named_dict(write_file_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "fs::write_file".to_string(),
             &write_file,
         ),
@@ -561,8 +559,7 @@ pub fn build_module() -> OnionStaticObject {
         "append_file".to_string(),
         wrap_native_function(
             &build_named_dict(append_file_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "fs::append_file".to_string(),
             &append_file,
         ),
@@ -578,8 +575,7 @@ pub fn build_module() -> OnionStaticObject {
         "read_text".to_string(),
         wrap_native_function(
             &build_named_dict(read_text_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "fs::read_text".to_string(),
             &read_text,
         ),
@@ -599,8 +595,7 @@ pub fn build_module() -> OnionStaticObject {
         "write_text".to_string(),
         wrap_native_function(
             &build_named_dict(write_text_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "fs::write_text".to_string(),
             &write_text,
         ),
@@ -620,8 +615,7 @@ pub fn build_module() -> OnionStaticObject {
         "append_text".to_string(),
         wrap_native_function(
             &build_named_dict(append_text_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "fs::append_text".to_string(),
             &append_text,
         ),
@@ -637,8 +631,7 @@ pub fn build_module() -> OnionStaticObject {
         "remove_file".to_string(),
         wrap_native_function(
             &build_named_dict(remove_file_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "fs::remove_file".to_string(),
             &remove_file,
         ),
@@ -658,8 +651,7 @@ pub fn build_module() -> OnionStaticObject {
         "copy_file".to_string(),
         wrap_native_function(
             &build_named_dict(copy_file_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "fs::copy_file".to_string(),
             &copy_file,
         ),
@@ -679,8 +671,7 @@ pub fn build_module() -> OnionStaticObject {
         "rename_file".to_string(),
         wrap_native_function(
             &build_named_dict(rename_file_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "fs::rename_file".to_string(),
             &rename_file,
         ),
@@ -696,8 +687,7 @@ pub fn build_module() -> OnionStaticObject {
         "create_dir".to_string(),
         wrap_native_function(
             &build_named_dict(create_dir_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "fs::create_dir".to_string(),
             &create_dir,
         ),
@@ -713,8 +703,7 @@ pub fn build_module() -> OnionStaticObject {
         "create_dir_all".to_string(),
         wrap_native_function(
             &build_named_dict(create_dir_all_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "fs::create_dir_all".to_string(),
             &create_dir_all,
         ),
@@ -730,8 +719,7 @@ pub fn build_module() -> OnionStaticObject {
         "remove_dir".to_string(),
         wrap_native_function(
             &build_named_dict(remove_dir_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "fs::remove_dir".to_string(),
             &remove_dir,
         ),
@@ -747,8 +735,7 @@ pub fn build_module() -> OnionStaticObject {
         "remove_dir_all".to_string(),
         wrap_native_function(
             &build_named_dict(remove_dir_all_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "fs::remove_dir_all".to_string(),
             &remove_dir_all,
         ),
@@ -764,8 +751,7 @@ pub fn build_module() -> OnionStaticObject {
         "read_dir".to_string(),
         wrap_native_function(
             &build_named_dict(read_dir_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "fs::read_dir".to_string(),
             &read_dir,
         ),
@@ -781,8 +767,7 @@ pub fn build_module() -> OnionStaticObject {
         "file_metadata".to_string(),
         wrap_native_function(
             &build_named_dict(file_metadata_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "fs::file_metadata".to_string(),
             &file_metadata,
         ),
@@ -798,8 +783,7 @@ pub fn build_module() -> OnionStaticObject {
         "exists".to_string(),
         wrap_native_function(
             &build_named_dict(exists_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "fs::exists".to_string(),
             &exists,
         ),

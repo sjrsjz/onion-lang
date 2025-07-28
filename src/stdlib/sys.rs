@@ -195,8 +195,7 @@ pub fn build_module() -> OnionStaticObject {
         "argv".to_string(),
         wrap_native_function(
             &build_named_dict(IndexMap::new()),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "sys::argv".to_string(),
             &argv,
         ),
@@ -212,8 +211,7 @@ pub fn build_module() -> OnionStaticObject {
         "getenv".to_string(),
         wrap_native_function(
             &build_named_dict(getenv_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "sys::getenv".to_string(),
             &getenv,
         ),
@@ -233,8 +231,7 @@ pub fn build_module() -> OnionStaticObject {
         "setenv".to_string(),
         wrap_native_function(
             &build_named_dict(setenv_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "sys::setenv".to_string(),
             &setenv,
         ),
@@ -250,8 +247,7 @@ pub fn build_module() -> OnionStaticObject {
         "unsetenv".to_string(),
         wrap_native_function(
             &build_named_dict(unsetenv_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "sys::unsetenv".to_string(),
             &unsetenv,
         ),
@@ -262,8 +258,7 @@ pub fn build_module() -> OnionStaticObject {
         "environ".to_string(),
         wrap_native_function(
             &build_named_dict(IndexMap::new()),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "sys::environ".to_string(),
             &environ,
         ),
@@ -274,8 +269,7 @@ pub fn build_module() -> OnionStaticObject {
         "getcwd".to_string(),
         wrap_native_function(
             &build_named_dict(IndexMap::new()),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "sys::getcwd".to_string(),
             &getcwd,
         ),
@@ -288,8 +282,7 @@ pub fn build_module() -> OnionStaticObject {
         "exit".to_string(),
         wrap_native_function(
             &build_named_dict(exit_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "sys::exit".to_string(),
             &exit,
         ),
@@ -300,8 +293,7 @@ pub fn build_module() -> OnionStaticObject {
         "platform".to_string(),
         wrap_native_function(
             &build_named_dict(IndexMap::new()),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "sys::platform".to_string(),
             &platform,
         ),
@@ -312,8 +304,7 @@ pub fn build_module() -> OnionStaticObject {
         "arch".to_string(),
         wrap_native_function(
             &build_named_dict(IndexMap::new()),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "sys::arch".to_string(),
             &arch,
         ),
@@ -324,8 +315,7 @@ pub fn build_module() -> OnionStaticObject {
         "executable".to_string(),
         wrap_native_function(
             &build_named_dict(IndexMap::new()),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "sys::executable".to_string(),
             &executable,
         ),

@@ -266,8 +266,7 @@ pub fn build_module() -> OnionStaticObject {
         "to_string".to_string(),
         wrap_native_function(
             &build_named_dict(to_string_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "types::to_string".to_string(),
             &to_string,
         ),
@@ -282,8 +281,7 @@ pub fn build_module() -> OnionStaticObject {
         "to_int".to_string(),
         wrap_native_function(
             &build_named_dict(to_int_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "types::to_int".to_string(),
             &to_int,
         ),
@@ -298,8 +296,7 @@ pub fn build_module() -> OnionStaticObject {
         "to_float".to_string(),
         wrap_native_function(
             &build_named_dict(to_float_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "types::to_float".to_string(),
             &to_float,
         ),
@@ -314,8 +311,7 @@ pub fn build_module() -> OnionStaticObject {
         "to_bool".to_string(),
         wrap_native_function(
             &build_named_dict(to_bool_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "types::to_bool".to_string(),
             &to_bool,
         ),
@@ -331,8 +327,7 @@ pub fn build_module() -> OnionStaticObject {
         "to_bytes".to_string(),
         wrap_native_function(
             &build_named_dict(to_bytes_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "types::to_bytes".to_string(),
             &to_bytes,
         ),
@@ -348,8 +343,7 @@ pub fn build_module() -> OnionStaticObject {
         "type_of".to_string(),
         wrap_native_function(
             &build_named_dict(type_of_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "types::type_of".to_string(),
             &type_of,
         ),
@@ -364,8 +358,7 @@ pub fn build_module() -> OnionStaticObject {
         "is_int".to_string(),
         wrap_native_function(
             &build_named_dict(is_int_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "types::is_int".to_string(),
             &is_int,
         ),
@@ -380,8 +373,7 @@ pub fn build_module() -> OnionStaticObject {
         "is_float".to_string(),
         wrap_native_function(
             &build_named_dict(is_float_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "types::is_float".to_string(),
             &is_float,
         ),
@@ -396,8 +388,7 @@ pub fn build_module() -> OnionStaticObject {
         "is_string".to_string(),
         wrap_native_function(
             &build_named_dict(is_string_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "types::is_string".to_string(),
             &is_string,
         ),
@@ -412,8 +403,7 @@ pub fn build_module() -> OnionStaticObject {
         "is_bool".to_string(),
         wrap_native_function(
             &build_named_dict(is_bool_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "types::is_bool".to_string(),
             &is_bool,
         ),
@@ -429,8 +419,7 @@ pub fn build_module() -> OnionStaticObject {
         "is_bytes".to_string(),
         wrap_native_function(
             &build_named_dict(is_bytes_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "types::is_bytes".to_string(),
             &is_bytes,
         ),
@@ -450,8 +439,7 @@ pub fn build_module() -> OnionStaticObject {
         "find".to_string(),
         wrap_native_function(
             &build_named_dict(find_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "types::find".to_string(),
             &find,
         ),

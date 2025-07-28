@@ -99,8 +99,7 @@ impl ReplExecutor {
         let lambda = OnionLambdaDefinition::new_static(
             &OnionTuple::new_static(vec![&stdlib_pair, &out_pair]),
             LambdaBody::Instruction(Arc::new(vm_instructions_package.clone())),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "__main__".to_string(),
         );
 
@@ -145,7 +144,21 @@ impl ReplExecutor {
                         // 如果是 Pending 状态，继续等待
                         continue;
                     }
-                    return Err(format!("Execution error: {}", error));
+                    eprintln!("\n{}", "--- Runtime Error Occurred ---".red().bold());
+                    eprintln!("An unrecoverable error was caught at the top level.");
+
+                    eprintln!("\n{}", "Error Details:".yellow().underline());
+                    eprintln!("{}", error);
+
+                    eprintln!(
+                        "\n{}",
+                        "Full Execution Context at Time of Crash:"
+                            .yellow()
+                            .underline()
+                    );
+                    eprintln!("{}", scheduler.format_context());
+
+                    return Err("Execution failed. See details above.".to_string());
                 }
                 StepResult::NewRunnable(_) => {
                     unreachable!()
@@ -166,8 +179,16 @@ impl ReplExecutor {
                             .get_value()
                             .to_string(&vec![])
                             .map_err(|e| format!("Failed to get error message: {:?}", e))?;
-                        println!("{} {}", "Error:".red().bold(), error_msg);
-                        return Err("Execution failed".to_string());
+
+                        eprintln!("{} {}", "Error:".red().bold(), error_msg);
+
+                        eprintln!(
+                            "\n{}",
+                            "Context at Time of Failure Return:".yellow().underline()
+                        );
+                        eprintln!("{}", scheduler.format_context());
+
+                        return Err("Execution returned a failure value.".to_string());
                     }
 
                     // 获取执行结果并存储到Out元组中

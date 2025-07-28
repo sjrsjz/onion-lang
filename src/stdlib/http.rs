@@ -27,6 +27,7 @@ enum RequestState {
 }
 
 /// 异步HTTP请求实现
+#[derive(Clone)]
 pub struct AsyncHttpRequest {
     url: String,
     method: String,
@@ -211,33 +212,46 @@ impl Runnable for AsyncHttpRequest {
         Ok(())
     }
 
-    fn copy(&self) -> Box<dyn Runnable> {
-        Box::new(AsyncHttpRequest {
-            url: self.url.clone(),
-            method: self.method.clone(),
-            headers: self.headers.clone(),
-            body: self.body.clone(),
-            state: Arc::clone(&self.state),
-        })
-    }
-
-    fn format_context(&self) -> Result<serde_json::Value, RuntimeError> {
+    fn format_context(&self) -> String {
+        // We need to lock the mutex to get the current state.
+        // Cloning the state allows us to release the lock quickly.
         let state = {
             let state_guard = self.state.lock().unwrap();
-            match *state_guard {
-                RequestState::Pending => "Pending",
-                RequestState::InProgress => "In Progress",
-                RequestState::Completed(_) => "Completed",
-            }
+            state_guard.clone()
         };
 
-        Ok(serde_json::json!({
-            "url": self.url,
-            "method": self.method,
-            "headers": self.headers,
-            "body": self.body,
-            "state": state,
-        }))
+        // Format the headers into a readable string.
+        let headers_str = self.headers
+            .iter()
+            .map(|(k, v)| format!("    - {}: {}", k, v))
+            .collect::<Vec<String>>()
+            .join("\n");
+
+        // Format the body information. Avoid printing large bodies.
+        let body_info = match &self.body {
+            Some(b) => format!("Yes ({} bytes)", b.len()),
+            None => "No".to_string(),
+        };
+
+        format!(
+            "-> Performing Async HTTP Request:\n   - State: {:?}\n   - Method: {}\n   - URL: {}\n   - Body Sent: {}\n   - Headers:\n{}",
+            
+            // 1. Current State
+            // Using the Debug derive on RequestState gives a clean "InProgress" or "Pending".
+            state,
+
+            // 2. Method
+            self.method,
+
+            // 3. URL
+            self.url,
+
+            // 4. Body Info
+            body_info,
+
+            // 5. Formatted Headers
+            if headers_str.is_empty() { "    (None)".to_string() } else { headers_str }
+        )
     }
 }
 
@@ -300,12 +314,11 @@ fn http_get(
     let request = AsyncHttpRequest::new(url, "GET".to_string(), headers, None);
 
     // 将调度器包装成Lambda返回
-    let lambda_body = LambdaBody::NativeFunction(Box::new(request));
+    let lambda_body = LambdaBody::NativeFunction(Arc::new(move || Box::new(request.clone())));
     let lambda_def = OnionLambdaDefinition::new_static(
         &onion_tuple!(),
         lambda_body,
-        None,
-        None,
+        &OnionObject::Undefined(None),
         "http::async_get".to_string(),
     );
 
@@ -333,12 +346,11 @@ fn http_post(
     let headers = IndexMap::new();
     let request = AsyncHttpRequest::new(url, "POST".to_string(), headers, body);
     // 将调度器包装成Lambda返回
-    let lambda_body = LambdaBody::NativeFunction(Box::new(request));
+    let lambda_body = LambdaBody::NativeFunction(Arc::new(move || Box::new(request.clone())));
     let lambda_def = OnionLambdaDefinition::new_static(
         &onion_tuple!(),
         lambda_body,
-        None,
-        None,
+        &OnionObject::Undefined(None),
         "http::async_post".to_string(),
     );
 
@@ -366,12 +378,11 @@ fn http_put(
     let headers = IndexMap::new();
     let request = AsyncHttpRequest::new(url, "PUT".to_string(), headers, body);
 
-    let lambda_body = LambdaBody::NativeFunction(Box::new(request));
+    let lambda_body = LambdaBody::NativeFunction(Arc::new(move || Box::new(request.clone())));
     let lambda_def = OnionLambdaDefinition::new_static(
         &onion_tuple!(),
         lambda_body,
-        None,
-        None,
+        &OnionObject::Undefined(None),
         "http::async_put".to_string(),
     );
 
@@ -393,12 +404,11 @@ fn http_delete(
     let headers = IndexMap::new();
     let request = AsyncHttpRequest::new(url, "DELETE".to_string(), headers, None);
 
-    let lambda_body = LambdaBody::NativeFunction(Box::new(request));
+    let lambda_body = LambdaBody::NativeFunction(Arc::new(move || Box::new(request.clone())));
     let lambda_def = OnionLambdaDefinition::new_static(
         &onion_tuple!(),
         lambda_body,
-        None,
-        None,
+        &OnionObject::Undefined(None),
         "http::async_delete".to_string(),
     );
 
@@ -426,12 +436,11 @@ fn http_patch(
     let headers = IndexMap::new();
     let request = AsyncHttpRequest::new(url, "PATCH".to_string(), headers, body);
 
-    let lambda_body = LambdaBody::NativeFunction(Box::new(request));
+    let lambda_body = LambdaBody::NativeFunction(Arc::new(move || Box::new(request.clone())));
     let lambda_def = OnionLambdaDefinition::new_static(
         &onion_tuple!(),
         lambda_body,
-        None,
-        None,
+        &OnionObject::Undefined(None),
         "http::async_patch".to_string(),
     );
 
@@ -446,12 +455,11 @@ fn http_request(
     let request = AsyncHttpRequest::new(url, method, headers, body);
 
     // 将调度器包装成Lambda返回
-    let lambda_body = LambdaBody::NativeFunction(Box::new(request));
+    let lambda_body = LambdaBody::NativeFunction(Arc::new(move || Box::new(request.clone())));
     let lambda_def = OnionLambdaDefinition::new_static(
         &onion_tuple!(),
         lambda_body,
-        None,
-        None,
+        &OnionObject::Undefined(None),
         "http::async_request".to_string(),
     );
 
@@ -518,8 +526,7 @@ pub fn build_module() -> OnionStaticObject {
         "get".to_string(),
         wrap_native_function(
             &build_named_dict(get_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "http::get".to_string(),
             &http_get,
         ),
@@ -540,8 +547,7 @@ pub fn build_module() -> OnionStaticObject {
         "post".to_string(),
         wrap_native_function(
             &build_named_dict(post_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "http::post".to_string(),
             &http_post,
         ),
@@ -562,8 +568,7 @@ pub fn build_module() -> OnionStaticObject {
         "put".to_string(),
         wrap_native_function(
             &build_named_dict(put_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "http::put".to_string(),
             &http_put,
         ),
@@ -580,8 +585,7 @@ pub fn build_module() -> OnionStaticObject {
         "delete".to_string(),
         wrap_native_function(
             &build_named_dict(delete_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "http::delete".to_string(),
             &http_delete,
         ),
@@ -600,8 +604,7 @@ pub fn build_module() -> OnionStaticObject {
         "patch".to_string(),
         wrap_native_function(
             &build_named_dict(patch_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "http::patch".to_string(),
             &http_patch,
         ),
@@ -618,8 +621,7 @@ pub fn build_module() -> OnionStaticObject {
         "get_sync".to_string(),
         wrap_native_function(
             &build_named_dict(get_sync_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "http::get_sync".to_string(),
             &http_get_sync,
         ),
@@ -640,8 +642,7 @@ pub fn build_module() -> OnionStaticObject {
         "post_sync".to_string(),
         wrap_native_function(
             &build_named_dict(post_sync_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "http::post_sync".to_string(),
             &http_post_sync,
         ),
@@ -667,8 +668,7 @@ pub fn build_module() -> OnionStaticObject {
         "request".to_string(),
         wrap_native_function(
             &build_named_dict(request_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "http::request".to_string(),
             &http_request,
         ),

@@ -59,8 +59,9 @@ fn slice(
 
         bytes.weak().with_data(|bytes_data| {
             start.weak().with_data(|start_data| {
-                length.weak().with_data(|length_data| {
-                    match (bytes_data, start_data, length_data) {
+                length
+                    .weak()
+                    .with_data(|length_data| match (bytes_data, start_data, length_data) {
                         (
                             OnionObject::Bytes(b),
                             OnionObject::Integer(start_idx),
@@ -82,8 +83,7 @@ fn slice(
                                 .to_string()
                                 .into(),
                         )),
-                    }
-                })
+                    })
             })
         })
     })
@@ -99,23 +99,25 @@ fn get_at(
         let index = get_attr_direct(data, "index".to_string())?;
 
         bytes.weak().with_data(|bytes_data| {
-            index.weak().with_data(|index_data| match (bytes_data, index_data) {
-                (OnionObject::Bytes(b), OnionObject::Integer(idx)) => {
-                    let idx = *idx as usize;
-                    if idx >= b.len() {
-                        Err(RuntimeError::InvalidOperation(
-                            "index out of bounds".to_string().into(),
-                        ))
-                    } else {
-                        Ok(OnionObject::Integer(b[idx] as i64).stabilize())
+            index
+                .weak()
+                .with_data(|index_data| match (bytes_data, index_data) {
+                    (OnionObject::Bytes(b), OnionObject::Integer(idx)) => {
+                        let idx = *idx as usize;
+                        if idx >= b.len() {
+                            Err(RuntimeError::InvalidOperation(
+                                "index out of bounds".to_string().into(),
+                            ))
+                        } else {
+                            Ok(OnionObject::Integer(b[idx] as i64).stabilize())
+                        }
                     }
-                }
-                _ => Err(RuntimeError::InvalidOperation(
-                    "get_at requires bytes and integer arguments"
-                        .to_string()
-                        .into(),
-                )),
-            })
+                    _ => Err(RuntimeError::InvalidOperation(
+                        "get_at requires bytes and integer arguments"
+                            .to_string()
+                            .into(),
+                    )),
+                })
         })
     })
 }
@@ -181,7 +183,7 @@ fn index_of(
                         if pat.is_empty() {
                             return Ok(OnionObject::Integer(0).stabilize());
                         }
-                        
+
                         for i in 0..=b.len().saturating_sub(pat.len()) {
                             if &b[i..i + pat.len()] == pat.as_ref() {
                                 return Ok(OnionObject::Integer(i as i64).stabilize());
@@ -214,7 +216,7 @@ fn contains(
                         if pat.is_empty() {
                             return Ok(OnionObject::Boolean(true).stabilize());
                         }
-                        
+
                         for i in 0..=b.len().saturating_sub(pat.len()) {
                             if &b[i..i + pat.len()] == pat.as_ref() {
                                 return Ok(OnionObject::Boolean(true).stabilize());
@@ -357,14 +359,12 @@ fn to_string(
     argument.weak().with_data(|data| {
         let bytes = get_attr_direct(data, "bytes".to_string())?;
         bytes.weak().with_data(|bytes_data| match bytes_data {
-            OnionObject::Bytes(b) => {
-                match String::from_utf8(b.as_ref().clone()) {
-                    Ok(s) => Ok(OnionObject::String(s.into()).stabilize()),
-                    Err(_) => Err(RuntimeError::InvalidOperation(
-                        "bytes is not valid UTF-8".to_string().into(),
-                    )),
-                }
-            }
+            OnionObject::Bytes(b) => match String::from_utf8(b.as_ref().clone()) {
+                Ok(s) => Ok(OnionObject::String(s.into()).stabilize()),
+                Err(_) => Err(RuntimeError::InvalidOperation(
+                    "bytes is not valid UTF-8".to_string().into(),
+                )),
+            },
             _ => Err(RuntimeError::InvalidOperation(
                 "to_string requires bytes".to_string().into(),
             )),
@@ -517,7 +517,7 @@ fn to_integers(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     use onion_vm::types::tuple::OnionTuple;
-    
+
     argument.weak().with_data(|data| {
         let bytes = get_attr_direct(data, "bytes".to_string())?;
         bytes.weak().with_data(|bytes_data| match bytes_data {
@@ -548,8 +548,7 @@ pub fn build_module() -> OnionStaticObject {
         "length".to_string(),
         wrap_native_function(
             &build_named_dict(length_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "bytes::length".to_string(),
             &length,
         ),
@@ -569,8 +568,7 @@ pub fn build_module() -> OnionStaticObject {
         "concat".to_string(),
         wrap_native_function(
             &build_named_dict(concat_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "bytes::concat".to_string(),
             &concat,
         ),
@@ -594,8 +592,7 @@ pub fn build_module() -> OnionStaticObject {
         "slice".to_string(),
         wrap_native_function(
             &build_named_dict(slice_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "bytes::slice".to_string(),
             &slice,
         ),
@@ -615,12 +612,11 @@ pub fn build_module() -> OnionStaticObject {
         "get_at".to_string(),
         wrap_native_function(
             &build_named_dict(get_at_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "bytes::get_at".to_string(),
             &get_at,
         ),
-    );    // set_at 函数 - 返回新的字节数组
+    ); // set_at 函数 - 返回新的字节数组
     let mut set_at_params = IndexMap::new();
     set_at_params.insert(
         "bytes".to_string(),
@@ -638,8 +634,7 @@ pub fn build_module() -> OnionStaticObject {
         "set_at".to_string(),
         wrap_native_function(
             &build_named_dict(set_at_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "bytes::set_at".to_string(),
             &set_at,
         ),
@@ -659,8 +654,7 @@ pub fn build_module() -> OnionStaticObject {
         "index_of".to_string(),
         wrap_native_function(
             &build_named_dict(index_of_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "bytes::index_of".to_string(),
             &index_of,
         ),
@@ -680,8 +674,7 @@ pub fn build_module() -> OnionStaticObject {
         "contains".to_string(),
         wrap_native_function(
             &build_named_dict(contains_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "bytes::contains".to_string(),
             &contains,
         ),
@@ -701,8 +694,7 @@ pub fn build_module() -> OnionStaticObject {
         "starts_with".to_string(),
         wrap_native_function(
             &build_named_dict(starts_with_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "bytes::starts_with".to_string(),
             &starts_with,
         ),
@@ -722,8 +714,7 @@ pub fn build_module() -> OnionStaticObject {
         "ends_with".to_string(),
         wrap_native_function(
             &build_named_dict(ends_with_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "bytes::ends_with".to_string(),
             &ends_with,
         ),
@@ -743,8 +734,7 @@ pub fn build_module() -> OnionStaticObject {
         "repeat".to_string(),
         wrap_native_function(
             &build_named_dict(repeat_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "bytes::repeat".to_string(),
             &repeat,
         ),
@@ -760,8 +750,7 @@ pub fn build_module() -> OnionStaticObject {
         "is_empty".to_string(),
         wrap_native_function(
             &build_named_dict(is_empty_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "bytes::is_empty".to_string(),
             &is_empty,
         ),
@@ -777,8 +766,7 @@ pub fn build_module() -> OnionStaticObject {
         "reverse".to_string(),
         wrap_native_function(
             &build_named_dict(reverse_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "bytes::reverse".to_string(),
             &reverse,
         ),
@@ -794,8 +782,7 @@ pub fn build_module() -> OnionStaticObject {
         "to_string".to_string(),
         wrap_native_function(
             &build_named_dict(to_string_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "bytes::to_string".to_string(),
             &to_string,
         ),
@@ -811,8 +798,7 @@ pub fn build_module() -> OnionStaticObject {
         "from_string".to_string(),
         wrap_native_function(
             &build_named_dict(from_string_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "bytes::from_string".to_string(),
             &from_string,
         ),
@@ -830,14 +816,14 @@ pub fn build_module() -> OnionStaticObject {
     );
     pad_left_params.insert(
         "pad_byte".to_string(),
-        OnionObject::Undefined(Some("Byte value to pad with (0-255)".to_string().into())).stabilize(),
+        OnionObject::Undefined(Some("Byte value to pad with (0-255)".to_string().into()))
+            .stabilize(),
     );
     module.insert(
         "pad_left".to_string(),
         wrap_native_function(
             &build_named_dict(pad_left_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "bytes::pad_left".to_string(),
             &pad_left,
         ),
@@ -855,14 +841,14 @@ pub fn build_module() -> OnionStaticObject {
     );
     pad_right_params.insert(
         "pad_byte".to_string(),
-        OnionObject::Undefined(Some("Byte value to pad with (0-255)".to_string().into())).stabilize(),
+        OnionObject::Undefined(Some("Byte value to pad with (0-255)".to_string().into()))
+            .stabilize(),
     );
     module.insert(
         "pad_right".to_string(),
         wrap_native_function(
             &build_named_dict(pad_right_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "bytes::pad_right".to_string(),
             &pad_right,
         ),
@@ -872,14 +858,18 @@ pub fn build_module() -> OnionStaticObject {
     let mut from_integers_params = IndexMap::new();
     from_integers_params.insert(
         "list".to_string(),
-        OnionObject::Undefined(Some("Tuple of integers (0-255) to convert to bytes".to_string().into())).stabilize(),
+        OnionObject::Undefined(Some(
+            "Tuple of integers (0-255) to convert to bytes"
+                .to_string()
+                .into(),
+        ))
+        .stabilize(),
     );
     module.insert(
         "from_integers".to_string(),
         wrap_native_function(
             &build_named_dict(from_integers_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "bytes::from_integers".to_string(),
             &from_integers,
         ),
@@ -895,8 +885,7 @@ pub fn build_module() -> OnionStaticObject {
         "to_integers".to_string(),
         wrap_native_function(
             &build_named_dict(to_integers_params),
-            None,
-            None,
+            &OnionObject::Undefined(None),
             "bytes::to_integers".to_string(),
             &to_integers,
         ),

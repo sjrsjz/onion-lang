@@ -1,13 +1,19 @@
 use rustc_hash::FxHashMap as HashMap;
-use serde_json::{Map, Value};
 
-use crate::{lambda::runnable::RuntimeError, types::object::OnionStaticObject};
+use crate::{
+    lambda::runnable::RuntimeError,
+    types::{
+        lambda::vm_instructions::instruction_set::VMInstructionPackage, object::OnionStaticObject,
+    }, util::format_object_summary,
+};
 
 #[derive(Clone, Debug)]
 pub struct Frame {
     pub variables: HashMap<usize, OnionStaticObject>,
     pub stack: Vec<OnionStaticObject>,
 }
+
+
 
 impl Frame {
     #[inline(always)]
@@ -19,35 +25,40 @@ impl Frame {
         &mut self.stack
     }
 
-    pub fn format_context(&self) -> Value {
-        let mut frame_obj = Map::new();
+    pub fn format_context(&self, package: &VMInstructionPackage) -> String {
+        let mut parts = Vec::new();
+        let string_pool = package.get_string_pool();
 
-        // Format variables
-        let mut variables = Map::new();
-        for (var_name, var_value) in &self.variables {
-            let value_str = var_value
-                .weak()
-                .to_string(&vec![])
-                .unwrap_or("Unknown value".into());
-            variables.insert(var_name.to_string(), Value::String(value_str));
+        // --- Part 1: Format Variables ---
+        if self.variables.is_empty() {
+            parts.push("  - Variables: (none)".to_string());
+        } else {
+            parts.push("  - Variables:".to_string());
+            for (id, value) in &self.variables {
+                // [关键修改] 使用 id 从 string_pool 中查找变量名
+                let var_name = string_pool
+                    .get(*id)
+                    .map(|s| s.as_str())
+                    .unwrap_or("<Unknown Var>");
+
+                let value_summary = format_object_summary(value.weak());
+                parts.push(format!("    - {}: {}", var_name, value_summary));
+            }
         }
-        frame_obj.insert("variables".to_string(), Value::Object(variables));
 
-        // Format stack
-        let stack_values: Vec<Value> = self
-            .stack
-            .iter()
-            .map(|obj| {
-                let obj_str = obj
-                    .weak()
-                    .to_string(&vec![])
-                    .unwrap_or("Unknown object".into());
-                Value::String(obj_str)
-            })
-            .collect();
-        frame_obj.insert("stack".to_string(), Value::Array(stack_values));
+        // --- Part 2: Format Operand Stack ---
+        if self.stack.is_empty() {
+            parts.push("  - Operand Stack: (empty)".to_string());
+        } else {
+            parts.push(format!("  - Operand Stack ({} items):", self.stack.len()));
+            for (i, value) in self.stack.iter().rev().enumerate() {
+                // [修改点] 在这里也使用辅助函数
+                let value_summary = format_object_summary(value.weak());
+                parts.push(format!("    - [Top - {}]: {}", i, value_summary));
+            }
+        }
 
-        Value::Object(frame_obj)
+        parts.join("\n")
     }
 }
 
@@ -214,26 +225,6 @@ impl Context {
         }
     }
 
-    // pub fn let_variable(
-    //     &mut self,
-    //     name: String,
-    //     value: OnionStaticObject,
-    // ) -> Result<(), RuntimeError> {
-    //     if self.frames.len() == 0 {
-    //         return Err(RuntimeError::InvalidOperation(
-    //             "Cannot let variable in empty context".to_string(),
-    //         ));
-    //     }
-
-    //     let last_frame = self.frames.last_mut().unwrap();
-
-    //     match last_frame {
-    //         Frame::Normal(vars, _) => {
-    //             vars.insert(name, value);
-    //         }
-    //     }    //     Ok(())
-    // }
-
     #[inline(always)]
     pub fn let_variable(
         &mut self,
@@ -250,30 +241,6 @@ impl Context {
         last_frame.variables.insert(name, value);
         Ok(())
     }
-
-    // pub fn get_variable(&self, name: &String) -> Result<&OnionStaticObject, RuntimeError> {
-    //     if self.frames.len() == 0 {
-    //         return Err(RuntimeError::DetailedError(
-    //             "Cannot get variable from empty context".to_string(),
-    //         ));
-    //     }
-
-    //     // 反向遍历所有帧，从最新的帧开始查找
-    //     for frame in self.frames.iter().rev() {
-    //         match frame {
-    //             Frame::Normal(vars, _) => {
-    //                 if let Some(value) = vars.get(name) {
-    //                     return Ok(value);
-    //                 }
-    //             }
-    //         }
-    //     }
-
-    //     Err(RuntimeError::DetailedError(format!(
-    //         "Variable `{}` not found",
-    //         name
-    //     )))
-    // }
 
     #[inline(always)]
     pub fn get_variable(&self, name: usize) -> Option<&OnionStaticObject> {
@@ -294,33 +261,6 @@ impl Context {
             println!("Frame {}: {:?}", i, frame);
         }
     }
-
-    // pub fn get_variable_mut(
-    //     &mut self,
-    //     name: &String,
-    // ) -> Result<&mut OnionStaticObject, RuntimeError> {
-    //     if self.frames.len() == 0 {
-    //         return Err(RuntimeError::DetailedError(
-    //             "Cannot get variable from empty context".to_string(),
-    //         ));
-    //     }
-
-    //     // 反向遍历所有帧，从最新的帧开始查找
-    //     for frame in self.frames.iter_mut().rev() {
-    //         match frame {
-    //             Frame::Normal(vars, _) => {
-    //                 if let Some(value) = vars.get_mut(name) {
-    //                     return Ok(value);
-    //                 }
-    //             }
-    //         }
-    //     }
-
-    //     Err(RuntimeError::DetailedError(format!(
-    //         "Variable `{}` not found",
-    //         name
-    //     )))
-    // }
 
     pub fn get_variable_mut(&mut self, name: usize) -> Option<&mut OnionStaticObject> {
         if self.frames.len() == 0 {
@@ -411,44 +351,26 @@ impl Context {
         let last_index = stack.len() - 1;
         stack[last_index] = object;
     }
-}
 
-impl Context {
-    pub fn format_to_json(&self) -> Value {
-        let mut frames = Map::new();
-
-        for (i, frame) in self.frames.iter().enumerate() {
-            let mut frame_obj = Map::new();
-
-            // Format variables
-            let mut variables = Map::new();
-            for (var_name, var_value) in &frame.variables {
-                let value_str = var_value
-                    .weak()
-                    .to_string(&vec![])
-                    .unwrap_or("Unknown value".into());
-
-                variables.insert(var_name.to_string(), Value::String(value_str));
-            }
-            frame_obj.insert("variables".to_string(), Value::Object(variables));
-
-            // Format stack
-            let stack_values: Vec<Value> = frame
-                .stack
-                .iter()
-                .map(|obj| {
-                    let obj_str = obj
-                        .weak()
-                        .to_string(&vec![])
-                        .unwrap_or("Unknown value".into());
-                    Value::String(obj_str)
-                })
-                .collect();
-            frame_obj.insert("stack".to_string(), Value::Array(stack_values));
-
-            frames.insert(format!("frame_{}", i), Value::Object(frame_obj));
+    pub fn format_context(&self, package: &VMInstructionPackage) -> String {
+        if self.frames.is_empty() {
+            return "Context: (No active frames)".to_string();
         }
 
-        Value::Object(frames)
+        let mut parts = Vec::new();
+        parts.push(format!("Call Stack ({} frames):", self.frames.len()));
+
+        // 从栈顶（最近的调用帧）开始打印
+        for (i, frame) in self.frames.iter().rev().enumerate() {
+            // 你需要一种方法来命名你的帧。这通常与函数名相关联。
+            // 暂时我们用索引代替。
+            parts.push(format!("--- Frame #{} (most recent) ---", i));
+
+            // 调用我们刚刚为 Frame 实现的 format_context
+            let frame_context = frame.format_context(package);
+            parts.push(frame_context);
+        }
+
+        parts.join("\n")
     }
 }

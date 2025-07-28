@@ -7,6 +7,7 @@ use crate::{
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         tuple::OnionTuple,
     },
+    util::format_object_summary,
 };
 
 #[derive(Clone)]
@@ -18,15 +19,6 @@ pub struct Mapping {
 }
 
 impl Runnable for Mapping {
-    fn copy(&self) -> Box<dyn Runnable> {
-        Box::new(Mapping {
-            container: self.container.clone(),
-            mapper: self.mapper.clone(),
-            collected: self.collected.clone(),
-            current_index: self.current_index,
-        })
-    }
-
     fn receive(
         &mut self,
         step_result: &StepResult,
@@ -95,14 +87,29 @@ impl Runnable for Mapping {
             })
             .unwrap_or_else(|e| StepResult::Error(e))
     }
+    fn format_context(&self) -> String {
+        // 使用 format! 宏来构建一个多行的字符串
+        format!(
+        "-> In 'map' operation:\n   - Mapper: {}\n   - Container: {}\n   - Progress: Processing element {} / {}\n   - Collected Items: {}",
+        // 1. 映射器信息
+        // 使用对象的简略表示（比如 debug 格式）
+        format_object_summary(self.mapper.weak()),
 
-    fn format_context(&self) -> Result<serde_json::Value, RuntimeError> {
-        return Ok(serde_json::json!({
-            "type": "Mapping",
-            "container": self.container.to_string(),
-            "mapper": self.mapper.to_string(),
-            "collected": self.collected.iter().map(|o| o.to_string()).collect::<Vec<_>>(),
-            "current_index": self.current_index,
-        }));
+        // 2. 容器信息
+        format_object_summary(self.container.weak()),
+
+        // 3. 进度信息
+        self.current_index,
+        self.container.weak().with_data(|c| {
+            Ok(if let OnionObject::Tuple(t) = c {
+                t.get_elements().len()
+            } else {
+                0 // Or some other placeholder like "N/A"
+            })
+        }).unwrap_or(0), // Provide a default if weak link is dead
+
+        // 4. 已收集结果的数量
+        self.collected.len()
+    )
     }
 }
