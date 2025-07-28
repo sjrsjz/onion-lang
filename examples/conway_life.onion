@@ -40,7 +40,7 @@ count_neighbors := (grid?, x?, y?, w?, h?) -> {
         dx := mut (-1);
         while (dx <= 1) {
             if (not (dx == 0 and dy == 0)) {
-                nx := x + dx/0;
+                nx := x + dx;
                 ny := y + dy;
                 if (nx >= 0 and nx < w and ny >= 0 and ny < h) {
                     if (grid[ny][nx]) {
