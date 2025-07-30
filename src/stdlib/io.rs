@@ -1,80 +1,62 @@
-use std::io::{stdout, Write};
-
 use indexmap::IndexMap;
 use onion_vm::{
+    GC,
     lambda::runnable::RuntimeError,
-    onion_tuple,
-    types::{
-        object::{OnionObject, OnionObjectCell, OnionStaticObject},
-        tuple::OnionTuple,
-    },
-    unwrap_object, GC,
+    types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
 };
+use rustc_hash::FxHashMap;
 
-use super::{build_named_dict, get_attr_direct, wrap_native_function};
+use super::{build_dict, wrap_native_function};
 
 fn println(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        unwrap_object!(data, OnionObject::Tuple).map(|tuple| {
-            println!(
-                "{}",
-                tuple
-                    .get_elements()
-                    .iter()
-                    .map(|element| element
-                        .to_string(&vec![])
-                        .unwrap_or("<unknown>".to_string()))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            );
-            Ok(OnionObject::Undefined(Some("Print completed".to_string().into())).stabilize())
-        })
-    })?
+    let Some(value) = argument.get("values") else {
+        return Err(RuntimeError::DetailedError(
+            "println requires a 'values' argument".to_string().into(),
+        ));
+    };
+
+    println!("{}", value.weak().to_string(&vec![])?);
+    Ok(OnionObject::Undefined(Some("Print completed".to_string().into())).stabilize())
 }
 
 fn print(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        unwrap_object!(data, OnionObject::Tuple).map(|tuple| {
-            print!(
-                "{}",
-                tuple
-                    .get_elements()
-                    .iter()
-                    .map(|element| element
-                        .to_string(&vec![])
-                        .unwrap_or("<unknown>".to_string()))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            );
-            Ok(OnionObject::Undefined(Some("Print completed".to_string().into())).stabilize())
-        })
-    })?
+    let Some(value) = argument.get("values") else {
+        return Err(RuntimeError::DetailedError(
+            "print requires a 'values' argument".to_string().into(),
+        ));
+    };
+
+    print!("{}", value.weak().to_string(&vec![])?);
+    Ok(OnionObject::Undefined(Some("Print completed".to_string().into())).stabilize())
 }
 
 fn input(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let hint = get_attr_direct(data, "hint".to_string())?
-            .weak()
-            .to_string(&vec![])?;
-        print!("{}", hint);
-        stdout()
-            .flush()
-            .map_err(|e| RuntimeError::InvalidOperation(e.to_string().into()))?;
-        let mut input = String::new();
-        std::io::stdin()
-            .read_line(&mut input)
-            .map_err(|e| RuntimeError::InvalidOperation(e.to_string().into()))?;
-        Ok(OnionObject::String(input.trim().to_string().into()).stabilize())
-    })
+    let Some(hint) = argument.get("hint") else {
+        return Err(RuntimeError::DetailedError(
+            "input requires a 'hint' argument".to_string().into(),
+        ));
+    };
+
+    print!("{}", hint.weak().to_string(&vec![])?);
+    let input = {
+        let mut buffer = String::new();
+        if let Err(e) = std::io::stdin().read_line(&mut buffer) {
+            return Err(RuntimeError::DetailedError(
+                format!("Failed to read input: {}", e).into(),
+            ));
+        }
+        buffer.trim().to_string()
+    };
+    Ok(OnionObject::String(input.into()).stabilize())
 }
 
 pub fn build_module() -> OnionStaticObject {
@@ -82,8 +64,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "println".to_string(),
         wrap_native_function(
-            &onion_tuple!(),
-            &OnionObject::Undefined(None),
+            &OnionObject::String("values".to_string().into()).stabilize(),
+            &FxHashMap::default(),
             "io::println".to_string(),
             &println,
         ),
@@ -91,27 +73,22 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "print".to_string(),
         wrap_native_function(
-            &onion_tuple!(),
-            &OnionObject::Undefined(None),
+            &OnionObject::String("values".to_string().into()).stabilize(),
+            &FxHashMap::default(),
             "io::print".to_string(),
             &print,
         ),
     );
 
-    let mut input_params = IndexMap::new();
-    input_params.insert(
-        "hint".to_string(),
-        OnionObject::String("Input: ".to_string().into()).stabilize(),
-    );
     module.insert(
         "input".to_string(),
         wrap_native_function(
-            &build_named_dict(input_params),
-            &OnionObject::Undefined(None),
+            &OnionObject::String("hint".to_string().into()).stabilize(),
+            &FxHashMap::default(),
             "io::input".to_string(),
             &input,
         ),
     );
 
-    build_named_dict(module)
+    build_dict(module)
 }

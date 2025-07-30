@@ -8,14 +8,15 @@ use crate::{
     compile::{build_code, compile_to_bytecode},
     dir_stack::DirectoryStack,
     parser::{
-        ast::{ast_token_stream, build_ast, ASTNodeType, ParserError},
+        ast::{ASTNodeType, ParserError, ast_token_stream, build_ast},
         diagnostics,
-        lexer::{lexer, Source},
+        lexer::{Source, lexer},
     },
     utils::cycle_detector::CycleDetector,
 };
 
 use colored::*;
+use onion_vm::types::lambda::vm_instructions::ir_translator::PRE_ALLOCATED_VARIABLE_STRINGS;
 
 use super::ast::ASTNode;
 #[derive(Debug, Clone, PartialEq)] // Added PartialEq for comparison if needed later
@@ -32,7 +33,6 @@ pub enum AssumedType {
     Tuple,
     Set,
     KeyVal,
-    NamedArgument,
 }
 
 #[derive(Debug, Clone)]
@@ -655,27 +655,26 @@ pub fn expand_macros_to_node(
                 children: new_children,
             };
         }
-        ASTNodeType::LambdaDef(is_dynamic_gen, is_capture, is_dynamic_params) => {
-            let mut capture_node = None;
-            if *is_capture {
-                // 检查 child[1]
-                if let Some(func_node) = node.children.get(1) {
-                    capture_node = Some(expand_macros_to_node(
-                        func_node, errors,   // Pass errors
-                        warnings, // Pass warnings
-                        context,
-                    ));
-                }
-            }
+        ASTNodeType::LambdaDef(is_dynamic_gen, capture_vars) => {
             // 在新的上下文中处理参数（参数定义在第一个帧中）
-            let mut args_node = None;
-            if let Some(params) = node.children.first() {
-                args_node = Some(expand_macros_to_node(
-                    params, errors,   // Pass errors
-                    warnings, // Pass warnings
-                    context,
+            let Some(params) = node.children.first() else {
+                errors.push(AnalyzeError::DetailedError(
+                    node.clone(),
+                    "LambdaDef has no parameters".to_string(),
                 ));
-            }
+                return ASTNode {
+                    node_type: ASTNodeType::Undefined,
+                    start_token: None,
+                    end_token: None,
+                    children: Vec::new(),
+                };
+            };
+            let args_node = expand_macros_to_node(
+                params, errors,   // Pass errors
+                warnings, // Pass warnings
+                context,
+            );
+
             let body_node;
             if *is_dynamic_gen {
                 body_node = expand_macros_to_node(
@@ -696,22 +695,11 @@ pub fn expand_macros_to_node(
                     errors.push(AnalyzeError::DetailedError(node.clone(), e.to_string()));
                 });
             }
-
-            // 创建新的 LambdaDef 节点
-            let mut new_children = Vec::new();
-            if let Some(args) = args_node {
-                new_children.push(args);
-            }
-            if let Some(capture) = capture_node {
-                new_children.push(capture);
-            }
-            new_children.push(body_node);
-
             return ASTNode {
-                node_type: ASTNodeType::LambdaDef(*is_dynamic_gen, *is_capture, *is_dynamic_params),
+                node_type: ASTNodeType::LambdaDef(*is_dynamic_gen, capture_vars.clone()),
                 start_token: node.start_token.clone(),
                 end_token: node.end_token.clone(),
-                children: new_children,
+                children: vec![args_node, body_node],
             };
         }
         _ => {}
@@ -860,7 +848,9 @@ fn analyze_node(
                     name: var_name.clone(),
                     assumed_type: assumed_type.clone(),
                 };
-                let _ = context.define_variable(&var);
+                context.define_variable(&var).unwrap_or_else(|e| {
+                    errors.push(AnalyzeError::DetailedError(node.clone(), e.to_string()));
+                });
 
                 // Post-order check after processing the let statement
                 check_postorder_break(source, node, break_at_position, context, context_at_break);
@@ -955,9 +945,9 @@ fn analyze_node(
                                                                 {
                                                                     // 使用 AnalyzeWarn::CompileError 记录写入错误
                                                                     let error_message = format!(
-                                                                "Failed to write bytecode to file '{}': {}",
-                                                                onionc_file_path, e
-                                                            );
+                                                                        "Failed to write bytecode to file '{}': {}",
+                                                                        onionc_file_path, e
+                                                                    );
                                                                     warnings.push(
                                                                         AnalyzeWarn::CompileError(
                                                                             child.clone(),
@@ -1012,7 +1002,10 @@ fn analyze_node(
                                 }
                             } else {
                                 // @compile 后面应该跟一个字符串字面量
-                                let error_message = format!("@compile annotation expects a string literal file path, found: {:?}", child.node_type);
+                                let error_message = format!(
+                                    "@compile annotation expects a string literal file path, found: {:?}",
+                                    child.node_type
+                                );
                                 warnings
                                     .push(AnalyzeWarn::CompileError(child.clone(), error_message));
                                 // 使用 child 作为错误关联的节点
@@ -1053,7 +1046,10 @@ fn analyze_node(
                                 }
                             } else {
                                 // @compile 后面应该跟一个字符串字面量
-                                let error_message = format!("@compile annotation expects a string literal file path, found: {:?}", child.node_type);
+                                let error_message = format!(
+                                    "@compile annotation expects a string literal file path, found: {:?}",
+                                    child.node_type
+                                );
                                 warnings
                                     .push(AnalyzeWarn::CompileError(child.clone(), error_message));
                                 // 使用 child 作为错误关联的节点
@@ -1190,47 +1186,33 @@ fn analyze_node(
             }
             return assumed_type;
         }
-        ASTNodeType::LambdaDef(is_dynamic_gen, is_capture, _) => {
-            if *is_capture {
-                // 检查 child[1]
-                if let Some(func_node) = node.children.get(1) {
-                    analyze_node(
-                        source,
-                        func_node,
-                        context,
-                        errors,   // Pass errors
-                        warnings, // Pass warnings
-                        dynamic,
-                        break_at_position,
-                        context_at_break,
-                        cycle_detector,
-                        dir_stack,
-                    );
-                    if context_at_break.is_some() {
-                        return AssumedType::Unknown;
-                    }
-                }
-            }
+        ASTNodeType::LambdaDef(is_dynamic_gen, captured_vars) => {
             // 在新的上下文中处理参数（参数定义在第一个帧中）
-            let mut args_frame = None;
-            if let Some(params) = node.children.first() {
-                args_frame = analyze_tuple_params(
-                    source,
-                    params,
-                    context,
-                    errors,   // Pass errors
-                    warnings, // Pass warnings
-                    dynamic,
-                    break_at_position,
-                    context_at_break,
-                    cycle_detector,
-                    dir_stack,
-                );
-                if context_at_break.is_some() {
-                    // 如果在参数分析中中断，不弹出上下文
-                    return AssumedType::Lambda;
-                }
+            let Some(params) = node.children.first() else {
+                errors.push(AnalyzeError::DetailedError(
+                    node.clone(),
+                    "LambdaDef has no parameters".to_string(),
+                ));
+                check_postorder_break(source, node, break_at_position, context, context_at_break);
+                return AssumedType::Lambda;
+            };
+            let params_def = analyze_tuple_params(
+                source,
+                params,
+                context,
+                errors,   // Pass errors
+                warnings, // Pass warnings
+                dynamic,
+                break_at_position,
+                context_at_break,
+                cycle_detector,
+                dir_stack,
+            );
+            if context_at_break.is_some() {
+                // 如果在参数分析中中断，不弹出上下文
+                return AssumedType::Lambda;
             }
+
             if *is_dynamic_gen {
                 context.push_frame();
                 analyze_node(
@@ -1256,7 +1238,7 @@ fn analyze_node(
                 check_postorder_break(source, node, break_at_position, context, context_at_break);
                 return AssumedType::Lambda;
             } else {
-                if args_frame.is_none() {
+                if params_def.is_none() {
                     // 如果没有参数定义，仍然需要创建一个空的参数帧
                     errors.push(AnalyzeError::DetailedError(
                         node.clone(),
@@ -1271,24 +1253,37 @@ fn analyze_node(
                     );
                     return AssumedType::Lambda;
                 }
-                let args = args_frame.unwrap();
+                let params_def = params_def.unwrap();
                 context.push_context();
-                // 将参数添加到新的上下文中
-                for arg in args.variables {
-                    let _ = context.define_variable(&arg);
+
+                for vars in PRE_ALLOCATED_VARIABLE_STRINGS {
+                    context
+                        .define_variable(&Variable {
+                            name: vars.to_string(),
+                            assumed_type: AssumedType::Unknown,
+                        })
+                        .unwrap_or_else(|err| {
+                            panic!(
+                                "Failed to define pre-allocated variable '{}': {}",
+                                vars, err
+                            );
+                        });
                 }
-                let _ = context.define_variable(&Variable {
-                    name: "this".to_string(),
-                    assumed_type: AssumedType::Lambda,
-                });
-                let _ = context.define_variable(&Variable {
-                    name: "self".to_string(),
-                    assumed_type: AssumedType::Tuple,
-                });
-                let _ = context.define_variable(&Variable {
-                    name: "arguments".to_string(),
-                    assumed_type: AssumedType::Tuple,
-                });
+
+                let mut captured_vars = captured_vars.clone();
+                captured_vars.extend(params_def);
+
+                for var in captured_vars {
+                    // 将捕获的变量添加到 Lambda 的上下文中
+                    context
+                        .define_variable(&Variable {
+                            name: var.clone(),
+                            assumed_type: AssumedType::Unknown,
+                        })
+                        .unwrap_or_else(|err| {
+                            panic!("Failed to define captured variable '{}': {}", var, err);
+                        });
+                }
 
                 // 在新的上下文中分析 Lambda 体
                 if node.children.len() > 1 {
@@ -1450,40 +1445,6 @@ fn analyze_node(
             check_postorder_break(source, node, break_at_position, context, context_at_break);
             return AssumedType::Set; // Return Set type
         }
-        ASTNodeType::NamedTo => {
-            let _ = analyze_node(
-                source,
-                &node.children[0],
-                context,
-                errors,   // Pass errors
-                warnings, // Pass warnings
-                dynamic,
-                break_at_position,
-                context_at_break,
-                cycle_detector,
-                dir_stack,
-            ); // Name (usually string/identifier, not analyzed as variable)
-            if context_at_break.is_some() {
-                return AssumedType::NamedArgument; // Return NamedArgument even if break occurred inside
-            }
-            let _ = analyze_node(
-                source,
-                &node.children[1],
-                context,
-                errors,   // Pass errors
-                warnings, // Pass warnings
-                dynamic,
-                break_at_position,
-                context_at_break,
-                cycle_detector,
-                dir_stack,
-            ); // Value
-            if context_at_break.is_some() {
-                return AssumedType::NamedArgument; // Return NamedArgument even if break occurred inside
-            }
-            check_postorder_break(source, node, break_at_position, context, context_at_break);
-            return AssumedType::NamedArgument; // Return NamedArgument type
-        } // Simple types don't have children to analyze recursively
         ASTNodeType::String(_) => {
             check_postorder_break(source, node, break_at_position, context, context_at_break);
             AssumedType::String
@@ -1511,10 +1472,6 @@ fn analyze_node(
         ASTNodeType::Range => {
             check_postorder_break(source, node, break_at_position, context, context_at_break);
             AssumedType::Range
-        }
-        ASTNodeType::None => {
-            check_postorder_break(source, node, break_at_position, context, context_at_break);
-            AssumedType::Undefined
         }
         ASTNodeType::Is => {
             for child in &node.children {
@@ -1573,199 +1530,64 @@ fn analyze_tuple_params(
     context_at_break: &mut Option<VariableContext>,
     cycle_detector: &mut CycleDetector<String>,
     dir_stack: &mut DirectoryStack,
-) -> Option<VariableFrame> {
+) -> Option<HashSet<String>> {
     // Check break condition before processing parameters
     if context_at_break.is_some() {
         return None;
     }
 
-    use super::ast::ASTNodeType;
-
-    let mut args_frame = VariableFrame {
-        variables: Vec::new(),
-        ast_macros: Vec::new(),
-    };
-
-    if let ASTNodeType::Tuple = params.node_type {
-        for param in &params.children {
-            if context_at_break.is_some() {
-                return None;
-            } // Check before each param
-
-            match &param.node_type {
-                ASTNodeType::NamedTo => {
-                    if param.children.len() >= 2 {
-                        // Analyze default value first
-                        let assumed_type = analyze_node(
-                            source,
-                            &param.children[1],
-                            context,
-                            errors,   // Pass errors
-                            warnings, // Pass warnings
-                            dynamic,
-                            break_at_position,
-                            context_at_break,
-                            cycle_detector,
-                            dir_stack,
-                        );
-                        if context_at_break.is_some() {
-                            return None;
-                        }
-
-                        // Define parameter variable
-                        if let ASTNodeType::String(var_name) = &param.children[0].node_type {
-                            let var = Variable {
-                                name: var_name.clone(),
-                                assumed_type,
-                            };
-                            let _ = args_frame.define_variable(var);
-                        } else {
-                            // Analyze complex parameter structure (e.g., destructuring) - might need specific handling
-                            analyze_node(
-                                source,
-                                &param.children[0],
-                                context,
-                                errors,   // Pass errors
-                                warnings, // Pass warnings
-                                dynamic,
-                                break_at_position,
-                                context_at_break,
-                                cycle_detector,
-                                dir_stack,
-                            );
-                            if context_at_break.is_some() {
-                                return None;
-                            }
-                        }
-                    }
-                }
-                ASTNodeType::Set => {
-                    let first_child = param.children.first();
-                    if let Some(first) = first_child {
-                        match &first.node_type {
-                            ASTNodeType::NamedTo => {
-                                // NamedTo in Set, analyze it
-                                if first.children.len() >= 2 {
-                                    // Analyze default value first
-                                    let assumed_type = analyze_node(
-                                        source,
-                                        &first.children[1],
-                                        context,
-                                        errors,   // Pass errors
-                                        warnings, // Pass warnings
-                                        dynamic,
-                                        break_at_position,
-                                        context_at_break,
-                                        cycle_detector,
-                                        dir_stack,
-                                    );
-                                    if context_at_break.is_some() {
-                                        return None;
-                                    }
-
-                                    // Define parameter variable
-                                    if let ASTNodeType::String(var_name) =
-                                        &first.children[0].node_type
-                                    {
-                                        let var = Variable {
-                                            name: var_name.clone(),
-                                            assumed_type,
-                                        };
-                                        let _ = args_frame.define_variable(var);
-                                    } else {
-                                        // Analyze complex parameter structure (e.g., destructuring)
-                                        analyze_node(
-                                            source,
-                                            &first.children[0],
-                                            context,
-                                            errors,   // Pass errors
-                                            warnings, // Pass warnings
-                                            dynamic,
-                                            break_at_position,
-                                            context_at_break,
-                                            cycle_detector,
-                                            dir_stack,
-                                        );
-                                        if context_at_break.is_some() {
-                                            return None;
-                                        }
-                                    }
-                                }
-                            }
-                            _ => {
-                                // If first child is not NamedTo, analyze it directly
-                                analyze_node(
-                                    source,
-                                    first,
-                                    context,
-                                    errors,   // Pass errors
-                                    warnings, // Pass warnings
-                                    dynamic,
-                                    break_at_position,
-                                    context_at_break,
-                                    cycle_detector,
-                                    dir_stack,
-                                );
-                                if context_at_break.is_some() {
-                                    return None;
-                                }
-                            }
-                        }
-                        // 分析剩下的节点
-                        for child in &param.children[1..] {
-                            analyze_node(
-                                source,
-                                child,
-                                context,
-                                errors,   // Pass errors
-                                warnings, // Pass warnings
-                                dynamic,
-                                break_at_position,
-                                context_at_break,
-                                cycle_detector,
-                                dir_stack,
-                            );
-                            if context_at_break.is_some() {
-                                return None;
-                            }
-                        }
-                    }
-                }
-                // Handle other param types if necessary
-                _ => {
-                    analyze_node(
-                        source,
-                        param,
-                        context,
-                        errors,   // Pass errors
-                        warnings, // Pass warnings
-                        dynamic,
-                        break_at_position,
-                        context_at_break,
-                        cycle_detector,
-                        dir_stack,
-                    );
-                    if context_at_break.is_some() {
-                        return None;
-                    }
-                }
-            }
-
-            // Post-order check after processing each parameter
-            check_postorder_break(source, param, break_at_position, context, context_at_break);
-            if context_at_break.is_some() {
-                return None;
-            }
+    for node in &params.children {
+        analyze_node(
+            source,
+            node,
+            context,
+            errors,   // Pass errors
+            warnings, // Pass warnings
+            dynamic,
+            break_at_position,
+            context_at_break,
+            cycle_detector,
+            dir_stack,
+        );
+        if context_at_break.is_some() {
+            return None; // Return early if break occurred
         }
     }
 
-    // Post-order check after processing all parameters
-    check_postorder_break(source, params, break_at_position, context, context_at_break);
-    if context_at_break.is_some() {
-        return None;
-    }
+    let mut param_names = HashSet::new();
 
-    Some(args_frame)
+    match &params.node_type {
+        ASTNodeType::Tuple => {
+            for param in &params.children {
+                match &param.node_type {
+                    ASTNodeType::KeyValue => {
+                        let key = &param.children[0];
+                        if let ASTNodeType::String(key_name) = &key.node_type {
+                            param_names.insert(key_name.clone());
+                        }
+                    }
+                    ASTNodeType::String(name) => {
+                        // Handle simple string parameters
+                        param_names.insert(name.clone());
+                    }
+                    _ => {}
+                }
+            }
+        }
+        ASTNodeType::String(name) => {
+            // Handle single string parameter
+            param_names.insert(name.clone());
+        }
+        ASTNodeType::KeyValue => {
+            let key = &params.children[0];
+            // Handle key-value pairs
+            if let ASTNodeType::String(key_name) = &key.node_type {
+                param_names.insert(key_name.clone());
+            }
+        }
+        _ => {}
+    }
+    Some(param_names)
 }
 
 pub fn auto_capture_and_rebuild(node: &ASTNode) -> (HashSet<String>, ASTNode) {
@@ -1773,161 +1595,50 @@ pub fn auto_capture_and_rebuild(node: &ASTNode) -> (HashSet<String>, ASTNode) {
     let mut context = VariableContext::new();
     context.push_context(); // Create a new context for the frame
     context.push_frame(); // Create a new frame for the context
-    let _ = context.define_variable(&Variable {
-        name: "this".to_string(),
-        assumed_type: AssumedType::Lambda,
-    });
-    let _ = context.define_variable(&Variable {
-        name: "self".to_string(),
-        assumed_type: AssumedType::Tuple,
-    });
-    let _ = context.define_variable(&Variable {
-        name: "arguments".to_string(),
-        assumed_type: AssumedType::Tuple,
-    });
+
+    for var in PRE_ALLOCATED_VARIABLE_STRINGS {
+        context
+            .define_variable(&Variable {
+                name: var.to_string(),
+                assumed_type: AssumedType::Unknown,
+            })
+            .unwrap_or_else(|err| {
+                panic!("Failed to define pre-allocated variable '{}': {}", var, err);
+            });
+    }
+
     auto_capture(&mut context, node, false)
 }
-// Auto-capture variables in the context
+
+/// 筛查掉当前上下文中已定义的变量
+pub fn filter_required_variables(
+    context: &VariableContext,
+    required_vars: HashSet<String>,
+) -> HashSet<String> {
+    // Filter out variables that are already defined in the current context
+    required_vars
+        .into_iter()
+        .filter(|var| context.get_variable_current_context(var).is_none())
+        .collect()
+}
+
+/// 自动捕获上下文中的变量
 pub fn auto_capture(
     context: &mut VariableContext,
     node: &ASTNode,
     dynamic: bool,
 ) -> (HashSet<String>, ASTNode) {
     // return a set of required variables and reconstructed ASTNode
-    use super::ast::ASTNodeType;
-
-    // Helper function to process parameters, define them, and collect requirements from default values
-    fn process_params(
-        context: &mut VariableContext,
-        params_node: &ASTNode,
-        dynamic: bool,
-    ) -> (HashSet<String>, ASTNode) {
-        let mut required_vars = HashSet::new();
-        let mut new_params_node = params_node.clone();
-        new_params_node.children = Vec::new();
-
-        if let ASTNodeType::Tuple = params_node.node_type {
-            for param in &params_node.children {
-                match &param.node_type {
-                    ASTNodeType::NamedTo => {
-                        if param.children.len() >= 2 {
-                            let (default_vars, default_node) =
-                                auto_capture(context, &param.children[1], dynamic);
-                            required_vars.extend(default_vars);
-
-                            // Define parameter variable (assuming name is String for now)
-                            if let ASTNodeType::String(var_name) = &param.children[0].node_type {
-                                let var = Variable {
-                                    name: var_name.clone(),
-                                    assumed_type: AssumedType::Unknown, // Type doesn't matter much for capture
-                                };
-                                let _ = context.define_variable(&var);
-                            }
-
-                            new_params_node.children.push(ASTNode {
-                                node_type: ASTNodeType::NamedTo,
-                                children: vec![param.children[0].clone(), default_node],
-                                start_token: param.start_token.clone(),
-                                end_token: param.end_token.clone(),
-                            });
-                        } else {
-                            let (param_req_vars, new_param_node) =
-                                auto_capture(context, param, dynamic);
-                            required_vars.extend(param_req_vars);
-                            new_params_node.children.push(new_param_node);
-                        }
-                    }
-                    ASTNodeType::Set => {
-                        // Handle Set parameters, which might contain NamedTo or other nodes
-                        let first_child = param.children.first();
-
-                        let mut new_set_node_children = Vec::new();
-
-                        if let Some(first) = first_child {
-                            match &first.node_type {
-                                ASTNodeType::NamedTo => {
-                                    let (default_vars, default_node) =
-                                        auto_capture(context, &first.children[1], dynamic);
-                                    required_vars.extend(default_vars);
-
-                                    if let ASTNodeType::String(var_name) =
-                                        &first.children[0].node_type
-                                    {
-                                        let var = Variable {
-                                            name: var_name.clone(),
-                                            assumed_type: AssumedType::Unknown, // Type doesn't matter much for capture
-                                        };
-                                        let _ = context.define_variable(&var);
-                                    }
-
-                                    new_set_node_children.push(ASTNode {
-                                        node_type: ASTNodeType::NamedTo,
-                                        children: vec![first.children[0].clone(), default_node],
-                                        start_token: first.start_token.clone(),
-                                        end_token: first.end_token.clone(),
-                                    });
-                                }
-                                _ => {
-                                    // If first child is not NamedTo, analyze it directly
-                                    let (param_req_vars, new_param_node) =
-                                        auto_capture(context, first, dynamic);
-                                    required_vars.extend(param_req_vars);
-                                    new_set_node_children.push(new_param_node);
-                                }
-                            }
-                        }
-                        // 分析剩下的节点
-                        for child in &param.children[1..] {
-                            let (child_req_vars, new_child_node) =
-                                auto_capture(context, child, dynamic);
-                            required_vars.extend(child_req_vars);
-                            new_set_node_children.push(new_child_node);
-                        }
-
-                        // Reconstruct the Set node with new children
-                        new_params_node.children.push(ASTNode {
-                            node_type: ASTNodeType::Set,
-                            children: new_set_node_children,
-                            start_token: param.start_token.clone(),
-                            end_token: param.end_token.clone(),
-                        });
-                    }
-
-                    // Potentially handle other node types if parameters can be complex (e.g., destructuring tuples)
-                    _ => {
-                        // If param is not a simple name or NamedTo, analyze it recursively
-                        // This might be needed for destructuring patterns
-                        let (param_req_vars, new_param_node) =
-                            auto_capture(context, param, dynamic);
-                        required_vars.extend(param_req_vars);
-                        new_params_node.children.push(new_param_node);
-                        // Note: Need to ensure variables within destructuring are defined correctly.
-                    }
-                }
-            }
-        } else {
-            // If params_node is not a Tuple, analyze it directly (should not happen for valid LambdaDef)
-            return auto_capture(context, params_node, dynamic);
-        }
-
-        (required_vars, new_params_node)
-    }
 
     match &node.node_type {
         ASTNodeType::Variable(var_name) => {
             if dynamic {
                 return (HashSet::new(), node.clone()); // Dynamic variables are not captured
             }
-            // Check if the variable is defined in the current context (any frame)
-            if context.get_variable_current_context(var_name).is_none() {
-                // If not defined anywhere in the current context stack, it's required from outside
-                let mut required_vars = HashSet::new();
-                required_vars.insert(var_name.clone());
-                (required_vars, node.clone())
-            } else {
-                // Defined locally, no requirement from outside this context
-                (HashSet::new(), node.clone())
-            }
+            let mut required_vars = HashSet::new();
+            required_vars.insert(var_name.clone());
+            required_vars = filter_required_variables(context, required_vars);
+            (required_vars, node.clone())
         }
 
         ASTNodeType::Annotation(annotation) => {
@@ -1940,16 +1651,22 @@ pub fn auto_capture(
                 // If it's a required annotation, we need to capture the variable
                 if let Some(var_name) = node.children.get(0) {
                     if let ASTNodeType::Variable(var_name_str) = &var_name.node_type {
-                        if context.get_variable_current_context(var_name_str).is_none() {
-                            // If the variable is not defined in the current context, add it to required_vars
-                            let _ = context.define_variable(&Variable {
+                        let mut required_vars = HashSet::new();
+                        required_vars.insert(var_name_str.clone());
+                        required_vars = filter_required_variables(context, required_vars);
+                        context
+                            .define_variable(&Variable {
                                 name: var_name_str.clone(),
                                 assumed_type: AssumedType::Unknown, // Type doesn't matter much for capture
+                            })
+                            .unwrap_or_else(|err| {
+                                panic!(
+                                    "Failed to define captured variable '{}' in Annotation: {}",
+                                    var_name_str, err
+                                );
                             });
-                            let mut required_vars = HashSet::new();
-                            required_vars.insert(var_name_str.clone());
-                            return (required_vars, node.clone()); // Still return required_vars because it's required
-                        }
+
+                        return (required_vars, node.clone()); // Still return required_vars because it's required
                     }
                 }
             }
@@ -1962,7 +1679,7 @@ pub fn auto_capture(
                 required_vars.extend(child_req_vars);
                 new_node.children.push(new_child_node);
             }
-            // Reconstruct the node with the new children
+            required_vars = filter_required_variables(context, required_vars);
             (required_vars, new_node)
         }
 
@@ -1970,19 +1687,22 @@ pub fn auto_capture(
             let mut required_vars = HashSet::new();
             let mut new_node = node.clone();
 
-            if let Some(value_node) = node.children.first() {
-                new_node.children = Vec::new();
-                // Analyze the value expression
-                let (value_req_vars, new_value_node) = auto_capture(context, value_node, dynamic);
-                required_vars.extend(value_req_vars);
-                new_node.children.push(new_value_node);
-                // Define the variable in the current context
-                let var = Variable {
-                    name: name.clone(),
-                    assumed_type: AssumedType::Unknown, // Type doesn't matter much for capture
-                };
-                let _ = context.define_variable(&var);
-            }
+            let value_node = &node.children[0];
+            new_node.children = Vec::new();
+            // Analyze the value expression
+            let (value_req_vars, new_value_node) = auto_capture(context, value_node, dynamic);
+            required_vars.extend(value_req_vars);
+            required_vars = filter_required_variables(context, required_vars); // 先筛选后定义
+
+            new_node.children.push(new_value_node);
+            // Define the variable in the current context
+            let var = Variable {
+                name: name.clone(),
+                assumed_type: AssumedType::Unknown, // Type doesn't matter much for capture
+            };
+            context.define_variable(&var).unwrap_or_else(|err| {
+                panic!("Failed to define variable '{}' in Let: {}", var.name, err);
+            });
             (required_vars, new_node)
         }
 
@@ -1999,203 +1719,160 @@ pub fn auto_capture(
                 required_vars.extend(child_req_vars);
                 new_node.children.push(new_child_node);
             }
-
             // Pop the scope frame
-            let _ = context.pop_frame();
+            context
+                .pop_frame()
+                .unwrap_or_else(|_| panic!("Failed to pop frame after Body analysis"));
+            required_vars = filter_required_variables(context, required_vars);
             (required_vars, new_node)
         }
 
-        ASTNodeType::LambdaDef(is_dynamic_gen, is_capture, is_dynmaic_params) => {
-            // --- Existing LambdaDef logic ---
-            // (Keeping your original logic as requested, but noting potential refinements needed
-            // based on the simplified approach for other nodes and parameter handling)
-
-            // Placeholder for your existing LambdaDef logic.
-            // It should:
-            // 1. Handle existing capture node if `is_capture` is true.
-            // 2. Create a new frame for parameters.
-            // 3. Call `process_params` to analyze defaults, define params in the frame, and get requirements.
-            // 4. Store the defined parameters (args_frame).
-            // 5. Pop the parameter frame.
-            // 6. If dynamic_gen: push frame, analyze body, pop frame.
-            // 7. If not dynamic_gen: push a *new context*, define args from args_frame, define this/self, analyze body.
-            // 8. Determine captured variables (body requirements not met by args/this/self).
-            // 9. Add captured variables to the outer `required_vars`.
-            // 10. Reconstruct the LambdaDef node, potentially adding captured vars to its parameter list if needed by the runtime.
-            // 11. Pop the context if it was pushed.
-            // 12. Return the outer `required_vars` and the reconstructed node.
-
-            // --- Start of your existing LambdaDef logic ---
+        ASTNodeType::LambdaDef(is_dynamic_gen, captured_vars) => {
             let mut required_vars = HashSet::new();
-            let mut capture_node = None;
-            if *is_capture {
-                // 检查 child[1]
-                if let Some(func_node) = node.children.get(1) {
-                    let (child_vars, child_node) = auto_capture(context, func_node, dynamic);
-                    required_vars.extend(child_vars);
-                    capture_node = Some(child_node);
-                }
-            }
-            // 进入 Lambda 定义，创建一个全新的、隔离的上下文
-            context.push_frame();
-            // 在新的上下文中处理参数（参数定义在第一个帧中）
-            let mut params_node_opt = None; // To store the potentially reconstructed params node
-            if let Some(params) = node.children.first() {
-                // Use the refined process_params helper
-                let (param_req_vars, new_params_node) = process_params(context, params, dynamic);
-                required_vars.extend(param_req_vars); // Collect requirements from default values
-                params_node_opt = Some(new_params_node);
-                // Note: process_params now defines variables in the current frame
-            }
-            let args_frame = context.current_context().last().unwrap().clone(); // Get the frame with defined args
-            if context.pop_frame().is_err() {
-                // 弹出 Lambda 定义的帧
-                panic!("Failed to pop frame after Lambda parameters");
-            }
+            let params = &node.children[0];
+            let body = &node.children[1];
+            // 分析形参所需要的变量
+            let (params_req_vars, new_params_node) = auto_capture(context, params, *is_dynamic_gen);
+            required_vars.extend(params_req_vars);
             if *is_dynamic_gen {
-                context.push_frame();
-                let body_index = if *is_capture { 2 } else { 1 }; // Adjust index based on capture node
-                let (body_vars, new_body_node) = if node.children.len() > body_index {
-                    auto_capture(context, &node.children[body_index], dynamic)
-                } else {
-                    // Lambda with no body? Create an empty node or handle appropriately
-                    (
-                        HashSet::new(),
-                        ASTNode {
-                            node_type: ASTNodeType::Expressions,
-                            children: vec![],
-                            start_token: node.start_token.clone(),
-                            end_token: node.end_token.clone(),
-                        },
-                    )
+                // 分析body
+                let (body_req_vars, new_body_node) = auto_capture(context, body, *is_dynamic_gen);
+                required_vars.extend(body_req_vars);
+                // 返回捕获的变量和重建的 ASTNode
+                let rebuilt_ast_node = ASTNode {
+                    node_type: ASTNodeType::LambdaDef(*is_dynamic_gen, captured_vars.clone()),
+                    start_token: node.start_token.clone(),
+                    end_token: node.end_token.clone(),
+                    children: vec![new_params_node, new_body_node],
                 };
-                required_vars.extend(body_vars); // Collect requirements from body
+                required_vars = filter_required_variables(context, required_vars);
+                return (required_vars, rebuilt_ast_node);
+            }
 
-                if context.pop_frame().is_err() {
-                    panic!("Failed to pop frame after dynamic Lambda body");
-                }
+            // 如果不是动态生成的 Lambda，我们需要处理捕获的变量
+            let mut lambda_body_required_vars = HashSet::new();
+            lambda_body_required_vars.extend(captured_vars.iter().cloned());
 
-                // Reconstruct the node
-                let final_params_node =
-                    params_node_opt.unwrap_or_else(|| node.children.first().unwrap().clone());
-                let mut children = vec![final_params_node];
-                if let Some(capt) = capture_node {
-                    children.push(capt);
-                }
-                children.push(new_body_node);
+            // 然后我们分析 Lambda 体
+            context.push_context(); // Create a new context for the Lambda body
+            for var in PRE_ALLOCATED_VARIABLE_STRINGS {
+                context
+                    .define_variable(&Variable {
+                        name: var.to_string(),
+                        assumed_type: AssumedType::Unknown,
+                    })
+                    .unwrap_or_else(|err| {
+                        panic!("Failed to define pre-allocated variable '{}': {}", var, err);
+                    });
+            }
 
-                return (
-                    required_vars,
-                    ASTNode {
-                        node_type: ASTNodeType::LambdaDef(
-                            *is_dynamic_gen,
-                            *is_capture,
-                            *is_dynmaic_params,
-                        ), // is_capture might need update based on actual captures
-                        children,
-                        start_token: node.start_token.clone(),
-                        end_token: node.end_token.clone(),
-                    },
-                );
-            } else {
-                context.push_context();
-                // 将参数添加到新的上下文中
-                for arg in args_frame.variables {
-                    // Use args from the stored frame
-                    let _ = context.define_variable(&arg);
-                }
-                let _ = context.define_variable(&Variable {
-                    name: "this".to_string(),
-                    assumed_type: AssumedType::Lambda,
-                });
-                let _ = context.define_variable(&Variable {
-                    name: "self".to_string(),
-                    assumed_type: AssumedType::Tuple,
-                });
-                let _ = context.define_variable(&Variable {
-                    name: "arguments".to_string(),
-                    assumed_type: AssumedType::Tuple,
-                });
+            // 我们通过把形参定义和捕获的变量添加到上下文中来处理 Lambda 的捕获
+            for var in captured_vars {
+                context
+                    .define_variable(&Variable {
+                        name: var.clone(),
+                        assumed_type: AssumedType::Unknown,
+                    })
+                    .unwrap_or_else(|err| {
+                        panic!(
+                            "Failed to define captured variable '{}' in Lambda: {}",
+                            var, err
+                        );
+                    });
+            }
 
-                let mut body_node = None;
-                let mut body_vars = HashSet::new();
-                // 在新的上下文中分析 Lambda 体
-                let body_index = if *is_capture { 2 } else { 1 }; // Adjust index based on capture node
-                if node.children.len() > body_index {
-                    let (child_vars, child_node) =
-                        auto_capture(context, &node.children[body_index], dynamic);
-                    body_vars.extend(child_vars); // These are requirements *within* the lambda's context
-                    body_node = Some(child_node);
-                }
-                let _ = context.pop_context(); // 退出 Lambda，恢复到父上下文
-
-                // Determine actual captured variables needed from the outer scope
-                let mut captured_vars = HashSet::new();
-                for var_name in body_vars {
-                    // Is this variable defined within the lambda's own context (args, this, self)?
-                    if context.get_variable(&var_name).is_some() {
-                        captured_vars.insert(var_name.clone());
-                        if context.get_variable_current_context(&var_name).is_none() {
-                            // If not defined in the current context, it's a captured variable
-                            required_vars.insert(var_name.clone());
-                        }
-                    } else {
-                        // If the variable is not defined in the current context, it's required from outside
-                        required_vars.insert(var_name.clone());
+            // 处理形参
+            // 我们这里
+            match &params.node_type {
+                ASTNodeType::KeyValue => {
+                    let param_name = &params.children[0];
+                    if let ASTNodeType::String(var_name) = &param_name.node_type {
+                        let var = Variable {
+                            name: var_name.clone(),
+                            assumed_type: AssumedType::Unknown, // Type doesn't matter much for capture
+                        };
+                        context.define_variable(&var).unwrap_or_else(|err| {
+                            panic!(
+                                "Failed to define variable '{}' in Lambda parameters: {}",
+                                var_name, err
+                            );
+                        });
                     }
                 }
-
-                // Reconstruct parameter list, potentially adding captured variables
-                let mut final_params_node =
-                    params_node_opt.unwrap_or_else(|| node.children.first().unwrap().clone());
-                for var in &captured_vars {
-                    // Iterate over the *actual* captures
-                    final_params_node.children.push(ASTNode {
-                        node_type: ASTNodeType::NamedTo,
-                        children: vec![
-                            ASTNode {
-                                node_type: ASTNodeType::String(var.clone()),
-                                children: Vec::new(),
-                                start_token: None,
-                                end_token: None,
-                            },
-                            ASTNode {
-                                // This represents reading the captured var from the outer scope
-                                node_type: ASTNodeType::Variable(var.clone()),
-                                children: Vec::new(),
-                                start_token: None,
-                                end_token: None,
-                            },
-                        ],
-                        start_token: node.start_token.clone(),
-                        end_token: node.start_token.clone(),
+                ASTNodeType::String(var_name) => {
+                    // 如果是单个字符串参数，直接定义变量
+                    let var = Variable {
+                        name: var_name.clone(),
+                        assumed_type: AssumedType::Unknown, // Type doesn't matter much for capture
+                    };
+                    context.define_variable(&var).unwrap_or_else(|err| {
+                        panic!(
+                            "Failed to define variable '{}' in Lambda parameters: {}",
+                            var_name, err
+                        );
                     });
                 }
-
-                // Reconstruct children
-                let mut children = vec![final_params_node];
-                if let Some(capt) = capture_node {
-                    children.push(capt);
-                } // Keep original capture node if present
-                if let Some(body) = body_node {
-                    children.push(body);
+                ASTNodeType::Tuple => {
+                    // 如果是元组参数，分析每个元素
+                    for param in &params.children {
+                        match &param.node_type {
+                            ASTNodeType::KeyValue => {
+                                let param_name = &param.children[0];
+                                if let ASTNodeType::String(var_name) = &param_name.node_type {
+                                    let var = Variable {
+                                        name: var_name.clone(),
+                                        assumed_type: AssumedType::Unknown, // Type doesn't matter much for capture
+                                    };
+                                    context.define_variable(&var).unwrap_or_else(|err| {
+                                        panic!(
+                                            "Failed to define variable '{}' in Lambda parameters: {}",
+                                            var_name, err
+                                        );
+                                    });
+                                }
+                            }
+                            ASTNodeType::String(var_name) => {
+                                // 如果是单个字符串参数，直接定义变量
+                                let var = Variable {
+                                    name: var_name.clone(),
+                                    assumed_type: AssumedType::Unknown, // Type doesn't matter much for capture
+                                };
+                                context.define_variable(&var).unwrap_or_else(|err| {
+                                    panic!(
+                                        "Failed to define variable '{}' in Lambda parameters: {}",
+                                        var_name, err
+                                    );
+                                });
+                            }
+                            _ => {}
+                        }
+                    }
                 }
-
-                return (
-                    required_vars,
-                    ASTNode {
-                        node_type: ASTNodeType::LambdaDef(
-                            *is_dynamic_gen,
-                            *is_capture, // Use actual capture status
-                            *is_dynmaic_params,
-                        ),
-                        children,
-                        start_token: node.start_token.clone(),
-                        end_token: node.end_token.clone(),
-                    },
-                );
+                _ => {}
             }
-            // --- End of your existing LambdaDef logic ---
+
+            // 分析 Lambda 体
+            let (body_req_vars, new_body_node) = auto_capture(context, body, *is_dynamic_gen);
+
+            lambda_body_required_vars.extend(body_req_vars);
+            required_vars.extend(lambda_body_required_vars.clone());
+
+            let rebuilt_ast_node = ASTNode {
+                node_type: ASTNodeType::LambdaDef(
+                    *is_dynamic_gen,
+                    lambda_body_required_vars.into_iter().collect(),
+                ),
+                start_token: node.start_token.clone(),
+                end_token: node.end_token.clone(),
+                children: vec![new_params_node, new_body_node],
+            };
+            // 弹出 Lambda 的上下文帧
+            context.pop_context().unwrap_or_else(|_| {
+                panic!("Failed to pop context after Lambda definition");
+            });
+            required_vars = filter_required_variables(context, required_vars);
+            // 返回捕获的变量和重建的 ASTNode
+            (required_vars, rebuilt_ast_node)
         }
 
         // Default case for all other node types
@@ -2209,6 +1886,7 @@ pub fn auto_capture(
                 required_vars.extend(child_req_vars);
                 new_node.children.push(new_child_node);
             }
+            required_vars = filter_required_variables(context, required_vars);
             (required_vars, new_node)
         }
     }

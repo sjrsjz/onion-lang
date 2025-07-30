@@ -24,7 +24,7 @@ pub enum IROperation {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DebugInfo {
-    token_span: (usize, usize),        // The span of the token
+    token_span: (usize, usize), // The span of the token
 }
 
 impl DebugInfo {
@@ -39,61 +39,58 @@ impl DebugInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum IR {
-    LoadNull,                              // load null to stack
-    LoadUndefined,                         // load undefined to stack
-    LoadInt(i64),                          // load integer to stack
-    LoadFloat(f64),                        // load float to stack
-    LoadString(String),                    // load string to stack
-    LoadBytes(Vec<u8>),                    // load bytes to stack
-    LoadBool(bool),                        // load bool to stack
-    LoadLambda(String, usize, bool, bool), // signature, code position, should capture
+    LoadNull,                        // load null to stack
+    LoadUndefined,                   // load undefined to stack
+    LoadInt(i64),                    // load integer to stack
+    LoadFloat(f64),                  // load float to stack
+    LoadString(String),              // load string to stack
+    LoadBytes(Vec<u8>),              // load bytes to stack
+    LoadBool(bool),                  // load bool to stack
+    LoadLambda(String, Vec<String>), // signature, capture variables
     ForkInstruction, // "fork" instruction and push the forked instruction gcref to stack
     BuildTuple(usize), // number of elements
     BuildKeyValue,   // pop key and value from stack and build key value pair
     BuildNamed,      // pop key and value from stack and build named argument
     BuildRange,      // pop start and end from stack and build range
     BuildSet,
-    BindSelf,              // bind lambda's self to tuple
-    BinaryOp(IROperation), // pop two values from stack and perform binary operation
-    UnaryOp(IROperation),  // pop one value from stack and perform unary operation
-    Let(String),           // pop value from stack and store it in variable
-    Get(String),           // get value from context and push the reference to stack
-    Set,                   // pop value and reference from stack and set value
+    BindSelf,                 // bind lambda's self to tuple
+    BinaryOp(IROperation),    // pop two values from stack and perform binary operation
+    UnaryOp(IROperation),     // pop one value from stack and perform unary operation
+    Let(String),              // pop value from stack and store it in variable
+    Get(String),              // get value from context and push the reference to stack
+    Set,                      // pop value and reference from stack and set value
     GetAttr, // pop object and attribute from stack and push the reference to attribute to stack
-    IndexOf, // pop object and index from stack and push the reference to index to stack
     KeyOf,   // pop object and get the key of the object
     ValueOf, // pop object and get the value of the object
     TypeOf,  // pop object and get the type of the object
-    CallLambda, // pop lambda and arguments from stack and call lambda
-    AsyncCallLambda,
-    SyncCallLambda,
-    Return,                   // pop value from stack and return it
-    NewFrame,                 // create new frame
-    PopFrame,                 // pop frame
-    Pop,                      // pop value from stack and discard it
-    JumpOffset(isize),        // jump to offset
+    Apply,   // pop lambda and arguments from stack and call lambda
+    Return,  // pop value from stack and return it
+    NewFrame, // create new frame
+    PopFrame, // pop frame
+    Pop,     // pop value from stack and discard it
+    JumpOffset(isize), // jump to offset
     JumpIfFalseOffset(isize), // jump to offset if false
-    ResetStack,               // reset stack
-    DeepCopyValue,            // copy value
-    CopyValue,                // copy value
-    Mut,                      // make value mutable
-    Const,                    // make value constant
-    Share,                    // share value, make it shared
-    Launch,                   // launch a new thread with the value
-    Spawn,                    // spawn a new task with the value
-    Assert,                   // assert value
-    Import,                   // import module from file
-    RedirectJump(String),     // redirect ir, not for vm just for ir generation
+    ResetStack, // reset stack
+    Mut,     // make value mutable
+    Const,   // make value constant
+    Launch,  // launch a new thread with the value
+    Spawn,   // spawn a new task with the value
+    Assert,  // assert value
+    Import,  // import module from file
+    RedirectJump(String), // redirect ir, not for vm just for ir generation
     RedirectJumpIfFalse(String),
     RedirectLabel(String),
     Namespace(String),
     In,
-    Emit,
     Swap(usize, usize), // swap two values in stack
     LengthOf,           // get length of object
     IsSameObject,       // check if two objects are the same
     MapTo,
-    Raise // raise an custom value
+    Raise, // raise an custom value
+
+    MakeAsync,
+    MakeSync,
+    MakeAtomic,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

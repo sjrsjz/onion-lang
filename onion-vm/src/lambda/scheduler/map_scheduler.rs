@@ -46,24 +46,9 @@ impl Runnable for Mapping {
                         let element_clone = element.clone();
                         self.mapper.weak().with_data(|mapper_obj| match mapper_obj {
                             OnionObject::Lambda(_) => {
-                                // let OnionObject::Tuple(params) = lambda.parameter.try_borrow()?
-                                // else {
-                                //     return Err(RuntimeError::InvalidType(format!(
-                                //         "Map's parameter must be a tuple, got {:?}",
-                                //         lambda.parameter
-                                //     )));
-                                // };
-                                // let argument =
-                                //     params.clone_and_named_assignment(&OnionTuple::new(vec![
-                                //         element_clone,
-                                //     ]))?;
-                                // let runnable = lambda.create_runnable(argument, &self.mapper, gc)?;
-                                let argument =
-                                    OnionObject::Tuple(OnionTuple::new(vec![element_clone]).into())
-                                        .stabilize();
                                 let runnable = Box::new(OnionLambdaRunnableLauncher::new_static(
                                     &self.mapper,
-                                    &argument,
+                                    &element.stabilize(),
                                     &|r| Ok(r),
                                 )?);
                                 Ok(StepResult::NewRunnable(runnable))
@@ -90,26 +75,26 @@ impl Runnable for Mapping {
     fn format_context(&self) -> String {
         // 使用 format! 宏来构建一个多行的字符串
         format!(
-        "-> In 'map' operation:\n   - Mapper: {}\n   - Container: {}\n   - Progress: Processing element {} / {}\n   - Collected Items: {}",
-        // 1. 映射器信息
-        // 使用对象的简略表示（比如 debug 格式）
-        format_object_summary(self.mapper.weak()),
-
-        // 2. 容器信息
-        format_object_summary(self.container.weak()),
-
-        // 3. 进度信息
-        self.current_index,
-        self.container.weak().with_data(|c| {
-            Ok(if let OnionObject::Tuple(t) = c {
-                t.get_elements().len()
-            } else {
-                0 // Or some other placeholder like "N/A"
-            })
-        }).unwrap_or(0), // Provide a default if weak link is dead
-
-        // 4. 已收集结果的数量
-        self.collected.len()
-    )
+            "-> In 'map' operation:\n   - Mapper: {}\n   - Container: {}\n   - Progress: Processing element {} / {}\n   - Collected Items: {}",
+            // 1. 映射器信息
+            // 使用对象的简略表示（比如 debug 格式）
+            format_object_summary(self.mapper.weak()),
+            // 2. 容器信息
+            format_object_summary(self.container.weak()),
+            // 3. 进度信息
+            self.current_index,
+            self.container
+                .weak()
+                .with_data(|c| {
+                    Ok(if let OnionObject::Tuple(t) = c {
+                        t.get_elements().len()
+                    } else {
+                        0 // Or some other placeholder like "N/A"
+                    })
+                })
+                .unwrap_or(0), // Provide a default if weak link is dead
+            // 4. 已收集结果的数量
+            self.collected.len()
+        )
     }
 }

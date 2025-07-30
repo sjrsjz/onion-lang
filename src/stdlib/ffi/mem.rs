@@ -6,8 +6,9 @@ use onion_vm::{
     types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
     GC,
 };
+use rustc_hash::FxHashMap;
 
-use crate::stdlib::{build_named_dict, get_attr_direct, wrap_native_function};
+use crate::stdlib::{build_dict, build_string_tuple, get_attr_direct, wrap_native_function};
 
 /// 分配内存
 fn mem_alloc(
@@ -318,125 +319,65 @@ fn mem_copy(
 pub fn build_module() -> OnionStaticObject {
     let mut module = IndexMap::new();
 
-    // alloc 函数
-    let mut alloc_params = IndexMap::new();
-    alloc_params.insert(
-        "size".to_string(),
-        OnionObject::Undefined(Some("Size in bytes to allocate".to_string().into())).stabilize(),
-    );
     module.insert(
         "alloc".to_string(),
         wrap_native_function(
-            &build_named_dict(alloc_params),
-            &OnionObject::Undefined(None),
+            &OnionObject::String("size".to_string().into()).stabilize(), // 这里不使用build_string_tuple是因为我们期望其能直接接收一个元组而非通过单元素元组传入
+            &FxHashMap::default(),
             "mem::alloc".to_string(),
             &mem_alloc,
         ),
     );
 
-    // free 函数
-    let mut free_params = IndexMap::new();
-    free_params.insert(
-        "ptr".to_string(),
-        OnionObject::Undefined(Some("Integer pointer address to memory to free".to_string().into())).stabilize(),
-    );
-    free_params.insert(
-        "size".to_string(),
-        OnionObject::Undefined(Some("Size of memory block".to_string().into())).stabilize(),
-    );
     module.insert(
         "free".to_string(),
         wrap_native_function(
-            &build_named_dict(free_params),
-            &OnionObject::Undefined(None),
+            &build_string_tuple(&["ptr", "size"]),
+            &FxHashMap::default(),
             "mem::free".to_string(),
             &mem_free,
         ),
     );
 
-    // calloc 函数
-    let mut calloc_params = IndexMap::new();
-    calloc_params.insert(
-        "count".to_string(),
-        OnionObject::Undefined(Some("Number of elements".to_string().into())).stabilize(),
-    );
-    calloc_params.insert(
-        "size".to_string(),
-        OnionObject::Undefined(Some("Size of each element".to_string().into())).stabilize(),
-    );
     module.insert(
         "calloc".to_string(),
         wrap_native_function(
-            &build_named_dict(calloc_params),
-            &OnionObject::Undefined(None),
+            &build_string_tuple(&["count", "size"]),
+            &FxHashMap::default(),
             "mem::calloc".to_string(),
             &mem_calloc,
         ),
     );
 
-    // read 函数
-    let mut read_params = IndexMap::new();
-    read_params.insert(
-        "ptr".to_string(),
-        OnionObject::Undefined(Some("Integer pointer address to memory to read".to_string().into())).stabilize(),
-    );
-    read_params.insert(
-        "size".to_string(),
-        OnionObject::Undefined(Some("Number of bytes to read".to_string().into())).stabilize(),
-    );
     module.insert(
         "read".to_string(),
         wrap_native_function(
-            &build_named_dict(read_params),
-            &OnionObject::Undefined(None),
+            &build_string_tuple(&["ptr", "size"]),
+            &FxHashMap::default(),
             "mem::read".to_string(),
             &mem_read,
         ),
     );
 
-    // write 函数
-    let mut write_params = IndexMap::new();
-    write_params.insert(
-        "ptr".to_string(),
-        OnionObject::Undefined(Some("Integer pointer address to memory to write".to_string().into())).stabilize(),
-    );
-    write_params.insert(
-        "buffer".to_string(),
-        OnionObject::Undefined(Some("Bytes or string containing data to write".to_string().into())).stabilize(),
-    );
     module.insert(
         "write".to_string(),
         wrap_native_function(
-            &build_named_dict(write_params),
-            &OnionObject::Undefined(None),
+            &build_string_tuple(&["ptr", "buffer"]),
+            &FxHashMap::default(),
             "mem::write".to_string(),
             &mem_write,
         ),
     );
 
-    // copy 函数
-    let mut copy_params = IndexMap::new();
-    copy_params.insert(
-        "dest".to_string(),
-        OnionObject::Undefined(Some("Integer destination pointer address".to_string().into())).stabilize(),
-    );
-    copy_params.insert(
-        "src".to_string(),
-        OnionObject::Undefined(Some("Integer source pointer address".to_string().into())).stabilize(),
-    );
-    copy_params.insert(
-        "size".to_string(),
-        OnionObject::Undefined(Some("Number of bytes to copy".to_string().into())).stabilize(),
-    );
     module.insert(
         "copy".to_string(),
         wrap_native_function(
-            &build_named_dict(copy_params),
-            &OnionObject::Undefined(None),
+            &build_string_tuple(&["dest", "src", "size"]),
+            &FxHashMap::default(),
             "mem::copy".to_string(),
             &mem_copy,
         ),
     );
 
-    build_named_dict(module)
+    build_dict(module)
 }

@@ -16,7 +16,7 @@ use onion_vm::{
     unwrap_step_result, GC,
 };
 
-use super::{build_named_dict, get_attr_direct, wrap_native_function};
+use super::{build_dict, get_attr_direct, wrap_native_function};
 
 /// 获取当前时间戳（秒）
 fn timestamp(
@@ -345,7 +345,7 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "sleep_seconds".to_string(),
         wrap_native_function(
-            &build_named_dict(sleep_seconds_params),
+            &build_dict(sleep_seconds_params),
             &OnionObject::Undefined(None),
             "time::sleep_seconds".to_string(),
             &sleep_seconds,
@@ -358,7 +358,7 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "sleep_millis".to_string(),
         wrap_native_function(
-            &build_named_dict(sleep_millis_params),
+            &build_dict(sleep_millis_params),
             &OnionObject::Undefined(None),
             "time::sleep_millis".to_string(),
             &sleep_millis,
@@ -374,7 +374,7 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "sleep_micros".to_string(),
         wrap_native_function(
-            &build_named_dict(sleep_micros_params),
+            &build_dict(sleep_micros_params),
             &OnionObject::Undefined(None),
             "time::sleep_micros".to_string(),
             &sleep_micros,
@@ -396,7 +396,7 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "format_time".to_string(),
         wrap_native_function(
-            &build_named_dict(format_time_params),
+            &build_dict(format_time_params),
             &OnionObject::Undefined(None),
             "time::format_time".to_string(),
             &format_time,
@@ -410,7 +410,7 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "time_diff".to_string(),
         wrap_native_function(
-            &build_named_dict(time_diff_params),
+            &build_dict(time_diff_params),
             &OnionObject::Undefined(None),
             "time::time_diff".to_string(),
             &time_diff,
@@ -423,12 +423,12 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "async_sleep".to_string(),
         wrap_native_function(
-            &build_named_dict(async_sleep_params),
+            &build_dict(async_sleep_params),
             &OnionObject::Undefined(None),
             "time::async_sleep".to_string(),
             &async_sleep,
         ),
     );
 
-    build_named_dict(module)
+    build_dict(module)
 }

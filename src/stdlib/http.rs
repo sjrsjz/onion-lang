@@ -6,6 +6,7 @@ use std::{
 
 use indexmap::IndexMap;
 use onion_vm::{
+    GC,
     lambda::runnable::{Runnable, RuntimeError, StepResult},
     onion_tuple,
     types::{
@@ -13,10 +14,13 @@ use onion_vm::{
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         tuple::OnionTuple,
     },
-    unwrap_object, GC,
+    unwrap_object,
 };
+use rustc_hash::FxHashMap;
 
-use super::{build_named_dict, get_attr_direct, wrap_native_function};
+use crate::stdlib::build_string_tuple;
+
+use super::{build_dict, get_attr_direct, wrap_native_function};
 
 /// HTTP请求的状态
 #[derive(Debug, Clone)]
@@ -221,7 +225,8 @@ impl Runnable for AsyncHttpRequest {
         };
 
         // Format the headers into a readable string.
-        let headers_str = self.headers
+        let headers_str = self
+            .headers
             .iter()
             .map(|(k, v)| format!("    - {}: {}", k, v))
             .collect::<Vec<String>>()
@@ -235,22 +240,21 @@ impl Runnable for AsyncHttpRequest {
 
         format!(
             "-> Performing Async HTTP Request:\n   - State: {:?}\n   - Method: {}\n   - URL: {}\n   - Body Sent: {}\n   - Headers:\n{}",
-            
             // 1. Current State
             // Using the Debug derive on RequestState gives a clean "InProgress" or "Pending".
             state,
-
             // 2. Method
             self.method,
-
             // 3. URL
             self.url,
-
             // 4. Body Info
             body_info,
-
             // 5. Formatted Headers
-            if headers_str.is_empty() { "    (None)".to_string() } else { headers_str }
+            if headers_str.is_empty() {
+                "    (None)".to_string()
+            } else {
+                headers_str
+            }
         )
     }
 }
@@ -515,164 +519,84 @@ fn http_post_sync(
 pub fn build_module() -> OnionStaticObject {
     let mut module = IndexMap::new();
 
-    // GET请求参数
-    let mut get_params = IndexMap::new();
-    get_params.insert(
-        "url".to_string(),
-        OnionObject::String("".to_string().into()).stabilize(),
-    );
-
     module.insert(
         "get".to_string(),
         wrap_native_function(
-            &build_named_dict(get_params),
-            &OnionObject::Undefined(None),
+            &OnionObject::String("url".to_string().into()).stabilize(),
+            &FxHashMap::default(),
             "http::get".to_string(),
             &http_get,
         ),
     );
 
-    // POST请求参数
-    let mut post_params = IndexMap::new();
-    post_params.insert(
-        "url".to_string(),
-        OnionObject::String("".to_string().into()).stabilize(),
-    );
-    post_params.insert(
-        "body".to_string(),
-        OnionObject::String("{}".to_string().into()).stabilize(),
-    );
-
     module.insert(
         "post".to_string(),
         wrap_native_function(
-            &build_named_dict(post_params),
-            &OnionObject::Undefined(None),
+            &build_string_tuple(&["url", "body"]),
+            &FxHashMap::default(),
             "http::post".to_string(),
             &http_post,
         ),
     );
 
-    // PUT请求参数
-    let mut put_params = IndexMap::new();
-    put_params.insert(
-        "url".to_string(),
-        OnionObject::String("".to_string().into()).stabilize(),
-    );
-    put_params.insert(
-        "body".to_string(),
-        OnionObject::String("{}".to_string().into()).stabilize(),
-    );
-
     module.insert(
         "put".to_string(),
         wrap_native_function(
-            &build_named_dict(put_params),
-            &OnionObject::Undefined(None),
+            &build_string_tuple(&["url", "body"]),
+            &FxHashMap::default(),
             "http::put".to_string(),
             &http_put,
         ),
     );
 
-    // DELETE请求参数
-    let mut delete_params = IndexMap::new();
-    delete_params.insert(
-        "url".to_string(),
-        OnionObject::String("".to_string().into()).stabilize(),
-    );
-
     module.insert(
         "delete".to_string(),
         wrap_native_function(
-            &build_named_dict(delete_params),
-            &OnionObject::Undefined(None),
+            &OnionObject::String("url".to_string().into()).stabilize(),
+            &FxHashMap::default(),
             "http::delete".to_string(),
             &http_delete,
         ),
-    ); // PATCH请求参数
-    let mut patch_params = IndexMap::new();
-    patch_params.insert(
-        "url".to_string(),
-        OnionObject::String("".to_string().into()).stabilize(),
     );
-    patch_params.insert(
-        "body".to_string(),
-        OnionObject::String("{}".to_string().into()).stabilize(),
-    );
-
     module.insert(
         "patch".to_string(),
         wrap_native_function(
-            &build_named_dict(patch_params),
-            &OnionObject::Undefined(None),
+            &build_string_tuple(&["url", "body"]),
+            &FxHashMap::default(),
             "http::patch".to_string(),
             &http_patch,
         ),
     );
 
-    // 同步GET请求 (用于测试)
-    let mut get_sync_params = IndexMap::new();
-    get_sync_params.insert(
-        "url".to_string(),
-        OnionObject::String("".to_string().into()).stabilize(),
-    );
-
     module.insert(
         "get_sync".to_string(),
         wrap_native_function(
-            &build_named_dict(get_sync_params),
-            &OnionObject::Undefined(None),
+            &OnionObject::String("url".to_string().into()).stabilize(),
+            &FxHashMap::default(),
             "http::get_sync".to_string(),
             &http_get_sync,
         ),
     );
 
-    // 同步POST请求 (用于测试)
-    let mut post_sync_params = IndexMap::new();
-    post_sync_params.insert(
-        "url".to_string(),
-        OnionObject::String("".to_string().into()).stabilize(),
-    );
-    post_sync_params.insert(
-        "body".to_string(),
-        OnionObject::String("{}".to_string().into()).stabilize(),
-    );
-
     module.insert(
         "post_sync".to_string(),
         wrap_native_function(
-            &build_named_dict(post_sync_params),
-            &OnionObject::Undefined(None),
+            &build_string_tuple(&["url", "body"]),
+            &FxHashMap::default(),
             "http::post_sync".to_string(),
             &http_post_sync,
         ),
     );
 
-    // 通用请求参数
-    let mut request_params = IndexMap::new();
-    request_params.insert(
-        "url".to_string(),
-        OnionObject::String("".to_string().into()).stabilize(),
-    );
-    request_params.insert(
-        "method".to_string(),
-        OnionObject::String("GET".to_string().into()).stabilize(),
-    );
-    request_params.insert("headers".to_string(), onion_tuple!());
-    request_params.insert(
-        "body".to_string(),
-        OnionObject::String("".to_string().into()).stabilize(),
-    );
-
     module.insert(
         "request".to_string(),
         wrap_native_function(
-            &build_named_dict(request_params),
-            &OnionObject::Undefined(None),
+            &build_string_tuple(&["url", "method", "headers", "body"]),
+            &FxHashMap::default(),
             "http::request".to_string(),
             &http_request,
         ),
     );
 
-    build_named_dict(module)
+    build_dict(module)
 }

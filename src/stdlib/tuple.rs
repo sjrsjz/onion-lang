@@ -1,205 +1,218 @@
 use indexmap::IndexMap;
 use onion_vm::{
+    GC,
     lambda::runnable::RuntimeError,
     types::{
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         tuple::OnionTuple,
     },
-    GC,
 };
+use rustc_hash::FxHashMap;
 
-use super::{build_named_dict, get_attr_direct, wrap_native_function};
+use super::{build_dict, build_string_tuple, wrap_native_function};
 
+/// Pushes a value to a tuple, returning a new tuple.
 fn push(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let tuple = get_attr_direct(data, "container".to_string())?;
-        let value = get_attr_direct(data, "value".to_string())?;
-        tuple.weak().with_data(|tuple| match tuple {
-            OnionObject::Tuple(tuple) => {
-                let mut new_tuple = tuple.get_elements().clone();
-                new_tuple.push(value.weak().clone());
-                Ok(OnionObject::Tuple(OnionTuple::new(new_tuple).into()).stabilize())
-            }
-            _ => Err(RuntimeError::InvalidOperation(
-                "Expected a tuple for 'container'".to_string().into(),
-            )),
-        })
+    let Some(container) = argument.get("container") else {
+        return Err(RuntimeError::DetailedError(
+            "push requires a 'container' argument".to_string().into(),
+        ));
+    };
+    let Some(value) = argument.get("value") else {
+        return Err(RuntimeError::DetailedError(
+            "push requires a 'value' argument".to_string().into(),
+        ));
+    };
+
+    container.weak().with_data(|data| match data {
+        OnionObject::Tuple(tuple) => {
+            let mut new_elements = tuple.get_elements().clone();
+            new_elements.push(value.weak().clone());
+            Ok(OnionObject::Tuple(OnionTuple::new(new_elements).into()).stabilize())
+        }
+        _ => Err(RuntimeError::InvalidType(
+            "Argument 'container' must be a tuple for push"
+                .to_string()
+                .into(),
+        )),
     })
 }
 
+/// Pops a value from a tuple, returning a new tuple.
 fn pop(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let tuple = get_attr_direct(data, "container".to_string())?;
-        tuple.weak().with_data(|tuple| match tuple {
-            OnionObject::Tuple(tuple) => {
-                let mut new_tuple = tuple.get_elements().clone();
-                match new_tuple.pop() {
-                    Some(_) => {
-                        Ok(OnionObject::Tuple(OnionTuple::new(new_tuple).into()).stabilize())
-                    }
-                    None => Err(RuntimeError::InvalidOperation(
-                        "Cannot pop from an empty tuple".to_string().into(),
-                    )),
-                }
+    let Some(container) = argument.get("container") else {
+        return Err(RuntimeError::DetailedError(
+            "pop requires a 'container' argument".to_string().into(),
+        ));
+    };
+
+    container.weak().with_data(|data| match data {
+        OnionObject::Tuple(tuple) => {
+            let mut new_elements = tuple.get_elements().clone();
+            if new_elements.pop().is_some() {
+                Ok(OnionObject::Tuple(OnionTuple::new(new_elements).into()).stabilize())
+            } else {
+                Err(RuntimeError::InvalidOperation(
+                    "Cannot pop from an empty tuple".to_string().into(),
+                ))
             }
-            _ => Err(RuntimeError::InvalidOperation(
-                "Expected a tuple for 'container'".to_string().into(),
-            )),
-        })
+        }
+        _ => Err(RuntimeError::InvalidType(
+            "Argument 'container' must be a tuple for pop"
+                .to_string()
+                .into(),
+        )),
     })
 }
 
+/// Inserts a value into a tuple at a specific index, returning a new tuple.
 fn insert(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let tuple = get_attr_direct(data, "container".to_string())?;
-        let index = get_attr_direct(data, "index".to_string())?;
-        let value = get_attr_direct(data, "value".to_string())?;
-        tuple.weak().with_data(|tuple| match tuple {
-            OnionObject::Tuple(tuple) => {
-                if let OnionObject::Integer(index) = index.weak() {
-                    let mut new_tuple = tuple.get_elements().clone();
-                    if (*index as usize) <= new_tuple.len() {
-                        new_tuple.insert(*index as usize, value.weak().clone());
-                        Ok(OnionObject::Tuple(OnionTuple::new(new_tuple).into()).stabilize())
-                    } else {
-                        Err(RuntimeError::InvalidOperation(
-                            "Index out of bounds".to_string().into(),
-                        ))
-                    }
-                } else {
-                    Err(RuntimeError::InvalidOperation(
-                        "Index must be an integer".to_string().into(),
-                    ))
+    let Some(container) = argument.get("container") else {
+        return Err(RuntimeError::DetailedError(
+            "insert requires a 'container' argument".to_string().into(),
+        ));
+    };
+    let Some(index_obj) = argument.get("index") else {
+        return Err(RuntimeError::DetailedError(
+            "insert requires an 'index' argument".to_string().into(),
+        ));
+    };
+    let Some(value) = argument.get("value") else {
+        return Err(RuntimeError::DetailedError(
+            "insert requires a 'value' argument".to_string().into(),
+        ));
+    };
+
+    container.weak().with_data(|data| match data {
+        OnionObject::Tuple(tuple) => {
+            let index = match index_obj.weak() {
+                OnionObject::Integer(i) => *i,
+                _ => {
+                    return Err(RuntimeError::InvalidType(
+                        "Argument 'index' must be an integer".to_string().into(),
+                    ));
                 }
+            };
+
+            let mut new_elements = tuple.get_elements().clone();
+            if (index as usize) <= new_elements.len() {
+                new_elements.insert(index as usize, value.weak().clone());
+                Ok(OnionObject::Tuple(OnionTuple::new(new_elements).into()).stabilize())
+            } else {
+                Err(RuntimeError::InvalidOperation(
+                    "Index out of bounds for insert".to_string().into(),
+                ))
             }
-            _ => Err(RuntimeError::InvalidOperation(
-                "Expected a tuple for 'container'".to_string().into(),
-            )),
-        })
+        }
+        _ => Err(RuntimeError::InvalidType(
+            "Argument 'container' must be a tuple for insert"
+                .to_string()
+                .into(),
+        )),
     })
 }
 
+/// Removes a value from a tuple at a specific index, returning a new tuple.
 fn remove(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let tuple = get_attr_direct(data, "container".to_string())?;
-        let index = get_attr_direct(data, "index".to_string())?;
-        tuple.weak().with_data(|tuple| match tuple {
-            OnionObject::Tuple(tuple) => {
-                if let OnionObject::Integer(index) = index.weak() {
-                    let mut new_tuple = tuple.get_elements().clone();
-                    if (*index as usize) < new_tuple.len() {
-                        new_tuple.remove(*index as usize);
-                        Ok(OnionObject::Tuple(OnionTuple::new(new_tuple).into()).stabilize())
-                    } else {
-                        Err(RuntimeError::InvalidOperation(
-                            "Index out of bounds".to_string().into(),
-                        ))
-                    }
-                } else {
-                    Err(RuntimeError::InvalidOperation(
-                        "Index must be an integer".to_string().into(),
-                    ))
+    let Some(container) = argument.get("container") else {
+        return Err(RuntimeError::DetailedError(
+            "remove requires a 'container' argument".to_string().into(),
+        ));
+    };
+    let Some(index_obj) = argument.get("index") else {
+        return Err(RuntimeError::DetailedError(
+            "remove requires an 'index' argument".to_string().into(),
+        ));
+    };
+
+    container.weak().with_data(|data| match data {
+        OnionObject::Tuple(tuple) => {
+            let index = match index_obj.weak() {
+                OnionObject::Integer(i) => *i,
+                _ => {
+                    return Err(RuntimeError::InvalidType(
+                        "Argument 'index' must be an integer".to_string().into(),
+                    ));
                 }
+            };
+
+            let mut new_elements = tuple.get_elements().clone();
+            if (index as usize) < new_elements.len() {
+                new_elements.remove(index as usize);
+                Ok(OnionObject::Tuple(OnionTuple::new(new_elements).into()).stabilize())
+            } else {
+                Err(RuntimeError::InvalidOperation(
+                    "Index out of bounds for remove".to_string().into(),
+                ))
             }
-            _ => Err(RuntimeError::InvalidOperation(
-                "Expected a tuple for 'container'".to_string().into(),
-            )),
-        })
+        }
+        _ => Err(RuntimeError::InvalidType(
+            "Argument 'container' must be a tuple for remove"
+                .to_string()
+                .into(),
+        )),
     })
 }
 
-/// Build the type conversion module
+/// Build the tuple manipulation module.
 pub fn build_module() -> OnionStaticObject {
     let mut module = IndexMap::new();
 
-    // Tuple module
-    let mut push_params = IndexMap::new();
-    push_params.insert(
-        "container".to_string(),
-        OnionObject::Undefined(Some("Container tuple".to_string().into())).stabilize(),
-    );
-    push_params.insert(
-        "value".to_string(),
-        OnionObject::Undefined(Some("Value to push".to_string().into())).stabilize(),
-    );
+    // tuple.push(container, value)
     module.insert(
         "push".to_string(),
         wrap_native_function(
-            &build_named_dict(push_params),
-            &OnionObject::Undefined(None),
+            &build_string_tuple(&["container", "value"]),
+            &FxHashMap::default(),
             "tuple::push".to_string(),
             &push,
         ),
     );
 
-    let mut pop_params = IndexMap::new();
-    pop_params.insert(
-        "container".to_string(),
-        OnionObject::Undefined(Some("Container tuple".to_string().into())).stabilize(),
-    );
+    // tuple.pop(container) - 只有一个参数，直接用 String 定义更清晰
     module.insert(
         "pop".to_string(),
         wrap_native_function(
-            &build_named_dict(pop_params),
-            &OnionObject::Undefined(None),
+            &OnionObject::String("container".to_string().into()).stabilize(),
+            &FxHashMap::default(),
             "tuple::pop".to_string(),
             &pop,
         ),
     );
 
-    let mut insert_params = IndexMap::new();
-    insert_params.insert(
-        "container".to_string(),
-        OnionObject::Undefined(Some("Container tuple".to_string().into())).stabilize(),
-    );
-    insert_params.insert(
-        "index".to_string(),
-        OnionObject::Undefined(Some("Index to insert at".to_string().into())).stabilize(),
-    );
-    insert_params.insert(
-        "value".to_string(),
-        OnionObject::Undefined(Some("Value to insert".to_string().into())).stabilize(),
-    );
+    // tuple.insert(container, index, value)
     module.insert(
         "insert".to_string(),
         wrap_native_function(
-            &build_named_dict(insert_params),
-            &OnionObject::Undefined(None),
+            &build_string_tuple(&["container", "index", "value"]),
+            &FxHashMap::default(),
             "tuple::insert".to_string(),
             &insert,
         ),
     );
 
-    let mut remove_params = IndexMap::new();
-    remove_params.insert(
-        "container".to_string(),
-        OnionObject::Undefined(Some("Container tuple".to_string().into())).stabilize(),
-    );
-    remove_params.insert(
-        "index".to_string(),
-        OnionObject::Undefined(Some("Index to remove".to_string().into())).stabilize(),
-    );
+    // tuple.remove(container, index)
     module.insert(
         "remove".to_string(),
         wrap_native_function(
-            &build_named_dict(remove_params),
-            &OnionObject::Undefined(None),
+            &build_string_tuple(&["container", "index"]),
+            &FxHashMap::default(),
             "tuple::remove".to_string(),
             &remove,
         ),
     );
 
-    build_named_dict(module)
+    build_dict(module)
 }

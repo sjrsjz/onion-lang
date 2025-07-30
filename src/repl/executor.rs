@@ -1,27 +1,29 @@
 use colored::*;
 use onion_vm::{
+    GC,
     lambda::{
         runnable::{Runnable, RuntimeError, StepResult},
         scheduler::scheduler::Scheduler,
     },
+    onion_tuple,
     types::{
         lambda::{
-            definition::{LambdaBody, OnionLambdaDefinition},
+            definition::{LambdaBody, LambdaType, OnionLambdaDefinition},
             launcher::OnionLambdaRunnableLauncher,
             vm_instructions::{
                 instruction_set::VMInstructionPackage, ir::IRPackage, ir_translator::IRTranslator,
             },
         },
-        named::OnionNamed,
         object::{OnionObject, OnionStaticObject},
         tuple::OnionTuple,
     },
-    unwrap_object, GC,
+    unwrap_object,
 };
 
 use onion_frontend::{compile::build_code, utils::cycle_detector};
-use std::sync::atomic::{AtomicBool, Ordering};
+use rustc_hash::FxHashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// REPL专用执行器
 #[derive(Clone)]
@@ -84,23 +86,18 @@ impl ReplExecutor {
         vm_instructions_package: &VMInstructionPackage,
     ) -> Result<(), String> {
         // 创建标准库对象
-        let stdlib_pair = OnionNamed::new_static(
-            &OnionObject::String(Arc::new("stdlib".to_string())).consume_and_stabilize(),
-            &crate::stdlib::build_module(),
-        );
-
-        // 创建Out参数对象 - 直接使用当前的out_tuple
-        let out_pair = OnionNamed::new_static(
-            &OnionObject::String(Arc::new("Out".to_string())).consume_and_stabilize(),
-            &self.out_tuple.clone(),
-        );
+        let stdlib = crate::stdlib::build_module();
+        let mut capture = FxHashMap::default();
+        capture.insert("stdlib".to_string(), stdlib.weak().clone());
+        capture.insert("Out".to_string(), self.out_tuple.weak().clone());
 
         // 创建Lambda定义，包含stdlib和Out两个参数
         let lambda = OnionLambdaDefinition::new_static(
-            &OnionTuple::new_static(vec![&stdlib_pair, &out_pair]),
+            &onion_tuple!(),
             LambdaBody::Instruction(Arc::new(vm_instructions_package.clone())),
-            &OnionObject::Undefined(None),
+            &capture,
             "__main__".to_string(),
+            LambdaType::Normal,
         );
 
         let args = OnionTuple::new_static(vec![]);
@@ -125,10 +122,6 @@ impl ReplExecutor {
             match scheduler.step(&mut gc) {
                 StepResult::Continue => {
                     // 继续下一步
-                }
-                StepResult::SetSelfObject(_) => {
-                    // 设置self对象，通常在Lambda中使用
-                    // 这里不需要处理，因为REPL不涉及self对象
                 }
                 StepResult::SpawnRunnable(_) => {
                     return Err("Cannot spawn async task in sync context".to_string());

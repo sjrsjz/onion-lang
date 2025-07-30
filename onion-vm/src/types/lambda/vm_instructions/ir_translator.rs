@@ -3,9 +3,9 @@ use std::result::Result;
 
 use super::instruction_set::*;
 use super::ir::DebugInfo;
+use super::ir::IR;
 use super::ir::IROperation;
 use super::ir::IRPackage;
-use super::ir::IR;
 use super::opcode::*;
 
 #[derive(Debug)]
@@ -22,10 +22,14 @@ pub struct IRTranslator {
     code: Vec<u32>,
     string_pool: Vec<String>,
     string_to_index: HashMap<String, usize>, // 新增：字符串到索引的映射
+    index_pool: Vec<Vec<usize>>,             // 新增：索引池
+    index_to_index: HashMap<Vec<usize>, usize>, // 新增：索引数组到索引的映射
     bytes_pool: Vec<Vec<u8>>,
     bytes_to_index: HashMap<Vec<u8>, usize>, // 新增：字节数组去重
     debug_infos: HashMap<usize, DebugInfo>,
 }
+
+pub const PRE_ALLOCATED_VARIABLE_STRINGS: [&str; 3] = ["this", "arguments", "self"];
 
 impl IRTranslator {
     pub fn new(ir_package: &IRPackage) -> Self {
@@ -36,13 +40,15 @@ impl IRTranslator {
             code: vec![],
             string_pool: vec![],
             string_to_index: HashMap::default(), // 初始化映射表
+            index_pool: vec![],                  // 初始化索引池
+            index_to_index: HashMap::default(),  // 初始化索引数组映射表
             bytes_pool: vec![],
             bytes_to_index: HashMap::default(), // 初始化字节数组映射表
             debug_infos: HashMap::default(),
         };
-        translator.alloc_string("this".to_string()); // 预分配
-        translator.alloc_string("arguments".to_string()); // 预分配
-        translator.alloc_string("self".to_string()); // 预分配
+        for &s in &PRE_ALLOCATED_VARIABLE_STRINGS {
+            translator.alloc_string(s.to_string()); // 预分配
+        }
         return translator;
     }
 
@@ -57,6 +63,19 @@ impl IRTranslator {
         let index = self.string_pool.len();
         self.string_to_index.insert(value.clone(), index);
         self.string_pool.push(value);
+        index
+    }
+
+    pub fn alloc_index(&mut self, value: Vec<usize>) -> usize {
+        // 先检查是否已经存在
+        if let Some(&existing_index) = self.index_to_index.get(&value) {
+            return existing_index;
+        }
+
+        // 不存在则创建新的
+        let index = self.index_pool.len();
+        self.index_to_index.insert(value.clone(), index);
+        self.index_pool.push(value);
         index
     }
 
@@ -169,23 +188,26 @@ impl IRTranslator {
                     );
                     self.code.push(value as u32);
                 }
-                IR::LoadLambda(signature, code_position, should_capture, dynamic_params) => {
+                IR::LoadLambda(signature, capture_vars) => {
                     self.code.push(
                         Opcode32::build_opcode(
                             VMInstruction::LoadLambda as u8,
                             OperandFlag::Valid | OperandFlag::ArgSize64 | OperandFlag::UseConstPool,
                             OperandFlag::Valid | OperandFlag::ArgSize64,
-                            OperandFlag::Valid as u8,
+                            0,
                         )
                         .get_opcode(),
                     );
                     let index = self.alloc_string(signature);
                     self.code.push(Opcode32::lower32(index as u64));
                     self.code.push(Opcode32::upper32(index as u64));
-                    self.code.push(Opcode32::lower32(code_position as u64));
-                    self.code.push(Opcode32::upper32(code_position as u64));
-                    self.code
-                        .push(should_capture as u32 | (dynamic_params as u32) << 1);
+                    let index = capture_vars
+                        .iter()
+                        .map(|s| self.alloc_string(s.clone()))
+                        .collect::<Vec<_>>();
+                    let index = self.alloc_index(index);
+                    self.code.push(Opcode32::lower32(index as u64));
+                    self.code.push(Opcode32::upper32(index as u64));
                 }
                 IR::ForkInstruction => {
                     self.code.push(
@@ -251,7 +273,7 @@ impl IRTranslator {
                         _ => {
                             return Err(IRTranslatorError::InvalidInstruction(IR::BinaryOp(
                                 op.clone(),
-                            )))
+                            )));
                         }
                     };
                     self.code
@@ -265,7 +287,7 @@ impl IRTranslator {
                         _ => {
                             return Err(IRTranslatorError::InvalidInstruction(IR::UnaryOp(
                                 op.clone(),
-                            )))
+                            )));
                         }
                     };
                     self.code
@@ -309,11 +331,6 @@ impl IRTranslator {
                         Opcode32::build_opcode(VMInstruction::GetAttr as u8, 0, 0, 0).get_opcode(),
                     );
                 }
-                IR::IndexOf => {
-                    self.code.push(
-                        Opcode32::build_opcode(VMInstruction::IndexOf as u8, 0, 0, 0).get_opcode(),
-                    );
-                }
                 IR::KeyOf => {
                     self.code.push(
                         Opcode32::build_opcode(VMInstruction::KeyOf as u8, 0, 0, 0).get_opcode(),
@@ -329,9 +346,9 @@ impl IRTranslator {
                         Opcode32::build_opcode(VMInstruction::TypeOf as u8, 0, 0, 0).get_opcode(),
                     );
                 }
-                IR::CallLambda => {
+                IR::Apply => {
                     self.code.push(
-                        Opcode32::build_opcode(VMInstruction::Call as u8, 0, 0, 0).get_opcode(),
+                        Opcode32::build_opcode(VMInstruction::Apply as u8, 0, 0, 0).get_opcode(),
                     );
                 }
                 IR::Return => {
@@ -398,17 +415,6 @@ impl IRTranslator {
                             .get_opcode(),
                     );
                 }
-                IR::DeepCopyValue => {
-                    self.code.push(
-                        Opcode32::build_opcode(VMInstruction::DeepCopy as u8, 0, 0, 0).get_opcode(),
-                    );
-                }
-                IR::CopyValue => {
-                    self.code.push(
-                        Opcode32::build_opcode(VMInstruction::ShallowCopy as u8, 0, 0, 0)
-                            .get_opcode(),
-                    );
-                }
                 IR::Mut => {
                     self.code.push(
                         Opcode32::build_opcode(VMInstruction::Mut as u8, 0, 0, 0).get_opcode(),
@@ -417,11 +423,6 @@ impl IRTranslator {
                 IR::Const => {
                     self.code.push(
                         Opcode32::build_opcode(VMInstruction::Const as u8, 0, 0, 0).get_opcode(),
-                    );
-                }
-                IR::Share => {
-                    self.code.push(
-                        Opcode32::build_opcode(VMInstruction::Share as u8, 0, 0, 0).get_opcode(),
                     );
                 }
                 IR::Launch => {
@@ -468,25 +469,9 @@ impl IRTranslator {
                         Opcode32::build_opcode(VMInstruction::BinaryIs as u8, 0, 0, 0).get_opcode(),
                     );
                 }
-                IR::Emit => {
-                    self.code.push(
-                        Opcode32::build_opcode(VMInstruction::Emit as u8, 0, 0, 0).get_opcode(),
-                    );
-                }
                 IR::Raise => {
                     self.code.push(
                         Opcode32::build_opcode(VMInstruction::Raise as u8, 0, 0, 0).get_opcode(),
-                    );
-                }
-                IR::AsyncCallLambda => {
-                    self.code.push(
-                        Opcode32::build_opcode(VMInstruction::AsyncCall as u8, 0, 0, 0)
-                            .get_opcode(),
-                    );
-                }
-                IR::SyncCallLambda => {
-                    self.code.push(
-                        Opcode32::build_opcode(VMInstruction::SyncCall as u8, 0, 0, 0).get_opcode(),
                     );
                 }
                 IR::BuildSet => {
@@ -517,6 +502,24 @@ impl IRTranslator {
                 IR::MapTo => {
                     self.code.push(
                         Opcode32::build_opcode(VMInstruction::MapTo as u8, 0, 0, 0).get_opcode(),
+                    );
+                }
+                IR::MakeAsync => {
+                    self.code.push(
+                        Opcode32::build_opcode(VMInstruction::MakeAsync as u8, 0, 0, 0)
+                            .get_opcode(),
+                    );
+                }
+                IR::MakeSync => {
+                    self.code.push(
+                        Opcode32::build_opcode(VMInstruction::MakeSync as u8, 0, 0, 0)
+                            .get_opcode(),
+                    );
+                }
+                IR::MakeAtomic => {
+                    self.code.push(
+                        Opcode32::build_opcode(VMInstruction::MakeAtomic as u8, 0, 0, 0)
+                            .get_opcode(),
                     );
                 }
                 _ => {
@@ -557,6 +560,7 @@ impl IRTranslator {
             self.function_ips.clone(),
             self.code.clone(),
             self.string_pool.clone(),
+            self.index_pool.clone(),
             self.bytes_pool.clone(),
             self.debug_infos.clone(),
             self.ir_package.source.clone(),

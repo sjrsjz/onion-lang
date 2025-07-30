@@ -1,10 +1,11 @@
 use std::fmt::Display;
 
 use arc_gc::gc::GC;
+use rustc_hash::FxHashMap;
 
 use crate::{
     lambda::scheduler::async_scheduler::Task,
-    types::object::{OnionObjectCell, OnionStaticObject},
+    types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
 };
 
 #[derive(Clone, Debug)]
@@ -41,7 +42,6 @@ pub enum StepResult {
     ReplaceRunnable(Box<dyn Runnable>),
     SpawnRunnable(Box<Task>),
     Return(Box<OnionStaticObject>),
-    SetSelfObject(Box<OnionStaticObject>),
     Error(RuntimeError),
 }
 
@@ -78,6 +78,25 @@ pub trait Runnable: Send + Sync + 'static {
     ) -> Result<(), RuntimeError> {
         Err(RuntimeError::DetailedError(
             "receive not implemented".to_string().into(),
+        ))
+    }
+
+    fn capture(
+        &mut self,
+        argument: &FxHashMap<String, OnionStaticObject>,
+        captured_vars: &FxHashMap<String, OnionObject>,
+        gc: &mut GC<OnionObjectCell>,
+    ) -> Result<(), RuntimeError> {
+        panic!("capture not implemented for this Runnable");
+    }
+
+    fn bind_self_object(
+        &mut self,
+        self_object: &OnionObject,
+        gc: &mut GC<OnionObjectCell>,
+    ) -> Result<(), RuntimeError> {
+        Err(RuntimeError::DetailedError(
+            "bind_self_object not implemented".to_string().into(),
         ))
     }
 

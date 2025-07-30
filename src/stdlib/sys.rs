@@ -8,9 +8,10 @@ use onion_vm::{
         tuple::OnionTuple,
     },
 };
+use rustc_hash::FxHashMap;
 use std::env;
 
-use super::{build_named_dict, get_attr_direct, wrap_native_function};
+use super::{build_dict, get_attr_direct, wrap_native_function};
 
 /// 获取系统命令行参数
 fn argv(
@@ -194,136 +195,101 @@ fn executable(
 pub fn build_module() -> OnionStaticObject {
     let mut module = IndexMap::new();
 
-    // argv 函数 - 获取命令行参数
+    // 统一参数定义
+    let key_arg = &OnionObject::String("key".to_string().into()).stabilize();
+    let setenv_args = &["key", "value"];
+    let exit_arg = &OnionObject::String("code".to_string().into()).stabilize();
+
     module.insert(
         "argv".to_string(),
         wrap_native_function(
-            &build_named_dict(IndexMap::new()),
-            &OnionObject::Undefined(None),
+            &build_dict(IndexMap::new()),
+            &FxHashMap::default(),
             "sys::argv".to_string(),
             &argv,
         ),
     );
-
-    // getenv 函数 - 获取环境变量
-    let mut getenv_params = IndexMap::new();
-    getenv_params.insert(
-        "key".to_string(),
-        OnionObject::String("".to_string().into()).stabilize(),
-    );
     module.insert(
         "getenv".to_string(),
         wrap_native_function(
-            &build_named_dict(getenv_params),
-            &OnionObject::Undefined(None),
+            key_arg,
+            &FxHashMap::default(),
             "sys::getenv".to_string(),
             &getenv,
         ),
     );
-
-    // setenv 函数 - 设置环境变量
-    let mut setenv_params = IndexMap::new();
-    setenv_params.insert(
-        "key".to_string(),
-        OnionObject::String("".to_string().into()).stabilize(),
-    );
-    setenv_params.insert(
-        "value".to_string(),
-        OnionObject::String("".to_string().into()).stabilize(),
-    );
     module.insert(
         "setenv".to_string(),
         wrap_native_function(
-            &build_named_dict(setenv_params),
-            &OnionObject::Undefined(None),
+            &super::build_string_tuple(setenv_args),
+            &FxHashMap::default(),
             "sys::setenv".to_string(),
             &setenv,
         ),
     );
-
-    // unsetenv 函数 - 删除环境变量
-    let mut unsetenv_params = IndexMap::new();
-    unsetenv_params.insert(
-        "key".to_string(),
-        OnionObject::String("".to_string().into()).stabilize(),
-    );
     module.insert(
         "unsetenv".to_string(),
         wrap_native_function(
-            &build_named_dict(unsetenv_params),
-            &OnionObject::Undefined(None),
+            key_arg,
+            &FxHashMap::default(),
             "sys::unsetenv".to_string(),
             &unsetenv,
         ),
     );
-
-    // environ 函数 - 获取所有环境变量
     module.insert(
         "environ".to_string(),
         wrap_native_function(
-            &build_named_dict(IndexMap::new()),
-            &OnionObject::Undefined(None),
+            &build_dict(IndexMap::new()),
+            &FxHashMap::default(),
             "sys::environ".to_string(),
             &environ,
         ),
     );
-
-    // getcwd 函数 - 获取当前工作目录
     module.insert(
         "getcwd".to_string(),
         wrap_native_function(
-            &build_named_dict(IndexMap::new()),
-            &OnionObject::Undefined(None),
+            &build_dict(IndexMap::new()),
+            &FxHashMap::default(),
             "sys::getcwd".to_string(),
             &getcwd,
         ),
     );
-
-    // exit 函数 - 退出程序
-    let mut exit_params = IndexMap::new();
-    exit_params.insert("code".to_string(), OnionObject::Integer(0).stabilize());
     module.insert(
         "exit".to_string(),
         wrap_native_function(
-            &build_named_dict(exit_params),
-            &OnionObject::Undefined(None),
+            exit_arg,
+            &FxHashMap::default(),
             "sys::exit".to_string(),
             &exit,
         ),
     );
-
-    // platform 函数 - 获取系统平台
     module.insert(
         "platform".to_string(),
         wrap_native_function(
-            &build_named_dict(IndexMap::new()),
-            &OnionObject::Undefined(None),
+            &build_dict(IndexMap::new()),
+            &FxHashMap::default(),
             "sys::platform".to_string(),
             &platform,
         ),
     );
-
-    // arch 函数 - 获取系统架构
     module.insert(
         "arch".to_string(),
         wrap_native_function(
-            &build_named_dict(IndexMap::new()),
-            &OnionObject::Undefined(None),
+            &build_dict(IndexMap::new()),
+            &FxHashMap::default(),
             "sys::arch".to_string(),
             &arch,
         ),
     );
-
-    // executable 函数 - 获取程序执行路径
     module.insert(
         "executable".to_string(),
         wrap_native_function(
-            &build_named_dict(IndexMap::new()),
-            &OnionObject::Undefined(None),
+            &build_dict(IndexMap::new()),
+            &FxHashMap::default(),
             "sys::executable".to_string(),
             &executable,
         ),
     );
 
-    build_named_dict(module)
+    build_dict(module)
 }

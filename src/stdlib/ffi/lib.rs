@@ -17,8 +17,9 @@ use onion_vm::{
     },
     GC,
 };
+use rustc_hash::FxHashMap;
 
-use crate::stdlib::{build_named_dict, get_attr_direct, wrap_native_function};
+use crate::stdlib::{build_dict, build_string_tuple, get_attr_direct, wrap_native_function};
 
 use super::ctypes::CTypes;
 
@@ -647,64 +648,35 @@ fn lib_call_function(
 
 pub fn build_module() -> OnionStaticObject {
     let mut module = IndexMap::new();    // load 函数
-    let mut load_params = IndexMap::new();
-    load_params.insert(
-        "path".to_string(),
-        OnionObject::Undefined(Some("Path to the dynamic library".to_string().into())).stabilize(),
-    );
     module.insert(
         "load".to_string(),
         wrap_native_function(
-            &build_named_dict(load_params),
-            &OnionObject::Undefined(None),
+            &OnionObject::String("path".to_string().into()).stabilize(), // 这里不使用build_string_tuple是因为我们期望其能直接接收一个元组而非通过单元素元组传入
+            &FxHashMap::default(),
             "lib::load".to_string(),
             &lib_load,
-        ),    );
+        ),
+    );
 
-    // get_function 函数
-    let mut get_function_params = IndexMap::new();
-    get_function_params.insert(
-        "library".to_string(),
-        OnionObject::Undefined(Some("CLib object or library path string".to_string().into())).stabilize(),
-    );
-    get_function_params.insert(
-        "function".to_string(),
-        OnionObject::Undefined(Some("Function name".to_string().into())).stabilize(),
-    );
-    get_function_params.insert(
-        "return_type".to_string(),
-        OnionObject::Undefined(Some("Return type string".to_string().into())).stabilize(),
-    );    get_function_params.insert(
-        "param_types".to_string(),
-        OnionObject::Undefined(Some("Tuple of parameter type strings".to_string().into())).stabilize(),
-    );
     module.insert(
         "get_function".to_string(),
         wrap_native_function(
-            &build_named_dict(get_function_params),
-            &OnionObject::Undefined(None),
+            &build_string_tuple(&["library", "function", "return_type", "param_types"]),
+            &FxHashMap::default(),
             "lib::get_function".to_string(),
             &lib_get_function,
         ),
     );
 
-    // call_function 函数
-    let mut call_function_params = IndexMap::new();
-    call_function_params.insert(
-        "handle".to_string(),
-        OnionObject::Undefined(Some("CFunctionHandle object".to_string().into())).stabilize(),
-    );    call_function_params.insert(
-        "args".to_string(),
-        OnionObject::Undefined(Some("Tuple of C type arguments".to_string().into())).stabilize(),
-    );
     module.insert(
         "call".to_string(),
         wrap_native_function(
-            &build_named_dict(call_function_params),
-            &OnionObject::Undefined(None),
+            &build_string_tuple(&["handle", "args"]),
+            &FxHashMap::default(),
             "lib::call".to_string(),
             &lib_call_function,
-        ),    );
+        ),
+    );
 
-    build_named_dict(module)
+    build_dict(module)
 }

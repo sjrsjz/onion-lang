@@ -5,11 +5,12 @@ use arc_gc::{
     gc::GC,
     traceable::GCTraceable,
 };
+use rustc_hash::FxHashMap;
 
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
     onion_tuple,
-    types::lambda::launcher::OnionLambdaRunnableLauncher,
+    types::lambda::{definition::LambdaType, launcher::OnionLambdaRunnableLauncher},
     unwrap_step_result,
 };
 
@@ -94,8 +95,9 @@ impl OnionLazySet {
                         let collector = collector.clone();
                         move || Box::new(collector.clone())
                     })),
-                    &OnionObject::Undefined(None),
+                    &FxHashMap::default(),
                     "collector".to_string(),
+                    LambdaType::Normal,
                 );
                 // Keep the collector alive until after we use its weak reference
                 let result = {
@@ -152,11 +154,6 @@ impl Runnable for OnionLazySetCollector {
                     }
                 }
             }
-            StepResult::SetSelfObject(_) => {
-                // 如果是 SetSelfObject，表示需要设置当前对象
-                // 这里我们不需要做任何操作，因为我们已经在构造函数中设置了 self_object
-                Ok(())
-            }
             _ => Err(RuntimeError::DetailedError(
                 "Unexpected step result in lazy set collector"
                     .to_string()
@@ -165,91 +162,92 @@ impl Runnable for OnionLazySetCollector {
         }
     }
 
-    fn step(&mut self, _gc: &mut GC<OnionObjectCell>) -> StepResult {
-        unwrap_step_result!(self
-            .container
-            .weak()
-            .with_data(|container| match container {
-                OnionObject::Tuple(tuple) => {
-                    // 使用索引获取当前元素
-                    if let Some(item) = tuple.get_elements().get(self.current_index) {
-                        let item_clone = item.clone();
-                        self.current_index += 1; // 移动到下一个元素
+    fn bind_self_object(
+        &mut self,
+        _self_object: &OnionObject,
+        _gc: &mut GC<OnionObjectCell>,
+    ) -> Result<(), RuntimeError> {
+        Ok(())
+    }
 
-                        self.filter
-                            .weak()
-                            .with_data(|filter: &OnionObject| match filter {
-                                OnionObject::Lambda(_) => {
-                                    // let OnionObject::Tuple(params) = func.parameter.try_borrow()?
-                                    // else {
-                                    //     return Err(RuntimeError::InvalidType(format!(
-                                    //         "Filter's parameter must be a tuple, got {:?}",
-                                    //         func.parameter
-                                    //     )));
-                                    // };
-                                    // let argument =
-                                    //     params.clone_and_named_assignment(&OnionTuple::new(vec![
-                                    //         item_clone,
-                                    //     ]))?;
-                                    // let runnable = func.create_runnable(argument, &self.filter, gc)?;
-                                    let argument = OnionObject::Tuple(
-                                        OnionTuple::new(vec![item_clone]).into(),
-                                    )
-                                    .consume_and_stabilize();
-                                    let runnable =
-                                        Box::new(OnionLambdaRunnableLauncher::new_static(
-                                            &self.filter,
-                                            &argument,
-                                            &|r| Ok(r),
-                                        )?);
-                                    Ok(StepResult::NewRunnable(runnable))
-                                }
-                                OnionObject::Boolean(false) => Ok(StepResult::Continue),
-                                _ => {
-                                    self.collected.push(item_clone.consume_and_stabilize());
-                                    Ok(StepResult::Continue)
-                                }
-                            })
-                    } else {
-                        // 所有元素都处理完了
-                        Ok(StepResult::Return(
-                            OnionTuple::new_static_no_ref(&self.collected).into(),
-                        ))
+    fn capture(
+        &mut self,
+        _argument: &FxHashMap<String, OnionStaticObject>,
+        _captured_vars: &FxHashMap<String, OnionObject>,
+        _gc: &mut GC<OnionObjectCell>,
+    ) -> Result<(), RuntimeError> {
+        Ok(())
+    }
+
+    fn step(&mut self, _gc: &mut GC<OnionObjectCell>) -> StepResult {
+        unwrap_step_result!(
+            self.container
+                .weak()
+                .with_data(|container| match container {
+                    OnionObject::Tuple(tuple) => {
+                        // 使用索引获取当前元素
+                        if let Some(item) = tuple.get_elements().get(self.current_index) {
+                            self.current_index += 1; // 移动到下一个元素
+                            self.filter
+                                .weak()
+                                .with_data(|filter: &OnionObject| match filter {
+                                    OnionObject::Lambda(_) => {
+                                        let runnable =
+                                            Box::new(OnionLambdaRunnableLauncher::new_static(
+                                                &self.filter,
+                                                &item.stabilize(),
+                                                &|r| Ok(r),
+                                            )?);
+                                        Ok(StepResult::NewRunnable(runnable))
+                                    }
+                                    v => {
+                                        if v.to_boolean()? {
+                                            self.collected.push(item.stabilize());
+                                        }
+                                        Ok(StepResult::Continue)
+                                    }
+                                })
+                        } else {
+                            // 所有元素都处理完了
+                            Ok(StepResult::Return(
+                                OnionTuple::new_static_no_ref(&self.collected).into(),
+                            ))
+                        }
                     }
-                }
-                _ => Err(RuntimeError::InvalidType(
-                    "Container must be a tuple".to_string().into(),
-                )),
-            }))
+                    _ => Err(RuntimeError::InvalidType(
+                        "Container must be a tuple".to_string().into(),
+                    )),
+                })
+        )
     }
 
     fn format_context(&self) -> String {
         // 尝试获取容器的总长度，用于进度报告
-        let container_len = self.container.weak().with_data(|c| {
-            Ok(if let OnionObject::Tuple(t) = c {
-                t.get_elements().len()
-            } else {
-                0 // 如果容器不是元组或弱引用失效，返回0
+        let container_len = self
+            .container
+            .weak()
+            .with_data(|c| {
+                Ok(if let OnionObject::Tuple(t) = c {
+                    t.get_elements().len()
+                } else {
+                    0 // 如果容器不是元组或弱引用失效，返回0
+                })
             })
-        }).unwrap_or(0);
+            .unwrap_or(0);
 
         // 使用 format! 宏构建一个清晰、多行的字符串
         format!(
             "-> Collecting from LazySet:\n   - Filter Function: {:?}\n   - From Container: {:?}\n   - Progress: Checking element {} / {}\n   - Items Collected: {}",
-            
             // 1. 过滤器信息
             // 使用 Debug 格式打印 filter 对象，以识别是哪个 lambda
             self.filter,
-
             // 2. 容器信息
             // 使用 Debug 格式打印 container 对象
             self.container,
-
             // 3. 进度信息
             // current_index 告诉我们下一个要检查的元素索引
             self.current_index,
             container_len,
-
             // 4. 已收集结果的数量
             self.collected.len()
         )

@@ -22,20 +22,15 @@ pub enum SemanticTokenTypes {
     Body,
     Tuple,
     KeyValue,
-    IndexOf,
     GetAttr,
     Modifier,
     LambdaDef,
     Expressions,
     AssumeTuple,
-    NamedTo,
     Break,
     Continue,
     Range,
     In,
-    Emit,
-    AsyncLambdaCall,
-    SyncLambdaCall,
     Namespace,
     Set,
     Map,
@@ -57,27 +52,22 @@ impl From<ASTNodeType> for SemanticTokenTypes {
             ASTNodeType::Let(_) => Self::Let,
             ASTNodeType::Body => Self::Body,
             ASTNodeType::Assign => Self::Assign,
-            ASTNodeType::LambdaDef(_, _, _) => Self::LambdaDef,
+            ASTNodeType::LambdaDef(_, _) => Self::LambdaDef,
             ASTNodeType::Expressions => Self::Expressions,
-            ASTNodeType::LambdaCall => Self::LambdaCall,
+            ASTNodeType::Apply => Self::LambdaCall,
             ASTNodeType::Operation(_) => Self::Operation,
             ASTNodeType::Tuple => Self::Tuple,
             ASTNodeType::AssumeTuple => Self::AssumeTuple,
             ASTNodeType::KeyValue => Self::KeyValue,
-            ASTNodeType::IndexOf => Self::IndexOf,
             ASTNodeType::GetAttr => Self::GetAttr,
             ASTNodeType::Return => Self::Return,
             ASTNodeType::If => Self::If,
             ASTNodeType::While => Self::While,
             ASTNodeType::Modifier(_) => Self::Modifier,
-            ASTNodeType::NamedTo => Self::NamedTo,
             ASTNodeType::Break => Self::Break,
             ASTNodeType::Continue => Self::Continue,
             ASTNodeType::Range => Self::Range,
             ASTNodeType::In => Self::In,
-            ASTNodeType::Emit => Self::Emit,
-            ASTNodeType::AsyncLambdaCall => Self::AsyncLambdaCall,
-            ASTNodeType::SyncLambdaCall => Self::SyncLambdaCall,
             ASTNodeType::Namespace(_) => Self::Namespace,
             ASTNodeType::Set => Self::Set,
             ASTNodeType::Map => Self::Map,
@@ -193,7 +183,7 @@ fn process_node(
                 }
             }
         }
-        ASTNodeType::LambdaCall => {
+        ASTNodeType::Apply => {
             if let Some(child) = node.children.get(0) {
                 if let ASTNodeType::Variable(_) = child.node_type {
                     if let Some((start, end)) = calculate_node_byte_range(child, char_map) {
@@ -201,22 +191,6 @@ fn process_node(
                             start,
                             end,
                             SemanticTokenTypes::LambdaCall,
-                            tokens,
-                            true,
-                            code,
-                        );
-                    }
-                }
-            }
-        }
-        ASTNodeType::AsyncLambdaCall => {
-            if let Some(child) = node.children.get(0) {
-                if let ASTNodeType::Variable(_) = child.node_type {
-                    if let Some((start, end)) = calculate_node_byte_range(child, char_map) {
-                        mark_byte_range_as(
-                            start,
-                            end,
-                            SemanticTokenTypes::AsyncLambdaCall,
                             tokens,
                             true,
                             code,
@@ -392,24 +366,19 @@ fn get_token_type_index(token_type: &SemanticTokenTypes) -> Option<u32> {
         SemanticTokenTypes::LambdaDef => Some(29),
         SemanticTokenTypes::Expressions => Some(30),
         SemanticTokenTypes::LambdaCall => Some(31),
-        SemanticTokenTypes::AsyncLambdaCall => Some(32),
-        SemanticTokenTypes::SyncLambdaCall => Some(32),
         SemanticTokenTypes::Operation => Some(33),
         SemanticTokenTypes::Tuple => Some(34),
         SemanticTokenTypes::AssumeTuple => Some(35),
         SemanticTokenTypes::KeyValue => Some(36),
-        SemanticTokenTypes::IndexOf => Some(37),
         SemanticTokenTypes::GetAttr => Some(38),
         SemanticTokenTypes::Return => Some(39),
         SemanticTokenTypes::If => Some(41),
         SemanticTokenTypes::While => Some(42),
         SemanticTokenTypes::Modifier => Some(15),
-        SemanticTokenTypes::NamedTo => Some(43),
         SemanticTokenTypes::Break => Some(44),
         SemanticTokenTypes::Continue => Some(45),
         SemanticTokenTypes::Range => Some(46),
         SemanticTokenTypes::In => Some(47),
-        SemanticTokenTypes::Emit => Some(48),
         SemanticTokenTypes::Namespace => Some(49),
         SemanticTokenTypes::Set => Some(50),
         SemanticTokenTypes::Map => Some(51),
@@ -424,11 +393,8 @@ fn get_token_modifiers(token_type: &SemanticTokenTypes) -> u32 {
         SemanticTokenTypes::Let => MOD_DECLARATION | MOD_DEFINITION,
         SemanticTokenTypes::Variable => MOD_NONE,
         SemanticTokenTypes::LambdaDef => MOD_DECLARATION | MOD_DEFINITION,
-        SemanticTokenTypes::AsyncLambdaCall => MOD_ASYNC,
-        SemanticTokenTypes::Emit => MOD_ASYNC,
         SemanticTokenTypes::Assign => MOD_MODIFICATION,
         SemanticTokenTypes::GetAttr => MOD_READONLY,
-        SemanticTokenTypes::IndexOf => MOD_READONLY,
         _ => MOD_NONE,
     }
 }

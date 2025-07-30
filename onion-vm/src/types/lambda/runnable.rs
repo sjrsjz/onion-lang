@@ -1,14 +1,18 @@
 use std::sync::Arc;
 
 use arc_gc::gc::GC;
+use rustc_hash::FxHashMap;
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
     types::{
-        lambda::vm_instructions::opcode::{
-            self, build_operand_argument, decode_opcode, get_operand_arg, get_processed_opcode,
-            OpcodeArgument,
+        lambda::{
+            build_dict_from_hashmap,
+            vm_instructions::opcode::{
+                self, OpcodeArgument, build_operand_argument, decode_opcode, get_operand_arg,
+                get_processed_opcode,
+            },
         },
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
     },
@@ -51,7 +55,6 @@ static INSTRUCTION_TABLE: std::sync::LazyLock<Vec<InstructionHandler>> =
         // 数据结构构建
         instruction_table[VMInstruction::BuildTuple as usize] = vm_instructions::build_tuple;
         instruction_table[VMInstruction::BuildKeyValue as usize] = vm_instructions::build_keyval;
-        instruction_table[VMInstruction::BuildNamed as usize] = vm_instructions::build_named;
         instruction_table[VMInstruction::BuildRange as usize] = vm_instructions::build_range;
         instruction_table[VMInstruction::BuildSet as usize] = vm_instructions::build_set;
         // 二元操作符
@@ -89,11 +92,9 @@ static INSTRUCTION_TABLE: std::sync::LazyLock<Vec<InstructionHandler>> =
         instruction_table[VMInstruction::LoadVar as usize] = vm_instructions::get_var;
         instruction_table[VMInstruction::SetValue as usize] = vm_instructions::set_var;
         instruction_table[VMInstruction::GetAttr as usize] = vm_instructions::get_attr;
-        instruction_table[VMInstruction::IndexOf as usize] = vm_instructions::index_of;
         instruction_table[VMInstruction::KeyOf as usize] = vm_instructions::key_of;
         instruction_table[VMInstruction::ValueOf as usize] = vm_instructions::value_of;
         instruction_table[VMInstruction::TypeOf as usize] = vm_instructions::type_of;
-        instruction_table[VMInstruction::ShallowCopy as usize] = vm_instructions::copy;
         instruction_table[VMInstruction::Swap as usize] = vm_instructions::swap;
         instruction_table[VMInstruction::LengthOf as usize] = vm_instructions::get_length;
         instruction_table[VMInstruction::Mut as usize] = vm_instructions::mutablize;
@@ -102,11 +103,12 @@ static INSTRUCTION_TABLE: std::sync::LazyLock<Vec<InstructionHandler>> =
             vm_instructions::fork_instruction;
         instruction_table[VMInstruction::Launch as usize] = vm_instructions::launch_thread;
         instruction_table[VMInstruction::Spawn as usize] = vm_instructions::spawn_task;
+        instruction_table[VMInstruction::MakeAtomic as usize] = vm_instructions::make_atomic;
+        instruction_table[VMInstruction::MakeAsync as usize] = vm_instructions::make_async;
+        instruction_table[VMInstruction::MakeSync as usize] = vm_instructions::make_sync;
 
         // 控制流
-        instruction_table[VMInstruction::Call as usize] = vm_instructions::call_lambda;
-        instruction_table[VMInstruction::AsyncCall as usize] = vm_instructions::async_call;
-        instruction_table[VMInstruction::SyncCall as usize] = vm_instructions::sync_call;
+        instruction_table[VMInstruction::Apply as usize] = vm_instructions::apply;
         instruction_table[VMInstruction::Return as usize] = vm_instructions::return_value;
         instruction_table[VMInstruction::Raise as usize] = vm_instructions::raise;
         instruction_table[VMInstruction::Jump as usize] = vm_instructions::jump;
@@ -128,14 +130,15 @@ static INSTRUCTION_TABLE: std::sync::LazyLock<Vec<InstructionHandler>> =
 
 pub struct OnionLambdaRunnable {
     pub(crate) context: Context,
-    pub(crate) ip: isize, // Instruction pointer
+    pub(crate) ip: isize,             // Instruction pointer
     pub(crate) ip_before_step: isize, // previous instruction pointer
     pub(crate) instruction: Arc<VMInstructionPackage>,
 }
 
 impl OnionLambdaRunnable {
     pub fn new(
-        argument: OnionStaticObject,
+        argument: &FxHashMap<String, OnionStaticObject>,
+        capture: &FxHashMap<String, OnionObject>,
         self_object: &OnionObject,
         this_lambda: &OnionStaticObject,
         instruction: Arc<VMInstructionPackage>,
@@ -207,7 +210,7 @@ impl OnionLambdaRunnable {
             })?;
 
         new_context
-            .let_variable(index_arguments, argument.clone())
+            .let_variable(index_arguments, build_dict_from_hashmap(argument))
             .map_err(|e| {
                 RuntimeError::InvalidOperation(
                     format!("Failed to initialize 'arguments' variable: {}", e).into(),
@@ -216,35 +219,47 @@ impl OnionLambdaRunnable {
 
         let pool = instruction.get_string_pool();
 
-        argument.weak().with_data(|data| {
-            if let OnionObject::Tuple(tuple) = data {
-                for item in tuple.get_elements().iter() {
-                    match item {
-                        OnionObject::Named(named) => {
-                            named.get_key().with_data(|key| match key {
-                                OnionObject::String(key_str) => {
-                                    match pool.iter().position(|s| s.eq(key_str.as_ref())) {
-                                        Some(index) => new_context
-                                            .let_variable(index, named.get_value().stabilize()),
-                                        None => {
-                                            // do nothing because the runnable does not need this variable
-                                            Ok(())
-                                        }
-                                    }
-                                }
-                                _ => Ok(()),
-                            })?;
-                        }
-                        _ => {}
-                    }
-                }
-                Ok(())
+        for (argument_name, value) in argument.iter() {
+            if let Some(index) = pool.iter().position(|s| s == argument_name) {
+                new_context
+                    .let_variable(index, value.clone())
+                    .map_err(|e| {
+                        RuntimeError::InvalidOperation(
+                            format!("Failed to initialize argument '{}': {}", argument_name, e)
+                                .into(),
+                        )
+                    })?;
             } else {
-                Err(RuntimeError::InvalidOperation(
-                    "Argument must be a tuple".to_string().into(),
-                ))
+                return Err(RuntimeError::InvalidOperation(
+                    format!("Argument '{}' not found in string pool", argument_name).into(),
+                ));
             }
-        })?;
+        }
+
+        // 设置捕获的变量
+        for (capture_name, value) in capture.iter() {
+            if let Some(index) = pool.iter().position(|s| s == capture_name) {
+                new_context
+                    .let_variable(index, value.stabilize())
+                    .map_err(|e| {
+                        RuntimeError::InvalidOperation(
+                            format!(
+                                "Failed to initialize captured variable '{}': {}",
+                                capture_name, e
+                            )
+                            .into(),
+                        )
+                    })?;
+            } else {
+                return Err(RuntimeError::InvalidOperation(
+                    format!(
+                        "Captured variable '{}' not found in string pool",
+                        capture_name
+                    )
+                    .into(),
+                ));
+            }
+        }
 
         Ok(OnionLambdaRunnable {
             context: new_context,
@@ -307,11 +322,6 @@ impl Runnable for OnionLambdaRunnable {
 
             match handler(self, &opcode, gc) {
                 StepResult::Continue => continue,
-                // StepResult::Error(RuntimeError::Pending) => {
-                //     // 如果是 Pending 状态，继续等待
-                //     self.ip = pending_ip as isize; // 恢复 IP
-                //     return StepResult::Error(RuntimeError::Pending);
-                // }
                 StepResult::Error(e) => {
                     self.ip = pending_ip as isize; // 恢复 IP
                     return StepResult::Error(e);

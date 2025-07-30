@@ -10,7 +10,8 @@ use arc_gc::{
     gc::GC,
     traceable::GCTraceable,
 };
-use base64::{engine::general_purpose, Engine as _};
+use base64::{Engine as _, engine::general_purpose};
+use rustc_hash::FxHashMap;
 
 use crate::{
     lambda::runnable::RuntimeError,
@@ -27,7 +28,6 @@ use super::{
         definition::OnionLambdaDefinition, vm_instructions::instruction_set::VMInstructionPackage,
     },
     lazy_set::OnionLazySet,
-    named::OnionNamed,
     pair::OnionPair,
     tuple::OnionTuple,
 };
@@ -46,7 +46,9 @@ impl OnionObjectCell {
         match self.0.read() {
             Ok(guard) => match &*guard {
                 OnionObject::Mut(_) => {
-                    panic!("CRITICAL: OnionObjectCell contains Mut object. This indicates a bug in VM object allocation or GC logic. Check mutablize() and object creation paths.")
+                    panic!(
+                        "CRITICAL: OnionObjectCell contains Mut object. This indicates a bug in VM object allocation or GC logic. Check mutablize() and object creation paths."
+                    )
                 }
                 obj => f(obj),
             },
@@ -67,7 +69,9 @@ impl OnionObjectCell {
         match self.0.write() {
             Ok(mut guard) => match &mut *guard {
                 OnionObject::Mut(_) => {
-                    panic!("CRITICAL: OnionObjectCell contains Mut object. This indicates a bug in VM object allocation or GC logic. Check mutablize() and object creation paths.")
+                    panic!(
+                        "CRITICAL: OnionObjectCell contains Mut object. This indicates a bug in VM object allocation or GC logic. Check mutablize() and object creation paths."
+                    )
                 }
                 obj => f(obj),
             },
@@ -210,7 +214,6 @@ pub enum OnionObject {
     // immutable container types
     Tuple(Arc<OnionTuple>),
     Pair(Arc<OnionPair>),
-    Named(Arc<OnionNamed>),
     LazySet(Arc<OnionLazySet>),
     Lambda((Arc<OnionLambdaDefinition>, Arc<OnionObject>)), // (definition, self_object)
     Custom(Arc<dyn OnionObjectExt>),
@@ -425,7 +428,6 @@ impl GCTraceable<OnionObjectCell> for OnionObject {
             }
             OnionObject::Tuple(tuple) => tuple.collect(queue),
             OnionObject::Pair(pair) => pair.collect(queue),
-            OnionObject::Named(named) => named.collect(queue),
             OnionObject::LazySet(lazy_set) => lazy_set.collect(queue),
             OnionObject::Lambda(lambda) => {
                 lambda.0.collect(queue);
@@ -447,7 +449,6 @@ impl OnionObject {
             }
             OnionObject::Tuple(tuple) => tuple.upgrade(collected),
             OnionObject::Pair(pair) => pair.upgrade(collected),
-            OnionObject::Named(named) => named.upgrade(collected),
             OnionObject::LazySet(lazy_set) => lazy_set.upgrade(collected),
             OnionObject::Lambda(lambda) => {
                 lambda.0.upgrade(collected);
@@ -652,11 +653,6 @@ impl OnionObject {
                     let right = pair.get_value().repr(&new_ptrs)?;
                     Ok(format!("{} : {}", left, right))
                 }
-                OnionObject::Named(named) => {
-                    let name = named.get_key().repr(&new_ptrs)?;
-                    let value = named.get_value().repr(&new_ptrs)?;
-                    Ok(format!("{} => {}", name, value))
-                }
                 OnionObject::LazySet(lazy_set) => {
                     let container = lazy_set.get_container().repr(&new_ptrs)?;
                     let filter = lazy_set.get_filter().repr(&new_ptrs)?;
@@ -725,11 +721,6 @@ impl OnionObject {
                     let left = pair.get_key().repr(&new_ptrs)?;
                     let right = pair.get_value().repr(&new_ptrs)?;
                     Ok(format!("{} : {}", left, right))
-                }
-                OnionObject::Named(named) => {
-                    let name = named.get_key().repr(&new_ptrs)?;
-                    let value = named.get_value().repr(&new_ptrs)?;
-                    Ok(format!("{} => {}", name, value))
                 }
                 OnionObject::LazySet(lazy_set) => {
                     let container = lazy_set.get_container().repr(&new_ptrs)?;
@@ -832,7 +823,6 @@ impl OnionObject {
                     (OnionObject::Undefined(_), OnionObject::Undefined(_)) => Ok(true),
                     (OnionObject::Tuple(t1), _) => t1.equals(other),
                     (OnionObject::Pair(p1), _) => p1.equals(other),
-                    (OnionObject::Named(n1), _) => n1.equals(other),
                     (OnionObject::Custom(c1), _) => c1.equals(other),
 
                     // 理论上Mut类型不应该出现在这里
@@ -1223,7 +1213,7 @@ impl OnionObject {
                         "int" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::int".to_string(),
                                 &native_int_converter,
@@ -1233,7 +1223,7 @@ impl OnionObject {
                         "float" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::float".to_string(),
                                 &native_float_converter,
@@ -1243,7 +1233,7 @@ impl OnionObject {
                         "string" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::string".to_string(),
                                 &native_string_converter,
@@ -1253,7 +1243,7 @@ impl OnionObject {
                         "bool" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::bool".to_string(),
                                 &native_bool_converter,
@@ -1263,7 +1253,7 @@ impl OnionObject {
                         "bytes" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::bytes".to_string(),
                                 &native_bytes_converter,
@@ -1290,7 +1280,7 @@ impl OnionObject {
                         "int" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::int".to_string(),
                                 &native_int_converter,
@@ -1300,7 +1290,7 @@ impl OnionObject {
                         "float" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::float".to_string(),
                                 &native_float_converter,
@@ -1310,7 +1300,7 @@ impl OnionObject {
                         "string" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::string".to_string(),
                                 &native_string_converter,
@@ -1320,7 +1310,7 @@ impl OnionObject {
                         "bool" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::bool".to_string(),
                                 &native_bool_converter,
@@ -1330,7 +1320,7 @@ impl OnionObject {
                         "bytes" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::bytes".to_string(),
                                 &native_bytes_converter,
@@ -1357,7 +1347,7 @@ impl OnionObject {
                         "int" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::int".to_string(),
                                 &native_int_converter,
@@ -1367,7 +1357,7 @@ impl OnionObject {
                         "float" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::float".to_string(),
                                 &native_float_converter,
@@ -1377,7 +1367,7 @@ impl OnionObject {
                         "string" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::string".to_string(),
                                 &native_string_converter,
@@ -1387,7 +1377,7 @@ impl OnionObject {
                         "bool" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::bool".to_string(),
                                 &native_bool_converter,
@@ -1397,7 +1387,7 @@ impl OnionObject {
                         "bytes" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::bytes".to_string(),
                                 &native_bytes_converter,
@@ -1430,7 +1420,7 @@ impl OnionObject {
                         "int" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::int".to_string(),
                                 &native_int_converter,
@@ -1440,7 +1430,7 @@ impl OnionObject {
                         "float" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::float".to_string(),
                                 &native_float_converter,
@@ -1450,7 +1440,7 @@ impl OnionObject {
                         "string" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::string".to_string(),
                                 &native_string_converter,
@@ -1460,7 +1450,7 @@ impl OnionObject {
                         "bool" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::bool".to_string(),
                                 &native_bool_converter,
@@ -1470,7 +1460,7 @@ impl OnionObject {
                         "bytes" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::bytes".to_string(),
                                 &native_bytes_converter,
@@ -1480,7 +1470,7 @@ impl OnionObject {
                         "length" => {
                             let length_method = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "builtin::length".to_string(),
                                 &native_length_method,
@@ -1490,7 +1480,7 @@ impl OnionObject {
                         "elements" => {
                             let elements_method = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "builtin::elements".to_string(),
                                 &native_elements_method,
@@ -1511,7 +1501,6 @@ impl OnionObject {
                     .into(),
                 ))
             }
-            OnionObject::Named(named) => named.with_attribute(key, f),
             OnionObject::Pair(pair) => pair.with_attribute(key, f),
             OnionObject::Lambda(lambda) => lambda.0.with_attribute(key, f),
             OnionObject::LazySet(lazy_set) => lazy_set.with_attribute(key, f),
@@ -1521,7 +1510,7 @@ impl OnionObject {
                         "int" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::int".to_string(),
                                 &native_int_converter,
@@ -1531,7 +1520,7 @@ impl OnionObject {
                         "float" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::float".to_string(),
                                 &native_float_converter,
@@ -1541,7 +1530,7 @@ impl OnionObject {
                         "string" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::string".to_string(),
                                 &native_string_converter,
@@ -1551,7 +1540,7 @@ impl OnionObject {
                         "bool" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::bool".to_string(),
                                 &native_bool_converter,
@@ -1561,7 +1550,7 @@ impl OnionObject {
                         "bytes" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::bytes".to_string(),
                                 &native_bytes_converter,
@@ -1571,7 +1560,7 @@ impl OnionObject {
                         "length" => {
                             let length_method = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "builtin::length".to_string(),
                                 &native_length_method,
@@ -1581,7 +1570,7 @@ impl OnionObject {
                         "elements" => {
                             let elements_method = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "builtin::elements".to_string(),
                                 &native_elements_method,
@@ -1608,7 +1597,7 @@ impl OnionObject {
                         "int" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::int".to_string(),
                                 &native_int_converter,
@@ -1618,7 +1607,7 @@ impl OnionObject {
                         "float" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::float".to_string(),
                                 &native_float_converter,
@@ -1628,7 +1617,7 @@ impl OnionObject {
                         "string" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::string".to_string(),
                                 &native_string_converter,
@@ -1638,7 +1627,7 @@ impl OnionObject {
                         "bool" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::bool".to_string(),
                                 &native_bool_converter,
@@ -1648,7 +1637,7 @@ impl OnionObject {
                         "bytes" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::bytes".to_string(),
                                 &native_bytes_converter,
@@ -1658,7 +1647,7 @@ impl OnionObject {
                         "length" => {
                             let length_method = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "builtin::length".to_string(),
                                 &native_length_method,
@@ -1668,7 +1657,7 @@ impl OnionObject {
                         "elements" => {
                             let elements_method = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "builtin::elements".to_string(),
                                 &native_elements_method,
@@ -1695,7 +1684,7 @@ impl OnionObject {
                         "int" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::int".to_string(),
                                 &native_int_converter,
@@ -1705,7 +1694,7 @@ impl OnionObject {
                         "float" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::float".to_string(),
                                 &native_float_converter,
@@ -1715,7 +1704,7 @@ impl OnionObject {
                         "string" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::string".to_string(),
                                 &native_string_converter,
@@ -1725,7 +1714,7 @@ impl OnionObject {
                         "bool" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::bool".to_string(),
                                 &native_bool_converter,
@@ -1735,7 +1724,7 @@ impl OnionObject {
                         "bytes" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "converter::bytes".to_string(),
                                 &native_bytes_converter,
@@ -1745,7 +1734,7 @@ impl OnionObject {
                         "length" => {
                             let length_method = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "builtin::length".to_string(),
                                 &native_length_method,
@@ -1755,7 +1744,7 @@ impl OnionObject {
                         "elements" => {
                             let elements_method = wrap_native_function(
                                 &onion_tuple!(),
-                                &OnionObject::Undefined(None),
+                                &FxHashMap::default(),
                                 obj,
                                 "builtin::elements".to_string(),
                                 &native_elements_method,
@@ -1824,7 +1813,6 @@ impl OnionObject {
 
     pub fn key_of(&self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| match obj {
-            OnionObject::Named(named) => Ok(named.get_key().stabilize()),
             OnionObject::Pair(pair) => Ok(pair.get_key().stabilize()),
             OnionObject::Custom(custom) => custom.key_of(),
             _ => Err(RuntimeError::InvalidOperation(
@@ -1835,7 +1823,6 @@ impl OnionObject {
 
     pub fn value_of(&self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| match obj {
-            OnionObject::Named(named) => Ok(named.get_value().stabilize()),
             OnionObject::Pair(pair) => Ok(pair.get_value().stabilize()),
             OnionObject::Undefined(s) => Ok(OnionStaticObject::new(OnionObject::String(Arc::new(
                 s.as_ref()
@@ -1860,7 +1847,6 @@ impl OnionObject {
             OnionObject::Undefined(_) => Ok("Undefined".to_string()),
             OnionObject::Tuple(_) => Ok("Tuple".to_string()),
             OnionObject::Pair(_) => Ok("Pair".to_string()),
-            OnionObject::Named(_) => Ok("Named".to_string()),
             OnionObject::LazySet(_) => Ok("LazySet".to_string()),
             OnionObject::InstructionPackage(_) => Ok("InstructionPackage".to_string()),
             OnionObject::Lambda(_) => Ok("Lambda".to_string()),
@@ -2030,7 +2016,6 @@ mod tests {
             std::mem::size_of::<GCArcWeak<OnionObjectCell>>()
         );
         println!("OnionTuple: {} bytes", std::mem::size_of::<OnionTuple>());
-        println!("OnionNamed: {} bytes", std::mem::size_of::<OnionNamed>());
         println!("OnionPair: {} bytes", std::mem::size_of::<OnionPair>());
         println!(
             "OnionLazySet: {} bytes",

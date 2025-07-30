@@ -108,9 +108,6 @@ impl Runnable for AsyncScheduler {
                             self.queue.push_back(*new_task);
                             self.queue.push_back(task);
                         }
-                        StepResult::SetSelfObject(_) => {
-                            self.queue.push_back(task);
-                        }
                     }
                 } else {
                     // 未到调度步，放回队尾

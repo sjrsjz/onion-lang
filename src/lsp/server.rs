@@ -480,10 +480,6 @@ impl LspServer {
                                             CompletionItemKind::Variable,
                                             format!("KeyValue: {}", var.name),
                                         ),
-                                        analyzer::AssumedType::NamedArgument => (
-                                            CompletionItemKind::Interface,
-                                            format!("NamedArgument: {}", var.name),
-                                        ),
                                         // Add more branches for other types
                                         _ => (
                                             CompletionItemKind::Variable,

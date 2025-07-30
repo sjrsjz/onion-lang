@@ -1093,7 +1093,7 @@ checksum = "a4895175b425cb1f87721b59f0f286c2092bd4af812243672510e1ac53e2e0ad"
 
 [[package]]
 name = "onion-frontend"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "base64 0.22.1",
  "colored",
@@ -1107,7 +1107,7 @@ dependencies = [
 
 [[package]]
 name = "onion-lang"
-version = "0.2.7"
+version = "0.3.0"
 dependencies = [
  "clap",
  "colored",
@@ -1125,6 +1125,7 @@ dependencies = [
  "regex",
  "reqwest",
  "rust-arc-gc",
+ "rustc-hash",
  "rustyline",
  "serde",
  "serde_json",
@@ -1135,7 +1136,7 @@ dependencies = [
 
 [[package]]
 name = "onion-vm"
-version = "0.2.5"
+version = "0.3.0"
 dependencies = [
  "base64 0.22.1",
  "bincode",

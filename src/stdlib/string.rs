@@ -1,11 +1,12 @@
 use indexmap::IndexMap;
 use onion_vm::{
+    GC,
     lambda::runnable::RuntimeError,
     types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
-    GC,
 };
+use rustc_hash::FxHashMap;
 
-use super::{build_named_dict, get_attr_direct, wrap_native_function};
+use super::{build_dict, get_attr_direct, wrap_native_function};
 
 fn length(
     argument: &OnionStaticObject,
@@ -451,341 +452,165 @@ fn reverse(
 pub fn build_module() -> OnionStaticObject {
     let mut module = IndexMap::new();
 
-    // length 函数
-    let mut length_params = IndexMap::new();
-    length_params.insert(
-        "string".to_string(),
-        OnionObject::Undefined(Some("String to get length".to_string().into())).stabilize(),
-    );
+    // 统一参数定义
+    let string_arg = &OnionObject::String("string".to_string().into()).stabilize();
+
+    // 单参数函数
     module.insert(
         "length".to_string(),
         wrap_native_function(
-            &build_named_dict(length_params),
-            &OnionObject::Undefined(None),
+            string_arg,
+            &FxHashMap::default(),
             "string::length".to_string(),
             &length,
         ),
     );
-
-    // trim 函数
-    let mut trim_params = IndexMap::new();
-    trim_params.insert(
-        "string".to_string(),
-        OnionObject::Undefined(Some("String to trim".to_string().into())).stabilize(),
-    );
     module.insert(
         "trim".to_string(),
         wrap_native_function(
-            &build_named_dict(trim_params),
-            &OnionObject::Undefined(None),
+            string_arg,
+            &FxHashMap::default(),
             "string::trim".to_string(),
             &trim,
         ),
     );
-
-    // uppercase 函数
-    let mut uppercase_params = IndexMap::new();
-    uppercase_params.insert(
-        "string".to_string(),
-        OnionObject::Undefined(Some("String to convert to uppercase".to_string().into()))
-            .stabilize(),
-    );
     module.insert(
         "uppercase".to_string(),
         wrap_native_function(
-            &build_named_dict(uppercase_params),
-            &OnionObject::Undefined(None),
+            string_arg,
+            &FxHashMap::default(),
             "string::uppercase".to_string(),
             &uppercase,
         ),
     );
-
-    // lowercase 函数
-    let mut lowercase_params = IndexMap::new();
-    lowercase_params.insert(
-        "string".to_string(),
-        OnionObject::Undefined(Some("String to convert to lowercase".to_string().into()))
-            .stabilize(),
-    );
     module.insert(
         "lowercase".to_string(),
         wrap_native_function(
-            &build_named_dict(lowercase_params),
-            &OnionObject::Undefined(None),
+            string_arg,
+            &FxHashMap::default(),
             "string::lowercase".to_string(),
             &lowercase,
         ),
     );
-
-    // contains 函数
-    let mut contains_params = IndexMap::new();
-    contains_params.insert(
-        "string".to_string(),
-        OnionObject::Undefined(Some("String to search within".to_string().into())).stabilize(),
-    );
-    contains_params.insert(
-        "substring".to_string(),
-        OnionObject::Undefined(Some("Substring to search for".to_string().into())).stabilize(),
-    );
-    module.insert(
-        "contains".to_string(),
-        wrap_native_function(
-            &build_named_dict(contains_params),
-            &OnionObject::Undefined(None),
-            "string::contains".to_string(),
-            &contains,
-        ),
-    );
-
-    // concat 函数
-    let mut concat_params = IndexMap::new();
-    concat_params.insert(
-        "a".to_string(),
-        OnionObject::Undefined(Some("First string to concatenate".to_string().into())).stabilize(),
-    );
-    concat_params.insert(
-        "b".to_string(),
-        OnionObject::Undefined(Some("Second string to concatenate".to_string().into())).stabilize(),
-    );
-    module.insert(
-        "concat".to_string(),
-        wrap_native_function(
-            &build_named_dict(concat_params),
-            &OnionObject::Undefined(None),
-            "string::concat".to_string(),
-            &concat,
-        ),
-    );
-
-    // split 函数
-    let mut split_params = IndexMap::new();
-    split_params.insert(
-        "string".to_string(),
-        OnionObject::Undefined(Some("String to split".to_string().into())).stabilize(),
-    );
-    split_params.insert(
-        "delimiter".to_string(),
-        OnionObject::Undefined(Some("Delimiter to split by".to_string().into())).stabilize(),
-    );
-    module.insert(
-        "split".to_string(),
-        wrap_native_function(
-            &build_named_dict(split_params),
-            &OnionObject::Undefined(None),
-            "string::split".to_string(),
-            &split,
-        ),
-    );
-
-    // replace 函数
-    let mut replace_params = IndexMap::new();
-    replace_params.insert(
-        "string".to_string(),
-        OnionObject::Undefined(Some("String to perform replacement on".to_string().into()))
-            .stabilize(),
-    );
-    replace_params.insert(
-        "from".to_string(),
-        OnionObject::Undefined(Some("Substring to replace".to_string().into())).stabilize(),
-    );
-    replace_params.insert(
-        "to".to_string(),
-        OnionObject::Undefined(Some("Replacement string".to_string().into())).stabilize(),
-    );
-    module.insert(
-        "replace".to_string(),
-        wrap_native_function(
-            &build_named_dict(replace_params),
-            &OnionObject::Undefined(None),
-            "string::replace".to_string(),
-            &replace,
-        ),
-    );
-
-    // substr 函数
-    let mut substr_params = IndexMap::new();
-    substr_params.insert(
-        "string".to_string(),
-        OnionObject::Undefined(Some("String to extract substring from".to_string().into()))
-            .stabilize(),
-    );
-    substr_params.insert(
-        "start".to_string(),
-        OnionObject::Undefined(Some("Start index".to_string().into())).stabilize(),
-    );
-    substr_params.insert(
-        "length".to_string(),
-        OnionObject::Undefined(Some("Length of substring".to_string().into())).stabilize(),
-    );
-    module.insert(
-        "substr".to_string(),
-        wrap_native_function(
-            &build_named_dict(substr_params),
-            &OnionObject::Undefined(None),
-            "string::substr".to_string(),
-            &substr,
-        ),
-    );
-
-    // index_of 函数
-    let mut index_of_params = IndexMap::new();
-    index_of_params.insert(
-        "string".to_string(),
-        OnionObject::Undefined(Some("String to search in".to_string().into())).stabilize(),
-    );
-    index_of_params.insert(
-        "substring".to_string(),
-        OnionObject::Undefined(Some("Substring to find".to_string().into())).stabilize(),
-    );
-    module.insert(
-        "index_of".to_string(),
-        wrap_native_function(
-            &build_named_dict(index_of_params),
-            &OnionObject::Undefined(None),
-            "string::index_of".to_string(),
-            &index_of,
-        ),
-    );
-
-    // starts_with 函数
-    let mut starts_with_params = IndexMap::new();
-    starts_with_params.insert(
-        "string".to_string(),
-        OnionObject::Undefined(Some("String to check".to_string().into())).stabilize(),
-    );
-    starts_with_params.insert(
-        "prefix".to_string(),
-        OnionObject::Undefined(Some("Prefix to check for".to_string().into())).stabilize(),
-    );
-    module.insert(
-        "starts_with".to_string(),
-        wrap_native_function(
-            &build_named_dict(starts_with_params),
-            &OnionObject::Undefined(None),
-            "string::starts_with".to_string(),
-            &starts_with,
-        ),
-    );
-
-    // ends_with 函数
-    let mut ends_with_params = IndexMap::new();
-    ends_with_params.insert(
-        "string".to_string(),
-        OnionObject::Undefined(Some("String to check".to_string().into())).stabilize(),
-    );
-    ends_with_params.insert(
-        "suffix".to_string(),
-        OnionObject::Undefined(Some("Suffix to check for".to_string().into())).stabilize(),
-    );
-    module.insert(
-        "ends_with".to_string(),
-        wrap_native_function(
-            &build_named_dict(ends_with_params),
-            &OnionObject::Undefined(None),
-            "string::ends_with".to_string(),
-            &ends_with,
-        ),
-    );
-
-    // repeat 函数
-    let mut repeat_params = IndexMap::new();
-    repeat_params.insert(
-        "string".to_string(),
-        OnionObject::Undefined(Some("String to repeat".to_string().into())).stabilize(),
-    );
-    repeat_params.insert(
-        "count".to_string(),
-        OnionObject::Undefined(Some("Number of times to repeat".to_string().into())).stabilize(),
-    );
-    module.insert(
-        "repeat".to_string(),
-        wrap_native_function(
-            &build_named_dict(repeat_params),
-            &OnionObject::Undefined(None),
-            "string::repeat".to_string(),
-            &repeat,
-        ),
-    );
-
-    // pad_left 函数
-    let mut pad_left_params = IndexMap::new();
-    pad_left_params.insert(
-        "string".to_string(),
-        OnionObject::Undefined(Some("String to pad".to_string().into())).stabilize(),
-    );
-    pad_left_params.insert(
-        "length".to_string(),
-        OnionObject::Undefined(Some("Target length".to_string().into())).stabilize(),
-    );
-    pad_left_params.insert(
-        "pad_char".to_string(),
-        OnionObject::Undefined(Some("Character to pad with".to_string().into())).stabilize(),
-    );
-    module.insert(
-        "pad_left".to_string(),
-        wrap_native_function(
-            &build_named_dict(pad_left_params),
-            &OnionObject::Undefined(None),
-            "string::pad_left".to_string(),
-            &pad_left,
-        ),
-    );
-
-    // pad_right 函数
-    let mut pad_right_params = IndexMap::new();
-    pad_right_params.insert(
-        "string".to_string(),
-        OnionObject::Undefined(Some("String to pad".to_string().into())).stabilize(),
-    );
-    pad_right_params.insert(
-        "length".to_string(),
-        OnionObject::Undefined(Some("Target length".to_string().into())).stabilize(),
-    );
-    pad_right_params.insert(
-        "pad_char".to_string(),
-        OnionObject::Undefined(Some("Character to pad with".to_string().into())).stabilize(),
-    );
-    module.insert(
-        "pad_right".to_string(),
-        wrap_native_function(
-            &build_named_dict(pad_right_params),
-            &OnionObject::Undefined(None),
-            "string::pad_right".to_string(),
-            &pad_right,
-        ),
-    );
-
-    // is_empty 函数
-    let mut is_empty_params = IndexMap::new();
-    is_empty_params.insert(
-        "string".to_string(),
-        OnionObject::Undefined(Some("String to check if empty".to_string().into())).stabilize(),
-    );
     module.insert(
         "is_empty".to_string(),
         wrap_native_function(
-            &build_named_dict(is_empty_params),
-            &OnionObject::Undefined(None),
+            string_arg,
+            &FxHashMap::default(),
             "string::is_empty".to_string(),
             &is_empty,
         ),
     );
-
-    // reverse 函数
-    let mut reverse_params = IndexMap::new();
-    reverse_params.insert(
-        "string".to_string(),
-        OnionObject::Undefined(Some("String to reverse".to_string().into())).stabilize(),
-    );
     module.insert(
         "reverse".to_string(),
         wrap_native_function(
-            &build_named_dict(reverse_params),
-            &OnionObject::Undefined(None),
+            string_arg,
+            &FxHashMap::default(),
             "string::reverse".to_string(),
             &reverse,
         ),
     );
 
-    build_named_dict(module)
+    // 多参数函数
+    module.insert(
+        "contains".to_string(),
+        wrap_native_function(
+            &super::build_string_tuple(&["string", "substring"]),
+            &FxHashMap::default(),
+            "string::contains".to_string(),
+            &contains,
+        ),
+    );
+    module.insert(
+        "concat".to_string(),
+        wrap_native_function(
+            &super::build_string_tuple(&["a", "b"]),
+            &FxHashMap::default(),
+            "string::concat".to_string(),
+            &concat,
+        ),
+    );
+    module.insert(
+        "split".to_string(),
+        wrap_native_function(
+            &super::build_string_tuple(&["string", "delimiter"]),
+            &FxHashMap::default(),
+            "string::split".to_string(),
+            &split,
+        ),
+    );
+    module.insert(
+        "replace".to_string(),
+        wrap_native_function(
+            &super::build_string_tuple(&["string", "from", "to"]),
+            &FxHashMap::default(),
+            "string::replace".to_string(),
+            &replace,
+        ),
+    );
+    module.insert(
+        "substr".to_string(),
+        wrap_native_function(
+            &super::build_string_tuple(&["string", "start", "length"]),
+            &FxHashMap::default(),
+            "string::substr".to_string(),
+            &substr,
+        ),
+    );
+    module.insert(
+        "index_of".to_string(),
+        wrap_native_function(
+            &super::build_string_tuple(&["string", "substring"]),
+            &FxHashMap::default(),
+            "string::index_of".to_string(),
+            &index_of,
+        ),
+    );
+    module.insert(
+        "starts_with".to_string(),
+        wrap_native_function(
+            &super::build_string_tuple(&["string", "prefix"]),
+            &FxHashMap::default(),
+            "string::starts_with".to_string(),
+            &starts_with,
+        ),
+    );
+    module.insert(
+        "ends_with".to_string(),
+        wrap_native_function(
+            &super::build_string_tuple(&["string", "suffix"]),
+            &FxHashMap::default(),
+            "string::ends_with".to_string(),
+            &ends_with,
+        ),
+    );
+    module.insert(
+        "repeat".to_string(),
+        wrap_native_function(
+            &super::build_string_tuple(&["string", "count"]),
+            &FxHashMap::default(),
+            "string::repeat".to_string(),
+            &repeat,
+        ),
+    );
+    module.insert(
+        "pad_left".to_string(),
+        wrap_native_function(
+            &super::build_string_tuple(&["string", "length", "pad_char"]),
+            &FxHashMap::default(),
+            "string::pad_left".to_string(),
+            &pad_left,
+        ),
+    );
+    module.insert(
+        "pad_right".to_string(),
+        wrap_native_function(
+            &super::build_string_tuple(&["string", "length", "pad_char"]),
+            &FxHashMap::default(),
+            "string::pad_right".to_string(),
+            &pad_right,
+        ),
+    );
+
+    build_dict(module)
 }

@@ -1,6 +1,6 @@
 [package]
 name = "onion-lang"
-version = "0.2.7"
+version = "0.3.0"
 edition = "2024"
 authors = ["sjrsjz <sjrsjz@gmail.com>"]
 description = "A modern functional programming language with asynchronous execution and lazy evaluation"
@@ -37,8 +37,8 @@ name = "onion"
 path = "src/main.rs"
 
 [dependencies]
-onion-frontend = { version = "0.2.2", path = "./onion-frontend" }
-onion-vm = { version = "0.2.5", path = "./onion-vm" }
+onion-frontend = { version = "0.3.0", path = "./onion-frontend" }
+onion-vm = { version = "0.3.0", path = "./onion-vm" }
 serde = { workspace = true }
 clap = { version = "4.5", features = ["derive"] }
 colored = { workspace = true }
@@ -57,6 +57,7 @@ indexmap = { version = "2.9.0", features = ["serde"] }
 ctrlc = "3.4.7"
 rust-arc-gc = "0.2.1"
 encoding_rs = "0.8.35"
+rustc-hash = "2.1.1"
 
 [dev-dependencies]
 criterion = { workspace = true }

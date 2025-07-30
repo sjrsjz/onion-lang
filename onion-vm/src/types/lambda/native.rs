@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
 use arc_gc::gc::GC;
+use rustc_hash::FxHashMap;
 
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
-    onion_tuple,
     types::{
-        lambda::definition::{LambdaBody, OnionLambdaDefinition},
+        lambda::definition::{LambdaBody, LambdaType, OnionLambdaDefinition},
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         tuple::OnionTuple,
     },
@@ -17,12 +17,12 @@ pub struct NativeMethodGenerator<F>
 where
     F: Fn(
             Option<&OnionStaticObject>,
-            &OnionStaticObject,
+            &FxHashMap<String, OnionStaticObject>,
             &mut GC<OnionObjectCell>,
         ) -> Result<OnionStaticObject, RuntimeError>
         + 'static,
 {
-    argument: OnionStaticObject,
+    captured: FxHashMap<String, OnionStaticObject>,
     self_object: Option<OnionStaticObject>,
     function: &'static F,
 }
@@ -31,7 +31,7 @@ impl<F> Runnable for NativeMethodGenerator<F>
 where
     F: Fn(
             Option<&OnionStaticObject>,
-            &OnionStaticObject,
+            &FxHashMap<String, OnionStaticObject>,
             &mut GC<OnionObjectCell>,
         ) -> Result<OnionStaticObject, RuntimeError>
         + Send
@@ -40,31 +40,31 @@ where
 {
     fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> StepResult {
         unwrap_step_result!(
-            (self.function)(self.self_object.as_ref(), &self.argument, gc)
+            (self.function)(self.self_object.as_ref(), &self.captured, gc)
                 .map(|result| StepResult::Return(result.into()))
         )
     }
 
-    fn receive(
+    fn capture(
         &mut self,
-        step_result: &StepResult,
+        argument: &FxHashMap<String, OnionStaticObject>,
+        captured_vars: &FxHashMap<String, OnionObject>,
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
-        match step_result {
-            StepResult::Return(result) => {
-                self.argument = result.as_ref().clone();
-                Ok(())
-            }
-            StepResult::SetSelfObject(self_object) => {
-                self.self_object = Some(self_object.as_ref().clone());
-                Ok(())
-            }
-            _ => Err(RuntimeError::DetailedError(
-                "NativeFunctionGenerator received unexpected step result"
-                    .to_string()
-                    .into(),
-            )),
+        self.captured = argument.clone();
+        for (key, value) in captured_vars {
+            self.captured.insert(key.clone(), value.stabilize());
         }
+        Ok(())
+    }
+
+    fn bind_self_object(
+        &mut self,
+        self_object: &OnionObject,
+        _gc: &mut GC<OnionObjectCell>,
+    ) -> Result<(), RuntimeError> {
+        self.self_object = Some(self_object.stabilize());
+        Ok(())
     }
 
     fn format_context(&self) -> String {
@@ -84,18 +84,18 @@ where
 
         // Assemble all the information into a clear, multi-line string.
         format!(
-        "-> Executing Native Method:\n   - Function: {} (Full Type: {})\n   - Self (this): {}\n   - Argument: {:?}",
-        short_type_name,
-        full_type_name, // It's good to include the full name for detailed debugging
-        self_info,
-        self.argument
-    )
+            "-> Executing Native Method:\n   - Function: {} (Full Type: {})\n   - Self (this): {}\n   - Argument: {:?}",
+            short_type_name,
+            full_type_name, // It's good to include the full name for detailed debugging
+            self_info,
+            self.captured
+        )
     }
 }
 
 pub(crate) fn native_int_converter(
     self_object: Option<&OnionStaticObject>,
-    _argument: &OnionStaticObject,
+    _argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(self_obj) = self_object else {
@@ -158,7 +158,7 @@ pub(crate) fn native_int_converter(
 
 pub(crate) fn native_float_converter(
     self_object: Option<&OnionStaticObject>,
-    _argument: &OnionStaticObject,
+    _argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(self_obj) = self_object else {
@@ -219,7 +219,7 @@ pub(crate) fn native_float_converter(
 
 pub(crate) fn native_string_converter(
     self_object: Option<&OnionStaticObject>,
-    _argument: &OnionStaticObject,
+    _argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(self_obj) = self_object else {
@@ -290,7 +290,7 @@ pub(crate) fn native_string_converter(
 
 pub(crate) fn native_bool_converter(
     self_object: Option<&OnionStaticObject>,
-    _argument: &OnionStaticObject,
+    _argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(self_obj) = self_object else {
@@ -345,7 +345,7 @@ pub(crate) fn native_bool_converter(
 
 pub(crate) fn native_bytes_converter(
     self_object: Option<&OnionStaticObject>,
-    _argument: &OnionStaticObject,
+    _argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(self_obj) = self_object else {
@@ -410,7 +410,7 @@ pub(crate) fn native_bytes_converter(
 
 pub(crate) fn native_length_method(
     self_object: Option<&OnionStaticObject>,
-    _argument: &OnionStaticObject,
+    _argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(self_obj) = self_object else {
@@ -442,7 +442,7 @@ pub(crate) fn native_length_method(
 
 pub(crate) fn native_elements_method(
     self_object: Option<&OnionStaticObject>,
-    _argument: &OnionStaticObject,
+    _argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(self_obj) = self_object else {
@@ -500,7 +500,7 @@ pub(crate) fn native_elements_method(
 
 pub(crate) fn wrap_native_function<F>(
     params: &OnionStaticObject,
-    capture: &OnionObject,
+    capture: &FxHashMap<String, OnionObject>,
     self_object: &OnionObject,
     signature: String,
     function: &'static F,
@@ -508,7 +508,7 @@ pub(crate) fn wrap_native_function<F>(
 where
     F: Fn(
             Option<&OnionStaticObject>,
-            &OnionStaticObject,
+            &FxHashMap<String, OnionStaticObject>,
             &mut GC<OnionObjectCell>,
         ) -> Result<OnionStaticObject, RuntimeError>
         + Send
@@ -519,7 +519,7 @@ where
         params,
         LambdaBody::NativeFunction(Arc::new(|| {
             Box::new(NativeMethodGenerator {
-                argument: onion_tuple!(),
+                captured: FxHashMap::default(),
                 self_object: None,
                 function: function,
             })
@@ -527,5 +527,6 @@ where
         capture,
         self_object,
         signature,
+        LambdaType::Normal,
     )
 }

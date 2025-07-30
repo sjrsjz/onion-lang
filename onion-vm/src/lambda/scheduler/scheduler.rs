@@ -70,34 +70,6 @@ impl Runnable for Scheduler {
                         )
                     }
                 }
-                StepResult::SetSelfObject(ref self_object) => {
-                    if let Some(top_runnable) = self.runnable_stack.last_mut() {
-                        match top_runnable
-                            .receive(&StepResult::SetSelfObject(self_object.clone()), gc)
-                        {
-                            Ok(_) => {}
-                            Err(RuntimeError::CustomValue(ref e)) => {
-                                return StepResult::Return(
-                                    OnionPair::new_static(
-                                        &OnionObject::Boolean(false).stabilize(),
-                                        &e,
-                                    )
-                                    .into(),
-                                );
-                            }
-                            Err(e) => {
-                                return StepResult::Return(
-                                    OnionPair::new_static(
-                                        &OnionObject::Boolean(false).stabilize(),
-                                        &OnionObject::String(Arc::new(e.to_string())).stabilize(),
-                                    )
-                                    .into(),
-                                );
-                            }
-                        }
-                    }
-                    StepResult::Continue
-                }
                 StepResult::Error(ref error) => {
                     if let RuntimeError::Pending = error {
                         // 如果是 Pending 状态，继续等待

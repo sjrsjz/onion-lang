@@ -1,11 +1,12 @@
 use indexmap::IndexMap;
 use onion_vm::{
+    GC,
     lambda::runnable::RuntimeError,
     types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
-    GC,
 };
+use rustc_hash::FxHashMap;
 
-use super::{build_named_dict, get_attr_direct, wrap_native_function};
+use super::{build_dict, get_attr_direct, wrap_native_function};
 
 fn abs(
     argument: &OnionStaticObject,
@@ -334,347 +335,137 @@ pub fn build_module() -> OnionStaticObject {
         OnionObject::Float(std::f64::consts::E).stabilize(),
     );
 
-    // abs 函数
-    let mut abs_params = IndexMap::new();
-    abs_params.insert(
-        "value".to_string(),
-        OnionObject::Undefined(Some("Number to get absolute value".to_string().into())).stabilize(),
-    );
+    // 统一参数定义
+    let single_arg = &OnionObject::String("value".to_string().into()).stabilize();
+    let pow_args = &["base", "exponent"];
+
+    // 注册所有实现，单参数统一，pow多参数
     module.insert(
         "abs".to_string(),
         wrap_native_function(
-            &build_named_dict(abs_params),
-            &OnionObject::Undefined(None),
+            single_arg,
+            &FxHashMap::default(),
             "math::abs".to_string(),
             &abs,
         ),
-    ); // sin 函数
-    let mut sin_params = IndexMap::new();
-    sin_params.insert(
-        "value".to_string(),
-        OnionObject::Undefined(Some("Angle in radians".to_string().into())).stabilize(),
     );
     module.insert(
         "sin".to_string(),
         wrap_native_function(
-            &build_named_dict(sin_params),
-            &OnionObject::Undefined(None),
+            single_arg,
+            &FxHashMap::default(),
             "math::sin".to_string(),
             &sin,
         ),
     );
-
-    // cos 函数
-    let mut cos_params = IndexMap::new();
-    cos_params.insert(
-        "value".to_string(),
-        OnionObject::Undefined(Some("Angle in radians".to_string().into())).stabilize(),
-    );
     module.insert(
         "cos".to_string(),
         wrap_native_function(
-            &build_named_dict(cos_params),
-            &OnionObject::Undefined(None),
+            single_arg,
+            &FxHashMap::default(),
             "math::cos".to_string(),
             &cos,
         ),
     );
-
-    // tan 函数
-    let mut tan_params = IndexMap::new();
-    tan_params.insert(
-        "value".to_string(),
-        OnionObject::Undefined(Some("Angle in radians".to_string().into())).stabilize(),
-    );
     module.insert(
         "tan".to_string(),
         wrap_native_function(
-            &build_named_dict(tan_params),
-            &OnionObject::Undefined(None),
+            single_arg,
+            &FxHashMap::default(),
             "math::tan".to_string(),
             &tan,
         ),
     );
-
-    // log 函数
-    let mut log_params = IndexMap::new();
-    log_params.insert(
-        "value".to_string(),
-        OnionObject::Undefined(Some(
-            "Number to calculate natural logarithm".to_string().into(),
-        ))
-        .stabilize(),
-    );
     module.insert(
         "log".to_string(),
         wrap_native_function(
-            &build_named_dict(log_params),
-            &OnionObject::Undefined(None),
+            single_arg,
+            &FxHashMap::default(),
             "math::log".to_string(),
             &log,
         ),
     );
-
-    // exp 函数
-    let mut exp_params = IndexMap::new();
-    exp_params.insert(
-        "value".to_string(),
-        OnionObject::Undefined(Some("Exponent for e^x".to_string().into())).stabilize(),
-    );
-    module.insert(
-        "exp".to_string(),
-        wrap_native_function(
-            &build_named_dict(exp_params),
-            &OnionObject::Undefined(None),
-            "math::exp".to_string(),
-            &exp,
-        ),
-    );
-
-    // floor 函数
-    let mut floor_params = IndexMap::new();
-    floor_params.insert(
-        "value".to_string(),
-        OnionObject::Undefined(Some("Number to floor".to_string().into())).stabilize(),
-    );
-    module.insert(
-        "floor".to_string(),
-        wrap_native_function(
-            &build_named_dict(floor_params),
-            &OnionObject::Undefined(None),
-            "math::floor".to_string(),
-            &floor,
-        ),
-    );
-
-    // ceil 函数
-    let mut ceil_params = IndexMap::new();
-    ceil_params.insert(
-        "value".to_string(),
-        OnionObject::Undefined(Some("Number to ceil".to_string().into())).stabilize(),
-    );
-    module.insert(
-        "ceil".to_string(),
-        wrap_native_function(
-            &build_named_dict(ceil_params),
-            &OnionObject::Undefined(None),
-            "math::ceil".to_string(),
-            &ceil,
-        ),
-    );
-
-    // round 函数
-    let mut round_params = IndexMap::new();
-    round_params.insert(
-        "value".to_string(),
-        OnionObject::Undefined(Some("Number to round".to_string().into())).stabilize(),
-    );
-    module.insert(
-        "round".to_string(),
-        wrap_native_function(
-            &build_named_dict(round_params),
-            &OnionObject::Undefined(None),
-            "math::round".to_string(),
-            &round,
-        ),
-    );
-
-    // asin 函数
-    let mut asin_params = IndexMap::new();
-    asin_params.insert(
-        "value".to_string(),
-        OnionObject::Undefined(Some("Value between -1 and 1".to_string().into())).stabilize(),
-    );
-    module.insert(
-        "asin".to_string(),
-        wrap_native_function(
-            &build_named_dict(asin_params),
-            &OnionObject::Undefined(None),
-            "math::asin".to_string(),
-            &asin,
-        ),
-    );
-
-    // acos 函数
-    let mut acos_params = IndexMap::new();
-    acos_params.insert(
-        "value".to_string(),
-        OnionObject::Undefined(Some("Value between -1 and 1".to_string().into())).stabilize(),
-    );
-    module.insert(
-        "acos".to_string(),
-        wrap_native_function(
-            &build_named_dict(acos_params),
-            &OnionObject::Undefined(None),
-            "math::acos".to_string(),
-            &acos,
-        ),
-    );
-
-    // atan 函数
-    let mut atan_params = IndexMap::new();
-    atan_params.insert(
-        "value".to_string(),
-        OnionObject::Undefined(Some("Value for arctangent".to_string().into())).stabilize(),
-    );
-    module.insert(
-        "atan".to_string(),
-        wrap_native_function(
-            &build_named_dict(atan_params),
-            &OnionObject::Undefined(None),
-            "math::atan".to_string(),
-            &atan,
-        ),
-    );
-
-    // sqrt 函数
-    let mut sqrt_params = IndexMap::new();
-    sqrt_params.insert(
-        "value".to_string(),
-        OnionObject::Undefined(Some("Number to calculate square root".to_string().into()))
-            .stabilize(),
-    );
     module.insert(
         "sqrt".to_string(),
         wrap_native_function(
-            &build_named_dict(sqrt_params),
-            &OnionObject::Undefined(None),
+            single_arg,
+            &FxHashMap::default(),
             "math::sqrt".to_string(),
             &sqrt,
         ),
     );
-
-    // pow 函数
-    let mut pow_params = IndexMap::new();
-    pow_params.insert(
-        "base".to_string(),
-        OnionObject::Undefined(Some("Base number".to_string().into())).stabilize(),
-    );
-    pow_params.insert(
-        "exponent".to_string(),
-        OnionObject::Undefined(Some("Exponent (power)".to_string().into())).stabilize(),
-    );
     module.insert(
         "pow".to_string(),
         wrap_native_function(
-            &build_named_dict(pow_params),
-            &OnionObject::Undefined(None),
+            &super::build_string_tuple(pow_args),
+            &FxHashMap::default(),
             "math::pow".to_string(),
             &pow,
         ),
     );
-
-    // exp 函数
-    let mut exp_params = IndexMap::new();
-    exp_params.insert(
-        "value".to_string(),
-        OnionObject::Undefined(Some("Number to calculate exponent".to_string().into())).stabilize(),
-    );
     module.insert(
         "exp".to_string(),
         wrap_native_function(
-            &build_named_dict(exp_params),
-            &OnionObject::Undefined(None),
+            single_arg,
+            &FxHashMap::default(),
             "math::exp".to_string(),
             &exp,
         ),
     );
-
-    // floor 函数
-    let mut floor_params = IndexMap::new();
-    floor_params.insert(
-        "value".to_string(),
-        OnionObject::Undefined(Some("Number to round down".to_string().into())).stabilize(),
-    );
     module.insert(
         "floor".to_string(),
         wrap_native_function(
-            &build_named_dict(floor_params),
-            &OnionObject::Undefined(None),
+            single_arg,
+            &FxHashMap::default(),
             "math::floor".to_string(),
             &floor,
         ),
     );
-
-    // ceil 函数
-    let mut ceil_params = IndexMap::new();
-    ceil_params.insert(
-        "value".to_string(),
-        OnionObject::Undefined(Some("Number to round up".to_string().into())).stabilize(),
-    );
     module.insert(
         "ceil".to_string(),
         wrap_native_function(
-            &build_named_dict(ceil_params),
-            &OnionObject::Undefined(None),
+            single_arg,
+            &FxHashMap::default(),
             "math::ceil".to_string(),
             &ceil,
         ),
     );
-
-    // round 函数
-    let mut round_params = IndexMap::new();
-    round_params.insert(
-        "value".to_string(),
-        OnionObject::Undefined(Some("Number to round".to_string().into())).stabilize(),
-    );
     module.insert(
         "round".to_string(),
         wrap_native_function(
-            &build_named_dict(round_params),
-            &OnionObject::Undefined(None),
+            single_arg,
+            &FxHashMap::default(),
             "math::round".to_string(),
             &round,
         ),
     );
-
-    // asin 函数
-    let mut asin_params = IndexMap::new();
-    asin_params.insert(
-        "value".to_string(),
-        OnionObject::Undefined(Some("Value in radians".to_string().into())).stabilize(),
-    );
     module.insert(
         "asin".to_string(),
         wrap_native_function(
-            &build_named_dict(asin_params),
-            &OnionObject::Undefined(None),
+            single_arg,
+            &FxHashMap::default(),
             "math::asin".to_string(),
             &asin,
         ),
     );
-
-    // acos 函数
-    let mut acos_params = IndexMap::new();
-    acos_params.insert(
-        "value".to_string(),
-        OnionObject::Undefined(Some("Value in radians".to_string().into())).stabilize(),
-    );
     module.insert(
         "acos".to_string(),
         wrap_native_function(
-            &build_named_dict(acos_params),
-            &OnionObject::Undefined(None),
+            single_arg,
+            &FxHashMap::default(),
             "math::acos".to_string(),
             &acos,
         ),
     );
-
-    // atan 函数
-    let mut atan_params = IndexMap::new();
-    atan_params.insert(
-        "value".to_string(),
-        OnionObject::Undefined(Some("Value in radians".to_string().into())).stabilize(),
-    );
     module.insert(
         "atan".to_string(),
         wrap_native_function(
-            &build_named_dict(atan_params),
-            &OnionObject::Undefined(None),
+            single_arg,
+            &FxHashMap::default(),
             "math::atan".to_string(),
             &atan,
         ),
     );
 
-    build_named_dict(module)
+    build_dict(module)
 }

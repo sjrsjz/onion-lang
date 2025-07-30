@@ -1,12 +1,15 @@
-use super::{build_named_dict, wrap_native_function};
+use super::{build_dict, wrap_native_function};
 use indexmap::IndexMap;
 use onion_vm::types::{pair::OnionPair, tuple::OnionTuple};
 use onion_vm::{
+    GC,
     lambda::runnable::RuntimeError,
-    types::object::{OnionObject, OnionStaticObject},
+    types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
 };
+use rustc_hash::FxHashMap;
 use serde_json::Value;
 
+/// 将 OnionObject 递归转换为 serde_json::Value。
 fn to_json(obj: OnionObject) -> Result<Value, RuntimeError> {
     obj.with_data(|data| {
         match data {
@@ -17,59 +20,42 @@ fn to_json(obj: OnionObject) -> Result<Value, RuntimeError> {
             OnionObject::Null => Ok(Value::Null),
             OnionObject::Pair(p) => {
                 // 将 Pair 转换为只有一个键值对的 JSON 对象
-                let key = p
-                    .get_key()
-                    .to_string(&vec![])
-                    .map_err(|e| RuntimeError::InvalidOperation(e.to_string().into()))?;
-                let value = to_json(p.get_value().clone())
-                    .map_err(|e| RuntimeError::InvalidOperation(e.to_string().into()))?;
+                let key = p.get_key().to_string(&vec![])?;
+                let value = to_json(p.get_value().clone())?;
                 let mut map = serde_json::Map::new();
                 map.insert(key, value);
                 Ok(Value::Object(map))
             }
             OnionObject::Tuple(t) => {
-                // 检查是否所有元素都是 Pair，如果是则转换为 JSON 对象
-                let all_pairs = t
-                    .get_elements()
-                    .iter()
-                    .all(|e| matches!(e, OnionObject::Pair(_)));
-
-                if all_pairs && !t.get_elements().is_empty() {
-                    // 转换为 JSON 对象 (字典)
+                let elements = t.get_elements();
+                // 检查元组是否可以被视为一个字典（所有元素都是键值对）
+                if !elements.is_empty()
+                    && elements.iter().all(|e| matches!(e, OnionObject::Pair(_)))
+                {
                     let mut map = serde_json::Map::new();
-                    for element in t.get_elements() {
+                    for element in elements {
                         if let OnionObject::Pair(pair) = element {
-                            let key = pair.get_key().to_string(&vec![]).map_err(|e| {
-                                RuntimeError::InvalidOperation(e.to_string().into())
-                            })?;
-                            let value = to_json(pair.get_value().clone()).map_err(|e| {
-                                RuntimeError::InvalidOperation(e.to_string().into())
-                            })?;
+                            let key = pair.get_key().to_string(&vec![])?;
+                            let value = to_json(pair.get_value().clone())?;
                             map.insert(key, value);
                         }
                     }
                     Ok(Value::Object(map))
                 } else {
-                    // 转换为 JSON 数组
-                    let vec: Vec<_> = t
-                        .get_elements()
-                        .iter()
-                        .map(|e| to_json(e.clone()))
-                        .collect();
-                    Ok(Value::Array(
-                        vec.into_iter()
-                            .collect::<Result<Vec<_>, _>>()
-                            .map_err(|e| RuntimeError::InvalidOperation(e.to_string().into()))?,
-                    ))
+                    // 否则，转换为 JSON 数组
+                    let vec: Result<Vec<_>, _> =
+                        elements.iter().map(|e| to_json(e.clone())).collect();
+                    Ok(Value::Array(vec?))
                 }
             }
             _ => Err(RuntimeError::InvalidType(
-                format!("Cannot convert {:?} to JSON", data).into(),
+                format!("Cannot convert type to JSON").into(),
             )),
         }
     })
 }
 
+/// 将 serde_json::Value 递归转换为 OnionObject。
 fn from_json(value: Value) -> Result<OnionStaticObject, RuntimeError> {
     match value {
         Value::Null => Ok(OnionObject::Null.stabilize()),
@@ -81,7 +67,7 @@ fn from_json(value: Value) -> Result<OnionStaticObject, RuntimeError> {
                 Ok(OnionObject::Float(f).stabilize())
             } else {
                 Err(RuntimeError::InvalidType(
-                    "Invalid number format".to_string().into(),
+                    "Invalid JSON number format".to_string().into(),
                 ))
             }
         }
@@ -91,10 +77,7 @@ fn from_json(value: Value) -> Result<OnionStaticObject, RuntimeError> {
                 .into_iter()
                 .map(|v| from_json(v).map(|obj| obj.weak().clone()))
                 .collect();
-            match elements {
-                Ok(elems) => Ok(OnionObject::Tuple(OnionTuple::new(elems).into()).stabilize()),
-                Err(e) => Err(e),
-            }
+            Ok(OnionObject::Tuple(OnionTuple::new(elements?).into()).stabilize())
         }
         Value::Object(obj) => {
             let pairs: Result<Vec<_>, _> = obj
@@ -105,124 +88,118 @@ fn from_json(value: Value) -> Result<OnionStaticObject, RuntimeError> {
                     Ok(OnionObject::Pair(OnionPair::new(key_obj, value_obj).into()))
                 })
                 .collect();
-            match pairs {
-                Ok(pair_elems) => {
-                    Ok(OnionObject::Tuple(OnionTuple::new(pair_elems).into()).stabilize())
-                }
-                Err(e) => Err(e),
-            }
+            Ok(OnionObject::Tuple(OnionTuple::new(pairs?).into()).stabilize())
         }
     }
 }
 
 /// 解析 JSON 字符串为 OnionObject
-pub fn parse_json(json_str: &str) -> Result<OnionStaticObject, RuntimeError> {
+fn parse_json(json_str: &str) -> Result<OnionStaticObject, RuntimeError> {
     let value: Value = serde_json::from_str(json_str)
-        .map_err(|e| RuntimeError::InvalidOperation(format!("JSON parse error: {}", e).into()))?;
+        .map_err(|e| RuntimeError::DetailedError(format!("JSON parse error: {}", e).into()))?;
     from_json(value)
 }
 
 /// 将 OnionObject 序列化为 JSON 字符串
-pub fn stringify_json(obj: OnionObject) -> Result<String, RuntimeError> {
+fn stringify_json(obj: OnionObject) -> Result<String, RuntimeError> {
     let json_value = to_json(obj)?;
     serde_json::to_string(&json_value)
-        .map_err(|e| RuntimeError::InvalidOperation(format!("JSON stringify error: {}", e).into()))
+        .map_err(|e| RuntimeError::DetailedError(format!("JSON stringify error: {}", e).into()))
 }
 
 /// 将 OnionObject 序列化为格式化的 JSON 字符串
-pub fn stringify_json_pretty(obj: OnionObject) -> Result<String, RuntimeError> {
+fn stringify_json_pretty(obj: OnionObject) -> Result<String, RuntimeError> {
     let json_value = to_json(obj)?;
     serde_json::to_string_pretty(&json_value)
-        .map_err(|e| RuntimeError::InvalidOperation(format!("JSON stringify error: {}", e).into()))
+        .map_err(|e| RuntimeError::DetailedError(format!("JSON stringify error: {}", e).into()))
 }
 
-/// 构建 JSON 模块
+// --- 新的原生函数封装 (遵循 io 模块的模式) ---
+
+fn json_parse(
+    argument: &FxHashMap<String, OnionStaticObject>,
+    _gc: &mut GC<OnionObjectCell>,
+) -> Result<OnionStaticObject, RuntimeError> {
+    let Some(json_string_obj) = argument.get("json_string") else {
+        return Err(RuntimeError::DetailedError(
+            "json.parse requires a 'json_string' argument"
+                .to_string()
+                .into(),
+        ));
+    };
+
+    json_string_obj.weak().with_data(|data| match data {
+        OnionObject::String(s) => parse_json(s),
+        _ => Err(RuntimeError::InvalidType(
+            "Argument 'json_string' must be a string".to_string().into(),
+        )),
+    })
+}
+
+fn json_stringify(
+    argument: &FxHashMap<String, OnionStaticObject>,
+    _gc: &mut GC<OnionObjectCell>,
+) -> Result<OnionStaticObject, RuntimeError> {
+    let Some(object_to_stringify) = argument.get("object") else {
+        return Err(RuntimeError::DetailedError(
+            "json.stringify requires an 'object' argument"
+                .to_string()
+                .into(),
+        ));
+    };
+
+    let json_str = stringify_json(object_to_stringify.weak().clone())?;
+    Ok(OnionObject::String(json_str.into()).stabilize())
+}
+
+fn json_stringify_pretty(
+    argument: &FxHashMap<String, OnionStaticObject>,
+    _gc: &mut GC<OnionObjectCell>,
+) -> Result<OnionStaticObject, RuntimeError> {
+    let Some(object_to_stringify) = argument.get("object") else {
+        return Err(RuntimeError::DetailedError(
+            "json.stringify_pretty requires an 'object' argument"
+                .to_string()
+                .into(),
+        ));
+    };
+
+    let json_str = stringify_json_pretty(object_to_stringify.weak().clone())?;
+    Ok(OnionObject::String(json_str.into()).stabilize())
+}
+
 pub fn build_module() -> OnionStaticObject {
     let mut module = IndexMap::new();
 
-    // JSON.parse 函数参数定义
-    let mut parse_params = IndexMap::new();
-    parse_params.insert(
-        "json_string".to_string(),
-        OnionObject::Undefined(Some("JSON string to parse".to_string().into())).stabilize(),
-    );
-
-    // JSON.parse 函数
     module.insert(
         "parse".to_string(),
         wrap_native_function(
-            &build_named_dict(parse_params),
-            &OnionObject::Undefined(None),
-            "json_parse".to_string(),
-            &|args, _gc| {
-                args.weak().with_data(|data| {
-                    let json_string = super::get_attr_direct(data, "json_string".to_string())?;
-                    json_string
-                        .weak()
-                        .with_data(|string_data| match string_data {
-                            OnionObject::String(s) => parse_json(s)
-                                .map_err(|e| RuntimeError::InvalidOperation(e.to_string().into())),
-                            _ => Err(RuntimeError::InvalidOperation(
-                                "parse requires string".to_string().into(),
-                            )),
-                        })
-                })
-            },
+            &OnionObject::String("json_string".to_string().into()).stabilize(),
+            &FxHashMap::default(),
+            "json::parse".to_string(),
+            &json_parse,
         ),
     );
 
-    // JSON.stringify 函数参数定义
-    let mut stringify_params = IndexMap::new();
-    stringify_params.insert(
-        "object".to_string(),
-        OnionObject::Undefined(Some("Object to stringify".to_string().into())).stabilize(),
-    );
-
-    // JSON.stringify 函数
     module.insert(
         "stringify".to_string(),
         wrap_native_function(
-            &build_named_dict(stringify_params),
-            &OnionObject::Undefined(None),
-            "json_stringify".to_string(),
-            &|args, _gc| {
-                args.weak().with_data(|data| {
-                    let obj = super::get_attr_direct(data, "object".to_string())?;
-                    let json_str = stringify_json(obj.weak().clone())
-                        .map_err(|e| RuntimeError::InvalidOperation(e.to_string().into()))?;
-                    Ok(OnionObject::String(json_str.into()).stabilize())
-                })
-            },
+            &OnionObject::String("object".to_string().into()).stabilize(),
+            &FxHashMap::default(),
+            "json::stringify".to_string(),
+            &json_stringify,
         ),
     );
 
-    // JSON.stringify_pretty 函数参数定义
-    let mut stringify_pretty_params = IndexMap::new();
-    stringify_pretty_params.insert(
-        "object".to_string(),
-        OnionObject::Undefined(Some(
-            "Object to stringify with pretty formatting".to_string().into(),
-        ))
-        .stabilize(),
-    );
-
-    // JSON.stringify_pretty 函数
     module.insert(
         "stringify_pretty".to_string(),
         wrap_native_function(
-            &build_named_dict(stringify_pretty_params),
-            &OnionObject::Undefined(None),
-            "json_stringify_pretty".to_string(),
-            &|args, _gc| {
-                args.weak().with_data(|data| {
-                    let obj = super::get_attr_direct(data, "object".to_string())?;
-                    let json_str = stringify_json_pretty(obj.weak().clone())
-                        .map_err(|e| RuntimeError::InvalidOperation(e.to_string().into()))?;
-                    Ok(OnionObject::String(json_str.into()).stabilize())
-                })
-            },
+            &OnionObject::String("object".to_string().into()).stabilize(),
+            &FxHashMap::default(),
+            "json::stringify_pretty".to_string(),
+            &json_stringify_pretty,
         ),
     );
 
-    build_named_dict(module)
+    build_dict(module)
 }

@@ -122,11 +122,6 @@ impl OnionTuple {
     {
         for element in &self.elements {
             match element {
-                OnionObject::Named(named) => {
-                    if named.get_key().equals(key)? {
-                        return f(&named.get_value());
-                    }
-                }
                 OnionObject::Pair(pair) => {
                     if pair.get_key().equals(key)? {
                         return f(&pair.get_value());

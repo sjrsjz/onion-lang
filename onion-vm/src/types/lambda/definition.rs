@@ -9,11 +9,14 @@ use arc_gc::{
     gc::GC,
     traceable::GCTraceable,
 };
+use rustc_hash::FxHashMap;
 
 use crate::{
-    lambda::runnable::{Runnable, RuntimeError, StepResult},
+    lambda::runnable::{Runnable, RuntimeError},
     types::{
-        lambda::vm_instructions::instruction_set::VMInstructionPackage,
+        lambda::{
+            build_dict_from_hashmap_weak, vm_instructions::instruction_set::VMInstructionPackage,
+        },
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
     },
 };
@@ -54,19 +57,27 @@ impl Display for LambdaBody {
     }
 }
 
+pub enum LambdaType {
+    Normal,
+    AsyncLauncher,
+    SyncLauncher,
+}
+
 pub struct OnionLambdaDefinition {
     parameter: Arc<OnionObject>,
     body: LambdaBody,
-    capture: Arc<OnionObject>,
+    capture: Arc<FxHashMap<String, OnionObject>>,
     signature: String,
+    lambda_type: LambdaType,
 }
 
 impl OnionLambdaDefinition {
     pub fn new_static(
         parameter: &OnionStaticObject,
         body: LambdaBody,
-        capture: &OnionObject,
+        capture: &FxHashMap<String, OnionObject>,
         signature: String,
+        lambda_type: LambdaType,
     ) -> OnionStaticObject {
         OnionObject::Lambda((
             OnionLambdaDefinition {
@@ -74,6 +85,7 @@ impl OnionLambdaDefinition {
                 body,
                 capture: capture.clone().into(),
                 signature,
+                lambda_type,
             }
             .into(),
             OnionObject::Undefined(None).into(),
@@ -84,9 +96,10 @@ impl OnionLambdaDefinition {
     pub fn new_static_with_self(
         parameter: &OnionStaticObject,
         body: LambdaBody,
-        capture: &OnionObject,
+        capture: &FxHashMap<String, OnionObject>,
         self_object: &OnionObject,
         signature: String,
+        lambda_type: LambdaType,
     ) -> OnionStaticObject {
         OnionObject::Lambda((
             OnionLambdaDefinition {
@@ -94,6 +107,7 @@ impl OnionLambdaDefinition {
                 body,
                 capture: capture.clone().into(),
                 signature,
+                lambda_type,
             }
             .into(),
             self_object.clone().into(),
@@ -101,9 +115,23 @@ impl OnionLambdaDefinition {
         .consume_and_stabilize()
     }
 
+    pub fn with_lambda_type(&self, lambda_type: LambdaType) -> Self {
+        OnionLambdaDefinition {
+            parameter: self.parameter.clone(),
+            body: self.body.clone(),
+            capture: self.capture.clone(),
+            signature: self.signature.clone(),
+            lambda_type,
+        }
+    }
+
+    pub fn lambda_type(&self) -> &LambdaType {
+        &self.lambda_type
+    }
+
     pub fn create_runnable(
         &self,
-        argument: OnionStaticObject,
+        argument: &FxHashMap<String, OnionStaticObject>,
         this_lambda: &OnionStaticObject,
         self_object: &OnionObject,
         gc: &mut GC<OnionObjectCell>,
@@ -112,6 +140,7 @@ impl OnionLambdaDefinition {
             LambdaBody::Instruction(instruction) => {
                 let runnable = OnionLambdaRunnable::new(
                     argument,
+                    self.capture.as_ref(),
                     self_object,
                     this_lambda,
                     instruction.clone(),
@@ -132,11 +161,8 @@ impl OnionLambdaDefinition {
             }
             LambdaBody::NativeFunction(native_function) => {
                 let mut runnable = native_function();
-                runnable.receive(&StepResult::Return(argument.into()), gc)?;
-                runnable.receive(
-                    &StepResult::SetSelfObject(self_object.stabilize().into()),
-                    gc,
-                )?;
+                runnable.capture(argument, self.capture.as_ref(), gc)?;
+                runnable.bind_self_object(self_object, gc)?;
                 Ok(runnable)
             }
         }
@@ -150,7 +176,7 @@ impl OnionLambdaDefinition {
         &self.parameter
     }
 
-    pub fn get_capture(&self) -> &OnionObject {
+    pub fn get_capture(&self) -> &FxHashMap<String, OnionObject> {
         &self.capture
     }
 
@@ -160,7 +186,9 @@ impl OnionLambdaDefinition {
 
     pub fn upgrade(&self, collected: &mut Vec<GCArc<OnionObjectCell>>) {
         self.parameter.upgrade(collected);
-        self.capture.upgrade(collected);
+        for obj in self.capture.values() {
+            obj.upgrade(collected);
+        }
     }
 
     pub fn with_attribute<F, R>(&self, key: &OnionObject, f: &F) -> Result<R, RuntimeError>
@@ -169,7 +197,9 @@ impl OnionLambdaDefinition {
     {
         match key {
             OnionObject::String(s) if s.as_str() == "parameter" => f(&self.parameter),
-            OnionObject::String(s) if s.as_str() == "capture" => f(&self.capture),
+            OnionObject::String(s) if s.as_str() == "capture" => {
+                f(&build_dict_from_hashmap_weak(&self.capture).weak())
+            }
             OnionObject::String(s) if s.as_str() == "signature" => {
                 f(&OnionObject::String(Arc::new(self.signature.clone())))
             }
@@ -183,14 +213,16 @@ impl OnionLambdaDefinition {
     where
         F: Fn(&OnionObject) -> Result<R, RuntimeError>,
     {
-        f(&self.parameter)
+        self.parameter.with_data(f)
     }
 }
 
 impl GCTraceable<OnionObjectCell> for OnionLambdaDefinition {
     fn collect(&self, queue: &mut VecDeque<GCArcWeak<OnionObjectCell>>) {
         self.parameter.collect(queue);
-        self.capture.collect(queue);
+        for obj in self.capture.values() {
+            obj.collect(queue);
+        }
     }
 }
 

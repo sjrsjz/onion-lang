@@ -1,6 +1,6 @@
 [package]
 name = "onion-frontend"
-version = "0.2.2"
+version = "0.3.0"
 edition = "2024"
 authors = ["sjrsjz <sjrsjz@gmail.com>"]
 description = "Compilation frontend for the Onion programming language - lexer, parser, and IR generator"
@@ -25,7 +25,7 @@ crate-type = ["lib"]
 base64 = "0.22.1"
 colored = { workspace = true, optional = true }
 once_cell = "1.21.3"
-onion-vm = { version = "0.2.5", path = "../onion-vm" }
+onion-vm = { version = "0.3.0", path = "../onion-vm" }
 regex = "1.11.1"
 unicode-segmentation = "1.12.0"
 unicode-width = "0.2.1"

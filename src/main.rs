@@ -1,5 +1,6 @@
 use clap::{Parser, Subcommand};
 use colored::*;
+use rustc_hash::FxHashMap;
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -14,20 +15,17 @@ use onion_vm::{
     lambda::{
         runnable::{Runnable, RuntimeError, StepResult},
         scheduler::scheduler::Scheduler,
-    },
-    types::{
+    }, onion_tuple, types::{
         lambda::{
-            definition::{LambdaBody, OnionLambdaDefinition},
+            definition::{LambdaBody, LambdaType, OnionLambdaDefinition},
             launcher::OnionLambdaRunnableLauncher,
             vm_instructions::{
                 instruction_set::VMInstructionPackage, ir::IRPackage, ir_translator::IRTranslator,
             },
         },
-        named::OnionNamed,
         object::OnionObject,
         tuple::OnionTuple,
-    },
-    unwrap_object, GC,
+    }, unwrap_object, GC
 };
 
 mod lsp;
@@ -343,17 +341,16 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
         Ok(_) => {}
     }
     // Create standard library object
-    let stdlib_pair = OnionNamed::new_static(
-        &OnionObject::String(Arc::new("stdlib".to_string())).consume_and_stabilize(),
-        &stdlib::build_module(),
-    );
-
+    let stdlib = stdlib::build_module();
+    let mut capture = FxHashMap::default();
+    capture.insert("stdlib".to_string(), stdlib.weak().clone());
     // Create Lambda definition
     let lambda = OnionLambdaDefinition::new_static(
-        &OnionTuple::new_static(vec![&stdlib_pair]),
+        &onion_tuple!(),
         LambdaBody::Instruction(Arc::new(vm_instructions_package.clone())),
-        &OnionObject::Undefined(None),
+        &capture,
         "__main__".to_string(),
+        LambdaType::Normal
     );
 
     let args = OnionTuple::new_static(vec![]);
@@ -369,9 +366,6 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
         match scheduler.step(&mut gc) {
             StepResult::Continue => {
                 // Continue to next step
-            }
-            StepResult::SetSelfObject(_) => {
-                // Set self object, no action needed here
             }
             StepResult::SpawnRunnable(_) => {
                 return Err("Cannot spawn async task in sync context".to_string());

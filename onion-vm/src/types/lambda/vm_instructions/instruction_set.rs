@@ -53,31 +53,28 @@ pub enum VMInstruction {
     UnaryNeg = 42,    // -
 
     // 变量与引用 (50-69)
-    StoreVar = 50,    // 存储变量
-    LoadVar = 51,     // 加载变量
-    SetValue = 52,    // 设置值
-    GetAttr = 53,     // 获取属性
-    IndexOf = 54,     // 获取索引
-    KeyOf = 55,       // 获取键
-    ValueOf = 56,     // 获取值
-    TypeOf = 57,      // 获取类型
-    DeepCopy = 58,    // 深拷贝
-    ShallowCopy = 59, // 浅拷贝
-    Mut = 60,         // 创建引用
-    Const = 61,       // 解引用
-    Swap = 62,        // 交换栈两个值
-    LengthOf = 63,    // 获取对象长度
-    Share = 64,      // 共享对象
+    StoreVar = 50,   // 存储变量
+    LoadVar = 51,    // 加载变量
+    SetValue = 52,   // 设置值
+    GetAttr = 53,    // 获取属性
+    KeyOf = 55,      // 获取键
+    ValueOf = 56,    // 获取值
+    TypeOf = 57,     // 获取类型
+    Mut = 60,        // 创建引用
+    Const = 61,      // 解引用
+    Swap = 62,       // 交换栈两个值
+    LengthOf = 63,   // 获取对象长度
     Launch = 65,     // 启动线程
     Spawn = 66,      // 启动任务
+    MakeAsync = 67,  // 异步池化调度
+    MakeSync = 68,   // 同步池化调度
+    MakeAtomic = 69, // 将Lambda转换为标准调度
 
     // 控制流 (70-79)
-    Call = 70,        // 调用函数
-    AsyncCall = 71,   // 异步调用
+    Apply = 70,       // 函数应用/索引应用
     Return = 72,      // 返回
     Jump = 73,        // 跳转
     JumpIfFalse = 74, // 条件跳转
-    SyncCall = 75,    // 运行函数
     Raise = 76,       // 抛出自定义值
 
     // 帧操作 (80-89)
@@ -93,7 +90,6 @@ pub enum VMInstruction {
     ForkInstruction = 100, // 复制当前函数指令集
     BindSelf = 101,        // 绑定self
     Assert = 102,          // 断言
-    Emit = 103,            // 发射事件
 
     // 其他
     Nop = 255, // 空操作
@@ -148,23 +144,23 @@ impl VMInstruction {
             51 => Some(Self::LoadVar),
             52 => Some(Self::SetValue),
             53 => Some(Self::GetAttr),
-            54 => Some(Self::IndexOf),
             55 => Some(Self::KeyOf),
             56 => Some(Self::ValueOf),
             57 => Some(Self::TypeOf),
-            58 => Some(Self::DeepCopy),
-            59 => Some(Self::ShallowCopy),
             60 => Some(Self::Mut),
             61 => Some(Self::Const),
             62 => Some(Self::Swap),
             63 => Some(Self::LengthOf),
+            65 => Some(Self::Launch),
+            66 => Some(Self::Spawn),
+            67 => Some(Self::MakeAsync),
+            68 => Some(Self::MakeSync),
+            69 => Some(Self::MakeAtomic),
 
-            70 => Some(Self::Call),
-            71 => Some(Self::AsyncCall),
+            70 => Some(Self::Apply),
             72 => Some(Self::Return),
             73 => Some(Self::Jump),
             74 => Some(Self::JumpIfFalse),
-            75 => Some(Self::SyncCall),
             76 => Some(Self::Raise),
 
             80 => Some(Self::NewFrame),
@@ -177,7 +173,6 @@ impl VMInstruction {
             100 => Some(Self::ForkInstruction),
             101 => Some(Self::BindSelf),
             102 => Some(Self::Assert),
-            103 => Some(Self::Emit),
             255 => Some(Self::Nop),
 
             _ => None,
@@ -191,6 +186,7 @@ pub struct VMInstructionPackage {
     function_ips: HashMap<String, usize>, // 签名定位表
     code: Vec<u32>,
     string_pool: Vec<String>,
+    index_pool: Vec<Vec<usize>>,
     bytes_pool: Vec<Vec<u8>>,
     debug_infos: HashMap<usize, DebugInfo>,
     source: Option<String>,
@@ -201,6 +197,7 @@ impl VMInstructionPackage {
         function_ips: HashMap<String, usize>,
         code: Vec<u32>,
         string_pool: Vec<String>,
+        index_pool: Vec<Vec<usize>>,
         bytes_pool: Vec<Vec<u8>>,
         debug_infos: HashMap<usize, DebugInfo>,
         source: Option<String>,
@@ -209,6 +206,7 @@ impl VMInstructionPackage {
             function_ips,
             code,
             string_pool,
+            index_pool,
             bytes_pool,
             debug_infos,
             source,
@@ -225,6 +223,10 @@ impl VMInstructionPackage {
     #[inline(always)]
     pub fn get_string_pool(&self) -> &Vec<String> {
         &self.string_pool
+    }
+    #[inline(always)]
+    pub fn get_index_pool(&self) -> &Vec<Vec<usize>> {
+        &self.index_pool
     }
     #[inline(always)]
     pub fn get_bytes_pool(&self) -> &Vec<Vec<u8>> {

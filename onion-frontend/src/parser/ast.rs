@@ -313,38 +313,32 @@ fn gather(tokens: GatheredTokens<'_>) -> Result<Vec<GatheredTokens<'_>>, ParserE
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ASTNodeType {
-    None, // No expression
     Null, // Null
     Undefined,
-    String(String),              // String
-    Boolean(String),             // Boolean
-    Number(String),              // Number (Integer, Float)
-    Base64(String),              // Base64
-    Variable(String),            // Variable
-    Let(String),                 // x := expression
-    Body,                        // {...}
-    Assign,                      // x = expression
-    LambdaDef(bool, bool, bool), // tuple -> body or tuple -> dyn expression or tuple -> &capture body or dynamic tuple -> body
-    Expressions,                 // expression1; expression2; ...
-    LambdaCall,                  // x (tuple)
-    Operation(ASTNodeOperation), // x + y, x - y, x * y, x / y ...
-    Tuple,                       // x, y, z, ...
-    AssumeTuple,                 // ...value
-    KeyValue,                    // x: y
-    IndexOf,                     // x[y]
-    GetAttr,                     // x.y
-    Return,                      // return expression
+    String(String),               // String
+    Boolean(bool),                // Boolean
+    Number(String),               // Number (Integer, Float)
+    Base64(String),               // Base64
+    Variable(String),             // Variable
+    Let(String),                  // x := expression
+    Body,                         // {...}
+    Assign,                       // x = expression
+    LambdaDef(bool, Vec<String>), // tuple -> body or tuple -> dyn expression
+    Expressions,                  // expression1; expression2; ...
+    Apply,                        // x y
+    Operation(ASTNodeOperation),  // x + y, x - y, x * y, x / y ...
+    Tuple,                        // x, y, z, ...
+    AssumeTuple,                  // ...value
+    KeyValue,                     // x: y
+    GetAttr,                      // x.y
+    Return,                       // return expression
     If,    // if expression truecondition || if expression truecondition else falsecondition
     While, // while expression body
     Modifier(ASTNodeModifier), // modifier expression
-    NamedTo, // x => y (x is name of y)
     Break, // break
     Continue, // continue
     Range, // x..y
     In,
-    Emit,
-    AsyncLambdaCall,
-    SyncLambdaCall,
     Namespace(String),  // Type::Value
     Set,                // collection | filter
     Map,                // collection |> map
@@ -377,8 +371,6 @@ pub enum ASTNodeOperation {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ASTNodeModifier {
-    DeepCopy, // DeepCopy
-    Copy,     // Copy
     Mut,      // Mut
     Const,    // Const
     KeyOf,    // KeyOf
@@ -387,11 +379,12 @@ pub enum ASTNodeModifier {
     Import,   // Import
     TypeOf,   // TypeOf
     Await,    // Await
-    BindSelf, // BindSelf
     LengthOf, // LengthOf
-    Share,    // Share
     Launch,   // Launch
     Spawn,    // Spawn
+    Async,
+    Sync,
+    Atomic,
 }
 
 #[derive(Debug, Clone)]
@@ -432,8 +425,10 @@ impl ASTNode {
         let output = match &self.node_type {
             node_type @ (ASTNodeType::Variable(v)
             | ASTNodeType::Number(v)
-            | ASTNodeType::String(v)
-            | ASTNodeType::Boolean(v)) => {
+            | ASTNodeType::String(v)) => {
+                format!("{}{:?}: {:?}", indent_str, node_type, v)
+            }
+            node_type @ ASTNodeType::Boolean(v) => {
                 format!("{}{:?}: {:?}", indent_str, node_type, v)
             }
             node_type => format!("{}{:?}", indent_str, node_type),
@@ -473,7 +468,10 @@ impl NodeMatcher {
         current: usize,
     ) -> Result<(Option<ASTNode>, usize), ParserError> {
         if tokens.is_empty() {
-            return Ok((Some(ASTNode::new(ASTNodeType::None, None, None, None)), 0));
+            return Ok((
+                Some(ASTNode::new(ASTNodeType::Tuple, None, None, Some(vec![]))),
+                0,
+            ));
         }
         let mut offset = 0;
         let mut matched_nodes = Vec::<ASTNode>::new();
@@ -512,7 +510,10 @@ impl NodeMatcher {
         current: usize,
     ) -> Result<(Option<ASTNode>, usize), ParserError> {
         if tokens.is_empty() {
-            return Ok((Some(ASTNode::new(ASTNodeType::None, None, None, None)), 0));
+            return Ok((
+                Some(ASTNode::new(ASTNodeType::Tuple, None, None, Some(vec![]))),
+                0,
+            ));
         }
 
         if current >= tokens.len() {
@@ -661,7 +662,7 @@ pub fn build_ast(tokens: GatheredTokens<'_>) -> Result<ASTNode, ParserError> {
     let gathered = gather(tokens)?;
     let (matched, offset) = match_all(&gathered, 0)?;
     if matched.is_none() {
-        return Ok(ASTNode::new(ASTNodeType::None, None, None, None));
+        return Ok(ASTNode::new(ASTNodeType::Tuple, None, None, Some(vec![])));
     }
     let matched = matched.unwrap();
     if offset != gathered.len() {
@@ -878,7 +879,7 @@ fn match_all<'t>(
 
     node_matcher.add_matcher(Box::new(
         |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_member_access_and_call(tokens, current)
+            match_member_access_and_apply(tokens, current)
         },
     ));
 
@@ -999,10 +1000,7 @@ fn match_return_emit_raise(
     if current >= tokens.len() {
         return Ok((None, 0));
     }
-    if !is_identifier(&tokens[current], "return")
-        && !is_identifier(&tokens[current], "emit")
-        && !is_identifier(&tokens[current], "raise")
-    {
+    if !is_identifier(&tokens[current], "return") && !is_identifier(&tokens[current], "raise") {
         return Ok((None, 0));
     }
     let right_tokens = tokens[current + 1..].to_vec();
@@ -1020,7 +1018,6 @@ fn match_return_emit_raise(
 
     let node_type = match tokens[current].first().unwrap().token().as_str() {
         "return" => ASTNodeType::Return,
-        "emit" => ASTNodeType::Emit,
         "raise" => ASTNodeType::Raise,
         _ => unreachable!(),
     };
@@ -1045,18 +1042,20 @@ fn match_tuple(
     let mut separated = Vec::<ASTNode>::new();
     while current + offset < tokens.len() {
         if is_symbol(&tokens[current + offset], ",") {
-            let (node, node_offset) = match_all(&left_tokens, 0)?;
-            if node.is_none() {
-                return Ok((None, 0));
+            if !left_tokens.is_empty() {
+                let (node, node_offset) = match_all(&left_tokens, 0)?;
+                if node.is_none() {
+                    return Ok((None, 0));
+                }
+                if node_offset != left_tokens.len() {
+                    return Err(ParserError::NotFullyMatched(
+                        left_tokens.first().unwrap().first().unwrap().clone(),
+                        left_tokens.last().unwrap().last().unwrap().clone(),
+                    ));
+                }
+                separated.push(node.unwrap());
+                left_tokens.clear();
             }
-            if node_offset != left_tokens.len() {
-                return Err(ParserError::NotFullyMatched(
-                    left_tokens.first().unwrap().first().unwrap().clone(),
-                    left_tokens.last().unwrap().last().unwrap().clone(),
-                ));
-            }
-            separated.push(node.unwrap());
-            left_tokens.clear();
             offset += 1;
             last_offset = offset;
         } else {
@@ -1067,21 +1066,22 @@ fn match_tuple(
     if separated.is_empty() {
         return Ok((None, 0));
     }
-    let (node, node_offset) = match_all(&left_tokens, 0)?;
-    if node.is_none() {
-        return Ok((None, 0));
+    if !left_tokens.is_empty() {
+        let (node, node_offset) = match_all(&left_tokens, 0)?;
+        if node.is_none() {
+            return Ok((None, 0));
+        }
+        separated.push(node.unwrap());
+        last_offset += node_offset;
     }
-    separated.push(node.unwrap());
     Ok((
         Some(ASTNode::new(
             ASTNodeType::Tuple,
             tokens[current].first().cloned(),
-            tokens[current + last_offset + node_offset - 1]
-                .last()
-                .cloned(),
+            tokens[current + last_offset - 1].last().cloned(),
             Some(separated),
         )),
-        last_offset + node_offset,
+        last_offset,
     ))
 }
 
@@ -1270,7 +1270,7 @@ fn match_named_to(
 
     Ok((
         Some(ASTNode::new(
-            ASTNodeType::NamedTo,
+            ASTNodeType::KeyValue,
             tokens[current].first().cloned(),
             tokens[current + right_offset + 1].last().cloned(),
             Some(vec![left, right]),
@@ -2286,65 +2286,15 @@ fn match_lambda_def(
     if left.is_none() {
         return Ok((None, 0));
     }
-    let mut left = left.unwrap();
+    let left = left.unwrap();
     if left_offset != left_tokens.len() {
         return Err(ParserError::NotFullyMatched(
             left_tokens.first().unwrap().first().unwrap().clone(),
             left_tokens.last().unwrap().last().unwrap().clone(),
         ));
     }
-    // Ensure parameters are treated as a tuple
-    if left.node_type != ASTNodeType::Tuple && left.node_type != ASTNodeType::AssumeTuple {
-        left = ASTNode::new(
-            ASTNodeType::Tuple,
-            left.start_token.clone(),
-            left.end_token.clone(),
-            Some(vec![left]),
-        );
-    }
 
     let mut body_start_index = current + 2; // Index after params ->
-    let mut captures_node: Option<ASTNode> = None;
-    let mut is_capture = false;
-
-    // Check for capture list (&xxx)
-    if body_start_index < tokens.len() && is_symbol(&tokens[body_start_index], "&") {
-        is_capture = true;
-        let capture_list_index = body_start_index + 1;
-        if capture_list_index >= tokens.len() {
-            return Err(ParserError::MissingStructure(
-                tokens[body_start_index][0].clone(),
-                "Capture list after '&'".to_string(),
-            ));
-        }
-
-        // Parse the capture list (single token group expected after &)
-        let capture_tokens_group = gather(tokens[capture_list_index])?;
-        let (captures, captures_parsed_len) = match_all(&capture_tokens_group, 0)?;
-
-        if captures.is_none() {
-            return Err(ParserError::ErrorStructure(
-                tokens[capture_list_index][0].clone(),
-                "Failed to parse capture value after '&'".to_string(),
-            ));
-        }
-        let captures = captures.unwrap();
-        if captures_parsed_len != capture_tokens_group.len() {
-            return Err(ParserError::NotFullyMatched(
-                capture_tokens_group
-                    .first()
-                    .unwrap()
-                    .first()
-                    .unwrap()
-                    .clone(),
-                capture_tokens_group.last().unwrap().last().unwrap().clone(),
-            ));
-        }
-        captures_node = Some(captures);
-
-        // Update body_start_index to point after & and the capture list token group
-        body_start_index += 2;
-    }
 
     // Check for 'dyn' keyword
     let is_dyn = body_start_index < tokens.len() && is_identifier(&tokens[body_start_index], "dyn");
@@ -2380,22 +2330,15 @@ fn match_lambda_def(
     }
     let right = right.unwrap();
 
-    // Construct the AST node
-    let mut children = vec![left];
-    if let Some(captures) = captures_node {
-        children.push(captures); // Add captures node if it exists
-    }
-    children.push(right); // Add body node
-
     let total_offset = body_start_index - current + right_offset;
 
     Ok((
         Some(ASTNode::new(
             // Use the new ASTNodeType variant
-            ASTNodeType::LambdaDef(is_dyn, is_capture, false),
+            ASTNodeType::LambdaDef(is_dyn, vec![]),
             tokens[current].first().cloned(), // Start of parameters
             tokens[current + total_offset - 1].last().cloned(), // End of body
-            Some(children),
+            Some(vec![left, right]),
         )),
         total_offset, // Total number of token groups consumed
     ))
@@ -2433,22 +2376,11 @@ fn match_quick_call(
                 right_tokens.last().unwrap().last().unwrap().clone(),
             ));
         }
-        let mut right = right.unwrap();
-        if right.node_type != ASTNodeType::Tuple && right.node_type != ASTNodeType::AssumeTuple {
-            right = ASTNode::new(
-                ASTNodeType::Tuple,
-                if current + 2 < tokens.len() {
-                    tokens[current + 2].first().cloned()
-                } else {
-                    None
-                },
-                right.end_token.clone(),
-                Some(vec![right]),
-            );
-        }
+        let right = right.unwrap();
+
         return Ok((
             Some(ASTNode::new(
-                ASTNodeType::LambdaCall,
+                ASTNodeType::Apply,
                 tokens[current].first().cloned(),
                 tokens[current + right_offset + 1].last().cloned(),
                 Some(vec![left, right]),
@@ -2468,8 +2400,8 @@ fn match_modifier(
     }
     if tokens[current].len() == 1
         && vec![
-            "deepcopy", "copy", "mut", "const", "keyof", "valueof", "assert", "import", "typeof",
-            "await", "bind", "lengthof", "dynamic", "static", "share", "launch", "spawn",
+            "mut", "const", "keyof", "valueof", "assert", "import", "typeof", "await", "lengthof",
+            "launch", "spawn", "async", "sync", "atomic",
         ]
         .contains(&tokens[current].first().unwrap().token().as_str())
     {
@@ -2486,47 +2418,7 @@ fn match_modifier(
         }
         let node = node.unwrap();
 
-        if tokens[current].first().unwrap() == "dynamic" {
-            let ASTNodeType::LambdaDef(is_dyn_gen, is_capture, _) = node.node_type else {
-                return Err(ParserError::ErrorStructure(
-                    tokens[current].first().unwrap().clone(),
-                    "Dynamic modifier can only be used with lambda".to_string(),
-                ));
-            };
-            let node = node.clone();
-            return Ok((
-                Some(ASTNode::new(
-                    ASTNodeType::LambdaDef(is_dyn_gen, is_capture, true),
-                    tokens[current].first().cloned(),
-                    tokens[current + node_offset].last().cloned(),
-                    Some(node.children),
-                )),
-                node_offset + 1,
-            ));
-        }
-
-        if tokens[current].first().unwrap() == "static" {
-            let ASTNodeType::LambdaDef(is_dyn_gen, is_capture, _) = node.node_type else {
-                return Err(ParserError::ErrorStructure(
-                    tokens[current].first().unwrap().clone(),
-                    "Dynamic modifier can only be used with lambda".to_string(),
-                ));
-            };
-            let node = node.clone();
-            return Ok((
-                Some(ASTNode::new(
-                    ASTNodeType::LambdaDef(is_dyn_gen, is_capture, false),
-                    tokens[current].first().cloned(),
-                    tokens[current + node_offset].last().cloned(),
-                    Some(node.children),
-                )),
-                node_offset + 1,
-            ));
-        }
-
         let modifier = match tokens[current].first().unwrap().token().as_str() {
-            "deepcopy" => ASTNodeModifier::DeepCopy,
-            "copy" => ASTNodeModifier::Copy,
             "mut" => ASTNodeModifier::Mut,
             "const" => ASTNodeModifier::Const,
             "keyof" => ASTNodeModifier::KeyOf,
@@ -2535,11 +2427,12 @@ fn match_modifier(
             "import" => ASTNodeModifier::Import,
             "typeof" => ASTNodeModifier::TypeOf,
             "await" => ASTNodeModifier::Await,
-            "bind" => ASTNodeModifier::BindSelf,
             "lengthof" => ASTNodeModifier::LengthOf,
-            "share" => ASTNodeModifier::Share,
             "launch" => ASTNodeModifier::Launch,
             "spawn" => ASTNodeModifier::Spawn,
+            "async" => ASTNodeModifier::Async,
+            "sync" => ASTNodeModifier::Sync,
+            "atomic" => ASTNodeModifier::Atomic,
             _ => return Ok((None, 0)),
         };
         return Ok((
@@ -2586,50 +2479,12 @@ fn match_quick_named_to(
         }
         return Ok((
             Some(ASTNode::new(
-                ASTNodeType::NamedTo,
+                ASTNodeType::KeyValue,
                 tokens[current].first().cloned(),
                 tokens.last().unwrap().last().cloned(),
                 Some(vec![
                     node,
-                    ASTNode::new(ASTNodeType::Undefined, None, None, None),
-                ]),
-            )),
-            node_offset + 1,
-        ));
-    } else if is_symbol(&tokens[tokens.len() - 1], "!") {
-        let left_tokens = tokens[..tokens.len() - 1].to_vec();
-        let (node, node_offset) = match_all(&left_tokens, 0)?;
-        if node.is_none() {
-            return Ok((None, 0));
-        }
-        if node_offset != left_tokens.len() {
-            return Err(ParserError::NotFullyMatched(
-                left_tokens.first().unwrap().first().unwrap().clone(),
-                left_tokens.last().unwrap().last().unwrap().clone(),
-            ));
-        }
-        let node = node.unwrap();
-        let ASTNodeType::Variable(name) = node.node_type else {
-            return Ok((None, 0));
-        };
-        return Ok((
-            Some(ASTNode::new(
-                ASTNodeType::NamedTo,
-                tokens[current].first().cloned(),
-                tokens.last().unwrap().last().cloned(),
-                Some(vec![
-                    ASTNode::new(
-                        ASTNodeType::String(name.clone()),
-                        node.start_token.clone(),
-                        node.start_token.clone(),
-                        None,
-                    ),
-                    ASTNode::new(
-                        ASTNodeType::Variable(name),
-                        node.start_token.clone(),
-                        node.end_token.clone(),
-                        None,
-                    ),
+                    ASTNode::new(ASTNodeType::Boolean(true), None, None, None),
                 ]),
             )),
             node_offset + 1,
@@ -2704,7 +2559,7 @@ fn match_alias(
         _ => {
             return Err(ParserError::InvalidSyntax(
                 tokens[current].first().unwrap().clone(),
-            ))
+            ));
         }
     };
 
@@ -2733,246 +2588,70 @@ fn match_alias(
     ))
 }
 
-fn match_member_access_and_call(
+fn match_member_access_and_apply(
     tokens: &Vec<GatheredTokens>,
     current: usize,
 ) -> Result<(Option<ASTNode>, usize), ParserError> {
-    let mut offset: usize = tokens.len() - current - 1;
-    let mut access_type = Option::<&str>::None;
-    let mut access_pos: usize = 0;
-
-    // 从右往左搜索访问操作符
-    while offset > 0 {
-        let pos = current + offset;
-
-        // 检查是否为索引访问 obj[idx]
-        if is_square_bracket(&tokens[pos]) {
-            access_type = Some("[]");
-            access_pos = pos;
-            break;
-        }
-        // 检查是否为属性访问 obj.prop
-        else if is_symbol(&tokens[pos], ".") {
-            access_type = Some(".");
-            access_pos = pos;
-            break;
-        }
-        // 检查是否为函数调用 func(args)
-        else if is_bracket(&tokens[pos]) {
-            access_type = Some("()");
-            access_pos = pos;
-            break;
-        }
-
-        offset -= 1;
+    // x y or x.y
+    if current + 1 >= tokens.len() {
+        return Ok((None, 0));
     }
 
-    if access_type.is_none() {
-        return Ok((None, 0)); // 没有找到访问操作符
+    let is_member_access = is_symbol(&tokens[tokens.len() - 2], ".");
+    let left = if is_member_access {
+        tokens[current..tokens.len() - 2].to_vec()
+    } else {
+        tokens[current..tokens.len() - 1].to_vec()
+    };
+    let (left_node, left_offset) = match_all(&left, 0)?;
+    if left_node.is_none() {
+        return Ok((None, 0));
+    }
+    let left_node = left_node.unwrap();
+    if left_offset != left.len() {
+        return Err(ParserError::NotFullyMatched(
+            left.first().unwrap().first().unwrap().clone(),
+            left.last().unwrap().last().unwrap().clone(),
+        ));
+    }
+    let right_tokens = gather(&tokens.last().unwrap())?;
+    let (right_node, right_offset) = match_all(&right_tokens, 0)?;
+    if right_node.is_none() {
+        return Ok((None, 0));
+    }
+    let mut right_node = right_node.unwrap();
+    if right_offset != right_tokens.len() {
+        return Err(ParserError::NotFullyMatched(
+            right_tokens.first().unwrap().first().unwrap().clone(),
+            right_tokens.last().unwrap().last().unwrap().clone(),
+        ));
     }
 
-    match access_type.unwrap() {
-        // 处理索引访问 obj[idx]
-        "[]" => {
-            if access_pos != tokens.len() - 1 {
-                // 非 xxx[] 形式的访问，直接返回
-                return Err(ParserError::InvalidSyntax(
-                    tokens[access_pos].first().unwrap().clone(),
-                ));
-            }
-            // 解析左侧表达式（被访问的对象或被调用的函数）
-            let left_tokens = &tokens[current..access_pos].to_vec();
-            if left_tokens.is_empty() {
-                return Ok((None, 0));
-            }
-
-            let (left, left_offset) = match_all(left_tokens, 0)?;
-            if left.is_none() {
-                return Ok((None, 0));
-            }
-
-            let left = left.unwrap();
-            if left_offset != left_tokens.len() {
-                return Err(ParserError::NotFullyMatched(
-                    left_tokens.first().unwrap().first().unwrap().clone(),
-                    left_tokens.last().unwrap().last().unwrap().clone(),
-                ));
-            }
-            // 解包索引括号中的内容
-            let index_tokens = &tokens[access_pos];
-            let gathered_index = gather(index_tokens)?;
-
-            let (index_node, _) = match_all(&gathered_index, 0)?;
-            if index_node.is_none() {
-                return Ok((None, 0));
-            }
-
-            let index_node = index_node.unwrap();
-
-            Ok((
-                Some(ASTNode::new(
-                    ASTNodeType::IndexOf,
-                    tokens[current].first().cloned(),
-                    tokens[access_pos].last().cloned(),
-                    Some(vec![left, index_node]),
-                )),
-                (access_pos - current) + 1,
-            ))
-        }
-
-        // 处理属性访问 obj.prop
-        "." => {
-            if access_pos != tokens.len() - 2 {
-                // 非 xxx.xx 形式的访问，直接返回
-                return Err(ParserError::InvalidSyntax(
-                    tokens[access_pos].first().unwrap().clone(),
-                ));
-            }
-            // 解析左侧表达式（被访问的对象或被调用的函数）
-            let left_tokens = &tokens[current..access_pos].to_vec();
-            if left_tokens.is_empty() {
-                return Ok((None, 0));
-            }
-
-            let (left, left_offset) = match_all(left_tokens, 0)?;
-            if left.is_none() {
-                return Ok((None, 0));
-            }
-
-            let left = left.unwrap();
-            if left_offset != left_tokens.len() {
-                return Err(ParserError::NotFullyMatched(
-                    left_tokens.first().unwrap().first().unwrap().clone(),
-                    left_tokens.last().unwrap().last().unwrap().clone(),
-                ));
-            }
-            if access_pos + 1 >= tokens.len() {
-                return Ok((None, 0));
-            }
-
-            // 获取属性名称
-            let right_tokens = &tokens[access_pos + 1..].to_vec();
-            let (right, right_offset) = match_all(right_tokens, 0)?;
-            if right.is_none() {
-                return Ok((None, 0));
-            }
-
-            let mut right = right.unwrap();
-
-            // 如果右侧是变量，将其视为属性名
-            if let ASTNodeType::Variable(var_name) = right.node_type {
-                right = ASTNode::new(
-                    ASTNodeType::String(var_name),
-                    right.start_token,
-                    right.end_token,
-                    Some(right.children),
-                );
-                return Ok((
-                    Some(ASTNode::new(
-                        ASTNodeType::GetAttr,
-                        tokens[current].first().cloned(),
-                        tokens[access_pos + right_offset].last().cloned(),
-                        Some(vec![left, right]),
-                    )),
-                    (access_pos - current) + 1 + right_offset,
-                ));
-            }
-
-            Ok((
-                Some(ASTNode::new(
-                    ASTNodeType::GetAttr,
-                    tokens[current].first().cloned(),
-                    tokens[access_pos + right_offset].last().cloned(),
-                    Some(vec![left, right]),
-                )),
-                (access_pos - current) + 1 + right_offset,
-            ))
-        }
-
-        // 处理函数调用 func(args)
-        "()" => {
-            if access_pos != tokens.len() - 1 {
-                // 非 xxx() 形式的访问，直接返回
-                return Err(ParserError::InvalidSyntax(
-                    tokens[access_pos].first().unwrap().clone(),
-                ));
-            }
-            // 解析左侧表达式（被访问的对象或被调用的函数）
-            let mut left_tokens = tokens[current..access_pos].to_vec();
-            if left_tokens.is_empty() {
-                return Ok((None, 0));
-            }
-
-            let is_async = if left_tokens[0].len() == 1 && left_tokens[0][0] == "async" {
-                left_tokens = left_tokens[1..].to_vec();
-                true
-            } else {
-                false
-            };
-            let is_sync = if left_tokens[0].len() == 1 && left_tokens[0][0] == "sync" {
-                left_tokens = left_tokens[1..].to_vec();
-                true
-            } else {
-                false
-            };
-            let (left, left_offset) = match_all(&left_tokens, 0)?;
-            if left.is_none() {
-                return Ok((None, 0));
-            }
-
-            let left = left.unwrap();
-            if left_offset != left_tokens.len() {
-                return Err(ParserError::NotFullyMatched(
-                    left_tokens.first().unwrap().first().unwrap().clone(),
-                    left_tokens.last().unwrap().last().unwrap().clone(),
-                ));
-            }
-
-            // 解包括号中的参数
-            let args_tokens = &tokens[access_pos];
-            let gathered_args = gather(args_tokens)?;
-
-            // 处理有参数情况
-            let (args_node, _) = match_all(&gathered_args, 0)?;
-            if args_node.is_none() {
-                return Ok((None, 0));
-            }
-
-            let args_node = args_node.unwrap();
-
-            // 如果不是元组类型，将其包装为元组
-            let args = if args_node.node_type != ASTNodeType::Tuple
-                && args_node.node_type != ASTNodeType::AssumeTuple
-            {
-                ASTNode::new(
-                    ASTNodeType::Tuple,
-                    args_node.start_token.clone(),
-                    args_node.end_token.clone(),
-                    Some(vec![args_node]),
-                )
-            } else {
-                args_node
-            };
-
-            Ok((
-                Some(ASTNode::new(
-                    if is_async {
-                        ASTNodeType::AsyncLambdaCall
-                    } else if is_sync {
-                        ASTNodeType::SyncLambdaCall
-                    } else {
-                        ASTNodeType::LambdaCall
-                    },
-                    tokens[current].first().cloned(),
-                    tokens[access_pos].last().cloned(),
-                    Some(vec![left, args]),
-                )),
-                (access_pos - current) + 1,
-            ))
-        }
-
-        _ => unreachable!(),
+    if let ASTNodeType::Variable(name) = &right_node.node_type
+        && is_member_access
+    {
+        // 如果是变量名，转换为字符串节点
+        right_node = ASTNode {
+            node_type: ASTNodeType::String(name.clone()),
+            start_token: right_node.start_token,
+            end_token: right_node.end_token,
+            children: right_node.children,
+        };
     }
+
+    return Ok((
+        Some(ASTNode::new(
+            if is_member_access {
+                ASTNodeType::GetAttr
+            } else {
+                ASTNodeType::Apply
+            },
+            tokens[current].first().cloned(),
+            tokens.last().unwrap().last().cloned(),
+            Some(vec![left_node, right_node]),
+        )),
+        tokens.len() - current, // return full length of the tokens
+    ));
 }
 
 fn match_range(
@@ -3185,7 +2864,7 @@ fn match_as(
 
     // 创建函数调用 type_name(value)
     let function_call = ASTNode::new(
-        ASTNodeType::LambdaCall,
+        ASTNodeType::Apply,
         tokens[current].first().cloned(),
         tokens.last().unwrap().last().cloned(),
         Some(vec![right, args_tuple]),
@@ -3208,20 +2887,6 @@ fn match_variable(
     // 匹配括号内容（元组）
     if is_bracket(&tokens[current]) || is_square_bracket(&tokens[current]) {
         let inner_tokens = unwrap_brace(&tokens[current])?;
-
-        // 处理空元组 ()
-        if inner_tokens.is_empty() {
-            return Ok((
-                Some(ASTNode::new(
-                    ASTNodeType::Tuple,
-                    tokens[current].first().cloned(),
-                    tokens[current].last().cloned(),
-                    Some(vec![]),
-                )),
-                1,
-            ));
-        }
-
         let gathered_inner = gather(inner_tokens)?;
         let (node, _) = match_all(&gathered_inner, 0)?;
         if node.is_none() {
@@ -3291,7 +2956,7 @@ fn match_variable(
     if is_identifier(&tokens[current], "true") {
         return Ok((
             Some(ASTNode::new(
-                ASTNodeType::Boolean(String::from("true")),
+                ASTNodeType::Boolean(true),
                 tokens[current].first().cloned(),
                 tokens[current].last().cloned(),
                 None,
@@ -3304,7 +2969,7 @@ fn match_variable(
     if is_identifier(&tokens[current], "false") {
         return Ok((
             Some(ASTNode::new(
-                ASTNodeType::Boolean(String::from("false")),
+                ASTNodeType::Boolean(false),
                 tokens[current].first().cloned(),
                 tokens[current].last().cloned(),
                 None,

@@ -1,12 +1,13 @@
 use indexmap::IndexMap;
 use onion_vm::{
+    GC,
     lambda::runnable::RuntimeError,
     types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
-    GC,
 };
+use rustc_hash::FxHashMap;
 use std::{env, process::Command};
 
-use super::{build_named_dict, get_attr_direct, wrap_native_function};
+use super::{build_dict, get_attr_direct, wrap_native_function};
 
 /// 执行系统命令
 fn system(
@@ -64,7 +65,7 @@ fn system(
                             OnionObject::Boolean(output.status.success()).stabilize(),
                         );
 
-                        Ok(build_named_dict(result))
+                        Ok(build_dict(result))
                     }
                     Err(e) => Err(RuntimeError::DetailedError(
                         format!("Failed to execute command: {}", e).into(),
@@ -255,154 +256,101 @@ fn path_join(
 pub fn build_module() -> OnionStaticObject {
     let mut module = IndexMap::new();
 
-    // system 函数 - 执行系统命令
-    let mut system_params = IndexMap::new();
-    system_params.insert(
-        "command".to_string(),
-        OnionObject::String("".to_string().into()).stabilize(),
-    );
+    // 统一参数定义
+    let command_arg = &OnionObject::String("command".to_string().into()).stabilize();
+    let path_arg = &OnionObject::String("path".to_string().into()).stabilize();
+    let path_join_args = &["base", "path"];
+
     module.insert(
         "system".to_string(),
         wrap_native_function(
-            &build_named_dict(system_params),
-            &OnionObject::Undefined(None),
+            command_arg,
+            &FxHashMap::default(),
             "os::system".to_string(),
             &system,
         ),
     );
-
-    // system_code 函数 - 执行命令并返回退出码
-    let mut system_code_params = IndexMap::new();
-    system_code_params.insert(
-        "command".to_string(),
-        OnionObject::String("".to_string().into()).stabilize(),
-    );
     module.insert(
         "system_code".to_string(),
         wrap_native_function(
-            &build_named_dict(system_code_params),
-            &OnionObject::Undefined(None),
+            command_arg,
+            &FxHashMap::default(),
             "os::system_code".to_string(),
             &system_code,
         ),
     );
-
-    // chdir 函数 - 改变当前工作目录
-    let mut chdir_params = IndexMap::new();
-    chdir_params.insert(
-        "path".to_string(),
-        OnionObject::String("".to_string().into()).stabilize(),
-    );
     module.insert(
         "chdir".to_string(),
         wrap_native_function(
-            &build_named_dict(chdir_params),
-            &OnionObject::Undefined(None),
+            path_arg,
+            &FxHashMap::default(),
             "os::chdir".to_string(),
             &chdir,
         ),
     );
-
-    // username 函数 - 获取当前用户名
     module.insert(
         "username".to_string(),
         wrap_native_function(
-            &build_named_dict(IndexMap::new()),
-            &OnionObject::Undefined(None),
+            &build_dict(IndexMap::new()),
+            &FxHashMap::default(),
             "os::username".to_string(),
             &username,
         ),
     );
-
-    // home_dir 函数 - 获取主目录
     module.insert(
         "home_dir".to_string(),
         wrap_native_function(
-            &build_named_dict(IndexMap::new()),
-            &OnionObject::Undefined(None),
+            &build_dict(IndexMap::new()),
+            &FxHashMap::default(),
             "os::home_dir".to_string(),
             &home_dir,
         ),
     );
-
-    // temp_dir 函数 - 获取临时目录
     module.insert(
         "temp_dir".to_string(),
         wrap_native_function(
-            &build_named_dict(IndexMap::new()),
-            &OnionObject::Undefined(None),
+            &build_dict(IndexMap::new()),
+            &FxHashMap::default(),
             "os::temp_dir".to_string(),
             &temp_dir,
         ),
     );
-
-    // path_exists 函数 - 检查路径是否存在
-    let mut path_exists_params = IndexMap::new();
-    path_exists_params.insert(
-        "path".to_string(),
-        OnionObject::String("".to_string().into()).stabilize(),
-    );
     module.insert(
         "path_exists".to_string(),
         wrap_native_function(
-            &build_named_dict(path_exists_params),
-            &OnionObject::Undefined(None),
+            path_arg,
+            &FxHashMap::default(),
             "os::path_exists".to_string(),
             &path_exists,
         ),
     );
-
-    // is_dir 函数 - 检查是否是目录
-    let mut is_dir_params = IndexMap::new();
-    is_dir_params.insert(
-        "path".to_string(),
-        OnionObject::String("".to_string().into()).stabilize(),
-    );
     module.insert(
         "is_dir".to_string(),
         wrap_native_function(
-            &build_named_dict(is_dir_params),
-            &OnionObject::Undefined(None),
+            path_arg,
+            &FxHashMap::default(),
             "os::is_dir".to_string(),
             &is_dir,
         ),
     );
-
-    // is_file 函数 - 检查是否是文件
-    let mut is_file_params = IndexMap::new();
-    is_file_params.insert(
-        "path".to_string(),
-        OnionObject::String("".to_string().into()).stabilize(),
-    );
     module.insert(
         "is_file".to_string(),
         wrap_native_function(
-            &build_named_dict(is_file_params),
-            &OnionObject::Undefined(None),
+            path_arg,
+            &FxHashMap::default(),
             "os::is_file".to_string(),
             &is_file,
         ),
     );
-
-    // path_join 函数 - 连接路径
-    let mut path_join_params = IndexMap::new();
-    path_join_params.insert(
-        "base".to_string(),
-        OnionObject::String("".to_string().into()).stabilize(),
-    );
-    path_join_params.insert(
-        "path".to_string(),
-        OnionObject::String("".to_string().into()).stabilize(),
-    );
     module.insert(
         "path_join".to_string(),
         wrap_native_function(
-            &build_named_dict(path_join_params),
-            &OnionObject::Undefined(None),
+            &super::build_string_tuple(path_join_args),
+            &FxHashMap::default(),
             "os::path_join".to_string(),
             &path_join,
         ),
     );
 
-    build_named_dict(module)
+    build_dict(module)
 }

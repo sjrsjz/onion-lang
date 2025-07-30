@@ -8,7 +8,7 @@ use opcode::{OpcodeArgument, ProcessedOpcode};
 
 use crate::{
     lambda::{
-        runnable::{RuntimeError, StepResult},
+        runnable::{Runnable, RuntimeError, StepResult},
         scheduler::{
             async_scheduler::{AsyncScheduler, Task},
             map_scheduler::Mapping,
@@ -18,9 +18,8 @@ use crate::{
     onion_tuple,
     types::{
         async_handle::OnionAsyncHandle,
-        lambda::launcher::OnionLambdaRunnableLauncher,
+        lambda::{definition::LambdaType, launcher::OnionLambdaRunnableLauncher},
         lazy_set::OnionLazySet,
-        named::OnionNamed,
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         pair::OnionPair,
         thread_handle::OnionThreadHandle,
@@ -46,9 +45,11 @@ pub fn load_int(
     _gc: &mut GC<OnionObjectCell>,
 ) -> StepResult {
     if let OpcodeArgument::Int64(value) = opcode.operand1 {
-        unwrap_step_result!(runnable
-            .context
-            .push_object(OnionObject::Integer(value).consume_and_stabilize()));
+        unwrap_step_result!(
+            runnable
+                .context
+                .push_object(OnionObject::Integer(value).consume_and_stabilize())
+        );
         StepResult::Continue
     } else {
         StepResult::Error(RuntimeError::DetailedError(
@@ -66,9 +67,11 @@ pub fn load_null(
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObjectCell>,
 ) -> StepResult {
-    unwrap_step_result!(runnable
-        .context
-        .push_object(OnionObject::Null.consume_and_stabilize()));
+    unwrap_step_result!(
+        runnable
+            .context
+            .push_object(OnionObject::Null.consume_and_stabilize())
+    );
     StepResult::Continue
 }
 
@@ -77,9 +80,11 @@ pub fn load_undefined(
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObjectCell>,
 ) -> StepResult {
-    unwrap_step_result!(runnable
-        .context
-        .push_object(OnionObject::Undefined(None).consume_and_stabilize()));
+    unwrap_step_result!(
+        runnable
+            .context
+            .push_object(OnionObject::Undefined(None).consume_and_stabilize())
+    );
     StepResult::Continue
 }
 
@@ -89,9 +94,11 @@ pub fn load_float(
     _gc: &mut GC<OnionObjectCell>,
 ) -> StepResult {
     if let OpcodeArgument::Float64(value) = opcode.operand1 {
-        unwrap_step_result!(runnable
-            .context
-            .push_object(OnionObject::Float(value).consume_and_stabilize()));
+        unwrap_step_result!(
+            runnable
+                .context
+                .push_object(OnionObject::Float(value).consume_and_stabilize())
+        );
         StepResult::Continue
     } else {
         StepResult::Error(RuntimeError::DetailedError(
@@ -156,9 +163,11 @@ pub fn load_bool(
     _gc: &mut GC<OnionObjectCell>,
 ) -> StepResult {
     if let OpcodeArgument::Int32(value) = opcode.operand1 {
-        unwrap_step_result!(runnable
-            .context
-            .push_object(OnionObject::Boolean(value != 0).consume_and_stabilize()));
+        unwrap_step_result!(
+            runnable
+                .context
+                .push_object(OnionObject::Boolean(value != 0).consume_and_stabilize())
+        );
         StepResult::Continue
     } else {
         StepResult::Error(RuntimeError::DetailedError(
@@ -227,21 +236,6 @@ pub fn build_keyval(
     StepResult::Continue
 }
 
-pub fn build_named(
-    runnable: &mut LambdaRunnable,
-    _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObjectCell>,
-) -> StepResult {
-    // 快速路径：一次获取栈的可变引用，避免重复查找
-    let stack = unwrap_step_result!(runnable.context.get_current_stack_mut());
-    let key = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
-    let value = unwrap_step_result!(Context::get_object_from_stack(stack, 0));
-    let named = OnionNamed::new_static(key, value);
-    unwrap_step_result!(Context::discard_from_stack(stack, 2));
-    Context::push_to_stack(stack, named);
-    StepResult::Continue
-}
-
 pub fn build_range(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
@@ -253,12 +247,13 @@ pub fn build_range(
     let right = unwrap_step_result!(Context::get_object_from_stack(stack, 0));
     let range =
         OnionObject::Range(
-            unwrap_step_result!(left
-                .weak()
-                .to_integer()
-                .map_err(|e| RuntimeError::DetailedError(
-                    format!("Failed to build range: {}", e).into()
-                ))),
+            unwrap_step_result!(
+                left.weak()
+                    .to_integer()
+                    .map_err(|e| RuntimeError::DetailedError(
+                        format!("Failed to build range: {}", e).into()
+                    ))
+            ),
             unwrap_step_result!(right.weak().to_integer().map_err(
                 |e| RuntimeError::DetailedError(format!("Failed to build range: {}", e).into())
             )),
@@ -299,64 +294,37 @@ pub fn load_lambda(
             .into(),
         ));
     };
-    let OpcodeArgument::Int64(_code_position) = opcode.operand2 else {
+    let OpcodeArgument::Int64(capture_indices_index) = opcode.operand2 else {
         return StepResult::Error(RuntimeError::DetailedError(
             format!(
-                "Expected Int64 operand for lambda code position, but found {:?}",
-                opcode.operand2
-            )
-            .into(),
-        ));
-    };
-    let OpcodeArgument::Int32(flags) = opcode.operand3 else {
-        return StepResult::Error(RuntimeError::DetailedError(
-            format!(
-                "Expected Int32 operand for lambda flags, but found {:?}",
+                "Expected Int64 operand for lambda capture indices index, but found {:?}",
                 opcode.operand3
             )
             .into(),
         ));
     };
 
-    let signature = unwrap_step_result!(runnable
-        .instruction
-        .get_string_pool()
-        .get(signature_index as usize)
-        .ok_or_else(|| {
-            RuntimeError::DetailedError(
-                format!(
-                    "Lambda signature index {} is out of bounds (pool size: {})",
-                    signature_index,
-                    runnable.instruction.get_string_pool().len()
+    let signature = unwrap_step_result!(
+        runnable
+            .instruction
+            .get_string_pool()
+            .get(signature_index as usize)
+            .ok_or_else(|| {
+                RuntimeError::DetailedError(
+                    format!(
+                        "Lambda signature index {} is out of bounds (pool size: {})",
+                        signature_index,
+                        runnable.instruction.get_string_pool().len()
+                    )
+                    .into(),
                 )
-                .into(),
-            )
-        }))
+            })
+    )
     .clone();
 
-    let should_capture = flags & 0x01 != 0;
-
-    let captured_value = if should_capture {
-        unwrap_step_result!(runnable.context.get_object_rev(1)).weak()
-    } else {
-        &OnionObject::Undefined(None)
-    };
-
-    let default_parameters = unwrap_step_result!(runnable
-        .context
-        .get_object_rev(if should_capture { 2 } else { 1 }))
-    .weak()
-    .stabilize();
-
-    let OnionObject::Tuple(_) = default_parameters.weak() else {
-        return StepResult::Error(RuntimeError::DetailedError(
-            format!(
-                "Lambda default parameters must be a Tuple, but found {}",
-                default_parameters
-            )
-            .into(),
-        ));
-    };
+    let default_parameters = unwrap_step_result!(runnable.context.get_object_rev(1))
+        .weak()
+        .stabilize();
 
     let instruction_package = unwrap_step_result!(runnable.context.get_object_rev(0))
         .weak()
@@ -371,16 +339,63 @@ pub fn load_lambda(
         ));
     };
 
+    let captured_value = {
+        let capture_indices = unwrap_step_result!(
+            runnable
+                .instruction
+                .get_index_pool()
+                .get(capture_indices_index as usize)
+                .ok_or_else(|| {
+                    RuntimeError::DetailedError(
+                        format!(
+                            "Capture index {} is out of bounds (pool size: {})",
+                            capture_indices_index,
+                            runnable.instruction.get_index_pool().len()
+                        )
+                        .into(),
+                    )
+                })
+        );
+        let mut captured = HashMap::default();
+        for string_index in capture_indices {
+            let string = unwrap_step_result!(
+                runnable
+                    .instruction
+                    .get_string_pool()
+                    .get(*string_index)
+                    .ok_or_else(|| {
+                        RuntimeError::DetailedError(
+                            format!(
+                                "Capture string index {} is out of bounds (pool size: {})",
+                                string_index,
+                                runnable.instruction.get_string_pool().len()
+                            )
+                            .into(),
+                        )
+                    })
+            )
+            .clone();
+            let value = unwrap_step_result!(
+                runnable.context.get_variable(*string_index).ok_or_else(|| {
+                    RuntimeError::DetailedError(
+                        format!("Capture variable '{}' not found in context", string).into(),
+                    )
+                })
+            );
+            captured.insert(string, value.weak().clone());
+        }
+        captured
+    };
+
     let lambda = OnionLambdaDefinition::new_static(
         &default_parameters,
         LambdaBody::Instruction(package.clone()),
-        captured_value,
+        &captured_value,
         signature,
+        LambdaType::Normal,
     );
 
-    unwrap_step_result!(runnable
-        .context
-        .discard_objects(if should_capture { 3 } else { 2 }));
+    unwrap_step_result!(runnable.context.discard_objects(2));
     unwrap_step_result!(runnable.context.push_object(lambda));
     StepResult::Continue
 }
@@ -508,38 +523,6 @@ pub fn get_attr(
     StepResult::Continue
 }
 
-pub fn index_of(
-    runnable: &mut LambdaRunnable,
-    _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObjectCell>,
-) -> StepResult {
-    // Get both objects first
-    let index_obj = unwrap_step_result!(runnable.context.get_object_rev(0));
-    let container_obj = unwrap_step_result!(runnable.context.get_object_rev(1));
-
-    // Extract the integer index value
-    let index_value = unwrap_step_result!(index_obj.weak().with_data(|index_ref| {
-        if let OnionObject::Integer(index) = index_ref {
-            Ok(*index)
-        } else {
-            Err(RuntimeError::DetailedError(
-                format!("Index must be an integer, but found {}", index_obj).into(),
-            ))
-        }
-    }));
-
-    // Get the element at the index
-    let element = {
-        let obj_ref = container_obj.weak();
-        unwrap_step_result!(obj_ref.at(index_value))
-    };
-
-    // Now modify the context after all borrows are dropped
-    unwrap_step_result!(runnable.context.discard_objects(2));
-    unwrap_step_result!(runnable.context.push_object(element));
-    StepResult::Continue
-}
-
 pub fn key_of(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
@@ -581,20 +564,6 @@ pub fn type_of(
     StepResult::Continue
 }
 
-pub fn copy(
-    runnable: &mut LambdaRunnable,
-    _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObjectCell>,
-) -> StepResult {
-    // 快速路径：一次获取栈的可变引用，避免重复查找
-    let stack = unwrap_step_result!(runnable.context.get_current_stack_mut());
-    let obj = unwrap_step_result!(Context::get_object_from_stack(stack, 0));
-    let copied_obj = unwrap_step_result!(obj.weak().copy());
-    unwrap_step_result!(Context::discard_from_stack(stack, 1));
-    Context::push_to_stack(stack, copied_obj);
-    StepResult::Continue
-}
-
 pub fn check_is_same_object(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
@@ -604,9 +573,11 @@ pub fn check_is_same_object(
     let obj2 = unwrap_step_result!(runnable.context.get_object_rev(1));
     let is_same = unwrap_step_result!(obj1.weak().is_same(obj2.weak()));
     unwrap_step_result!(runnable.context.discard_objects(2));
-    unwrap_step_result!(runnable
-        .context
-        .push_object(OnionObject::Boolean(is_same).consume_and_stabilize()));
+    unwrap_step_result!(
+        runnable
+            .context
+            .push_object(OnionObject::Boolean(is_same).consume_and_stabilize())
+    );
     StepResult::Continue
 }
 
@@ -1017,24 +988,25 @@ pub fn is_in(
     let container = unwrap_step_result!(runnable.context.get_object_rev(0));
 
     // 先检查元素是否在惰性集合的容器中
-    let is_in =
-        unwrap_step_result!(container
-            .weak()
-            .with_data(|container_ref| match container_ref {
-                OnionObject::LazySet(lazy_set) => lazy_set.get_container().contains(element.weak()),
-                _ => {
-                    return Err(RuntimeError::DetailedError(
-                        format!("Container is not a LazySet: {}", container).into(),
-                    ));
-                }
-            }));
+    let is_in = unwrap_step_result!(container.weak().with_data(
+        |container_ref| match container_ref {
+            OnionObject::LazySet(lazy_set) => lazy_set.get_container().contains(element.weak()),
+            _ => {
+                return Err(RuntimeError::DetailedError(
+                    format!("Container is not a LazySet: {}", container).into(),
+                ));
+            }
+        }
+    ));
 
     if !is_in {
         // 元素不在容器中，直接返回 false
         unwrap_step_result!(runnable.context.discard_objects(2));
-        unwrap_step_result!(runnable
-            .context
-            .push_object(OnionObject::Boolean(false).consume_and_stabilize()));
+        unwrap_step_result!(
+            runnable
+                .context
+                .push_object(OnionObject::Boolean(false).consume_and_stabilize())
+        );
         return StepResult::Continue;
     }
 
@@ -1066,25 +1038,113 @@ pub fn is_in(
         unwrap_step_result!(runnable.context.push_object(filter));
         unwrap_step_result!(runnable.context.push_object(args));
         // 运行过滤器
-        return call_lambda(runnable, opcode, gc);
+        return apply(runnable, opcode, gc);
     };
 
     unwrap_step_result!(runnable.context.push_object(filter));
     return StepResult::Continue;
 }
 
-pub fn call_lambda(
+// pub fn call_lambda(
+//     runnable: &mut LambdaRunnable,
+//     _opcode: &ProcessedOpcode,
+//     _gc: &mut GC<OnionObjectCell>,
+// ) -> StepResult {
+//     let lambda = unwrap_step_result!(runnable.context.get_object_rev(1));
+//     let args = unwrap_step_result!(runnable.context.get_object_rev(0));
+//     let new_runnable = Box::new(unwrap_step_result!(
+//         OnionLambdaRunnableLauncher::new_static(lambda, args, &|r| Ok(r),)
+//     ));
+//     unwrap_step_result!(runnable.context.discard_objects(2));
+//     StepResult::NewRunnable(new_runnable)
+// }
+
+// pub fn index_of(
+//     runnable: &mut LambdaRunnable,
+//     _opcode: &ProcessedOpcode,
+//     _gc: &mut GC<OnionObjectCell>,
+// ) -> StepResult {
+//     // Get both objects first
+//     let index_obj = unwrap_step_result!(runnable.context.get_object_rev(0));
+//     let container_obj = unwrap_step_result!(runnable.context.get_object_rev(1));
+
+//     // Extract the integer index value
+//     let index_value = unwrap_step_result!(index_obj.weak().with_data(|index_ref| {
+//         if let OnionObject::Integer(index) = index_ref {
+//             Ok(*index)
+//         } else {
+//             Err(RuntimeError::DetailedError(
+//                 format!("Index must be an integer, but found {}", index_obj).into(),
+//             ))
+//         }
+//     }));
+
+//     // Get the element at the index
+//     let element = {
+//         let obj_ref = container_obj.weak();
+//         unwrap_step_result!(obj_ref.at(index_value))
+//     };
+
+//     // Now modify the context after all borrows are dropped
+//     unwrap_step_result!(runnable.context.discard_objects(2));
+//     unwrap_step_result!(runnable.context.push_object(element));
+//     StepResult::Continue
+// }
+
+pub fn apply(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObjectCell>,
+    gc: &mut GC<OnionObjectCell>,
 ) -> StepResult {
-    let lambda = unwrap_step_result!(runnable.context.get_object_rev(1));
-    let args = unwrap_step_result!(runnable.context.get_object_rev(0));
-    let new_runnable = Box::new(unwrap_step_result!(
-        OnionLambdaRunnableLauncher::new_static(lambda, args, &|r| Ok(r),)
-    ));
+    let object = unwrap_step_result!(runnable.context.get_object_rev(1));
+    let argument = unwrap_step_result!(runnable.context.get_object_rev(0));
+    let (step_result, push_object) = unwrap_step_result!(object.weak().with_data(|obj_ref| {
+        match obj_ref {
+            OnionObject::Lambda((lambda_def, _)) => {
+                let launcher =
+                    OnionLambdaRunnableLauncher::new_static(object, argument, |r| Ok(r))?;
+                let new_runnable: Box<dyn Runnable> = match lambda_def.lambda_type() {
+                    LambdaType::Normal => Box::new(launcher),
+                    LambdaType::AsyncLauncher => {
+                        let new_task_handler = OnionAsyncHandle::new(gc);
+                        Box::new(AsyncScheduler::new(Task::new(
+                            Box::new(Scheduler::new(vec![Box::new(launcher)])),
+                            new_task_handler,
+                            0,
+                        )))
+                    }
+                    LambdaType::SyncLauncher => Box::new(Scheduler::new(vec![Box::new(launcher)])),
+                };
+                return Ok((StepResult::NewRunnable(new_runnable), None));
+            }
+            _ => {
+                // Extract the integer index value
+                let index_value = (argument.weak().with_data(|index_ref| {
+                    if let OnionObject::Integer(index) = index_ref {
+                        Ok(*index)
+                    } else {
+                        Err(RuntimeError::DetailedError(
+                            format!("Index must be an integer, but found {}", argument).into(),
+                        ))
+                    }
+                }))?;
+
+                // Get the element at the index
+                let element = {
+                    let obj_ref = object.weak();
+                    (obj_ref.at(index_value))?
+                };
+
+                return Ok((StepResult::Continue, Some(element)));
+            }
+        }
+    }));
+
     unwrap_step_result!(runnable.context.discard_objects(2));
-    StepResult::NewRunnable(new_runnable)
+    if let Some(element) = push_object {
+        unwrap_step_result!(runnable.context.push_object(element));
+    }
+    step_result
 }
 
 pub fn mutablize(
@@ -1103,9 +1163,11 @@ pub fn immutablize(
     _gc: &mut GC<OnionObjectCell>,
 ) -> StepResult {
     let obj = unwrap_step_result!(runnable.context.pop());
-    unwrap_step_result!(runnable
-        .context
-        .push_object(unwrap_step_result!(obj.immutablize())));
+    unwrap_step_result!(
+        runnable
+            .context
+            .push_object(unwrap_step_result!(obj.immutablize()))
+    );
     StepResult::Continue
 }
 
@@ -1152,30 +1214,32 @@ pub fn import(
         Err(e) => {
             return StepResult::Error(RuntimeError::DetailedError(
                 format!("Invalid VM instruction package: {}", e).into(),
-            ))
+            ));
         }
         Ok(_) => {}
     }
     unwrap_step_result!(runnable.context.discard_objects(1));
-    unwrap_step_result!(runnable
-        .context
-        .push_object(OnionObject::InstructionPackage(Arc::new(package)).consume_and_stabilize()));
+    unwrap_step_result!(
+        runnable.context.push_object(
+            OnionObject::InstructionPackage(Arc::new(package)).consume_and_stabilize()
+        )
+    );
     StepResult::Continue
 }
 
-pub fn sync_call(
-    runnable: &mut LambdaRunnable,
-    _opcode: &ProcessedOpcode,
-    _gc: &mut GC<OnionObjectCell>,
-) -> StepResult {
-    let lambda = unwrap_step_result!(runnable.context.get_object_rev(1));
-    let args = unwrap_step_result!(runnable.context.get_object_rev(0));
-    let new_runnable = Box::new(Scheduler::new(vec![Box::new(unwrap_step_result!(
-        OnionLambdaRunnableLauncher::new_static(lambda, args, |r| Ok(r))
-    ))]));
-    unwrap_step_result!(runnable.context.discard_objects(2));
-    StepResult::NewRunnable(new_runnable)
-}
+// pub fn sync_call(
+//     runnable: &mut LambdaRunnable,
+//     _opcode: &ProcessedOpcode,
+//     _gc: &mut GC<OnionObjectCell>,
+// ) -> StepResult {
+//     let lambda = unwrap_step_result!(runnable.context.get_object_rev(1));
+//     let args = unwrap_step_result!(runnable.context.get_object_rev(0));
+//     let new_runnable = Box::new(Scheduler::new(vec![Box::new(unwrap_step_result!(
+//         OnionLambdaRunnableLauncher::new_static(lambda, args, |r| Ok(r))
+//     ))]));
+//     unwrap_step_result!(runnable.context.discard_objects(2));
+//     StepResult::NewRunnable(new_runnable)
+// }
 
 pub fn map_to(
     runnable: &mut LambdaRunnable,
@@ -1194,24 +1258,24 @@ pub fn map_to(
     return StepResult::NewRunnable(Box::new(mapping));
 }
 
-pub fn async_call(
-    runnable: &mut LambdaRunnable,
-    _opcode: &ProcessedOpcode,
-    gc: &mut GC<OnionObjectCell>,
-) -> StepResult {
-    let lambda = unwrap_step_result!(runnable.context.get_object_rev(1));
-    let args = unwrap_step_result!(runnable.context.get_object_rev(0));
-    let new_task_handler = OnionAsyncHandle::new(gc);
-    let new_runnable = Box::new(AsyncScheduler::new(Task::new(
-        Box::new(Scheduler::new(vec![Box::new(unwrap_step_result!(
-            OnionLambdaRunnableLauncher::new_static(lambda, args, |r| Ok(r))
-        ))])),
-        new_task_handler,
-        0,
-    )));
-    unwrap_step_result!(runnable.context.discard_objects(2));
-    StepResult::NewRunnable(new_runnable)
-}
+// pub fn async_call(
+//     runnable: &mut LambdaRunnable,
+//     _opcode: &ProcessedOpcode,
+//     gc: &mut GC<OnionObjectCell>,
+// ) -> StepResult {
+//     let lambda = unwrap_step_result!(runnable.context.get_object_rev(1));
+//     let args = unwrap_step_result!(runnable.context.get_object_rev(0));
+//     let new_task_handler = OnionAsyncHandle::new(gc);
+//     let new_runnable = Box::new(AsyncScheduler::new(Task::new(
+//         Box::new(Scheduler::new(vec![Box::new(unwrap_step_result!(
+//             OnionLambdaRunnableLauncher::new_static(lambda, args, |r| Ok(r))
+//         ))])),
+//         new_task_handler,
+//         0,
+//     )));
+//     unwrap_step_result!(runnable.context.discard_objects(2));
+//     StepResult::NewRunnable(new_runnable)
+// }
 
 pub fn raise(
     runnable: &mut LambdaRunnable,
@@ -1295,9 +1359,6 @@ pub fn launch_thread(
                     StepResult::Continue => {
                         // 继续执行下一步
                     }
-                    StepResult::SetSelfObject(_) => {
-                        // 设置 self 对象，这里无需额外操作
-                    }
                     StepResult::SpawnRunnable(_) => {
                         // 处理 SpawnRunnable 结果，由于同步调度器上级没有异步调度器，应当直接报错
                         return Err(RuntimeError::InvalidOperation(
@@ -1333,5 +1394,82 @@ pub fn launch_thread(
     let handle_object = OnionObject::Custom(Arc::new(thread_handle.0)).consume_and_stabilize();
     unwrap_step_result!(runnable.context.discard_objects(1));
     unwrap_step_result!(runnable.context.push_object(handle_object));
+    StepResult::Continue
+}
+
+pub fn make_async(
+    runnable: &mut LambdaRunnable,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObjectCell>,
+) -> StepResult {
+    let value = unwrap_step_result!(runnable.context.get_object_rev(0));
+
+    let new_lambda = unwrap_step_result!(value.weak().with_data(|obj| {
+        match obj {
+            OnionObject::Lambda((lambda_def, self_object)) => Ok(OnionObject::Lambda((
+                lambda_def
+                    .with_lambda_type(LambdaType::AsyncLauncher)
+                    .into(),
+                self_object.clone(),
+            ))
+            .consume_and_stabilize()),
+            _ => Err(RuntimeError::DetailedError(
+                format!("make_async requires a Lambda object, but found {}", value).into(),
+            )),
+        }
+    }));
+
+    unwrap_step_result!(runnable.context.discard_objects(1));
+    unwrap_step_result!(runnable.context.push_object(new_lambda));
+    StepResult::Continue
+}
+
+pub fn make_sync(
+    runnable: &mut LambdaRunnable,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObjectCell>,
+) -> StepResult {
+    let value = unwrap_step_result!(runnable.context.get_object_rev(0));
+
+    let new_lambda = unwrap_step_result!(value.weak().with_data(|obj| {
+        match obj {
+            OnionObject::Lambda((lambda_def, self_object)) => Ok(OnionObject::Lambda((
+                lambda_def.with_lambda_type(LambdaType::SyncLauncher).into(),
+                self_object.clone(),
+            ))
+            .consume_and_stabilize()),
+            _ => Err(RuntimeError::DetailedError(
+                format!("make_async requires a Lambda object, but found {}", value).into(),
+            )),
+        }
+    }));
+
+    unwrap_step_result!(runnable.context.discard_objects(1));
+    unwrap_step_result!(runnable.context.push_object(new_lambda));
+    StepResult::Continue
+}
+
+pub fn make_atomic(
+    runnable: &mut LambdaRunnable,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObjectCell>,
+) -> StepResult {
+    let value = unwrap_step_result!(runnable.context.get_object_rev(0));
+
+    let new_lambda = unwrap_step_result!(value.weak().with_data(|obj| {
+        match obj {
+            OnionObject::Lambda((lambda_def, self_object)) => Ok(OnionObject::Lambda((
+                lambda_def.with_lambda_type(LambdaType::Normal).into(),
+                self_object.clone(),
+            ))
+            .consume_and_stabilize()),
+            _ => Err(RuntimeError::DetailedError(
+                format!("make_async requires a Lambda object, but found {}", value).into(),
+            )),
+        }
+    }));
+
+    unwrap_step_result!(runnable.context.discard_objects(1));
+    unwrap_step_result!(runnable.context.push_object(new_lambda));
     StepResult::Continue
 }
