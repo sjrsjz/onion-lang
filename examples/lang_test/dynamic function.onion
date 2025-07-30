@@ -1,8 +1,0 @@
-@required stdlib;
-foo := (n => mut undefined, stdlib!) -> {
-    stdlib.io.println("Arguments received:", n);
-};
-
-foo.parameter.n = 1;
-foo(2);
-foo()

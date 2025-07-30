@@ -28,4 +28,4 @@ stdlib.io.println("内置类型转换：", "42".int());
 
 int := (x?) -> x.int();
 abs := (x?) -> +x;
-stdlib.io.println("自定义类型转换：", "-42" as int as abs);
+stdlib.io.println("自定义类型转换：", int "-42");

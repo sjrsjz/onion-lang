@@ -3,7 +3,7 @@ Modules := mut ();
 @import "std/result.onion";
 
 @required stdlib;
-print := (a? | Union(Float, Integer), b? | Union(Float, Integer), stdlib! | Never) -> {
+print := (a => Union(Float, Integer), b => Union(Float, Integer)) -> {
     stdlib.io.println('a:', a, 'b:', b);
 };
 
@@ -17,13 +17,13 @@ DynamicCheck := (v?) -> {
 };
 
 // Example usage of DynamicCheck
-f := (v? | DynamicCheck) -> {
+f := (v => DynamicCheck) -> {
     stdlib.io.println('DynamicCheck value:', v);
 };
 
 stdlib.io.println(try(() -> f("Hello")).unwrap_or("Failed to match DynamicCheck"));
 
-foo := (x? | Positive) -> {
+foo := (x => Positive) -> {
     stdlib.io.println('foo called with:', x);
     "Success!"
 };
@@ -62,11 +62,11 @@ instanceA := #interfaceA mut {
 };
 
 
-some_function_A := (obj? | InstanceOf(interfaceA)) -> {
+some_function_A := (obj => InstanceOf(interfaceA)) -> {
     stdlib.io.println("some_function called with:", obj.get_data());
 };
 
-some_function_B := (obj? | InstanceOf(interfaceB)) -> {
+some_function_B := (obj => InstanceOf(interfaceB)) -> {
     stdlib.io.println("some_function called with:", obj.get_data());
 };
 

@@ -2,464 +2,277 @@ use indexmap::IndexMap;
 use onion_vm::{
     GC,
     lambda::runnable::RuntimeError,
-    types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
+    types::{
+        object::{OnionObject, OnionObjectCell, OnionStaticObject},
+        tuple::OnionTuple,
+    },
 };
 use rustc_hash::FxHashMap;
 
-use super::{build_dict, get_attr_direct, wrap_native_function};
+// 引入所需的辅助函数
+use super::{build_dict, build_string_tuple, wrap_native_function};
+
+fn get_string_arg<'a>(
+    argument: &'a FxHashMap<String, OnionStaticObject>,
+    name: &str,
+) -> Result<&'a str, RuntimeError> {
+    let obj = argument.get(name).ok_or_else(|| {
+        RuntimeError::DetailedError(
+            format!("Function requires a '{}' argument", name)
+                .to_string()
+                .into(),
+        )
+    })?;
+    match obj.weak() {
+        OnionObject::String(s) => Ok(s.as_ref()),
+        _ => Err(RuntimeError::InvalidType(
+            format!("Argument '{}' must be a string", name)
+                .to_string()
+                .into(),
+        )),
+    }
+}
+
+fn get_integer_arg(
+    argument: &FxHashMap<String, OnionStaticObject>,
+    name: &str,
+) -> Result<i64, RuntimeError> {
+    let obj = argument.get(name).ok_or_else(|| {
+        RuntimeError::DetailedError(
+            format!("Function requires an '{}' argument", name)
+                .to_string()
+                .into(),
+        )
+    })?;
+    match obj.weak() {
+        OnionObject::Integer(i) => Ok(*i),
+        _ => Err(RuntimeError::InvalidType(
+            format!("Argument '{}' must be an integer", name)
+                .to_string()
+                .into(),
+        )),
+    }
+}
 
 fn length(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let string = get_attr_direct(data, "string".to_string())?;
-        string.weak().with_data(|string_data| match string_data {
-            OnionObject::String(s) => Ok(OnionObject::Integer(s.len() as i64).stabilize()),
-            _ => Err(RuntimeError::InvalidOperation(
-                "length requires string".to_string().into(),
-            )),
-        })
-    })
+    let s = get_string_arg(argument, "string")?;
+    Ok(OnionObject::Integer(s.chars().count() as i64).stabilize())
 }
 
 fn trim(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let string = get_attr_direct(data, "string".to_string())?;
-        string.weak().with_data(|string_data| match string_data {
-            OnionObject::String(s) => {
-                Ok(OnionObject::String(s.trim().to_string().into()).stabilize())
-            }
-            _ => Err(RuntimeError::InvalidOperation(
-                "trim requires string".to_string().into(),
-            )),
-        })
-    })
+    let s = get_string_arg(argument, "string")?;
+    Ok(OnionObject::String(s.trim().to_string().into()).stabilize())
 }
 
 fn uppercase(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let string = get_attr_direct(data, "string".to_string())?;
-        string.weak().with_data(|string_data| match string_data {
-            OnionObject::String(s) => Ok(OnionObject::String(s.to_uppercase().into()).stabilize()),
-            _ => Err(RuntimeError::InvalidOperation(
-                "uppercase requires string".to_string().into(),
-            )),
-        })
-    })
+    let s = get_string_arg(argument, "string")?;
+    Ok(OnionObject::String(s.to_uppercase().into()).stabilize())
 }
 
 fn lowercase(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let string = get_attr_direct(data, "string".to_string())?;
-        string.weak().with_data(|string_data| match string_data {
-            OnionObject::String(s) => Ok(OnionObject::String(s.to_lowercase().into()).stabilize()),
-            _ => Err(RuntimeError::InvalidOperation(
-                "lowercase requires string".to_string().into(),
-            )),
-        })
-    })
+    let s = get_string_arg(argument, "string")?;
+    Ok(OnionObject::String(s.to_lowercase().into()).stabilize())
 }
 
 fn contains(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let string = get_attr_direct(data, "string".to_string())?;
-        let substring = get_attr_direct(data, "substring".to_string())?;
-
-        string.weak().with_data(|string_data| {
-            substring
-                .weak()
-                .with_data(|substring_data| match (string_data, substring_data) {
-                    (OnionObject::String(s), OnionObject::String(sub)) => {
-                        Ok(OnionObject::Boolean(s.contains(sub.as_ref())).stabilize())
-                    }
-                    _ => Err(RuntimeError::InvalidOperation(
-                        "contains requires string arguments".to_string().into(),
-                    )),
-                })
-        })
-    })
+    let string = get_string_arg(argument, "string")?;
+    let substring = get_string_arg(argument, "substring")?;
+    Ok(OnionObject::Boolean(string.contains(substring)).stabilize())
 }
 
 fn concat(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let a = get_attr_direct(data, "a".to_string())?;
-        let b = get_attr_direct(data, "b".to_string())?;
-
-        a.weak().with_data(|a_data| {
-            b.weak().with_data(|b_data| match (a_data, b_data) {
-                (OnionObject::String(s1), OnionObject::String(s2)) => {
-                    let mut result = s1.as_ref().clone();
-                    result.push_str(s2);
-                    Ok(OnionObject::String(result.into()).stabilize())
-                }
-                _ => Err(RuntimeError::InvalidOperation(
-                    "concat requires string arguments".to_string().into(),
-                )),
-            })
-        })
-    })
+    let s1 = get_string_arg(argument, "a")?;
+    let s2 = get_string_arg(argument, "b")?;
+    let result = [s1, s2].concat();
+    Ok(OnionObject::String(result.into()).stabilize())
 }
 
-/// Split string by delimiter
 fn split(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    use onion_vm::types::tuple::OnionTuple;
-
-    argument.weak().with_data(|data| {
-        let string = get_attr_direct(data, "string".to_string())?;
-        let delimiter = get_attr_direct(data, "delimiter".to_string())?;
-
-        string.weak().with_data(|string_data| {
-            delimiter
-                .weak()
-                .with_data(|delimiter_data| match (string_data, delimiter_data) {
-                    (OnionObject::String(s), OnionObject::String(delim)) => {
-                        let parts: Vec<_> = s
-                            .split(delim.as_ref())
-                            .map(|part| OnionObject::String(part.to_string().into()).stabilize())
-                            .collect();
-                        Ok(OnionTuple::new_static_no_ref(&parts))
-                    }
-                    _ => Err(RuntimeError::InvalidOperation(
-                        "split requires string arguments".to_string().into(),
-                    )),
-                })
-        })
-    })
+    let string = get_string_arg(argument, "string")?;
+    let delimiter = get_string_arg(argument, "delimiter")?;
+    let parts: Vec<_> = string
+        .split(delimiter)
+        .map(|part| OnionObject::String(part.to_string().into()))
+        .collect();
+    Ok(OnionObject::Tuple(OnionTuple::new(parts).into()).stabilize())
 }
 
-/// Replace all occurrences of a substring
 fn replace(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let string = get_attr_direct(data, "string".to_string())?;
-        let from = get_attr_direct(data, "from".to_string())?;
-        let to = get_attr_direct(data, "to".to_string())?;
-
-        string.weak().with_data(|string_data| {
-            from.weak().with_data(|from_data| {
-                to.weak()
-                    .with_data(|to_data| match (string_data, from_data, to_data) {
-                        (
-                            OnionObject::String(s),
-                            OnionObject::String(f),
-                            OnionObject::String(t),
-                        ) => {
-                            let result = s.replace(f.as_ref(), t);
-                            Ok(OnionObject::String(result.into()).stabilize())
-                        }
-                        _ => Err(RuntimeError::InvalidOperation(
-                            "replace requires string arguments".to_string().into(),
-                        )),
-                    })
-            })
-        })
-    })
+    let string = get_string_arg(argument, "string")?;
+    let from = get_string_arg(argument, "from")?;
+    let to = get_string_arg(argument, "to")?;
+    let result = string.replace(from, to);
+    Ok(OnionObject::String(result.into()).stabilize())
 }
 
-/// Get substring from start to end index
 fn substr(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let string = get_attr_direct(data, "string".to_string())?;
-        let start = get_attr_direct(data, "start".to_string())?;
-        let length = get_attr_direct(data, "length".to_string())?;
+    let string = get_string_arg(argument, "string")?;
+    let start = get_integer_arg(argument, "start")?;
+    let length = get_integer_arg(argument, "length")?;
 
-        string.weak().with_data(|string_data| {
-            start.weak().with_data(|start_data| {
-                length.weak().with_data(|length_data| {
-                    match (string_data, start_data, length_data) {
-                        (
-                            OnionObject::String(s),
-                            OnionObject::Integer(start_idx),
-                            OnionObject::Integer(len),
-                        ) => {
-                            let start_idx = *start_idx as usize;
-                            let len = *len as usize;
+    if start < 0 || length < 0 {
+        return Err(RuntimeError::InvalidOperation(
+            "start and length for substr cannot be negative"
+                .to_string()
+                .into(),
+        ));
+    }
+    let start_idx = start as usize;
+    let len = length as usize;
 
-                            if start_idx >= s.len() {
-                                Ok(OnionObject::String("".to_string().into()).stabilize())
-                            } else {
-                                let end_idx = std::cmp::min(start_idx + len, s.len());
-                                let result = s
-                                    .chars()
-                                    .skip(start_idx)
-                                    .take(end_idx - start_idx)
-                                    .collect::<String>();
-                                Ok(OnionObject::String(result.into()).stabilize())
-                            }
-                        }
-                        _ => Err(RuntimeError::InvalidOperation(
-                            "substr requires string and integer arguments"
-                                .to_string()
-                                .into(),
-                        )),
-                    }
-                })
-            })
-        })
-    })
+    let result: String = string.chars().skip(start_idx).take(len).collect();
+    Ok(OnionObject::String(result.into()).stabilize())
 }
 
-/// Find the index of a substring
 fn index_of(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let string = get_attr_direct(data, "string".to_string())?;
-        let substring = get_attr_direct(data, "substring".to_string())?;
-
-        string.weak().with_data(|string_data| {
-            substring
-                .weak()
-                .with_data(|substring_data| match (string_data, substring_data) {
-                    (OnionObject::String(s), OnionObject::String(sub)) => {
-                        match s.find(sub.as_ref()) {
-                            Some(index) => Ok(OnionObject::Integer(index as i64).stabilize()),
-                            None => Ok(OnionObject::Integer(-1).stabilize()),
-                        }
-                    }
-                    _ => Err(RuntimeError::InvalidOperation(
-                        "index_of requires string arguments".to_string().into(),
-                    )),
-                })
-        })
-    })
+    let string = get_string_arg(argument, "string")?;
+    let substring = get_string_arg(argument, "substring")?;
+    let index = string.find(substring).map(|i| i as i64).unwrap_or(-1);
+    Ok(OnionObject::Integer(index).stabilize())
 }
 
-/// Check if string starts with a prefix
 fn starts_with(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let string = get_attr_direct(data, "string".to_string())?;
-        let prefix = get_attr_direct(data, "prefix".to_string())?;
-
-        string.weak().with_data(|string_data| {
-            prefix
-                .weak()
-                .with_data(|prefix_data| match (string_data, prefix_data) {
-                    (OnionObject::String(s), OnionObject::String(p)) => {
-                        Ok(OnionObject::Boolean(s.starts_with(p.as_ref())).stabilize())
-                    }
-                    _ => Err(RuntimeError::InvalidOperation(
-                        "starts_with requires string arguments".to_string().into(),
-                    )),
-                })
-        })
-    })
+    let string = get_string_arg(argument, "string")?;
+    let prefix = get_string_arg(argument, "prefix")?;
+    Ok(OnionObject::Boolean(string.starts_with(prefix)).stabilize())
 }
 
-/// Check if string ends with a suffix
 fn ends_with(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let string = get_attr_direct(data, "string".to_string())?;
-        let suffix = get_attr_direct(data, "suffix".to_string())?;
-
-        string.weak().with_data(|string_data| {
-            suffix
-                .weak()
-                .with_data(|suffix_data| match (string_data, suffix_data) {
-                    (OnionObject::String(s), OnionObject::String(suf)) => {
-                        Ok(OnionObject::Boolean(s.ends_with(suf.as_ref())).stabilize())
-                    }
-                    _ => Err(RuntimeError::InvalidOperation(
-                        "ends_with requires string arguments".to_string().into(),
-                    )),
-                })
-        })
-    })
+    let string = get_string_arg(argument, "string")?;
+    let suffix = get_string_arg(argument, "suffix")?;
+    Ok(OnionObject::Boolean(string.ends_with(suffix)).stabilize())
 }
 
-/// Repeat string n times
 fn repeat(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let string = get_attr_direct(data, "string".to_string())?;
-        let count = get_attr_direct(data, "count".to_string())?;
+    let string = get_string_arg(argument, "string")?;
+    let count = get_integer_arg(argument, "count")?;
 
-        string.weak().with_data(|string_data| {
-            count
-                .weak()
-                .with_data(|count_data| match (string_data, count_data) {
-                    (OnionObject::String(s), OnionObject::Integer(n)) => {
-                        if *n < 0 {
-                            return Err(RuntimeError::InvalidOperation(
-                                "repeat count cannot be negative".to_string().into(),
-                            ));
-                        }
-                        let result = s.repeat(*n as usize);
-                        Ok(OnionObject::String(result.into()).stabilize())
-                    }
-                    _ => Err(RuntimeError::InvalidOperation(
-                        "repeat requires string and integer arguments"
-                            .to_string()
-                            .into(),
-                    )),
-                })
-        })
-    })
+    if count < 0 {
+        return Err(RuntimeError::InvalidOperation(
+            "repeat count cannot be negative".to_string().into(),
+        ));
+    }
+    let result = string.repeat(count as usize);
+    Ok(OnionObject::String(result.into()).stabilize())
 }
 
-/// Pad string on the left with specified character
 fn pad_left(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let string = get_attr_direct(data, "string".to_string())?;
-        let length = get_attr_direct(data, "length".to_string())?;
-        let pad_char = get_attr_direct(data, "pad_char".to_string())?;
+    let string = get_string_arg(argument, "string")?;
+    let length = get_integer_arg(argument, "length")?;
+    let pad_char_str = get_string_arg(argument, "pad_char")?;
 
-        string.weak().with_data(|string_data| {
-            length.weak().with_data(|length_data| {
-                pad_char.weak().with_data(|pad_char_data| {
-                    match (string_data, length_data, pad_char_data) {
-                        (
-                            OnionObject::String(s),
-                            OnionObject::Integer(len),
-                            OnionObject::String(pad),
-                        ) => {
-                            let target_len = *len as usize;
-                            if s.len() >= target_len {
-                                Ok(OnionObject::String(s.clone()).stabilize())
-                            } else {
-                                let pad_count = target_len - s.len();
-                                let pad_char = pad.chars().next().unwrap_or(' ');
-                                let padded =
-                                    format!("{}{}", pad_char.to_string().repeat(pad_count), s);
-                                Ok(OnionObject::String(padded.into()).stabilize())
-                            }
-                        }
-                        _ => Err(RuntimeError::InvalidOperation(
-                            "pad_left requires string, integer, and string arguments"
-                                .to_string()
-                                .into(),
-                        )),
-                    }
-                })
-            })
-        })
-    })
+    if length < 0 {
+        return Err(RuntimeError::InvalidOperation(
+            "padding length cannot be negative".to_string().into(),
+        ));
+    }
+    let target_len = length as usize;
+    let s_char_len = string.chars().count();
+
+    if s_char_len >= target_len {
+        return Ok(OnionObject::String(string.to_string().into()).stabilize());
+    }
+
+    let pad_char = pad_char_str.chars().next().unwrap_or(' ');
+    let pad_count = target_len - s_char_len;
+    let padded = format!("{}{}", pad_char.to_string().repeat(pad_count), string);
+    Ok(OnionObject::String(padded.into()).stabilize())
 }
 
-/// Pad string on the right with specified character
 fn pad_right(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let string = get_attr_direct(data, "string".to_string())?;
-        let length = get_attr_direct(data, "length".to_string())?;
-        let pad_char = get_attr_direct(data, "pad_char".to_string())?;
+    let string = get_string_arg(argument, "string")?;
+    let length = get_integer_arg(argument, "length")?;
+    let pad_char_str = get_string_arg(argument, "pad_char")?;
 
-        string.weak().with_data(|string_data| {
-            length.weak().with_data(|length_data| {
-                pad_char.weak().with_data(|pad_char_data| {
-                    match (string_data, length_data, pad_char_data) {
-                        (
-                            OnionObject::String(s),
-                            OnionObject::Integer(len),
-                            OnionObject::String(pad),
-                        ) => {
-                            let target_len = *len as usize;
-                            if s.len() >= target_len {
-                                Ok(OnionObject::String(s.clone()).stabilize())
-                            } else {
-                                let pad_count = target_len - s.len();
-                                let pad_char = pad.chars().next().unwrap_or(' ');
-                                let padded =
-                                    format!("{}{}", s, pad_char.to_string().repeat(pad_count));
-                                Ok(OnionObject::String(padded.into()).stabilize())
-                            }
-                        }
-                        _ => Err(RuntimeError::InvalidOperation(
-                            "pad_right requires string, integer, and string arguments"
-                                .to_string()
-                                .into(),
-                        )),
-                    }
-                })
-            })
-        })
-    })
+    if length < 0 {
+        return Err(RuntimeError::InvalidOperation(
+            "padding length cannot be negative".to_string().into(),
+        ));
+    }
+    let target_len = length as usize;
+    let s_char_len = string.chars().count();
+
+    if s_char_len >= target_len {
+        return Ok(OnionObject::String(string.to_string().into()).stabilize());
+    }
+
+    let pad_char = pad_char_str.chars().next().unwrap_or(' ');
+    let pad_count = target_len - s_char_len;
+    let padded = format!("{}{}", string, pad_char.to_string().repeat(pad_count));
+    Ok(OnionObject::String(padded.into()).stabilize())
 }
 
-/// Check if string is empty
 fn is_empty(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let string = get_attr_direct(data, "string".to_string())?;
-        string.weak().with_data(|string_data| match string_data {
-            OnionObject::String(s) => Ok(OnionObject::Boolean(s.is_empty()).stabilize()),
-            _ => Err(RuntimeError::InvalidOperation(
-                "is_empty requires string".to_string().into(),
-            )),
-        })
-    })
+    let s = get_string_arg(argument, "string")?;
+    Ok(OnionObject::Boolean(s.is_empty()).stabilize())
 }
 
-/// Reverse a string
 fn reverse(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let string = get_attr_direct(data, "string".to_string())?;
-        string.weak().with_data(|string_data| match string_data {
-            OnionObject::String(s) => {
-                let reversed: String = s.chars().rev().collect();
-                Ok(OnionObject::String(reversed.into()).stabilize())
-            }
-            _ => Err(RuntimeError::InvalidOperation(
-                "reverse requires string".to_string().into(),
-            )),
-        })
-    })
+    let s = get_string_arg(argument, "string")?;
+    let reversed: String = s.chars().rev().collect();
+    Ok(OnionObject::String(reversed.into()).stabilize())
 }
 
 pub fn build_module() -> OnionStaticObject {
     let mut module = IndexMap::new();
 
-    // 统一参数定义
-    let string_arg = &OnionObject::String("string".to_string().into()).stabilize();
+    let string_arg = OnionObject::String("string".to_string().into()).stabilize();
 
-    // 单参数函数
     module.insert(
         "length".to_string(),
         wrap_native_function(
-            string_arg,
+            &string_arg,
             &FxHashMap::default(),
             "string::length".to_string(),
             &length,
@@ -468,7 +281,7 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "trim".to_string(),
         wrap_native_function(
-            string_arg,
+            &string_arg,
             &FxHashMap::default(),
             "string::trim".to_string(),
             &trim,
@@ -477,7 +290,7 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "uppercase".to_string(),
         wrap_native_function(
-            string_arg,
+            &string_arg,
             &FxHashMap::default(),
             "string::uppercase".to_string(),
             &uppercase,
@@ -486,7 +299,7 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "lowercase".to_string(),
         wrap_native_function(
-            string_arg,
+            &string_arg,
             &FxHashMap::default(),
             "string::lowercase".to_string(),
             &lowercase,
@@ -495,7 +308,7 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "is_empty".to_string(),
         wrap_native_function(
-            string_arg,
+            &string_arg,
             &FxHashMap::default(),
             "string::is_empty".to_string(),
             &is_empty,
@@ -504,18 +317,17 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "reverse".to_string(),
         wrap_native_function(
-            string_arg,
+            &string_arg,
             &FxHashMap::default(),
             "string::reverse".to_string(),
             &reverse,
         ),
     );
 
-    // 多参数函数
     module.insert(
         "contains".to_string(),
         wrap_native_function(
-            &super::build_string_tuple(&["string", "substring"]),
+            &build_string_tuple(&["string", "substring"]),
             &FxHashMap::default(),
             "string::contains".to_string(),
             &contains,
@@ -524,7 +336,7 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "concat".to_string(),
         wrap_native_function(
-            &super::build_string_tuple(&["a", "b"]),
+            &build_string_tuple(&["a", "b"]),
             &FxHashMap::default(),
             "string::concat".to_string(),
             &concat,
@@ -533,7 +345,7 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "split".to_string(),
         wrap_native_function(
-            &super::build_string_tuple(&["string", "delimiter"]),
+            &build_string_tuple(&["string", "delimiter"]),
             &FxHashMap::default(),
             "string::split".to_string(),
             &split,
@@ -542,7 +354,7 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "replace".to_string(),
         wrap_native_function(
-            &super::build_string_tuple(&["string", "from", "to"]),
+            &build_string_tuple(&["string", "from", "to"]),
             &FxHashMap::default(),
             "string::replace".to_string(),
             &replace,
@@ -551,7 +363,7 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "substr".to_string(),
         wrap_native_function(
-            &super::build_string_tuple(&["string", "start", "length"]),
+            &build_string_tuple(&["string", "start", "length"]),
             &FxHashMap::default(),
             "string::substr".to_string(),
             &substr,
@@ -560,7 +372,7 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "index_of".to_string(),
         wrap_native_function(
-            &super::build_string_tuple(&["string", "substring"]),
+            &build_string_tuple(&["string", "substring"]),
             &FxHashMap::default(),
             "string::index_of".to_string(),
             &index_of,
@@ -569,7 +381,7 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "starts_with".to_string(),
         wrap_native_function(
-            &super::build_string_tuple(&["string", "prefix"]),
+            &build_string_tuple(&["string", "prefix"]),
             &FxHashMap::default(),
             "string::starts_with".to_string(),
             &starts_with,
@@ -578,7 +390,7 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "ends_with".to_string(),
         wrap_native_function(
-            &super::build_string_tuple(&["string", "suffix"]),
+            &build_string_tuple(&["string", "suffix"]),
             &FxHashMap::default(),
             "string::ends_with".to_string(),
             &ends_with,
@@ -587,7 +399,7 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "repeat".to_string(),
         wrap_native_function(
-            &super::build_string_tuple(&["string", "count"]),
+            &build_string_tuple(&["string", "count"]),
             &FxHashMap::default(),
             "string::repeat".to_string(),
             &repeat,
@@ -596,7 +408,7 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "pad_left".to_string(),
         wrap_native_function(
-            &super::build_string_tuple(&["string", "length", "pad_char"]),
+            &build_string_tuple(&["string", "length", "pad_char"]),
             &FxHashMap::default(),
             "string::pad_left".to_string(),
             &pad_left,
@@ -605,7 +417,7 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "pad_right".to_string(),
         wrap_native_function(
-            &super::build_string_tuple(&["string", "length", "pad_char"]),
+            &build_string_tuple(&["string", "length", "pad_char"]),
             &FxHashMap::default(),
             "string::pad_right".to_string(),
             &pad_right,

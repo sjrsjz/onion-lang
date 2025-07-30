@@ -14,7 +14,7 @@ main := () -> {
     };
 
     stdlib.io.println("📦 Loading user32.dll...");
-    user32_lib := stdlib.ffi.lib.load(path => "user32.dll");
+    user32_lib := stdlib.ffi.lib.load("user32.dll");
 
     if (user32_lib == null) {
         stdlib.io.println("✗ Failed to load user32.dll. Cannot proceed.");
@@ -31,10 +31,10 @@ main := () -> {
     // 我们使用 'W' 版本 (MessageBoxW) 是因为它接受宽字符字符串 (LPCWSTR)，
     // 这与我们的 `wstring` 类型完美匹配。
     msgbox_handle := stdlib.ffi.lib.get_function(
-        library => user32_lib,
-        function => "MessageBoxW",
-        return_type => "i32",
-        param_types => ("pointer", "wstring", "wstring", "u32")
+        user32_lib,
+        "MessageBoxW",
+        "i32",
+        ("pointer", "wstring", "wstring", "u32")
     );
 
     if (msgbox_handle == null) {
@@ -46,18 +46,18 @@ main := () -> {
     // 准备参数
     // hWnd (HWND): 窗口句柄，传 0 (null) 表示无所有者窗口。
     // uType (UINT): 消息框的样式。0x40 代表 MB_ICONINFORMATION。
-    hwnd := stdlib.ffi.ctypes.pointer(value => 0);
-    text := stdlib.ffi.ctypes.string(value => "This is a message from an Onion script!");
-    caption := stdlib.ffi.ctypes.string(value => "Onion FFI Demo");
-    msg_type := stdlib.ffi.ctypes.u32(value => 64); // 0x40 for MB_ICONINFORMATION
+    hwnd := stdlib.ffi.ctypes.pointer(0);
+    text := stdlib.ffi.ctypes.string("This is a message from an Onion script!");
+    caption := stdlib.ffi.ctypes.string("Onion FFI Demo");
+    msg_type := stdlib.ffi.ctypes.u32(64); // 0x40 for MB_ICONINFORMATION
 
     stdlib.io.println("  Calling MessageBoxA with an informational message...");
     stdlib.io.println("  (A dialog box should appear on your screen)");
 
     // 调用函数
     result := stdlib.ffi.lib.call(
-        handle => msgbox_handle,
-        args => (hwnd, text, caption, msg_type)
+        msgbox_handle,
+        (hwnd, text, caption, msg_type)
     );
 
     stdlib.io.println("  MessageBoxA returned:", valueof result, "(1 means OK was clicked)");
@@ -69,17 +69,17 @@ main := () -> {
 
     // 准备参数
     // uType: MB_YESNOCANCEL | MB_ICONQUESTION (0x03 | 0x20)
-    q_text := stdlib.ffi.ctypes.string(value => "Do you enjoy using Onion Language's FFI?");
-    q_caption := stdlib.ffi.ctypes.string(value => "Question");
-    q_type := stdlib.ffi.ctypes.u32(value => 35); // 3 (MB_YESNOCANCEL) + 32 (MB_ICONQUESTION)
+    q_text := stdlib.ffi.ctypes.string("Do you enjoy using Onion Language's FFI?");
+    q_caption := stdlib.ffi.ctypes.string("Question");
+    q_type := stdlib.ffi.ctypes.u32(35); // 3 (MB_YESNOCANCEL) + 32 (MB_ICONQUESTION)
 
     stdlib.io.println("  Calling MessageBoxA with a question...");
     stdlib.io.println("  (Please click a button on the dialog box)");
 
     // 调用函数
     q_result_val := stdlib.ffi.lib.call(
-        handle => msgbox_handle,
-        args => (hwnd, q_text, q_caption, q_type)
+        msgbox_handle,
+        (hwnd, q_text, q_caption, q_type)
     );
     q_result := valueof q_result_val;
 
@@ -104,3 +104,4 @@ main := () -> {
 };
 
 main();
+return undefined;

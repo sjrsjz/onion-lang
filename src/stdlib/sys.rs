@@ -1,100 +1,108 @@
 use indexmap::IndexMap;
 use onion_vm::{
-    GC,
-    lambda::runnable::RuntimeError,
-    types::{
+    lambda::runnable::RuntimeError, onion_tuple, types::{
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         pair::OnionPair,
         tuple::OnionTuple,
-    },
+    }, GC
 };
 use rustc_hash::FxHashMap;
 use std::env;
 
-use super::{build_dict, get_attr_direct, wrap_native_function};
+// 引入所需的辅助函数
+use super::{build_dict, build_string_tuple, wrap_native_function};
+
+// 辅助函数，用于获取并验证字符串参数
+fn get_string_arg<'a>(
+    argument: &'a FxHashMap<String, OnionStaticObject>,
+    name: &str,
+) -> Result<&'a str, RuntimeError> {
+    let obj = argument.get(name).ok_or_else(|| {
+        RuntimeError::DetailedError(
+            format!("Function requires a '{}' argument", name)
+                .to_string()
+                .into(),
+        )
+    })?;
+    match obj.weak() {
+        OnionObject::String(s) => Ok(s.as_ref()),
+        _ => Err(RuntimeError::InvalidType(
+            format!("Argument '{}' must be a string", name)
+                .to_string()
+                .into(),
+        )),
+    }
+}
+
+// 辅助函数，用于获取并验证整数参数
+fn get_integer_arg(
+    argument: &FxHashMap<String, OnionStaticObject>,
+    name: &str,
+) -> Result<i64, RuntimeError> {
+    let obj = argument.get(name).ok_or_else(|| {
+        RuntimeError::DetailedError(
+            format!("Function requires an '{}' argument", name)
+                .to_string()
+                .into(),
+        )
+    })?;
+    match obj.weak() {
+        OnionObject::Integer(i) => Ok(*i),
+        _ => Err(RuntimeError::InvalidType(
+            format!("Argument '{}' must be an integer", name)
+                .to_string()
+                .into(),
+        )),
+    }
+}
 
 /// 获取系统命令行参数
 fn argv(
-    _argument: &OnionStaticObject,
+    _argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let args: Vec<_> = env::args()
         .map(|arg| OnionObject::String(arg.into()))
         .collect();
-
     Ok(OnionObject::Tuple(OnionTuple::new(args).into()).stabilize())
 }
 
 /// 获取环境变量
 fn getenv(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let key = get_attr_direct(data, "key".to_string())?;
-        key.weak().with_data(|key_data| match key_data {
-            OnionObject::String(key_str) => match env::var(key_str.as_ref()) {
-                Ok(value) => Ok(OnionObject::String(value.into()).stabilize()),
-                Err(_) => Ok(OnionObject::Null.stabilize()),
-            },
-            _ => Err(RuntimeError::InvalidType(
-                "Key must be a string".to_string().into(),
-            )),
-        })
-    })
+    let key_str = get_string_arg(argument, "key")?;
+    match env::var(key_str) {
+        Ok(value) => Ok(OnionObject::String(value.into()).stabilize()),
+        Err(_) => Ok(OnionObject::Null.stabilize()),
+    }
 }
 
 /// 设置环境变量
 fn setenv(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let key = get_attr_direct(data, "key".to_string())?;
-        let value = get_attr_direct(data, "value".to_string())?;
-
-        key.weak().with_data(|key_data| {
-            value
-                .weak()
-                .with_data(|value_data| match (key_data, value_data) {
-                    (OnionObject::String(key_str), OnionObject::String(value_str)) => {
-                        unsafe {
-                            env::set_var(key_str.as_ref(), value_str.as_ref());
-                        }
-                        Ok(OnionObject::Null.stabilize())
-                    }
-                    _ => Err(RuntimeError::InvalidType(
-                        "Key and value must be strings".to_string().into(),
-                    )),
-                })
-        })
-    })
+    let key_str = get_string_arg(argument, "key")?;
+    let value_str = get_string_arg(argument, "value")?;
+    unsafe { env::set_var(key_str, value_str) }
+    Ok(OnionObject::Null.stabilize())
 }
 
 /// 删除环境变量
 fn unsetenv(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let key = get_attr_direct(data, "key".to_string())?;
-        key.weak().with_data(|key_data| match key_data {
-            OnionObject::String(key_str) => {
-                unsafe {
-                    env::remove_var(key_str.as_ref());
-                }
-                Ok(OnionObject::Null.stabilize())
-            }
-            _ => Err(RuntimeError::InvalidType(
-                "Key must be a string".to_string().into(),
-            )),
-        })
-    })
+    let key_str = get_string_arg(argument, "key")?;
+    unsafe { env::remove_var(key_str) }
+    Ok(OnionObject::Null.stabilize())
 }
 
 /// 获取所有环境变量
 fn environ(
-    _argument: &OnionStaticObject,
+    _argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let env_vars: Vec<_> = env::vars()
@@ -104,13 +112,12 @@ fn environ(
             OnionObject::Pair(OnionPair::new(key_obj, value_obj).into())
         })
         .collect();
-
     Ok(OnionObject::Tuple(OnionTuple::new(env_vars).into()).stabilize())
 }
 
 /// 获取当前工作目录
 fn getcwd(
-    _argument: &OnionStaticObject,
+    _argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     match env::current_dir() {
@@ -123,26 +130,16 @@ fn getcwd(
 
 /// 退出程序
 fn exit(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let exit_code = argument.weak().with_data(|data| {
-        get_attr_direct(data, "code".to_string())?
-            .weak()
-            .with_data(|code_data| match code_data {
-                OnionObject::Integer(code) => Ok(*code as i32),
-                _ => Err(RuntimeError::InvalidType(
-                    "Exit code must be an integer".to_string().into(),
-                )),
-            })
-    })?;
-
-    std::process::exit(exit_code);
+    let exit_code = get_integer_arg(argument, "code")?;
+    std::process::exit(exit_code as i32);
 }
 
 /// 获取系统平台信息
 fn platform(
-    _argument: &OnionStaticObject,
+    _argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let platform = if cfg!(target_os = "windows") {
@@ -154,13 +151,12 @@ fn platform(
     } else {
         "unknown"
     };
-
     Ok(OnionObject::String(platform.to_string().into()).stabilize())
 }
 
 /// 获取系统架构信息
 fn arch(
-    _argument: &OnionStaticObject,
+    _argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let arch = if cfg!(target_arch = "x86_64") {
@@ -174,13 +170,12 @@ fn arch(
     } else {
         "unknown"
     };
-
     Ok(OnionObject::String(arch.to_string().into()).stabilize())
 }
 
 /// 获取程序执行路径
 fn executable(
-    _argument: &OnionStaticObject,
+    _argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     match env::current_exe() {
@@ -195,15 +190,14 @@ fn executable(
 pub fn build_module() -> OnionStaticObject {
     let mut module = IndexMap::new();
 
-    // 统一参数定义
-    let key_arg = &OnionObject::String("key".to_string().into()).stabilize();
-    let setenv_args = &["key", "value"];
-    let exit_arg = &OnionObject::String("code".to_string().into()).stabilize();
+    let no_args = onion_tuple!();
+    let key_arg = OnionObject::String("key".to_string().into()).stabilize();
+    let exit_arg = OnionObject::String("code".to_string().into()).stabilize();
 
     module.insert(
         "argv".to_string(),
         wrap_native_function(
-            &build_dict(IndexMap::new()),
+            &no_args,
             &FxHashMap::default(),
             "sys::argv".to_string(),
             &argv,
@@ -212,7 +206,7 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "getenv".to_string(),
         wrap_native_function(
-            key_arg,
+            &key_arg,
             &FxHashMap::default(),
             "sys::getenv".to_string(),
             &getenv,
@@ -221,7 +215,7 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "setenv".to_string(),
         wrap_native_function(
-            &super::build_string_tuple(setenv_args),
+            &build_string_tuple(&["key", "value"]),
             &FxHashMap::default(),
             "sys::setenv".to_string(),
             &setenv,
@@ -230,7 +224,7 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "unsetenv".to_string(),
         wrap_native_function(
-            key_arg,
+            &key_arg,
             &FxHashMap::default(),
             "sys::unsetenv".to_string(),
             &unsetenv,
@@ -239,7 +233,7 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "environ".to_string(),
         wrap_native_function(
-            &build_dict(IndexMap::new()),
+            &no_args,
             &FxHashMap::default(),
             "sys::environ".to_string(),
             &environ,
@@ -248,7 +242,7 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "getcwd".to_string(),
         wrap_native_function(
-            &build_dict(IndexMap::new()),
+            &no_args,
             &FxHashMap::default(),
             "sys::getcwd".to_string(),
             &getcwd,
@@ -257,7 +251,7 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "exit".to_string(),
         wrap_native_function(
-            exit_arg,
+            &exit_arg,
             &FxHashMap::default(),
             "sys::exit".to_string(),
             &exit,
@@ -266,7 +260,7 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "platform".to_string(),
         wrap_native_function(
-            &build_dict(IndexMap::new()),
+            &no_args,
             &FxHashMap::default(),
             "sys::platform".to_string(),
             &platform,
@@ -275,7 +269,7 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "arch".to_string(),
         wrap_native_function(
-            &build_dict(IndexMap::new()),
+            &no_args,
             &FxHashMap::default(),
             "sys::arch".to_string(),
             &arch,
@@ -284,7 +278,7 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "executable".to_string(),
         wrap_native_function(
-            &build_dict(IndexMap::new()),
+            &no_args,
             &FxHashMap::default(),
             "sys::executable".to_string(),
             &executable,

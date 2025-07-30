@@ -1,471 +1,298 @@
 use indexmap::IndexMap;
 use onion_vm::{
-    GC,
     lambda::runnable::RuntimeError,
     types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
+    GC,
 };
 use rustc_hash::FxHashMap;
 
-use super::{build_dict, get_attr_direct, wrap_native_function};
+// 引入所需的辅助函数
+use super::{build_dict, build_string_tuple, wrap_native_function};
 
 fn abs(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let value = get_attr_direct(data, "value".to_string())?;
-        value.weak().with_data(|value_data| match value_data {
-            OnionObject::Integer(n) => Ok(OnionObject::Integer(n.abs()).stabilize()),
-            OnionObject::Float(f) => Ok(OnionObject::Float(f.abs()).stabilize()),
-            _ => Err(RuntimeError::InvalidOperation(
-                "abs requires numeric value".to_string().into(),
-            )),
-        })
+    let Some(value) = argument.get("value") else {
+        return Err(RuntimeError::DetailedError("abs requires a 'value' argument".to_string().into()));
+    };
+
+    value.weak().with_data(|value_data| match value_data {
+        OnionObject::Integer(n) => Ok(OnionObject::Integer(n.abs()).stabilize()),
+        OnionObject::Float(f) => Ok(OnionObject::Float(f.abs()).stabilize()),
+        _ => Err(RuntimeError::InvalidType("abs requires a numeric value".to_string().into())),
     })
 }
 
 fn sin(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let value = get_attr_direct(data, "value".to_string())?;
-        value.weak().with_data(|value_data| match value_data {
-            OnionObject::Integer(n) => Ok(OnionObject::Float((*n as f64).sin()).stabilize()),
-            OnionObject::Float(f) => Ok(OnionObject::Float(f.sin()).stabilize()),
-            _ => Err(RuntimeError::InvalidOperation(
-                "sin requires numeric value".to_string().into(),
-            )),
-        })
+    let Some(value) = argument.get("value") else {
+        return Err(RuntimeError::DetailedError("sin requires a 'value' argument".to_string().into()));
+    };
+
+    value.weak().with_data(|value_data| match value_data {
+        OnionObject::Integer(n) => Ok(OnionObject::Float((*n as f64).sin()).stabilize()),
+        OnionObject::Float(f) => Ok(OnionObject::Float(f.sin()).stabilize()),
+        _ => Err(RuntimeError::InvalidType("sin requires a numeric value".to_string().into())),
     })
 }
 
 fn cos(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let value = get_attr_direct(data, "value".to_string())?;
-        value.weak().with_data(|value_data| match value_data {
-            OnionObject::Integer(n) => Ok(OnionObject::Float((*n as f64).cos()).stabilize()),
-            OnionObject::Float(f) => Ok(OnionObject::Float(f.cos()).stabilize()),
-            _ => Err(RuntimeError::InvalidOperation(
-                "cos requires numeric value".to_string().into(),
-            )),
-        })
+    let Some(value) = argument.get("value") else {
+        return Err(RuntimeError::DetailedError("cos requires a 'value' argument".to_string().into()));
+    };
+
+    value.weak().with_data(|value_data| match value_data {
+        OnionObject::Integer(n) => Ok(OnionObject::Float((*n as f64).cos()).stabilize()),
+        OnionObject::Float(f) => Ok(OnionObject::Float(f.cos()).stabilize()),
+        _ => Err(RuntimeError::InvalidType("cos requires a numeric value".to_string().into())),
     })
 }
 
 fn tan(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let value = get_attr_direct(data, "value".to_string())?;
-        value.weak().with_data(|value_data| match value_data {
-            OnionObject::Integer(n) => Ok(OnionObject::Float((*n as f64).tan()).stabilize()),
-            OnionObject::Float(f) => Ok(OnionObject::Float(f.tan()).stabilize()),
-            _ => Err(RuntimeError::InvalidOperation(
-                "tan requires numeric value".to_string().into(),
-            )),
-        })
+    let Some(value) = argument.get("value") else {
+        return Err(RuntimeError::DetailedError("tan requires a 'value' argument".to_string().into()));
+    };
+
+    value.weak().with_data(|value_data| match value_data {
+        OnionObject::Integer(n) => Ok(OnionObject::Float((*n as f64).tan()).stabilize()),
+        OnionObject::Float(f) => Ok(OnionObject::Float(f.tan()).stabilize()),
+        _ => Err(RuntimeError::InvalidType("tan requires a numeric value".to_string().into())),
     })
 }
 
 fn log(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let value = get_attr_direct(data, "value".to_string())?;
-        value.weak().with_data(|value_data| match value_data {
-            OnionObject::Integer(n) => {
-                if *n <= 0 {
-                    Err(RuntimeError::InvalidOperation(
-                        "log requires positive value".to_string().into(),
-                    ))
-                } else {
-                    Ok(OnionObject::Float((*n as f64).ln()).stabilize())
-                }
+    let Some(value) = argument.get("value") else {
+        return Err(RuntimeError::DetailedError("log requires a 'value' argument".to_string().into()));
+    };
+
+    value.weak().with_data(|value_data| match value_data {
+        OnionObject::Integer(n) => {
+            if *n <= 0 {
+                Err(RuntimeError::InvalidOperation("log requires a positive value".to_string().into()))
+            } else {
+                Ok(OnionObject::Float((*n as f64).ln()).stabilize())
             }
-            OnionObject::Float(f) => {
-                if *f <= 0.0 {
-                    Err(RuntimeError::InvalidOperation(
-                        "log requires positive value".to_string().into(),
-                    ))
-                } else {
-                    Ok(OnionObject::Float(f.ln()).stabilize())
-                }
+        }
+        OnionObject::Float(f) => {
+            if *f <= 0.0 {
+                Err(RuntimeError::InvalidOperation("log requires a positive value".to_string().into()))
+            } else {
+                Ok(OnionObject::Float(f.ln()).stabilize())
             }
-            _ => Err(RuntimeError::InvalidOperation(
-                "log requires numeric value".to_string().into(),
-            )),
-        })
+        }
+        _ => Err(RuntimeError::InvalidType("log requires a numeric value".to_string().into())),
     })
 }
 
 fn sqrt(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let value = get_attr_direct(data, "value".to_string())?;
-        value.weak().with_data(|value_data| match value_data {
-            OnionObject::Integer(n) => {
-                if *n < 0 {
-                    Err(RuntimeError::InvalidOperation(
-                        "Cannot take square root of negative number"
-                            .to_string()
-                            .into(),
-                    ))
-                } else {
-                    Ok(OnionObject::Float((*n as f64).sqrt()).stabilize())
-                }
+    let Some(value) = argument.get("value") else {
+        return Err(RuntimeError::DetailedError("sqrt requires a 'value' argument".to_string().into()));
+    };
+
+    value.weak().with_data(|value_data| match value_data {
+        OnionObject::Integer(n) => {
+            if *n < 0 {
+                Err(RuntimeError::InvalidOperation("Cannot take square root of a negative number".to_string().into()))
+            } else {
+                Ok(OnionObject::Float((*n as f64).sqrt()).stabilize())
             }
-            OnionObject::Float(f) => {
-                if *f < 0.0 {
-                    Err(RuntimeError::InvalidOperation(
-                        "Cannot take square root of negative number"
-                            .to_string()
-                            .into(),
-                    ))
-                } else {
-                    Ok(OnionObject::Float(f.sqrt()).stabilize())
-                }
+        }
+        OnionObject::Float(f) => {
+            if *f < 0.0 {
+                Err(RuntimeError::InvalidOperation("Cannot take square root of a negative number".to_string().into()))
+            } else {
+                Ok(OnionObject::Float(f.sqrt()).stabilize())
             }
-            _ => Err(RuntimeError::InvalidOperation(
-                "sqrt requires numeric value".to_string().into(),
-            )),
-        })
+        }
+        _ => Err(RuntimeError::InvalidType("sqrt requires a numeric value".to_string().into())),
     })
 }
 
 fn pow(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let base = get_attr_direct(data, "base".to_string())?;
-        let exponent = get_attr_direct(data, "exponent".to_string())?;
+    let Some(base_obj) = argument.get("base") else {
+        return Err(RuntimeError::DetailedError("pow requires a 'base' argument".to_string().into()));
+    };
+    let Some(exp_obj) = argument.get("exponent") else {
+        return Err(RuntimeError::DetailedError("pow requires an 'exponent' argument".to_string().into()));
+    };
 
-        base.weak().with_data(|base_data| {
-            exponent
-                .weak()
-                .with_data(|exp_data| match (base_data, exp_data) {
-                    (OnionObject::Integer(base), OnionObject::Integer(exp)) => {
-                        if *exp >= 0 {
-                            Ok(OnionObject::Integer(base.pow(*exp as u32)).stabilize())
-                        } else {
-                            Ok(OnionObject::Float((*base as f64).powf(*exp as f64)).stabilize())
-                        }
-                    }
-                    (OnionObject::Float(base), OnionObject::Float(exp)) => {
-                        Ok(OnionObject::Float(base.powf(*exp)).stabilize())
-                    }
-                    (OnionObject::Integer(base), OnionObject::Float(exp)) => {
-                        Ok(OnionObject::Float((*base as f64).powf(*exp)).stabilize())
-                    }
-                    (OnionObject::Float(base), OnionObject::Integer(exp)) => {
-                        Ok(OnionObject::Float(base.powf(*exp as f64)).stabilize())
-                    }
-                    _ => Err(RuntimeError::InvalidOperation(
-                        "pow requires numeric values".to_string().into(),
-                    )),
-                })
+    base_obj.weak().with_data(|base_data| {
+        exp_obj.weak().with_data(|exp_data| match (base_data, exp_data) {
+            (OnionObject::Integer(base), OnionObject::Integer(exp)) => {
+                if *exp >= 0 {
+                    Ok(OnionObject::Integer(base.pow(*exp as u32)).stabilize())
+                } else {
+                    Ok(OnionObject::Float((*base as f64).powf(*exp as f64)).stabilize())
+                }
+            }
+            (OnionObject::Float(base), OnionObject::Float(exp)) => Ok(OnionObject::Float(base.powf(*exp)).stabilize()),
+            (OnionObject::Integer(base), OnionObject::Float(exp)) => Ok(OnionObject::Float((*base as f64).powf(*exp)).stabilize()),
+            (OnionObject::Float(base), OnionObject::Integer(exp)) => Ok(OnionObject::Float(base.powf(*exp as f64)).stabilize()),
+            _ => Err(RuntimeError::InvalidType("pow requires numeric values for base and exponent".to_string().into())),
         })
     })
 }
 
 fn exp(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let value = get_attr_direct(data, "value".to_string())?;
-        value.weak().with_data(|value_data| match value_data {
-            OnionObject::Integer(n) => Ok(OnionObject::Float((*n as f64).exp()).stabilize()),
-            OnionObject::Float(f) => Ok(OnionObject::Float(f.exp()).stabilize()),
-            _ => Err(RuntimeError::InvalidOperation(
-                "exp requires numeric value".to_string().into(),
-            )),
-        })
+    let Some(value) = argument.get("value") else {
+        return Err(RuntimeError::DetailedError("exp requires a 'value' argument".to_string().into()));
+    };
+
+    value.weak().with_data(|value_data| match value_data {
+        OnionObject::Integer(n) => Ok(OnionObject::Float((*n as f64).exp()).stabilize()),
+        OnionObject::Float(f) => Ok(OnionObject::Float(f.exp()).stabilize()),
+        _ => Err(RuntimeError::InvalidType("exp requires a numeric value".to_string().into())),
     })
 }
 
 fn floor(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let value = get_attr_direct(data, "value".to_string())?;
-        value.weak().with_data(|value_data| match value_data {
-            OnionObject::Integer(n) => Ok(OnionObject::Integer(*n).stabilize()),
-            OnionObject::Float(f) => Ok(OnionObject::Integer(f.floor() as i64).stabilize()),
-            _ => Err(RuntimeError::InvalidOperation(
-                "floor requires numeric value".to_string().into(),
-            )),
-        })
+    let Some(value) = argument.get("value") else {
+        return Err(RuntimeError::DetailedError("floor requires a 'value' argument".to_string().into()));
+    };
+
+    value.weak().with_data(|value_data| match value_data {
+        OnionObject::Integer(n) => Ok(OnionObject::Integer(*n).stabilize()),
+        OnionObject::Float(f) => Ok(OnionObject::Integer(f.floor() as i64).stabilize()),
+        _ => Err(RuntimeError::InvalidType("floor requires a numeric value".to_string().into())),
     })
 }
 
 fn ceil(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let value = get_attr_direct(data, "value".to_string())?;
-        value.weak().with_data(|value_data| match value_data {
-            OnionObject::Integer(n) => Ok(OnionObject::Integer(*n).stabilize()),
-            OnionObject::Float(f) => Ok(OnionObject::Integer(f.ceil() as i64).stabilize()),
-            _ => Err(RuntimeError::InvalidOperation(
-                "ceil requires numeric value".to_string().into(),
-            )),
-        })
+    let Some(value) = argument.get("value") else {
+        return Err(RuntimeError::DetailedError("ceil requires a 'value' argument".to_string().into()));
+    };
+
+    value.weak().with_data(|value_data| match value_data {
+        OnionObject::Integer(n) => Ok(OnionObject::Integer(*n).stabilize()),
+        OnionObject::Float(f) => Ok(OnionObject::Integer(f.ceil() as i64).stabilize()),
+        _ => Err(RuntimeError::InvalidType("ceil requires a numeric value".to_string().into())),
     })
 }
 
 fn round(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let value = get_attr_direct(data, "value".to_string())?;
-        value.weak().with_data(|value_data| match value_data {
-            OnionObject::Integer(n) => Ok(OnionObject::Integer(*n).stabilize()),
-            OnionObject::Float(f) => Ok(OnionObject::Integer(f.round() as i64).stabilize()),
-            _ => Err(RuntimeError::InvalidOperation(
-                "round requires numeric value".to_string().into(),
-            )),
-        })
+    let Some(value) = argument.get("value") else {
+        return Err(RuntimeError::DetailedError("round requires a 'value' argument".to_string().into()));
+    };
+
+    value.weak().with_data(|value_data| match value_data {
+        OnionObject::Integer(n) => Ok(OnionObject::Integer(*n).stabilize()),
+        OnionObject::Float(f) => Ok(OnionObject::Integer(f.round() as i64).stabilize()),
+        _ => Err(RuntimeError::InvalidType("round requires a numeric value".to_string().into())),
     })
 }
 
 fn asin(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let value = get_attr_direct(data, "value".to_string())?;
-        value.weak().with_data(|value_data| match value_data {
-            OnionObject::Integer(n) => {
-                let val = *n as f64;
-                if val < -1.0 || val > 1.0 {
-                    Err(RuntimeError::InvalidOperation(
-                        "asin requires value between -1 and 1".to_string().into(),
-                    ))
-                } else {
-                    Ok(OnionObject::Float(val.asin()).stabilize())
-                }
-            }
-            OnionObject::Float(f) => {
-                if *f < -1.0 || *f > 1.0 {
-                    Err(RuntimeError::InvalidOperation(
-                        "asin requires value between -1 and 1".to_string().into(),
-                    ))
-                } else {
-                    Ok(OnionObject::Float(f.asin()).stabilize())
-                }
-            }
-            _ => Err(RuntimeError::InvalidOperation(
-                "asin requires numeric value".to_string().into(),
-            )),
-        })
+    let Some(value) = argument.get("value") else {
+        return Err(RuntimeError::DetailedError("asin requires a 'value' argument".to_string().into()));
+    };
+
+    value.weak().with_data(|value_data| {
+        let val_f64 = match value_data {
+            OnionObject::Integer(n) => *n as f64,
+            OnionObject::Float(f) => *f,
+            _ => return Err(RuntimeError::InvalidType("asin requires a numeric value".to_string().into())),
+        };
+        if val_f64 < -1.0 || val_f64 > 1.0 {
+            Err(RuntimeError::InvalidOperation("asin requires a value between -1 and 1".to_string().into()))
+        } else {
+            Ok(OnionObject::Float(val_f64.asin()).stabilize())
+        }
     })
 }
 
 fn acos(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let value = get_attr_direct(data, "value".to_string())?;
-        value.weak().with_data(|value_data| match value_data {
-            OnionObject::Integer(n) => {
-                let val = *n as f64;
-                if val < -1.0 || val > 1.0 {
-                    Err(RuntimeError::InvalidOperation(
-                        "acos requires value between -1 and 1".to_string().into(),
-                    ))
-                } else {
-                    Ok(OnionObject::Float(val.acos()).stabilize())
-                }
-            }
-            OnionObject::Float(f) => {
-                if *f < -1.0 || *f > 1.0 {
-                    Err(RuntimeError::InvalidOperation(
-                        "acos requires value between -1 and 1".to_string().into(),
-                    ))
-                } else {
-                    Ok(OnionObject::Float(f.acos()).stabilize())
-                }
-            }
-            _ => Err(RuntimeError::InvalidOperation(
-                "acos requires numeric value".to_string().into(),
-            )),
-        })
+    let Some(value) = argument.get("value") else {
+        return Err(RuntimeError::DetailedError("acos requires a 'value' argument".to_string().into()));
+    };
+
+    value.weak().with_data(|value_data| {
+        let val_f64 = match value_data {
+            OnionObject::Integer(n) => *n as f64,
+            OnionObject::Float(f) => *f,
+            _ => return Err(RuntimeError::InvalidType("acos requires a numeric value".to_string().into())),
+        };
+        if val_f64 < -1.0 || val_f64 > 1.0 {
+            Err(RuntimeError::InvalidOperation("acos requires a value between -1 and 1".to_string().into()))
+        } else {
+            Ok(OnionObject::Float(val_f64.acos()).stabilize())
+        }
     })
 }
 
 fn atan(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let value = get_attr_direct(data, "value".to_string())?;
-        value.weak().with_data(|value_data| match value_data {
-            OnionObject::Integer(n) => Ok(OnionObject::Float((*n as f64).atan()).stabilize()),
-            OnionObject::Float(f) => Ok(OnionObject::Float(f.atan()).stabilize()),
-            _ => Err(RuntimeError::InvalidOperation(
-                "atan requires numeric value".to_string().into(),
-            )),
-        })
+    let Some(value) = argument.get("value") else {
+        return Err(RuntimeError::DetailedError("atan requires a 'value' argument".to_string().into()));
+    };
+
+    value.weak().with_data(|value_data| match value_data {
+        OnionObject::Integer(n) => Ok(OnionObject::Float((*n as f64).atan()).stabilize()),
+        OnionObject::Float(f) => Ok(OnionObject::Float(f.atan()).stabilize()),
+        _ => Err(RuntimeError::InvalidType("atan requires a numeric value".to_string().into())),
     })
 }
 
 pub fn build_module() -> OnionStaticObject {
     let mut module = IndexMap::new();
 
-    // 数学常量
-    module.insert(
-        "PI".to_string(),
-        OnionObject::Float(std::f64::consts::PI).stabilize(),
-    );
-    module.insert(
-        "E".to_string(),
-        OnionObject::Float(std::f64::consts::E).stabilize(),
-    );
+    module.insert("PI".to_string(), OnionObject::Float(std::f64::consts::PI).stabilize());
+    module.insert("E".to_string(), OnionObject::Float(std::f64::consts::E).stabilize());
 
-    // 统一参数定义
-    let single_arg = &OnionObject::String("value".to_string().into()).stabilize();
-    let pow_args = &["base", "exponent"];
+    let single_arg = OnionObject::String("value".to_string().into()).stabilize();
+    let pow_args = build_string_tuple(&["base", "exponent"]);
 
-    // 注册所有实现，单参数统一，pow多参数
-    module.insert(
-        "abs".to_string(),
-        wrap_native_function(
-            single_arg,
-            &FxHashMap::default(),
-            "math::abs".to_string(),
-            &abs,
-        ),
-    );
-    module.insert(
-        "sin".to_string(),
-        wrap_native_function(
-            single_arg,
-            &FxHashMap::default(),
-            "math::sin".to_string(),
-            &sin,
-        ),
-    );
-    module.insert(
-        "cos".to_string(),
-        wrap_native_function(
-            single_arg,
-            &FxHashMap::default(),
-            "math::cos".to_string(),
-            &cos,
-        ),
-    );
-    module.insert(
-        "tan".to_string(),
-        wrap_native_function(
-            single_arg,
-            &FxHashMap::default(),
-            "math::tan".to_string(),
-            &tan,
-        ),
-    );
-    module.insert(
-        "log".to_string(),
-        wrap_native_function(
-            single_arg,
-            &FxHashMap::default(),
-            "math::log".to_string(),
-            &log,
-        ),
-    );
-    module.insert(
-        "sqrt".to_string(),
-        wrap_native_function(
-            single_arg,
-            &FxHashMap::default(),
-            "math::sqrt".to_string(),
-            &sqrt,
-        ),
-    );
-    module.insert(
-        "pow".to_string(),
-        wrap_native_function(
-            &super::build_string_tuple(pow_args),
-            &FxHashMap::default(),
-            "math::pow".to_string(),
-            &pow,
-        ),
-    );
-    module.insert(
-        "exp".to_string(),
-        wrap_native_function(
-            single_arg,
-            &FxHashMap::default(),
-            "math::exp".to_string(),
-            &exp,
-        ),
-    );
-    module.insert(
-        "floor".to_string(),
-        wrap_native_function(
-            single_arg,
-            &FxHashMap::default(),
-            "math::floor".to_string(),
-            &floor,
-        ),
-    );
-    module.insert(
-        "ceil".to_string(),
-        wrap_native_function(
-            single_arg,
-            &FxHashMap::default(),
-            "math::ceil".to_string(),
-            &ceil,
-        ),
-    );
-    module.insert(
-        "round".to_string(),
-        wrap_native_function(
-            single_arg,
-            &FxHashMap::default(),
-            "math::round".to_string(),
-            &round,
-        ),
-    );
-    module.insert(
-        "asin".to_string(),
-        wrap_native_function(
-            single_arg,
-            &FxHashMap::default(),
-            "math::asin".to_string(),
-            &asin,
-        ),
-    );
-    module.insert(
-        "acos".to_string(),
-        wrap_native_function(
-            single_arg,
-            &FxHashMap::default(),
-            "math::acos".to_string(),
-            &acos,
-        ),
-    );
-    module.insert(
-        "atan".to_string(),
-        wrap_native_function(
-            single_arg,
-            &FxHashMap::default(),
-            "math::atan".to_string(),
-            &atan,
-        ),
-    );
+    module.insert("abs".to_string(), wrap_native_function(&single_arg, &FxHashMap::default(), "math::abs".to_string(), &abs));
+    module.insert("sin".to_string(), wrap_native_function(&single_arg, &FxHashMap::default(), "math::sin".to_string(), &sin));
+    module.insert("cos".to_string(), wrap_native_function(&single_arg, &FxHashMap::default(), "math::cos".to_string(), &cos));
+    module.insert("tan".to_string(), wrap_native_function(&single_arg, &FxHashMap::default(), "math::tan".to_string(), &tan));
+    module.insert("log".to_string(), wrap_native_function(&single_arg, &FxHashMap::default(), "math::log".to_string(), &log));
+    module.insert("sqrt".to_string(), wrap_native_function(&single_arg, &FxHashMap::default(), "math::sqrt".to_string(), &sqrt));
+    module.insert("pow".to_string(), wrap_native_function(&pow_args, &FxHashMap::default(), "math::pow".to_string(), &pow));
+    module.insert("exp".to_string(), wrap_native_function(&single_arg, &FxHashMap::default(), "math::exp".to_string(), &exp));
+    module.insert("floor".to_string(), wrap_native_function(&single_arg, &FxHashMap::default(), "math::floor".to_string(), &floor));
+    module.insert("ceil".to_string(), wrap_native_function(&single_arg, &FxHashMap::default(), "math::ceil".to_string(), &ceil));
+    module.insert("round".to_string(), wrap_native_function(&single_arg, &FxHashMap::default(), "math::round".to_string(), &round));
+    module.insert("asin".to_string(), wrap_native_function(&single_arg, &FxHashMap::default(), "math::asin".to_string(), &asin));
+    module.insert("acos".to_string(), wrap_native_function(&single_arg, &FxHashMap::default(), "math::acos".to_string(), &acos));
+    module.insert("atan".to_string(), wrap_native_function(&single_arg, &FxHashMap::default(), "math::atan".to_string(), &atan));
 
     build_dict(module)
 }

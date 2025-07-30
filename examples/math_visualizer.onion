@@ -1,6 +1,6 @@
 // 数学函数可视化器 - 动态图形绘制
 @required stdlib;
-
+@import "std/constraint.onion";
 colors := {
     // 前景色
     'black': "\u001b[30m",
@@ -42,7 +42,7 @@ colors := {
     'reset': "\u001b[0m"
 };
 
-colorize := (text => "", fg => "white", bg => "bg_black") -> {
+colorize := (text => String, fg => String, bg => String) -> {
     fg_color := colors.{fg};
     bg_color := colors.{bg};
     return fg_color + bg_color + text + colors.reset;

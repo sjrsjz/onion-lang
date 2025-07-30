@@ -1,6 +1,4 @@
-use std::{
-    collections::VecDeque, ffi::CString, sync::Arc
-};
+use std::{collections::VecDeque, ffi::CString, sync::Arc};
 
 use arc_gc::{
     arc::{GCArc, GCArcWeak},
@@ -10,25 +8,25 @@ use indexmap::IndexMap;
 use libffi::middle::{Arg, Cif, Type};
 use libloading::Library;
 use onion_vm::{
+    GC,
     lambda::runnable::RuntimeError,
     types::{
         object::{OnionObject, OnionObjectCell, OnionObjectExt, OnionStaticObject},
         tuple::OnionTuple,
     },
-    GC,
 };
 use rustc_hash::FxHashMap;
 
-use crate::stdlib::{build_dict, build_string_tuple, get_attr_direct, wrap_native_function};
-
+// 引入所需的辅助函数和类型
 use super::ctypes::CTypes;
+use crate::stdlib::{build_dict, build_string_tuple, wrap_native_function};
 
-/// 跨平台的字符串到 UTF-16 转换函数
+// --- Core Structs and Implementations (CLib, CFunctionHandle, etc.) ---
+// The internal logic of these structs is sound and remains largely unchanged.
+
 fn string_to_utf16(s: &str) -> Vec<u16> {
     s.encode_utf16().collect()
 }
-
-// Helper enum to manage argument lifetimes and types for libffi calls
 enum Argument {
     I8(i8),
     I16(i16),
@@ -42,12 +40,11 @@ enum Argument {
     F64(f64),
     USize(usize),
     ISize(isize),
-    #[allow(dead_code)]
+    #[allow(unused)]
     Ptr(*const u8, Option<Box<CString>>),
-    #[allow(dead_code)]
+    #[allow(unused)]
     WidePtr(*const u16, Option<Box<Vec<u16>>>),
 }
-
 impl Argument {
     fn as_arg(&self) -> Arg {
         match self {
@@ -64,99 +61,65 @@ impl Argument {
             Argument::USize(v) => Arg::new(v),
             Argument::ISize(v) => Arg::new(v),
             Argument::Ptr(p, _) => Arg::new(p),
-            Argument::WidePtr(p, _) => Arg::new(p), 
+            Argument::WidePtr(p, _) => Arg::new(p),
         }
     }
 }
 
-/// C 动态库对象
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CLib {
     pub path: String,
     pub library: Arc<Library>,
 }
 
-impl Clone for CLib {
-    fn clone(&self) -> Self {
-        CLib {
-            path: self.path.clone(),
-            library: self.library.clone(),
-        }
-    }
-}
-
 impl CLib {
     pub fn new(path: String) -> Result<Self, RuntimeError> {
         unsafe {
-            match Library::new(&path) {
-                Ok(lib) => Ok(CLib {
+            Library::new(&path)
+                .map(|lib| CLib {
                     path,
                     library: Arc::new(lib),
-                }),
-                Err(e) => Err(RuntimeError::InvalidOperation(
-                    format!("Failed to load library: {}", e).into(),
-                )),
-            }
+                })
+                .map_err(|e| {
+                    RuntimeError::InvalidOperation(format!("Failed to load library: {}", e).into())
+                })
         }
     }
-
-    /// 获取函数符号
     pub fn get_symbol(&self, name: &str) -> Result<*const u8, RuntimeError> {
         unsafe {
-            let symbol: Result<libloading::Symbol<unsafe extern "C" fn()>, _> = 
-                self.library.get(name.as_bytes());
-            match symbol {
-                Ok(sym) => Ok(*sym as *const u8),
-                Err(e) => Err(RuntimeError::InvalidOperation(
-                    format!("Function '{}' not found: {}", name, e).into(),
-                )),
-            }
+            self.library
+                .get(name.as_bytes())
+                .map(|sym: libloading::Symbol<unsafe extern "C" fn()>| *sym as *const u8)
+                .map_err(|e| {
+                    RuntimeError::InvalidOperation(
+                        format!("Function '{}' not found: {}", name, e).into(),
+                    )
+                })
         }
     }
 }
-
 impl GCTraceable<OnionObjectCell> for CLib {
     fn collect(&self, _queue: &mut VecDeque<GCArcWeak<OnionObjectCell>>) {}
 }
-
 impl OnionObjectExt for CLib {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
-
     fn repr(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
-        Ok(format!(
-            "CLib(path: \"{}\")",
-            self.path
-        ))
+        Ok(format!("CLib(path=\"{}\")", self.path))
     }
-
     fn equals(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
         if let OnionObject::Custom(other_custom) = other {
             if let Some(other_lib) = other_custom.as_any().downcast_ref::<CLib>() {
-                Ok(self.path == other_lib.path)
-            } else {
-                Ok(false)
+                return Ok(self.path == other_lib.path);
             }
-        } else {
-            Ok(false)
         }
+        Ok(false)
     }
-
     fn upgrade(&self, _collected: &mut Vec<GCArc<OnionObjectCell>>) {}
-
     fn is_same(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
-        if let OnionObject::Custom(other_custom) = other {
-            if let Some(other_lib) = other_custom.as_any().downcast_ref::<CLib>() {
-                Ok(self.path == other_lib.path)
-            } else {
-                Ok(false)
-            }
-        } else {
-            Ok(false)
-        }
+        self.equals(other)
     }
-
     fn with_attribute(
         &self,
         key: &OnionObject,
@@ -164,18 +127,17 @@ impl OnionObjectExt for CLib {
     ) -> Result<(), RuntimeError> {
         if let OnionObject::String(attr) = key {
             match attr.as_ref().as_str() {
-                "path" => f(&OnionObject::String(Arc::new(self.path.clone()))),
+                "path" => f(&OnionObject::String(self.path.clone().into())),
                 _ => Err(RuntimeError::InvalidOperation(
                     format!("CLib has no attribute '{}'", attr).into(),
                 )),
             }
         } else {
-            Err(RuntimeError::InvalidOperation(
+            Err(RuntimeError::InvalidType(
                 "Attribute key must be a string".to_string().into(),
             ))
         }
     }
-
     fn len(&self) -> Result<OnionStaticObject, RuntimeError> {
         Err(RuntimeError::InvalidOperation(
             "CLib has no length".to_string().into(),
@@ -183,7 +145,6 @@ impl OnionObjectExt for CLib {
     }
 }
 
-/// C 函数句柄
 #[derive(Clone, Debug)]
 pub struct CFunctionHandle {
     pub library: Arc<CLib>,
@@ -192,11 +153,8 @@ pub struct CFunctionHandle {
     pub param_types: Vec<String>,
     pub function_ptr: *const u8,
 }
-
-// 确保 CFunctionHandle 可以安全地在线程间传递
 unsafe impl Send for CFunctionHandle {}
 unsafe impl Sync for CFunctionHandle {}
-
 impl CFunctionHandle {
     pub fn new(
         library: Arc<CLib>,
@@ -205,8 +163,7 @@ impl CFunctionHandle {
         param_types: Vec<String>,
     ) -> Result<Self, RuntimeError> {
         let function_ptr = library.get_symbol(&function_name)?;
-        
-        Ok(CFunctionHandle {
+        Ok(Self {
             library,
             function_name,
             return_type,
@@ -215,121 +172,70 @@ impl CFunctionHandle {
         })
     }
 
-    /// 调用 C 函数
-    pub fn call(&self, args: &[&CTypes]) -> Result<CTypes, RuntimeError> {
+    pub fn call(&self, args: &[CTypes]) -> Result<CTypes, RuntimeError> {
         if args.len() != self.param_types.len() {
             return Err(RuntimeError::InvalidOperation(
                 format!(
                     "Expected {} arguments, got {}",
                     self.param_types.len(),
                     args.len()
-                ).into(),
+                )
+                .into(),
             ));
         }
-
-        unsafe {
-            self.call_with_libffi(args)
-        }
-    }    /// 使用 libffi 调用函数
-    unsafe fn call_with_libffi(&self, args: &[&CTypes]) -> Result<CTypes, RuntimeError> {
-        // 准备参数类型和值
-        let mut arg_types = Vec::new();
-        let mut arg_values = Vec::new(); // Vec<Argument>
+        unsafe { self.call_with_libffi(args) }
+    }
+    unsafe fn call_with_libffi(&self, args: &[CTypes]) -> Result<CTypes, RuntimeError> {
+        let mut arg_types = Vec::with_capacity(args.len());
+        let mut arg_values = Vec::with_capacity(args.len());
 
         for (i, arg) in args.iter().enumerate() {
-            let (ffi_type, value) = unsafe {
-                self.prepare_arg_for_call(arg, &self.param_types[i])
-            }?;
+            let (ffi_type, value) =
+                unsafe { self.prepare_arg_for_call(arg, &self.param_types[i])? };
             arg_types.push(ffi_type);
             arg_values.push(value);
         }
 
-        // 准备返回类型
         let return_ffi_type = self.get_ffi_type(&self.return_type)?;
-
-        // 创建 CIF
         let cif = Cif::new(arg_types, return_ffi_type);
-        // 准备参数指针
-        let args_for_ffi: Vec<Arg> = arg_values.iter().map(|val| val.as_arg()).collect();
+        let ffi_args: Vec<Arg> = arg_values.iter().map(|v| v.as_arg()).collect();
+        let code_ptr = libffi::middle::CodePtr(self.function_ptr as *mut _);
 
-        // 调用函数并处理返回值
         unsafe {
             match self.return_type.as_str() {
                 "void" => {
-                    cif.call::<()>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
+                    cif.call::<()>(code_ptr, &ffi_args);
                     Ok(CTypes::CVoid)
                 }
-                "i8" => {
-                    let result = cif.call::<i8>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                    Ok(CTypes::CInt8(result))
-                }
-                "i16" => {
-                    let result = cif.call::<i16>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                    Ok(CTypes::CInt16(result))
-                }
-                "i32" => {
-                    let result = cif.call::<i32>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                    Ok(CTypes::CInt32(result))
-                }
-                "i64" => {
-                    let result = cif.call::<i64>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                    Ok(CTypes::CInt64(result))
-                }
-                "u8" => {
-                    let result = cif.call::<u8>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                    Ok(CTypes::CUInt8(result))
-                }
-                "u16" => {
-                    let result = cif.call::<u16>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                    Ok(CTypes::CUInt16(result))
-                }
-                "u32" => {
-                    let result = cif.call::<u32>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                    Ok(CTypes::CUInt32(result))
-                }
-                "u64" => {
-                    let result = cif.call::<u64>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                    Ok(CTypes::CUInt64(result))
-                }
-                "f32" => {
-                    let result = cif.call::<f32>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                    Ok(CTypes::CFloat(result))
-                }
-                "f64" => {
-                    let result = cif.call::<f64>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                    Ok(CTypes::CDouble(result))
-                }
-                "bool" => {
-                    let result = cif.call::<u8>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                    Ok(CTypes::CBool(result != 0))
-                }
-                "char" => {
-                    let result = cif.call::<i8>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                    Ok(CTypes::CChar(result))
-                }
-                "uchar" => {
-                    let result = cif.call::<u8>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                    Ok(CTypes::CUChar(result))
-                }
-                "size" => {
-                    let result = cif.call::<usize>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                    Ok(CTypes::CSize(result))
-                }
-                "ssize" => {
-                    let result = cif.call::<isize>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                    Ok(CTypes::CSSize(result))
-                }
-                "pointer" => {
-                    let result = cif.call::<*const u8>(libffi::middle::CodePtr(self.function_ptr as *mut std::ffi::c_void), &args_for_ffi);
-                    Ok(CTypes::CPointer(result as usize))
-                }
+                "i8" => Ok(CTypes::CInt8(cif.call::<i8>(code_ptr, &ffi_args))),
+                "i16" => Ok(CTypes::CInt16(cif.call::<i16>(code_ptr, &ffi_args))),
+                "i32" => Ok(CTypes::CInt32(cif.call::<i32>(code_ptr, &ffi_args))),
+                "i64" => Ok(CTypes::CInt64(cif.call::<i64>(code_ptr, &ffi_args))),
+                "u8" => Ok(CTypes::CUInt8(cif.call::<u8>(code_ptr, &ffi_args))),
+                "u16" => Ok(CTypes::CUInt16(cif.call::<u16>(code_ptr, &ffi_args))),
+                "u32" => Ok(CTypes::CUInt32(cif.call::<u32>(code_ptr, &ffi_args))),
+                "u64" => Ok(CTypes::CUInt64(cif.call::<u64>(code_ptr, &ffi_args))),
+                "f32" => Ok(CTypes::CFloat(cif.call::<f32>(code_ptr, &ffi_args))),
+                "f64" => Ok(CTypes::CDouble(cif.call::<f64>(code_ptr, &ffi_args))),
+                "bool" => Ok(CTypes::CBool(cif.call::<u8>(code_ptr, &ffi_args) != 0)),
+                "char" => Ok(CTypes::CChar(cif.call::<i8>(code_ptr, &ffi_args))),
+                "uchar" => Ok(CTypes::CUChar(cif.call::<u8>(code_ptr, &ffi_args))),
+                "size" => Ok(CTypes::CSize(cif.call::<usize>(code_ptr, &ffi_args))),
+                "ssize" => Ok(CTypes::CSSize(cif.call::<isize>(code_ptr, &ffi_args))),
+                "pointer" => Ok(CTypes::CPointer(
+                    cif.call::<*const u8>(code_ptr, &ffi_args) as usize
+                )),
                 _ => Err(RuntimeError::InvalidOperation(
                     format!("Unsupported return type: {}", self.return_type).into(),
                 )),
             }
         }
-    }    /// 准备参数用于调用
-    unsafe fn prepare_arg_for_call(&self, ctype: &CTypes, expected_type: &str) -> Result<(Type, Argument), RuntimeError> {
+    }
+    unsafe fn prepare_arg_for_call(
+        &self,
+        ctype: &CTypes,
+        expected_type: &str,
+    ) -> Result<(Type, Argument), RuntimeError> {
         match (ctype, expected_type) {
             (CTypes::CInt8(v), "i8") => Ok((Type::i8(), Argument::I8(*v))),
             (CTypes::CInt16(v), "i16") => Ok((Type::i16(), Argument::I16(*v))),
@@ -341,37 +247,48 @@ impl CFunctionHandle {
             (CTypes::CUInt64(v), "u64") => Ok((Type::u64(), Argument::U64(*v))),
             (CTypes::CFloat(v), "f32") => Ok((Type::f32(), Argument::F32(*v))),
             (CTypes::CDouble(v), "f64") => Ok((Type::f64(), Argument::F64(*v))),
-            (CTypes::CBool(v), "bool") => Ok((Type::u8(), Argument::U8(if *v { 1u8 } else { 0u8 }))),
+            (CTypes::CBool(v), "bool") => Ok((Type::u8(), Argument::U8(if *v { 1 } else { 0 }))),
             (CTypes::CChar(v), "char") => Ok((Type::i8(), Argument::I8(*v))),
             (CTypes::CUChar(v), "uchar") => Ok((Type::u8(), Argument::U8(*v))),
             (CTypes::CSize(v), "size") => Ok((Type::usize(), Argument::USize(*v))),
             (CTypes::CSSize(v), "ssize") => Ok((Type::isize(), Argument::ISize(*v))),
-            (CTypes::CPointer(v), "pointer") => Ok((Type::pointer(), Argument::Ptr(*v as *const u8, None))),
+            (CTypes::CPointer(v), "pointer") => {
+                Ok((Type::pointer(), Argument::Ptr(*v as *const u8, None)))
+            }
             (CTypes::CString(s), "string") => {
                 let c_string = CString::new(s.as_str()).map_err(|_| {
                     RuntimeError::InvalidOperation("String contains null byte".to_string().into())
                 })?;
                 let ptr = c_string.as_ptr();
-                let boxed_cstring = Box::new(c_string);
-                Ok((Type::pointer(), Argument::Ptr(ptr as *const u8, Some(boxed_cstring))))
+                Ok((
+                    Type::pointer(),
+                    Argument::Ptr(ptr as *const u8, Some(Box::new(c_string))),
+                ))
             }
             (CTypes::CString(s), "wstring") => {
-                let mut wide_chars: Vec<u16> = string_to_utf16(s.as_str());
-                wide_chars.push(0); // 添加 null 终止符
+                let mut wide_chars = string_to_utf16(s);
+                wide_chars.push(0);
                 let ptr = wide_chars.as_ptr();
-                let boxed_wstr = Box::new(wide_chars);
-                Ok((Type::pointer(), Argument::WidePtr(ptr, Some(boxed_wstr))))
+                Ok((
+                    Type::pointer(),
+                    Argument::WidePtr(ptr, Some(Box::new(wide_chars))),
+                ))
             }
             (CTypes::CBuffer(b), "buffer") => {
-                let ptr = b.as_ptr();
-                Ok((Type::pointer(), Argument::Ptr(ptr, None)))
+                Ok((Type::pointer(), Argument::Ptr(b.as_ptr(), None)))
             }
-            (CTypes::CNull, "pointer") => Ok((Type::pointer(), Argument::Ptr(std::ptr::null::<u8>(), None))),
+            (CTypes::CNull, "pointer") => {
+                Ok((Type::pointer(), Argument::Ptr(std::ptr::null(), None)))
+            }
             _ => Err(RuntimeError::InvalidOperation(
-                format!("Type mismatch: expected {}, got {:?}", expected_type, ctype).into(),
+                format!(
+                    "Type mismatch for FFI call: expected {}, got {:?}",
+                    expected_type, ctype
+                )
+                .into(),
             )),
         }
-    }    /// 获取 libffi 类型
+    }
     fn get_ffi_type(&self, type_name: &str) -> Result<Type, RuntimeError> {
         match type_name {
             "void" => Ok(Type::void()),
@@ -390,40 +307,41 @@ impl CFunctionHandle {
             "uchar" => Ok(Type::u8()),
             "size" => Ok(Type::usize()),
             "ssize" => Ok(Type::isize()),
-            "pointer" | "string" | "buffer" | "wstring" => Ok(Type::pointer()), 
+            "pointer" | "string" | "buffer" | "wstring" => Ok(Type::pointer()),
             _ => Err(RuntimeError::InvalidOperation(
-                format!("Unsupported type: {}", type_name).into(),
+                format!("Unsupported FFI type: {}", type_name).into(),
             )),
         }
     }
 }
-
 impl GCTraceable<OnionObjectCell> for CFunctionHandle {
     fn collect(&self, _queue: &mut VecDeque<GCArcWeak<OnionObjectCell>>) {}
 }
-
 impl OnionObjectExt for CFunctionHandle {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
-
     fn repr(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
         Ok(format!(
-            "CFunctionHandle({}::{}, ret: {}, params: {:?})",
-            self.library.path, self.function_name, self.return_type, self.param_types
+            "CFunctionHandle({}::{})",
+            self.library.path, self.function_name
         ))
     }
-
-    fn equals(&self, _other: &OnionObject) -> Result<bool, RuntimeError> {
+    fn equals(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
+        if let OnionObject::Custom(other_custom) = other {
+            if let Some(other_handle) = other_custom.as_any().downcast_ref::<CFunctionHandle>() {
+                return Ok(
+                    Arc::ptr_eq(&self.library.library, &other_handle.library.library)
+                        && self.function_name == other_handle.function_name,
+                );
+            }
+        }
         Ok(false)
     }
-
     fn upgrade(&self, _collected: &mut Vec<GCArc<OnionObjectCell>>) {}
-
-    fn is_same(&self, _other: &OnionObject) -> Result<bool, RuntimeError> {
-        Ok(false)
+    fn is_same(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
+        self.equals(other)
     }
-
     fn with_attribute(
         &self,
         key: &OnionObject,
@@ -431,29 +349,29 @@ impl OnionObjectExt for CFunctionHandle {
     ) -> Result<(), RuntimeError> {
         if let OnionObject::String(attr) = key {
             match attr.as_ref().as_str() {
-                "name" => f(&OnionObject::String(Arc::new(self.function_name.clone()))),
-                "library" => f(&OnionObject::String(Arc::new(self.library.path.clone()))),
-                "return_type" => f(&OnionObject::String(Arc::new(self.return_type.clone()))),
+                "name" => f(&OnionObject::String(self.function_name.clone().into())),
+                "library" => f(&OnionObject::Custom(Arc::new(
+                    self.library.as_ref().clone(),
+                ))),
+                "return_type" => f(&OnionObject::String(self.return_type.clone().into())),
                 "param_types" => {
-                    let types: Vec<OnionObject> = self
+                    let types = self
                         .param_types
                         .iter()
-                        .map(|t| OnionObject::String(Arc::new(t.clone())))
+                        .map(|t| OnionObject::String(t.clone().into()))
                         .collect();
-                    let tuple = OnionTuple::new(types);
-                    f(&OnionObject::Tuple(Arc::new(tuple)))
+                    f(&OnionObject::Tuple(OnionTuple::new(types).into()))
                 }
                 _ => Err(RuntimeError::InvalidOperation(
                     format!("CFunctionHandle has no attribute '{}'", attr).into(),
                 )),
             }
         } else {
-            Err(RuntimeError::InvalidOperation(
+            Err(RuntimeError::InvalidType(
                 "Attribute key must be a string".to_string().into(),
             ))
         }
     }
-
     fn len(&self) -> Result<OnionStaticObject, RuntimeError> {
         Err(RuntimeError::InvalidOperation(
             "CFunctionHandle has no length".to_string().into(),
@@ -461,203 +379,178 @@ impl OnionObjectExt for CFunctionHandle {
     }
 }
 
-/// 加载动态库
-fn lib_load(
-    argument: &OnionStaticObject,
-    _gc: &mut GC<OnionObjectCell>,
-) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let path = get_attr_direct(data, "path".to_string())?;
-        path.weak().with_data(|path_data| match path_data {
-            OnionObject::String(path_str) => {
-                let path_str = path_str.as_ref();
-                
-                match CLib::new(path_str.to_string()) {
-                    Ok(clib) => Ok(OnionObject::Custom(Arc::new(clib)).stabilize()),
-                    Err(e) => Err(e),
-                }
-            }
-            _ => Err(RuntimeError::InvalidOperation(
-                "lib_load requires string path".to_string().into(),
-            )),
-        })
-    })
+// --- Argument Parsing Helper Functions ---
+
+fn get_clib_arg(
+    argument: &FxHashMap<String, OnionStaticObject>,
+    name: &str,
+) -> Result<Arc<CLib>, RuntimeError> {
+    let obj = argument.get(name).ok_or_else(|| {
+        RuntimeError::DetailedError(format!("Missing required argument: '{}'", name).into())
+    })?;
+    match obj.weak() {
+        OnionObject::Custom(custom) => custom
+            .as_any()
+            .downcast_ref::<CLib>()
+            .map(|clib| Arc::new(clib.clone()))
+            .ok_or_else(|| {
+                RuntimeError::InvalidType(
+                    format!("Argument '{}' must be a CLib object", name).into(),
+                )
+            }),
+        _ => Err(RuntimeError::InvalidType(
+            format!("Argument '{}' must be a CLib object", name).into(),
+        )),
+    }
 }
 
-/// 获取函数句柄
-fn lib_get_function(
-    argument: &OnionStaticObject,
-    _gc: &mut GC<OnionObjectCell>,
-) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let library_arg = get_attr_direct(data, "library".to_string())?;
-        let function_name = get_attr_direct(data, "function".to_string())?;
-        let return_type = get_attr_direct(data, "return_type".to_string())?;
-        let param_types = get_attr_direct(data, "param_types".to_string())?;
+fn get_string_arg(
+    argument: &FxHashMap<String, OnionStaticObject>,
+    name: &str,
+) -> Result<String, RuntimeError> {
+    let obj = argument.get(name).ok_or_else(|| {
+        RuntimeError::DetailedError(format!("Missing required argument: '{}'", name).into())
+    })?;
+    match obj.weak() {
+        OnionObject::String(s) => Ok(s.to_string()),
+        _ => Err(RuntimeError::InvalidType(
+            format!("Argument '{}' must be a string", name).into(),
+        )),
+    }
+}
 
-        library_arg.weak().with_data(|lib_data| {
-            function_name.weak().with_data(|func_data| {
-                return_type.weak().with_data(|ret_data| {
-                    param_types.weak().with_data(|params_data| {
-                        let (library, func_name, ret_type) = match (lib_data, func_data, ret_data) {
-                            (OnionObject::String(lib_path), OnionObject::String(func_name), OnionObject::String(ret_type)) => {
-                                // 从路径创建新的库
-                                let library = CLib::new(lib_path.as_ref().clone())?;
-                                (Arc::new(library), func_name.as_ref().clone(), ret_type.as_ref().clone())
-                            }
-                            (OnionObject::Custom(custom), OnionObject::String(func_name), OnionObject::String(ret_type)) => {
-                                if let Some(clib) = custom.as_any().downcast_ref::<CLib>() {
-                                    (Arc::new(clib.clone()), func_name.as_ref().clone(), ret_type.as_ref().clone())
-                                } else {
-                                    return Err(RuntimeError::InvalidOperation(
-                                        "Expected CLib object or string path".to_string().into(),
-                                    ));
-                                }
-                            }
-                            _ => return Err(RuntimeError::InvalidOperation(
-                                "lib_get_function requires library (CLib or string), function name, and return type".to_string().into(),
-                            )),
-                        };
-
-                        if let OnionObject::Tuple(params_tuple) = params_data {
-                            // 解析参数类型
-                            let mut param_type_strs = Vec::new();
-                            let tuple_len = params_tuple.len()?.weak().with_data(|data| {
-                                if let OnionObject::Integer(len) = data {
-                                    Ok(*len)
-                                } else {
-                                    Err(RuntimeError::InvalidOperation("Invalid tuple length".to_string().into()))
-                                }
-                            })?;
-                            
-                            for i in 0..tuple_len {
-                                let param = params_tuple.at(i)?;
-                                param.weak().with_data(|param_data| {
-                                    if let OnionObject::String(type_str) = param_data {
-                                        param_type_strs.push(type_str.as_ref().clone());
-                                        Ok(())
-                                    } else {
-                                        Err(RuntimeError::InvalidOperation(
-                                            "Parameter types must be strings".to_string().into(),
-                                        ))
-                                    }
-                                })?;
-                            }
-                            
-                            // 创建函数句柄
-                            let handle = CFunctionHandle::new(
-                                library,
-                                func_name,
-                                ret_type,
-                                param_type_strs,
-                            )?;
-                            
-                            Ok(OnionObject::Custom(Arc::new(handle)).stabilize())
-                        } else {
-                            Err(RuntimeError::InvalidOperation(
-                                "Parameter types must be a tuple".to_string().into(),
-                            ))
-                        }
-                    })
-                })
+fn get_string_tuple_arg(
+    argument: &FxHashMap<String, OnionStaticObject>,
+    name: &str,
+) -> Result<Vec<String>, RuntimeError> {
+    let obj = argument.get(name).ok_or_else(|| {
+        RuntimeError::DetailedError(format!("Missing required argument: '{}'", name).into())
+    })?;
+    match obj.weak() {
+        OnionObject::Tuple(tuple) => tuple
+            .get_elements()
+            .iter()
+            .map(|item| match item {
+                OnionObject::String(s) => Ok(s.to_string()),
+                _ => Err(RuntimeError::InvalidType(
+                    "All elements in the parameter types tuple must be strings"
+                        .to_string()
+                        .into(),
+                )),
             })
-        })
-    })
+            .collect(),
+        _ => Err(RuntimeError::InvalidType(
+            format!("Argument '{}' must be a tuple of strings", name).into(),
+        )),
+    }
 }
 
-/// 调用 C 函数
-fn lib_call_function(
-    argument: &OnionStaticObject,
-    _gc: &mut GC<OnionObjectCell>,
-) -> Result<OnionStaticObject, RuntimeError> {
-    argument.weak().with_data(|data| {
-        let handle_arg = get_attr_direct(data, "handle".to_string())?;
-        let args_arg = get_attr_direct(data, "args".to_string())?;
-
-        handle_arg.weak().with_data(|handle_data| {
-            args_arg.weak().with_data(|args_data| {
-                match (handle_data, args_data) {
-                    (OnionObject::Custom(handle_custom), OnionObject::Tuple(args_tuple)) => {
-                        // 尝试转换为 CFunctionHandle
-                        let handle = handle_custom
-                            .as_any()
-                            .downcast_ref::<CFunctionHandle>()
-                            .ok_or_else(|| {
-                                RuntimeError::InvalidOperation(
-                                    "Expected CFunctionHandle".to_string().into(),
-                                )
-                            })?;
-
-                        // 验证参数数量
-                        let args_len = args_tuple.len()?.weak().with_data(|data| {
-                            if let OnionObject::Integer(len) = data {
-                                Ok(*len)
-                            } else {
-                                Err(RuntimeError::InvalidOperation("Invalid args length".to_string().into()))
-                            }
-                        })?;
-                        
-                        if args_len != handle.param_types.len() as i64 {
-                            return Err(RuntimeError::InvalidOperation(
-                                format!(
-                                    "Expected {} arguments, got {}",
-                                    handle.param_types.len(),
-                                    args_len
-                                )
+fn get_ctypes_tuple_arg(
+    argument: &FxHashMap<String, OnionStaticObject>,
+    name: &str,
+) -> Result<Vec<CTypes>, RuntimeError> {
+    let obj = argument.get(name).ok_or_else(|| {
+        RuntimeError::DetailedError(format!("Missing required argument: '{}'", name).into())
+    })?;
+    match obj.weak() {
+        OnionObject::Tuple(tuple) => tuple
+            .get_elements()
+            .iter()
+            .map(|item| match item {
+                OnionObject::Custom(custom) => custom
+                    .as_any()
+                    .downcast_ref::<CTypes>()
+                    .map(|ctype| ctype.clone())
+                    .ok_or_else(|| {
+                        RuntimeError::InvalidType(
+                            "All arguments for call must be CTypes objects"
+                                .to_string()
                                 .into(),
-                            ));
-                        }
-
-                        // 收集所有参数的 CTypes，避免生命周期问题
-                        let mut owned_ctypes = Vec::new();
-                        for i in 0..args_len {
-                            let arg = args_tuple.at(i)?;
-                            arg.weak().with_data(|arg_data| {
-                                if let OnionObject::Custom(custom) = arg_data {
-                                    if let Some(ctype) = custom.as_any().downcast_ref::<CTypes>() {
-                                        owned_ctypes.push(ctype.clone());
-                                        Ok(())
-                                    } else {
-                                        Err(RuntimeError::InvalidOperation(
-                                            format!("Argument {} is not a valid C type", i).into(),
-                                        ))
-                                    }
-                                } else {
-                                    Err(RuntimeError::InvalidOperation(
-                                        format!("Argument {} is not a C type object", i).into(),
-                                    ))
-                                }
-                            })?;
-                        }
-
-                        // 创建引用向量用于调用
-                        let ctype_refs: Vec<&CTypes> = owned_ctypes.iter().collect();
-
-                        // 调用函数
-                        let result = handle.call(&ctype_refs)?;
-                        Ok(OnionObject::Custom(Arc::new(result)).stabilize())
-                    }
-                    _ => Err(RuntimeError::InvalidOperation(
-                        "lib_call_function requires handle and args tuple".to_string().into(),
-                    )),
-                }
+                        )
+                    }),
+                _ => Err(RuntimeError::InvalidType(
+                    "All arguments for call must be CTypes objects"
+                        .to_string()
+                        .into(),
+                )),
             })
-        })
-    })
+            .collect(),
+        _ => Err(RuntimeError::InvalidType(
+            format!("Argument '{}' must be a tuple of CTypes", name).into(),
+        )),
+    }
 }
+
+// --- Refactored Native Functions ---
+
+fn lib_load(
+    argument: &FxHashMap<String, OnionStaticObject>,
+    _gc: &mut GC<OnionObjectCell>,
+) -> Result<OnionStaticObject, RuntimeError> {
+    let path = get_string_arg(argument, "path")?;
+    let clib = CLib::new(path)?;
+    Ok(OnionObject::Custom(Arc::new(clib)).stabilize())
+}
+
+fn lib_get_function(
+    argument: &FxHashMap<String, OnionStaticObject>,
+    _gc: &mut GC<OnionObjectCell>,
+) -> Result<OnionStaticObject, RuntimeError> {
+    let library = get_clib_arg(argument, "library")?;
+    let func_name = get_string_arg(argument, "function")?;
+    let ret_type = get_string_arg(argument, "return_type")?;
+    let param_types = get_string_tuple_arg(argument, "param_types")?;
+
+    let handle = CFunctionHandle::new(library, func_name, ret_type, param_types)?;
+    Ok(OnionObject::Custom(Arc::new(handle)).stabilize())
+}
+
+fn lib_call_function(
+    argument: &FxHashMap<String, OnionStaticObject>,
+    _gc: &mut GC<OnionObjectCell>,
+) -> Result<OnionStaticObject, RuntimeError> {
+    let handle_obj = argument.get("handle").ok_or_else(|| {
+        RuntimeError::DetailedError("Missing required argument: 'handle'".to_string().into())
+    })?;
+    let handle = match handle_obj.weak() {
+        OnionObject::Custom(custom) => custom
+            .as_any()
+            .downcast_ref::<CFunctionHandle>()
+            .ok_or_else(|| {
+                RuntimeError::InvalidType(
+                    "Argument 'handle' must be a CFunctionHandle"
+                        .to_string()
+                        .into(),
+                )
+            }),
+        _ => Err(RuntimeError::InvalidType(
+            "Argument 'handle' must be a CFunctionHandle"
+                .to_string()
+                .into(),
+        )),
+    }?;
+
+    let args = get_ctypes_tuple_arg(argument, "args")?;
+
+    // The call method now takes a slice of owned CTypes
+    let result = handle.call(&args)?;
+    Ok(OnionObject::Custom(Arc::new(result)).stabilize())
+}
+
+// --- Module Build Function ---
 
 pub fn build_module() -> OnionStaticObject {
-    let mut module = IndexMap::new();    // load 函数
+    let mut module = IndexMap::new();
+
     module.insert(
         "load".to_string(),
         wrap_native_function(
-            &OnionObject::String("path".to_string().into()).stabilize(), // 这里不使用build_string_tuple是因为我们期望其能直接接收一个元组而非通过单元素元组传入
+            &OnionObject::String("path".to_string().into()).stabilize(),
             &FxHashMap::default(),
             "lib::load".to_string(),
             &lib_load,
         ),
     );
-
     module.insert(
         "get_function".to_string(),
         wrap_native_function(
@@ -667,7 +560,6 @@ pub fn build_module() -> OnionStaticObject {
             &lib_get_function,
         ),
     );
-
     module.insert(
         "call".to_string(),
         wrap_native_function(

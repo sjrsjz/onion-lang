@@ -10,19 +10,88 @@ use onion_vm::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
     onion_tuple,
     types::{
-        lambda::definition::{LambdaBody, OnionLambdaDefinition},
+        lambda::definition::{LambdaBody, LambdaType, OnionLambdaDefinition},
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         tuple::OnionTuple,
     },
-    unwrap_object,
 };
 use rustc_hash::FxHashMap;
 
-use crate::stdlib::build_string_tuple;
+// 引入所需的辅助函数
+use super::{build_dict, build_string_tuple, wrap_native_function};
 
-use super::{build_dict, get_attr_direct, wrap_native_function};
+// --- Helper functions for robust argument parsing ---
 
-/// HTTP请求的状态
+fn get_string_arg<'a>(
+    arg_map: &'a FxHashMap<String, OnionStaticObject>,
+    name: &str,
+) -> Result<String, RuntimeError> {
+    arg_map
+        .get(name)
+        .ok_or_else(|| {
+            RuntimeError::DetailedError(format!("Missing required argument: '{}'", name).into())
+        })
+        .and_then(|obj| match obj.weak() {
+            OnionObject::String(s) => Ok(s.to_string()),
+            _ => Err(RuntimeError::InvalidType(
+                format!("Argument '{}' must be a string", name).into(),
+            )),
+        })
+}
+
+fn get_optional_string_arg(
+    arg_map: &FxHashMap<String, OnionStaticObject>,
+    name: &str,
+) -> Result<Option<String>, RuntimeError> {
+    match arg_map.get(name) {
+        Some(obj) => match obj.weak() {
+            OnionObject::String(s) => Ok(Some(s.to_string())),
+            OnionObject::Null | OnionObject::Undefined(_) => Ok(None),
+            _ => Err(RuntimeError::InvalidType(
+                format!("Argument '{}' must be a string, null, or undefined", name).into(),
+            )),
+        },
+        None => Ok(None),
+    }
+}
+
+fn get_headers_arg(
+    arg_map: &FxHashMap<String, OnionStaticObject>,
+    name: &str,
+) -> Result<IndexMap<String, String>, RuntimeError> {
+    match arg_map.get(name) {
+        Some(obj) => match obj.weak() {
+            OnionObject::Tuple(tuple) => {
+                let mut headers = IndexMap::new();
+                for item in tuple.get_elements() {
+                    match item {
+                        OnionObject::Pair(p) => {
+                            let key = p.get_key().to_string(&vec![])?;
+                            let value = p.get_value().to_string(&vec![])?;
+                            headers.insert(key, value);
+                        }
+                        _ => {
+                            return Err(RuntimeError::InvalidType(
+                                "Header elements must be key-value pairs".to_string().into(),
+                            ));
+                        }
+                    }
+                }
+                Ok(headers)
+            }
+            OnionObject::Null | OnionObject::Undefined(_) => Ok(IndexMap::new()),
+            _ => Err(RuntimeError::InvalidType(
+                format!(
+                    "Argument '{}' must be a tuple of pairs, null, or undefined",
+                    name
+                )
+                .into(),
+            )),
+        },
+        None => Ok(IndexMap::new()),
+    }
+}
+
 #[derive(Debug, Clone)]
 enum RequestState {
     Pending,
@@ -30,7 +99,6 @@ enum RequestState {
     Completed(Result<String, String>),
 }
 
-/// 异步HTTP请求实现
 #[derive(Clone)]
 pub struct AsyncHttpRequest {
     url: String,
@@ -64,106 +132,71 @@ impl AsyncHttpRequest {
         let state = Arc::clone(&self.state);
 
         thread::spawn(move || {
-            // 将状态设置为进行中
             {
                 let mut state_guard = state.lock().unwrap();
                 *state_guard = RequestState::InProgress;
             }
-
-            // 执行HTTP请求（这里是一个简化的实现，在实际中应该使用真正的HTTP客户端）
             let result = Self::perform_http_request(&url, &method, &headers, body.as_deref());
-
-            // 更新状态为完成
             {
                 let mut state_guard = state.lock().unwrap();
                 *state_guard = RequestState::Completed(result);
             }
         });
     }
+
     fn perform_http_request(
         url: &str,
         method: &str,
         headers: &IndexMap<String, String>,
         body: Option<&str>,
     ) -> Result<String, String> {
-        // 创建Tokio runtime来处理异步请求
         let rt = match tokio::runtime::Runtime::new() {
             Ok(rt) => rt,
             Err(e) => return Err(format!("Failed to create async runtime: {}", e)),
         };
 
-        // 在异步runtime中执行HTTP请求
         rt.block_on(async {
             let client = reqwest::Client::new();
-
-            // 构建请求
-            let request_builder = match method.to_uppercase().as_str() {
+            let mut request_builder = match method.to_uppercase().as_str() {
                 "GET" => client.get(url),
-                "POST" => {
-                    let mut builder = client.post(url);
-                    if let Some(body_data) = body {
-                        builder = builder.body(body_data.to_string());
-                    }
-                    builder
-                }
-                "PUT" => {
-                    let mut builder = client.put(url);
-                    if let Some(body_data) = body {
-                        builder = builder.body(body_data.to_string());
-                    }
-                    builder
-                }
+                "POST" => client.post(url),
+                "PUT" => client.put(url),
                 "DELETE" => client.delete(url),
-                "PATCH" => {
-                    let mut builder = client.patch(url);
-                    if let Some(body_data) = body {
-                        builder = builder.body(body_data.to_string());
-                    }
-                    builder
-                }
+                "PATCH" => client.patch(url),
                 "HEAD" => client.head(url),
                 _ => return Err(format!("Unsupported HTTP method: {}", method)),
             };
 
-            // 添加headers
-            let mut final_builder = request_builder;
-            for (key, value) in headers {
-                final_builder = final_builder.header(key, value);
+            if let Some(body_data) = body {
+                request_builder = request_builder.body(body_data.to_string());
             }
 
-            // 设置超时时间
-            final_builder = final_builder.timeout(Duration::from_secs(30));
+            for (key, value) in headers {
+                request_builder = request_builder.header(key, value);
+            }
 
-            // 执行请求
-            match final_builder.send().await {
+            request_builder = request_builder.timeout(Duration::from_secs(30));
+
+            match request_builder.send().await {
                 Ok(response) => {
                     let status = response.status();
-                    let status_code = status.as_u16();
-
-                    match response.text().await {
-                        Ok(text) => {
-                            // 构建包含状态码和响应体的JSON响应
-                            let response_json = serde_json::json!({
-                                "status_code": status_code,
-                                "status": status.canonical_reason().unwrap_or("Unknown"),
-                                "method": method.to_uppercase(),
-                                "url": url,
-                                "body": text,
-                                "success": status.is_success()
-                            });
-                            Ok(response_json.to_string())
-                        }
-                        Err(e) => Err(format!("Failed to read response body: {}", e)),
-                    }
+                    let response_body = response
+                        .text()
+                        .await
+                        .map_err(|e| format!("Failed to read response body: {}", e))?;
+                    let response_json = serde_json::json!({
+                        "status_code": status.as_u16(),
+                        "status_text": status.canonical_reason().unwrap_or("Unknown"),
+                        "body": response_body,
+                        "success": status.is_success(),
+                    });
+                    Ok(response_json.to_string())
                 }
                 Err(e) => {
-                    // 处理不同类型的错误
                     if e.is_timeout() {
                         Err("Request timeout".to_string())
                     } else if e.is_connect() {
                         Err(format!("Connection error: {}", e))
-                    } else if e.is_request() {
-                        Err(format!("Request error: {}", e))
                     } else {
                         Err(format!("HTTP request failed: {}", e))
                     }
@@ -175,36 +208,31 @@ impl AsyncHttpRequest {
 
 impl Runnable for AsyncHttpRequest {
     fn step(&mut self, _gc: &mut GC<OnionObjectCell>) -> StepResult {
-        let state = {
-            let state_guard = self.state.lock().unwrap();
-            state_guard.clone()
-        };
-
+        let state = self.state.lock().unwrap().clone();
         match state {
             RequestState::Pending => {
-                // 启动请求
                 self.start_request();
                 StepResult::Continue
             }
-            RequestState::InProgress => {
-                // 请求正在进行中，继续等待
-                StepResult::Continue
-            }
-            RequestState::Completed(result) => {
-                // 请求完成，返回结果
-                match result {
-                    Ok(response) => {
-                        let response_obj = OnionObject::String(response.into()).stabilize();
-                        StepResult::Return(response_obj.into())
-                    }
-                    Err(error) => {
-                        let error_obj =
-                            OnionObject::String(format!("HTTP Error: {}", error).into())
-                                .stabilize();
-                        StepResult::Return(error_obj.into())
-                    }
+            RequestState::InProgress => StepResult::Continue,
+            RequestState::Completed(result) => match result {
+                Ok(response) => {
+                    StepResult::Return(OnionObject::String(response.into()).stabilize().into())
                 }
-            }
+                Err(error) => {
+                    let response_json = serde_json::json!({
+                        "status_code": 500, // Generic server error
+                        "status_text": "ClientError",
+                        "body": error,
+                        "success": false,
+                    });
+                    StepResult::Return(
+                        OnionObject::String(response_json.to_string().into())
+                            .stabilize()
+                            .into(),
+                    )
+                }
+            },
         }
     }
 
@@ -216,40 +244,40 @@ impl Runnable for AsyncHttpRequest {
         Ok(())
     }
 
-    fn format_context(&self) -> String {
-        // We need to lock the mutex to get the current state.
-        // Cloning the state allows us to release the lock quickly.
-        let state = {
-            let state_guard = self.state.lock().unwrap();
-            state_guard.clone()
-        };
+    fn bind_self_object(
+        &mut self,
+        _self_object: &OnionObject,
+        _gc: &mut GC<OnionObjectCell>,
+    ) -> Result<(), RuntimeError> {
+        Ok(())
+    }
 
-        // Format the headers into a readable string.
+    fn capture(
+        &mut self,
+        _argument: &FxHashMap<String, OnionStaticObject>,
+        _captured_vars: &FxHashMap<String, OnionObject>,
+        _gc: &mut GC<OnionObjectCell>,
+    ) -> Result<(), RuntimeError> {
+        Ok(())
+    }
+    fn format_context(&self) -> String {
+        let state = self.state.lock().unwrap().clone();
         let headers_str = self
             .headers
             .iter()
             .map(|(k, v)| format!("    - {}: {}", k, v))
             .collect::<Vec<String>>()
             .join("\n");
-
-        // Format the body information. Avoid printing large bodies.
-        let body_info = match &self.body {
-            Some(b) => format!("Yes ({} bytes)", b.len()),
-            None => "No".to_string(),
-        };
-
+        let body_info = self
+            .body
+            .as_ref()
+            .map_or("No".to_string(), |b| format!("Yes ({} bytes)", b.len()));
         format!(
             "-> Performing Async HTTP Request:\n   - State: {:?}\n   - Method: {}\n   - URL: {}\n   - Body Sent: {}\n   - Headers:\n{}",
-            // 1. Current State
-            // Using the Debug derive on RequestState gives a clean "InProgress" or "Pending".
             state,
-            // 2. Method
             self.method,
-            // 3. URL
             self.url,
-            // 4. Body Info
             body_info,
-            // 5. Formatted Headers
             if headers_str.is_empty() {
                 "    (None)".to_string()
             } else {
@@ -259,300 +287,171 @@ impl Runnable for AsyncHttpRequest {
     }
 }
 
-/// 解析请求参数并创建HTTP请求
-fn parse_request_params(
-    argument: &OnionStaticObject,
-) -> Result<(String, String, IndexMap<String, String>, Option<String>), RuntimeError> {
-    argument.weak().with_data(|data| {
-        let _request_obj = unwrap_object!(data, OnionObject::Tuple)?;
-
-        // 获取URL
-        let url = get_attr_direct(data, "url".to_string())?
-            .weak()
-            .to_string(&vec![])
-            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e).into()))?;
-
-        // 获取方法，默认为GET
-        let method = get_attr_direct(data, "method".to_string())
-            .unwrap_or_else(|_| OnionObject::String("GET".to_string().into()).stabilize())
-            .weak()
-            .to_string(&vec![])
-            .unwrap_or_else(|_| "GET".to_string());
-
-        // 获取headers，如果有的话
-        let mut headers = IndexMap::new();
-        if let Ok(headers_obj) = get_attr_direct(data, "headers".to_string()) {
-            if let OnionObject::Tuple(headers_tuple) = headers_obj.weak() {
-                for element in headers_tuple.get_elements() {
-                    if let OnionObject::Named(named) = element {
-                        let key = named.get_key().to_string(&vec![]).unwrap_or_default();
-                        let value = named.get_value().to_string(&vec![]).unwrap_or_default();
-                        headers.insert(key, value);
-                    }
-                }
-            }
-        }
-
-        // 获取body，如果有的话
-        let body = get_attr_direct(data, "body".to_string())
-            .ok()
-            .and_then(|body_obj| body_obj.weak().to_string(&vec![]).ok());
-
-        Ok((url, method, headers, body))
-    })
-}
-
-/// 创建异步HTTP GET请求
-fn http_get(
-    argument: &OnionStaticObject,
-    _gc: &mut GC<OnionObjectCell>,
-) -> Result<OnionStaticObject, RuntimeError> {
-    let url = argument.weak().with_data(|data| {
-        get_attr_direct(data, "url".to_string())?
-            .weak()
-            .to_string(&vec![])
-            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e).into()))
-    })?;
-
-    let headers = IndexMap::new();
-    let request = AsyncHttpRequest::new(url, "GET".to_string(), headers, None);
-
-    // 将调度器包装成Lambda返回
-    let lambda_body = LambdaBody::NativeFunction(Arc::new(move || Box::new(request.clone())));
-    let lambda_def = OnionLambdaDefinition::new_static(
-        &onion_tuple!(),
-        lambda_body,
-        &OnionObject::Undefined(None),
-        "http::async_get".to_string(),
-    );
-
-    Ok(lambda_def)
-}
-
-/// 创建异步HTTP POST请求
-fn http_post(
-    argument: &OnionStaticObject,
-    _gc: &mut GC<OnionObjectCell>,
-) -> Result<OnionStaticObject, RuntimeError> {
-    let (url, body) = argument.weak().with_data(|data| {
-        let url = get_attr_direct(data, "url".to_string())?
-            .weak()
-            .to_string(&vec![])
-            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e).into()))?;
-
-        let body = get_attr_direct(data, "body".to_string())
-            .ok()
-            .and_then(|body_obj| body_obj.weak().to_string(&vec![]).ok());
-
-        Ok((url, body))
-    })?;
-
-    let headers = IndexMap::new();
-    let request = AsyncHttpRequest::new(url, "POST".to_string(), headers, body);
-    // 将调度器包装成Lambda返回
-    let lambda_body = LambdaBody::NativeFunction(Arc::new(move || Box::new(request.clone())));
-    let lambda_def = OnionLambdaDefinition::new_static(
-        &onion_tuple!(),
-        lambda_body,
-        &OnionObject::Undefined(None),
-        "http::async_post".to_string(),
-    );
-
-    Ok(lambda_def)
-}
-
-/// 创建异步HTTP PUT请求
-fn http_put(
-    argument: &OnionStaticObject,
-    _gc: &mut GC<OnionObjectCell>,
-) -> Result<OnionStaticObject, RuntimeError> {
-    let (url, body) = argument.weak().with_data(|data| {
-        let url = get_attr_direct(data, "url".to_string())?
-            .weak()
-            .to_string(&vec![])
-            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e).into()))?;
-
-        let body = get_attr_direct(data, "body".to_string())
-            .ok()
-            .and_then(|body_obj| body_obj.weak().to_string(&vec![]).ok());
-
-        Ok((url, body))
-    })?;
-
-    let headers = IndexMap::new();
-    let request = AsyncHttpRequest::new(url, "PUT".to_string(), headers, body);
-
-    let lambda_body = LambdaBody::NativeFunction(Arc::new(move || Box::new(request.clone())));
-    let lambda_def = OnionLambdaDefinition::new_static(
-        &onion_tuple!(),
-        lambda_body,
-        &OnionObject::Undefined(None),
-        "http::async_put".to_string(),
-    );
-
-    Ok(lambda_def)
-}
-
-/// 创建异步HTTP DELETE请求
-fn http_delete(
-    argument: &OnionStaticObject,
-    _gc: &mut GC<OnionObjectCell>,
-) -> Result<OnionStaticObject, RuntimeError> {
-    let url = argument.weak().with_data(|data| {
-        get_attr_direct(data, "url".to_string())?
-            .weak()
-            .to_string(&vec![])
-            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e).into()))
-    })?;
-
-    let headers = IndexMap::new();
-    let request = AsyncHttpRequest::new(url, "DELETE".to_string(), headers, None);
-
-    let lambda_body = LambdaBody::NativeFunction(Arc::new(move || Box::new(request.clone())));
-    let lambda_def = OnionLambdaDefinition::new_static(
-        &onion_tuple!(),
-        lambda_body,
-        &OnionObject::Undefined(None),
-        "http::async_delete".to_string(),
-    );
-
-    Ok(lambda_def)
-}
-
-/// 创建异步HTTP PATCH请求
-fn http_patch(
-    argument: &OnionStaticObject,
-    _gc: &mut GC<OnionObjectCell>,
-) -> Result<OnionStaticObject, RuntimeError> {
-    let (url, body) = argument.weak().with_data(|data| {
-        let url = get_attr_direct(data, "url".to_string())?
-            .weak()
-            .to_string(&vec![])
-            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e).into()))?;
-
-        let body = get_attr_direct(data, "body".to_string())
-            .ok()
-            .and_then(|body_obj| body_obj.weak().to_string(&vec![]).ok());
-
-        Ok((url, body))
-    })?;
-
-    let headers = IndexMap::new();
-    let request = AsyncHttpRequest::new(url, "PATCH".to_string(), headers, body);
-
-    let lambda_body = LambdaBody::NativeFunction(Arc::new(move || Box::new(request.clone())));
-    let lambda_def = OnionLambdaDefinition::new_static(
-        &onion_tuple!(),
-        lambda_body,
-        &OnionObject::Undefined(None),
-        "http::async_patch".to_string(),
-    );
-
-    Ok(lambda_def)
-}
 fn http_request(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let (url, method, headers, body) = parse_request_params(&argument)?;
+    let url = get_string_arg(argument, "url")?;
+    let method = get_optional_string_arg(argument, "method")?.unwrap_or_else(|| "GET".to_string());
+    let headers = get_headers_arg(argument, "headers")?;
+    let body = get_optional_string_arg(argument, "body")?;
 
     let request = AsyncHttpRequest::new(url, method, headers, body);
-
-    // 将调度器包装成Lambda返回
     let lambda_body = LambdaBody::NativeFunction(Arc::new(move || Box::new(request.clone())));
-    let lambda_def = OnionLambdaDefinition::new_static(
+
+    Ok(OnionLambdaDefinition::new_static(
         &onion_tuple!(),
         lambda_body,
-        &OnionObject::Undefined(None),
+        &FxHashMap::default(),
         "http::async_request".to_string(),
-    );
-
-    Ok(lambda_def)
+        LambdaType::Normal,
+    ))
 }
 
-/// 创建同步HTTP GET请求（用于简单测试）
+fn http_get(
+    argument: &FxHashMap<String, OnionStaticObject>,
+    _gc: &mut GC<OnionObjectCell>,
+) -> Result<OnionStaticObject, RuntimeError> {
+    let url = get_string_arg(argument, "url")?;
+    let request = AsyncHttpRequest::new(url, "GET".to_string(), IndexMap::new(), None);
+    let lambda_body = LambdaBody::NativeFunction(Arc::new(move || Box::new(request.clone())));
+    Ok(OnionLambdaDefinition::new_static(
+        &onion_tuple!(),
+        lambda_body,
+        &FxHashMap::default(),
+        "http::async_get".to_string(),
+        LambdaType::Normal,
+    ))
+}
+
+fn http_post(
+    argument: &FxHashMap<String, OnionStaticObject>,
+    _gc: &mut GC<OnionObjectCell>,
+) -> Result<OnionStaticObject, RuntimeError> {
+    let url = get_string_arg(argument, "url")?;
+    let body = get_optional_string_arg(argument, "body")?;
+    let request = AsyncHttpRequest::new(url, "POST".to_string(), IndexMap::new(), body);
+    let lambda_body = LambdaBody::NativeFunction(Arc::new(move || Box::new(request.clone())));
+    Ok(OnionLambdaDefinition::new_static(
+        &onion_tuple!(),
+        lambda_body,
+        &FxHashMap::default(),
+        "http::async_post".to_string(),
+        LambdaType::Normal,
+    ))
+}
+
+// ... other http methods like put, delete, patch follow the same pattern as post/get ...
+fn http_put(
+    argument: &FxHashMap<String, OnionStaticObject>,
+    _gc: &mut GC<OnionObjectCell>,
+) -> Result<OnionStaticObject, RuntimeError> {
+    let url = get_string_arg(argument, "url")?;
+    let body = get_optional_string_arg(argument, "body")?;
+    let request = AsyncHttpRequest::new(url, "PUT".to_string(), IndexMap::new(), body);
+    let lambda_body = LambdaBody::NativeFunction(Arc::new(move || Box::new(request.clone())));
+    Ok(OnionLambdaDefinition::new_static(
+        &onion_tuple!(),
+        lambda_body,
+        &FxHashMap::default(),
+        "http::async_put".to_string(),
+        LambdaType::Normal,
+    ))
+}
+
+fn http_delete(
+    argument: &FxHashMap<String, OnionStaticObject>,
+    _gc: &mut GC<OnionObjectCell>,
+) -> Result<OnionStaticObject, RuntimeError> {
+    let url = get_string_arg(argument, "url")?;
+    let request = AsyncHttpRequest::new(url, "DELETE".to_string(), IndexMap::new(), None);
+    let lambda_body = LambdaBody::NativeFunction(Arc::new(move || Box::new(request.clone())));
+    Ok(OnionLambdaDefinition::new_static(
+        &onion_tuple!(),
+        lambda_body,
+        &FxHashMap::default(),
+        "http::async_delete".to_string(),
+        LambdaType::Normal,
+    ))
+}
+
+fn http_patch(
+    argument: &FxHashMap<String, OnionStaticObject>,
+    _gc: &mut GC<OnionObjectCell>,
+) -> Result<OnionStaticObject, RuntimeError> {
+    let url = get_string_arg(argument, "url")?;
+    let body = get_optional_string_arg(argument, "body")?;
+    let request = AsyncHttpRequest::new(url, "PATCH".to_string(), IndexMap::new(), body);
+    let lambda_body = LambdaBody::NativeFunction(Arc::new(move || Box::new(request.clone())));
+    Ok(OnionLambdaDefinition::new_static(
+        &onion_tuple!(),
+        lambda_body,
+        &FxHashMap::default(),
+        "http::async_patch".to_string(),
+        LambdaType::Normal,
+    ))
+}
+
 fn http_get_sync(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let url = argument.weak().with_data(|data| {
-        get_attr_direct(data, "url".to_string())?
-            .weak()
-            .to_string(&vec![])
-            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e).into()))
-    })?;
-
-    // 直接执行HTTP请求并返回结果
-    let headers = IndexMap::new();
-    match AsyncHttpRequest::perform_http_request(&url, "GET", &headers, None) {
-        Ok(response) => Ok(OnionObject::String(response.into()).stabilize()),
-        Err(error) => Ok(OnionObject::String(format!("HTTP Error: {}", error).into()).stabilize()),
-    }
+    let url = get_string_arg(argument, "url")?;
+    let result = AsyncHttpRequest::perform_http_request(&url, "GET", &IndexMap::new(), None);
+    Ok(OnionObject::String(result.unwrap_or_else(|e| e).into()).stabilize())
 }
 
-/// 创建同步HTTP POST请求（用于简单测试）
 fn http_post_sync(
-    argument: &OnionStaticObject,
+    argument: &FxHashMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let (url, body) = argument.weak().with_data(|data| {
-        let url = get_attr_direct(data, "url".to_string())?
-            .weak()
-            .to_string(&vec![])
-            .map_err(|e| RuntimeError::InvalidType(format!("Invalid URL: {}", e).into()))?;
-
-        let body = get_attr_direct(data, "body".to_string())
-            .ok()
-            .and_then(|body_obj| body_obj.weak().to_string(&vec![]).ok());
-
-        Ok((url, body))
-    })?;
-
-    let headers = IndexMap::new();
-    match AsyncHttpRequest::perform_http_request(&url, "POST", &headers, body.as_deref()) {
-        Ok(response) => Ok(OnionObject::String(response.into()).stabilize()),
-        Err(error) => Ok(OnionObject::String(format!("HTTP Error: {}", error).into()).stabilize()),
-    }
+    let url = get_string_arg(argument, "url")?;
+    let body = get_optional_string_arg(argument, "body")?;
+    let result =
+        AsyncHttpRequest::perform_http_request(&url, "POST", &IndexMap::new(), body.as_deref());
+    Ok(OnionObject::String(result.unwrap_or_else(|e| e).into()).stabilize())
 }
 
 /// 构建HTTP模块
 pub fn build_module() -> OnionStaticObject {
     let mut module = IndexMap::new();
 
+    // Reusable parameter definitions
+    let url_only_param = OnionObject::String("url".to_string().into()).stabilize();
+    let url_body_params = build_string_tuple(&["url", "body"]);
+
+    // --- Async Functions ---
     module.insert(
         "get".to_string(),
         wrap_native_function(
-            &OnionObject::String("url".to_string().into()).stabilize(),
+            &url_only_param,
             &FxHashMap::default(),
             "http::get".to_string(),
             &http_get,
         ),
     );
-
     module.insert(
         "post".to_string(),
         wrap_native_function(
-            &build_string_tuple(&["url", "body"]),
+            &url_body_params,
             &FxHashMap::default(),
             "http::post".to_string(),
             &http_post,
         ),
     );
-
     module.insert(
         "put".to_string(),
         wrap_native_function(
-            &build_string_tuple(&["url", "body"]),
+            &url_body_params,
             &FxHashMap::default(),
             "http::put".to_string(),
             &http_put,
         ),
     );
-
     module.insert(
         "delete".to_string(),
         wrap_native_function(
-            &OnionObject::String("url".to_string().into()).stabilize(),
+            &url_only_param,
             &FxHashMap::default(),
             "http::delete".to_string(),
             &http_delete,
@@ -561,27 +460,27 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "patch".to_string(),
         wrap_native_function(
-            &build_string_tuple(&["url", "body"]),
+            &url_body_params,
             &FxHashMap::default(),
             "http::patch".to_string(),
             &http_patch,
         ),
     );
 
+    // --- Sync Functions (for testing/simple cases) ---
     module.insert(
         "get_sync".to_string(),
         wrap_native_function(
-            &OnionObject::String("url".to_string().into()).stabilize(),
+            &url_only_param,
             &FxHashMap::default(),
             "http::get_sync".to_string(),
             &http_get_sync,
         ),
     );
-
     module.insert(
         "post_sync".to_string(),
         wrap_native_function(
-            &build_string_tuple(&["url", "body"]),
+            &url_body_params,
             &FxHashMap::default(),
             "http::post_sync".to_string(),
             &http_post_sync,

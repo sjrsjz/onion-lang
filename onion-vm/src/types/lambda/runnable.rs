@@ -229,10 +229,6 @@ impl OnionLambdaRunnable {
                                 .into(),
                         )
                     })?;
-            } else {
-                return Err(RuntimeError::InvalidOperation(
-                    format!("Argument '{}' not found in string pool", argument_name).into(),
-                ));
             }
         }
 
@@ -250,14 +246,6 @@ impl OnionLambdaRunnable {
                             .into(),
                         )
                     })?;
-            } else {
-                return Err(RuntimeError::InvalidOperation(
-                    format!(
-                        "Captured variable '{}' not found in string pool",
-                        capture_name
-                    )
-                    .into(),
-                ));
             }
         }
 

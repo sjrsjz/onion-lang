@@ -8,51 +8,51 @@ demo_ctypes := () -> {
     
     // 整数类型
     stdlib.io.println("Integer Types:");
-    i8_val := stdlib.ffi.ctypes.i8(value => -128);
-    i16_val := stdlib.ffi.ctypes.i16(value => 32767);
-    i32_val := stdlib.ffi.ctypes.i32(value => 2147483647);
-    i64_val := stdlib.ffi.ctypes.i64(value => 9223372036854775807);
+    i8_val := stdlib.ffi.ctypes.i8(-128);
+    i16_val := stdlib.ffi.ctypes.i16(32767);
+    i32_val := stdlib.ffi.ctypes.i32(2147483647);
+    i64_val := stdlib.ffi.ctypes.i64(9223372036854775807);
     stdlib.io.println("  ✓ i8(-128), i16(32767), i32(2147483647), i64(9223372036854775807)");
     
-    u8_val := stdlib.ffi.ctypes.u8(value => 255);
-    u16_val := stdlib.ffi.ctypes.u16(value => 65535);
-    u32_val := stdlib.ffi.ctypes.u32(value => 4294967295);
-    u64_val := stdlib.ffi.ctypes.u64(value => 1844674407370955161);
-    stdlib.io.println("  ✓ u8(255), u16(65535), u32(4294967295), u64(18446744073709551615)");
+    u8_val := stdlib.ffi.ctypes.u8(255);
+    u16_val := stdlib.ffi.ctypes.u16(65535);
+    u32_val := stdlib.ffi.ctypes.u32(4294967295);
+    u64_val := stdlib.ffi.ctypes.u64(184467440737091615);
+    stdlib.io.println("  ✓ u8(255), u16(65535), u32(4294967295), u64(184467440737091615)");
     
     // 浮点类型
     stdlib.io.println("Floating Point Types:");
-    f32_val := stdlib.ffi.ctypes.f32(value => 3.14159);
-    f64_val := stdlib.ffi.ctypes.f64(value => 2.718281828459045);
+    f32_val := stdlib.ffi.ctypes.f32(3.14159);
+    f64_val := stdlib.ffi.ctypes.f64(2.718281828459045);
     stdlib.io.println("  ✓ f32(3.14159), f64(2.718281828459045)");
     
     // 字符类型
     stdlib.io.println("Character Types:");
-    char_val := stdlib.ffi.ctypes.char(value => 65);  // 'A'
-    uchar_val := stdlib.ffi.ctypes.uchar(value => 255);
+    char_val := stdlib.ffi.ctypes.char(65);  // 'A'
+    uchar_val := stdlib.ffi.ctypes.uchar(255);
     stdlib.io.println("  ✓ char(65 -> 'A'), uchar(255)");
     
     // 布尔类型
     stdlib.io.println("Boolean Type:");
-    bool_true := stdlib.ffi.ctypes.bool(value => true);
-    bool_false := stdlib.ffi.ctypes.bool(value => false);
+    bool_true := stdlib.ffi.ctypes.bool(true);
+    bool_false := stdlib.ffi.ctypes.bool(false);
     stdlib.io.println("  ✓ bool(true), bool(false)");
       // 指针和特殊类型
     stdlib.io.println("Pointer and Special Types:");
-    ptr_val := stdlib.ffi.ctypes.pointer(value => 4096);
+    ptr_val := stdlib.ffi.ctypes.pointer(4096);
     void_val := stdlib.ffi.ctypes.void();
     stdlib.io.println("  ✓ pointer(0x1000), void");
     
     // 字符串和缓冲区
     stdlib.io.println("String and Buffer Types:");
-    str_val := stdlib.ffi.ctypes.string(value => "Hello, FFI World!");
-    buffer_val := stdlib.ffi.ctypes.buffer(value => "Binary data");
+    str_val := stdlib.ffi.ctypes.string("Hello, FFI World!");
+    buffer_val := stdlib.ffi.ctypes.buffer("Binary data");
     stdlib.io.println("  ✓ string(\"Hello, FFI World!\"), buffer(\"Binary data\")");
     
     // 大小类型
     stdlib.io.println("Size Types:");
-    size_val := stdlib.ffi.ctypes.size(value => 1024);
-    ssize_val := stdlib.ffi.ctypes.ssize(value => -1024);
+    size_val := stdlib.ffi.ctypes.size(1024);
+    ssize_val := stdlib.ffi.ctypes.ssize(-1024);
     stdlib.io.println("  ✓ size(1024), ssize(-1024)");
 };
 
@@ -79,7 +79,7 @@ demo_library_loading := () -> {
     stdlib.io.println("Loading:", lib_desc);
     stdlib.io.println("Path:", lib_path);
     
-    lib := stdlib.ffi.lib.load(path => lib_path);
+    lib := stdlib.ffi.lib.load(lib_path);
     
     if (lib != null) {
         stdlib.io.println("✓ Library loaded successfully!");
@@ -95,10 +95,10 @@ demo_strlen := (lib?) -> {
     stdlib.io.println("Testing strlen() function:");
     
     strlen_handle := stdlib.ffi.lib.get_function(
-        library => lib,
-        function => "strlen",
-        return_type => "size",
-        param_types => ("string",)
+        lib,
+        "strlen",
+        "size",
+        ("string",)
     );
     
     if (strlen_handle == null) {
@@ -122,8 +122,8 @@ demo_strlen := (lib?) -> {
         c_string := stdlib.ffi.ctypes.string(value => test_str);
         
         result := stdlib.ffi.lib.call(
-            handle => strlen_handle,
-            args => (c_string,)
+            strlen_handle,
+            (c_string,)
         );
         
         stdlib.io.println("  strlen(\"", test_str, "\") = ", valueof result);
@@ -136,10 +136,10 @@ demo_abs := (lib?) -> {
     stdlib.io.println("Testing abs() function:");
     
     abs_handle := stdlib.ffi.lib.get_function(
-        library => lib,
-        function => "abs",
-        return_type => "i32",
-        param_types => ("i32",)
+        lib,
+        "abs",
+        "i32",
+        ("i32",)
     );
     
     if (abs_handle == null) {
@@ -152,11 +152,11 @@ demo_abs := (lib?) -> {
     i := mut 0;
     while (i < 7) {
         test_val := test_values[i];
-        c_int := stdlib.ffi.ctypes.i32(value => test_val);
+        c_int := stdlib.ffi.ctypes.i32(test_val);
         
         result := stdlib.ffi.lib.call(
-            handle => abs_handle,
-            args => (c_int,)
+            abs_handle,
+            (c_int,)
         );
         
         stdlib.io.println("  abs(", test_val, ") = ", valueof result);
@@ -170,7 +170,7 @@ demo_function_calls := () -> {
     stdlib.io.println("-----------------------");
     
     // 加载库
-    lib := stdlib.ffi.lib.load(path => "msvcrt.dll");
+    lib := stdlib.ffi.lib.load("msvcrt.dll");
     
     if (lib == null) {
         stdlib.io.println("✗ Cannot demonstrate function calls without library");
@@ -208,3 +208,4 @@ main := () -> {
 };
 
 main();
+return undefined

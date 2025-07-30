@@ -1,7 +1,7 @@
 @required stdlib;
 start := stdlib.time.timestamp_millis();
 stdlib.io.println(start);
-fib := mut (n => 0) -> {
+fib := "n" -> {
     if (n <= 1) {
         return n;
     };
@@ -10,4 +10,4 @@ fib := mut (n => 0) -> {
 stdlib.io.println("斐波那契数列第30个数是:", fib(30));
 end := stdlib.time.timestamp_millis();
 stdlib.io.println(end);
-stdlib.io.println("计算完成，耗时:", end - start, "毫秒");
+stdlib.io.println("计算完成，耗时:", end - start, "毫秒")
