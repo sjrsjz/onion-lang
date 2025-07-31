@@ -65,7 +65,7 @@ stdlib.io.println(
 );
 
 @import "../std/option.onion";
-map_to := (x => OptionType, f => Lambda) -> {
+map_to := (x => Option.check, f => Lambda) -> {
     if (x.is_some()) {
         return Some(f(x.unwrap()));
     } else {
