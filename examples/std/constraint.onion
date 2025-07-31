@@ -7,7 +7,6 @@ Bytes := (v?) -> typeof v == 'Bytes';
 Lambda := (v?) -> typeof v == 'Lambda';
 LazySet := (v?) -> typeof v == 'LazySet';
 Pair := (v?) -> typeof v == 'Pair';
-Named := (v?) -> typeof v == 'Named';
 InstructionPackage := (v?) -> typeof v == 'InstructionPackage';
 Null := (v?) -> typeof v == 'Null';
 Undefined := (v?) -> typeof v == 'Undefined';
@@ -17,8 +16,38 @@ Never := (v?) -> false; // Never type cannot be instantiated
 Positive := (x?) -> x > 0;
 Negative := (x?) -> x < 0;
 
-InstanceOf := (interface?) -> (x?) -> isinstance(x, interface);
+InstanceOf := (interface?) -> (x?) -> interface.check(x);
 
-Union := (f?, g?) -> (v?) -> f(v) or g(v);
-Intersection := (f?, g?) -> (v?) -> f(v) and g(v);
+Union := (checkers?) -> (v?) -> {
+    // 遍历传入的检查器元组
+    i := 0;
+    len := lengthof checkers;
+    while (i < len) (
+        checker := checkers[i];
+        // 只要有一个检查器返回 true，整个 Union 就为 true
+        if (checker(v)) {
+            return true;
+        };
+        i := i + 1
+    );
+    // 如果所有检查器都返回 false，整个 Union 才为 false
+    return false;
+};
+
+Intersection := (checkers?) -> (v?) -> {
+    // 遍历传入的检查器元组
+    i := 0;
+    len := lengthof checkers;
+    while (i < len) (
+        checker := checkers[i];
+        // 只要有一个检查器返回 false，整个 Intersection 就为 false
+        if (not checker(v)) {
+            return false;
+        };
+        i := i + 1
+    );
+    // 如果所有检查器都返回 true，整个 Intersection 才为 true
+    return true;
+};
+
 Not := (f?) -> (v?) -> not f(v);

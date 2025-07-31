@@ -23,7 +23,7 @@ complex_data := {
     }
 };
 
-json_output := stdlib.json.stringify_pretty(object => complex_data);
+json_output := stdlib.json.stringify_pretty(complex_data);
 stdlib.io.println("复杂对象的 JSON 输出:");
 stdlib.io.println(json_output);
 stdlib.io.println();
@@ -36,7 +36,7 @@ mixed_array := [
     {"type": "guest", "id": 3, "active": true}
 ];
 
-array_json := stdlib.json.stringify_pretty(object => mixed_array);
+array_json := stdlib.json.stringify_pretty(mixed_array);
 stdlib.io.println("混合数组的 JSON 输出:");
 stdlib.io.println(array_json);
 stdlib.io.println();
@@ -48,7 +48,7 @@ api_response := '{"status": "success", "data": {"items": [{"name": "商品A", "p
 stdlib.io.println("模拟 API 响应:");
 stdlib.io.println(api_response);
 
-parsed_response := stdlib.json.parse(json_string => api_response);
+parsed_response := stdlib.json.parse(api_response);
 stdlib.io.println("解析后的响应:");
 stdlib.io.println(parsed_response);
 stdlib.io.println();
@@ -73,7 +73,7 @@ config := {
     }
 };
 
-config_json := stdlib.json.stringify_pretty(object => config);
+config_json := stdlib.json.stringify_pretty(config);
 stdlib.io.println("应用配置:");
 stdlib.io.println(config_json);
 stdlib.io.println();
@@ -83,11 +83,11 @@ stdlib.io.println("示例 5: 数据转换和验证");
 input_json := '{"numbers": [1, 2, 3, 4, 5], "statistics": {"sum": 15, "average": 3.0, "count": 5}}';
 stdlib.io.println("输入数据:", input_json);
 
-parsed_input := stdlib.json.parse(json_string => input_json);
+parsed_input := stdlib.json.parse(input_json);
 stdlib.io.println("解析结果:", parsed_input);
 
 // 重新序列化验证数据完整性
-output_json := stdlib.json.stringify(object => parsed_input);
+output_json := stdlib.json.stringify(parsed_input);
 stdlib.io.println("重新序列化:", output_json);
 
 stdlib.io.println("======== 示例完成 ========");

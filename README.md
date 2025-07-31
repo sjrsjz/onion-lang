@@ -9,7 +9,7 @@ The name `Onion` is inspired by the layered structure of onions, which mirrors t
 **Onion** refers to this programming language that embodies the "layered execution" philosophy:
 
 - **Multi-level Nesting**: Schedulers can be nested arbitrarily deep - `AsyncScheduler` → `Scheduler` → `AsyncScheduler` → `Scheduler`
-- **State Isolation**: Each layer maintains its own execution context, preventing interference between different scheduling levels  
+- **State Isolation**: Each layer maintains its own execution context, preventing interference between different scheduling levels
 - **Layer Communication**: Layers communicate through well-defined interfaces (`StepResult`, `Runnable` trait) while maintaining isolation
 - **Flexible Composition**: You can compose different execution strategies (sync/async) at any depth
 
@@ -64,19 +64,59 @@ Run the program:
 ### Function Definition and Invocation
 
 ```onion
-// Basic function definition
-square := (x?) -> x * x;
+@required stdlib;
+// Traditional functional style
 
-// Recursive function (Fibonacci sequence)
-fib := (n => 0) -> {
-    if (n <= 1) {
-        return n;
-    };
-    return this(n - 1) + this(n - 2);
-};
+f := "x" -> x + 1;
 
-stdlib.io.println("Square of 5:", square(5));
-stdlib.io.println("10th Fibonacci number:", fib(10));
+// We can call the function in the following ways
+// Onion syntax treats f x, f(x), and f[x] as equivalent, since parentheses and brackets are only used to change operator precedence
+
+// Traditional call
+assert f(1) == 2;
+// You can also use brackets
+assert f[1] == 2;
+// Call without parentheses
+assert f 1 == 2;
+
+// We can add value constraints to function parameters
+guard := "x" -> x > 0;
+
+f := (x => guard) -> x + 1; // Or f := ("x" : guard) -> x + 1;
+// When calling, it will check whether x is greater than 0. If not, an exception will be thrown
+assert f(1) == 2;
+// f(0) // Throws exception
+
+// Or use logical values to represent constraints, true means always valid, false means never valid
+f := (x => true) -> x + 1; // Or f := ("x" : true) -> x + 1;
+
+// In this case, the value of x will not be checked
+assert f(1) == 2;
+
+// You can use x? to represent x => true
+f := (x?) -> x + 1;
+assert f(1) == 2;
+
+// We can also make the function parameter a tuple
+f := ("x", "y") -> x + y;
+
+assert f(1, 2) == 3;
+
+// Since f x and f(x) are equivalent, we can also call it as follows
+// When calling, the VM will unpack the tuple and pass each element to the corresponding slot
+// Note: (x?,) -> {} and (x?) -> {} are different. The former is a tuple, the latter is a single-value parameter. The latter will not unpack the passed value. This means that if you pass a single value to a function that requires a single-element tuple, the VM will immediately report an error because it cannot unpack the single value. In other words, you must pass a single-value tuple when calling
+packaged := (1, 2);
+assert f(packaged) == 3;
+assert f packaged == 3;
+
+// We can also add value constraints to tuple parameters
+f := (x => guard, y => guard) -> x + y;
+
+assert f(1, 2) == 3;
+
+
+// You can use keyof to get the parameter list of a function
+stdlib.io.println("Function parameters:", keyof f);
 ```
 
 ### Mutability Control
@@ -96,7 +136,7 @@ obj[0] = 42;
 
 // References and const references
 ref := obj[0];        // mutable reference
-const_ref := const obj[0];  // const reference
+const_value := const obj[0];  // const
 ```
 
 ### Asynchronous Programming
@@ -112,7 +152,7 @@ task := () -> {
             while (n < 5) {
                 stdlib.io.println("Async element:", x, "count:", n);
                 n = n + 1;
-                stdlib.time.sleep_seconds(seconds => 0.01);
+                stdlib.time.sleep_seconds(0.01);
             };
             return x * 2;
         };
@@ -120,7 +160,7 @@ task := () -> {
 };
 
 // Execute asynchronously and get results
-tasks := async task();
+tasks := (async task)();
 stdlib.io.println("Processing results:", valueof tasks);
 ```
 
@@ -130,14 +170,14 @@ stdlib.io.println("Processing results:", valueof tasks);
 // Create concurrent threads
 thread1 := () -> {
     stdlib.io.println("Thread 1 starting");
-    stdlib.time.sleep_seconds(seconds => 2);
+    stdlib.time.sleep_seconds(2);
     stdlib.io.println("Thread 1 completed");
     return "Result from thread 1";
 };
 
 thread2 := () -> {
     stdlib.io.println("Thread 2 starting");
-    stdlib.time.sleep_seconds(seconds => 1);
+    stdlib.time.sleep_seconds(1);
     stdlib.io.println("Thread 2 completed");
     return "Result from thread 2";
 };
@@ -157,14 +197,14 @@ stdlib.io.println("Results:", result1, result2);
 ```onion
 // Define constraint functions
 Positive := (x?) -> x > 0;
-NonEmpty := (s?) -> stdlib.string.length(string => s) > 0;
+NonEmpty := (s?) -> stdlib.string.length(s) > 0;
 
 // Functions with parameter constraints
-add_positive := (a => 0 | Positive, b => 0 | Positive) -> {
+add_positive := (a => Positive, b => Positive) -> {
     return a + b;
 };
 
-greet := (name => "World" | NonEmpty) -> {
+greet := (name => NonEmpty) -> {
     return "Hello, " + name + "!";
 };
 
@@ -201,21 +241,53 @@ range_result := (0..100).elements() |> (x?) -> {
 ### Prototype Inheritance
 
 ```onion
-// Define class prototype
-ClassA := (struct?, interface => mut {
-    print => () -> {
-        stdlib.io.println("This is an instance of Class A");
-    },
-    to_string => () -> "ClassA: " + stdlib.types.to_string(self)
-}) -> struct : interface;
-
-// Create instance
-instance := #ClassA mut {
-    "name": "Test instance",
-    "value": 42
+@required stdlib;
+interface := (interface_definition?) -> {
+    pointer := mut interface_definition;
+    return (
+        new => (structure?) -> structure : pointer,
+        check => (instance?) -> {
+            (valueof instance) is pointer
+        },
+    )
 };
 
-instance.print();
+my_interface := interface {
+    method1 => () -> stdlib.io.println("Method 1 called"),
+    method2 => (arg?) -> stdlib.io.println("Method 2 called with argument:", arg),
+    method3 => () -> stdlib.io.println(self.data),
+};
+
+my_interface_2 := interface {
+    method1 => () -> stdlib.io.println("Method 1 called"),
+    method2 => (arg?) -> stdlib.io.println("Method 2 called with argument:", arg),
+    method3 => () -> stdlib.io.println(self.data),
+};
+
+my_instance := my_interface.new {
+    data => "This is some data",
+};
+
+my_instance_2 := my_interface_2.new {
+    data => "This is some data",
+};
+
+
+stdlib.io.println("Is my_instance an instance of my_interface? ", my_interface.check(my_instance));
+stdlib.io.println("Is my_instance an instance of my_interface_2? ", my_interface_2.check(my_instance));
+my_instance.method1();
+stdlib.io.println("Calling method2 with 'Hello':");
+my_instance.method2("Hello");
+stdlib.io.println("Calling method3:");
+my_instance.method3();
+
+instance_guard_test := (x => my_interface.check) -> {
+    stdlib.io.println("Instance guard test passed with:", x.data);
+};
+
+instance_guard_test(my_instance); // This should work
+
+// instance_guard_test(my_instance_2); // This should fail, as my_instance_2 is not an instance of my_interface
 ```
 
 ### Enhanced String Literals
@@ -246,8 +318,7 @@ stdlib.io.println("Converted number:", number);
 
 // Custom type conversion chains
 int := (x?) -> x.int();
-abs := (x?) -> if (x < 0) { -x } else { x };
-result := "-42" as int as abs;
+result := int "-42";
 stdlib.io.println("Chained conversion:", result);
 
 // Tuple operations
@@ -355,7 +426,6 @@ stdlib.io.println("User name:", name);
 @Named @Pair pair(1, named("A", "B"))
 ```
 
-
 ## 🛠️ Command Line Tools
 
 Onion provides a complete set of command line tools:
@@ -380,7 +450,7 @@ onion lsp
 onion-lang/
 ├── src/                    # Main program source code
 │   ├── main.rs            # CLI entry point
-│   ├── repl.rs            # Interactive interpreter (not yet complete)
+│   ├── repl/            # Interactive interpreter (not yet complete)
 │   ├── lsp/               # Language Server Protocol
 │   └── stdlib/            # Standard library
 ├── onion-frontend/        # Compilation frontend

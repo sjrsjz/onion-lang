@@ -4,14 +4,14 @@ stdlib.io.println("======== 简单HTTP同步测试 ========");
 
 // 测试同步GET请求
 stdlib.io.println("\n测试同步GET请求:");
-result := stdlib.http.get_sync(url => "https://httpbin.org/get");
+result := stdlib.http.get_sync("https://httpbin.org/get");
 stdlib.io.println("GET结果:", result);
 
 // 测试同步POST请求
 stdlib.io.println("\n测试同步POST请求:");
 post_result := stdlib.http.post_sync(
-    url => "https://httpbin.org/post",
-    body => "{\"message\":\"Hello from Onion!\"}"
+    "https://httpbin.org/post",
+    "{\"message\":\"Hello from Onion!\"}"
 );
 stdlib.io.println("POST结果:", post_result);
 

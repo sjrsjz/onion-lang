@@ -45,8 +45,8 @@ pub fn build_code(
         println!("{}", warn.format().bright_yellow());
     }
 
-    let ast = auto_capture_and_rebuild(&macro_result.result_node).1;
-
+    let (_required_vars, ast) = auto_capture_and_rebuild(&macro_result.result_node);
+    
     let analyse_result = analyze_ast(&ast, None, cycle_detector, dir_stack);
 
     let mut errors = "".to_string();

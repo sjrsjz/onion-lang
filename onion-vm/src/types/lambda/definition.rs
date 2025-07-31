@@ -14,9 +14,7 @@ use rustc_hash::FxHashMap;
 use crate::{
     lambda::runnable::{Runnable, RuntimeError},
     types::{
-        lambda::{
-            build_dict_from_hashmap_weak, vm_instructions::instruction_set::VMInstructionPackage,
-        },
+        lambda::vm_instructions::instruction_set::VMInstructionPackage,
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
     },
 };
@@ -196,12 +194,19 @@ impl OnionLambdaDefinition {
         F: Fn(&OnionObject) -> Result<R, RuntimeError>,
     {
         match key {
-            OnionObject::String(s) if s.as_str() == "parameter" => f(&self.parameter),
-            OnionObject::String(s) if s.as_str() == "capture" => {
-                f(&build_dict_from_hashmap_weak(&self.capture).weak())
-            }
-            OnionObject::String(s) if s.as_str() == "signature" => {
+            OnionObject::String(s) if s.as_str() == "$parameter" => f(&self.parameter),
+            OnionObject::String(s) if s.as_str() == "$signature" => {
                 f(&OnionObject::String(Arc::new(self.signature.clone())))
+            }
+            OnionObject::String(s) => {
+                let capture_key = s.as_str();
+                if let Some(value) = self.capture.get(capture_key) {
+                    f(value)
+                } else {
+                    Err(RuntimeError::InvalidOperation(
+                        format!("Attribute '{:?}' not found in lambda definition", key).into(),
+                    ))
+                }
             }
             _ => Err(RuntimeError::InvalidOperation(
                 format!("Attribute '{:?}' not found in lambda definition", key).into(),

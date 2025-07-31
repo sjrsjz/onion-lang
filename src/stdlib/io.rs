@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use indexmap::IndexMap;
 use onion_vm::{
     GC,
@@ -47,6 +49,10 @@ fn input(
     };
 
     print!("{}", hint.weak().to_string(&vec![])?);
+    // flush
+    std::io::stdout().flush().map_err(|e| {
+        RuntimeError::DetailedError(format!("Failed to flush stdout: {}", e).into())
+    })?;
     let input = {
         let mut buffer = String::new();
         if let Err(e) = std::io::stdin().read_line(&mut buffer) {

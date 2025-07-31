@@ -25,10 +25,10 @@ main := () -> {
     temp := stdlib.os.temp_dir();
     stdlib.io.println("Temp directory: " + temp);
     
-    path_exists := stdlib.os.path_exists(path => ".");
+    path_exists := stdlib.os.path_exists(".");
     stdlib.io.println("Current directory exists: ", path_exists);
     
-    is_dir := stdlib.os.is_dir(path => ".");
+    is_dir := stdlib.os.is_dir(".");
     stdlib.io.println("Current path is directory: ", is_dir);
     
     stdlib.io.println("");
@@ -37,17 +37,17 @@ main := () -> {
     stdlib.io.println("=== Testing fs module ===");
     
     test_content := "Hello, this is a test file!";
-    stdlib.fs.write_file(path => "test_stdlib.txt", content => test_content);
+    stdlib.fs.write_file("test_stdlib.txt", test_content);
     stdlib.io.println("Created test file: test_stdlib.txt");
     
-    read_content := stdlib.fs.read_file(path => "test_stdlib.txt");
+    read_content := stdlib.fs.read_file("test_stdlib.txt");
     stdlib.io.println("Read file content: ", read_content);
     
-    file_exists := stdlib.fs.exists(path => "test_stdlib.txt");
+    file_exists := stdlib.fs.exists("test_stdlib.txt");
     stdlib.io.println("Test file exists: ", file_exists);
     
     // 清理测试文件
-    stdlib.fs.remove_file(path => "test_stdlib.txt");
+    stdlib.fs.remove_file("test_stdlib.txt");
     stdlib.io.println("Cleaned up test file");
     
     stdlib.io.println("");

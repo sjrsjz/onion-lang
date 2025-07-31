@@ -1,5 +1,5 @@
 parallel := (tasks?) -> {
-    async () -> {
-        tasks |> (f?) -> sync f() 
-    }();
+    (async () -> {
+        tasks |> (f?) -> spawn f 
+    })();
 };

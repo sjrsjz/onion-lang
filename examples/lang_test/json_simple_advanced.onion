@@ -13,7 +13,7 @@ nested := {
 };
 
 stdlib.io.println("嵌套对象:", nested);
-json_result := stdlib.json.stringify_pretty(object => nested);
+json_result := stdlib.json.stringify_pretty(nested);
 stdlib.io.println("JSON 结果:");
 stdlib.io.println(json_result);
 

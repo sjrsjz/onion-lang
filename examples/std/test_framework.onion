@@ -2,7 +2,7 @@
 // Assert 函数
 @required stdlib;
 @required Modules;
-
+@import "constraint.onion";
 assert := (condition?, message?) -> {
     if (not condition) {
         raise "Assertion failed: " + message;
@@ -21,14 +21,8 @@ assert_ne := (expected?, actual?, message?) -> {
     }
 };
 
-assert_true := (condition?, message?) -> {
-    assert(condition == true, message);
-};
 
-assert_false := (condition?, message?) -> {
-    assert(condition == false, message);
-};
-Test := (tests => ()) -> {
+Test := (tests => Tuple) -> {
     @import "result.onion";
     @import "logging.onion";
     stdlib.io.println("Starting tests...");
@@ -47,17 +41,15 @@ Test := (tests => ()) -> {
         );
     };
     logger := logger(writter);
-    if (typeof tests != "Tuple") {
-        raise "Test expects a tuple of Named";
-    };
     n := lengthof tests;
     logger(INFO, "Running tests: " + stdlib.types.to_string(n));
     i := mut 0;
+    
+    guard := (x => Pair) -> x;
+    
     while (i < n) {
-        test := tests[i];
-        if (typeof test != "Named") {
-            raise "Test expects a tuple of Named";
-        };
+        test := guard(tests[i]);
+
         test_name := keyof test;
         test_func := valueof test;
         if (typeof test_func != "Lambda") {

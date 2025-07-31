@@ -53,12 +53,11 @@ pub enum IR {
     BuildNamed,      // pop key and value from stack and build named argument
     BuildRange,      // pop start and end from stack and build range
     BuildSet,
-    BindSelf,                 // bind lambda's self to tuple
-    BinaryOp(IROperation),    // pop two values from stack and perform binary operation
-    UnaryOp(IROperation),     // pop one value from stack and perform unary operation
-    Let(String),              // pop value from stack and store it in variable
-    Get(String),              // get value from context and push the reference to stack
-    Set,                      // pop value and reference from stack and set value
+    BinaryOp(IROperation), // pop two values from stack and perform binary operation
+    UnaryOp(IROperation),  // pop one value from stack and perform unary operation
+    Let(String),           // pop value from stack and store it in variable
+    Get(String),           // get value from context and push the reference to stack
+    Set,                   // pop value and reference from stack and set value
     GetAttr, // pop object and attribute from stack and push the reference to attribute to stack
     KeyOf,   // pop object and get the key of the object
     ValueOf, // pop object and get the value of the object

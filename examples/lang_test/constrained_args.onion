@@ -9,17 +9,17 @@ CannotAssign := (x?) -> raise "You should just use default value of parameter, n
 @required stdlib;
 @import "../std/result.onion";
 
-add_positive := (a => 0 | Positive, b => 0 | Positive) -> {
+add_positive := (a => Positive, b => Positive) -> {
     return a + b;
 };
 
-add_negative := (a => 0 | Negative, b => 0 | Negative) -> {
+add_negative := (a => Negative, b => Negative) -> {
     return a + b;
 };
 
 
 x := 1;
-foo := (y?, x! | CannotAssign) -> {
+foo := (y?) -> {
     stdlib.io.println("foo called with y:", y, "and x:", x);
     return y + x;
 };
@@ -65,7 +65,7 @@ stdlib.io.println(
 );
 
 @import "../std/option.onion";
-map_to := (x? | OptionType, f? | Lambda) -> {
+map_to := (x => OptionType, f => Lambda) -> {
     if (x.is_some()) {
         return Some(f(x.unwrap()));
     } else {

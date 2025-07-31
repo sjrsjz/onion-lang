@@ -15,5 +15,5 @@ logger := (writter?) ->
         if (typeof msg != "String") {
             raise "Logger expects a message of type String";
         };
-        writter(level!, msg!);
+        writter(level, msg);
     };

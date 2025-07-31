@@ -528,6 +528,7 @@ pub fn expand_macro(
     // 遍历所有宏定义，尝试应用到当前节点
     let mut context = VariableContext::new();
     context.push_context();
+    context.push_frame();
 
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
@@ -638,7 +639,7 @@ pub fn expand_macros_to_node(
                 }
             }
         }
-        ASTNodeType::Body => {
+        ASTNodeType::Frame => {
             context.push_frame(); // 进入新的上下文帧
             let mut new_children = Vec::new();
             for child in &node.children {
@@ -649,7 +650,7 @@ pub fn expand_macros_to_node(
                 errors.push(AnalyzeError::DetailedError(node.clone(), e.to_string()));
             });
             return ASTNode {
-                node_type: ASTNodeType::Body,
+                node_type: ASTNodeType::Frame,
                 start_token: node.start_token.clone(),
                 end_token: node.end_token.clone(),
                 children: new_children,
@@ -685,6 +686,7 @@ pub fn expand_macros_to_node(
                 );
             } else {
                 context.push_context();
+                context.push_frame(); // Create a new frame for the Lambda body
                 body_node = expand_macros_to_node(
                     node.children.last().unwrap(),
                     errors,   // Pass errors
@@ -807,6 +809,7 @@ fn check_postorder_break(
     }
 }
 
+#[stacksafe::stacksafe]
 fn analyze_node(
     source: &Option<Source>,
     node: &ASTNode,
@@ -1157,7 +1160,7 @@ fn analyze_node(
                 AssumedType::Unknown
             }
         }
-        ASTNodeType::Body => {
+        ASTNodeType::Frame => {
             // Body 和 Boundary 在当前上下文中创建新的作用域（帧）
             context.push_frame();
             let mut assumed_type = AssumedType::Unknown;
@@ -1187,6 +1190,11 @@ fn analyze_node(
             return assumed_type;
         }
         ASTNodeType::LambdaDef(is_dynamic_gen, captured_vars) => {
+            let mut captured_vars = captured_vars.clone();
+            if !dynamic {
+                // 可以选择在这里报告未定义的捕获变量，但是为了避免过多错误，不做处理而是交给 Lambda 体分析
+                captured_vars.retain(|v| context.get_variable_current_context(v).is_some());
+            }
             // 在新的上下文中处理参数（参数定义在第一个帧中）
             let Some(params) = node.children.first() else {
                 errors.push(AnalyzeError::DetailedError(
@@ -1214,7 +1222,6 @@ fn analyze_node(
             }
 
             if *is_dynamic_gen {
-                context.push_frame();
                 analyze_node(
                     source,
                     &node.children.last().unwrap(),
@@ -1230,10 +1237,6 @@ fn analyze_node(
                 if context_at_break.is_some() {
                     // 如果在 Lambda 体分析中中断，不弹出上下文
                     return AssumedType::Lambda;
-                }
-                // 弹出 Lambda 定义的帧
-                if context.pop_frame().is_err() {
-                    panic!("Failed to pop frame after Lambda definition");
                 }
                 check_postorder_break(source, node, break_at_position, context, context_at_break);
                 return AssumedType::Lambda;
@@ -1255,6 +1258,7 @@ fn analyze_node(
                 }
                 let params_def = params_def.unwrap();
                 context.push_context();
+                context.push_frame(); // Create a new frame for the Lambda body
 
                 for vars in PRE_ALLOCATED_VARIABLE_STRINGS {
                     context
@@ -1519,6 +1523,8 @@ fn analyze_node(
     }
 }
 
+
+#[stacksafe::stacksafe]
 fn analyze_tuple_params(
     source: &Option<Source>,
     params: &ASTNode,
@@ -1536,22 +1542,20 @@ fn analyze_tuple_params(
         return None;
     }
 
-    for node in &params.children {
-        analyze_node(
-            source,
-            node,
-            context,
-            errors,   // Pass errors
-            warnings, // Pass warnings
-            dynamic,
-            break_at_position,
-            context_at_break,
-            cycle_detector,
-            dir_stack,
-        );
-        if context_at_break.is_some() {
-            return None; // Return early if break occurred
-        }
+    analyze_node(
+        source,
+        params,
+        context,
+        errors,   // Pass errors
+        warnings, // Pass warnings
+        dynamic,
+        break_at_position,
+        context_at_break,
+        cycle_detector,
+        dir_stack,
+    );
+    if context_at_break.is_some() {
+        return None; // Return early if break occurred
     }
 
     let mut param_names = HashSet::new();
@@ -1610,19 +1614,8 @@ pub fn auto_capture_and_rebuild(node: &ASTNode) -> (HashSet<String>, ASTNode) {
     auto_capture(&mut context, node, false)
 }
 
-/// 筛查掉当前上下文中已定义的变量
-pub fn filter_required_variables(
-    context: &VariableContext,
-    required_vars: HashSet<String>,
-) -> HashSet<String> {
-    // Filter out variables that are already defined in the current context
-    required_vars
-        .into_iter()
-        .filter(|var| context.get_variable_current_context(var).is_none())
-        .collect()
-}
-
 /// 自动捕获上下文中的变量
+#[stacksafe::stacksafe]
 pub fn auto_capture(
     context: &mut VariableContext,
     node: &ASTNode,
@@ -1635,9 +1628,12 @@ pub fn auto_capture(
             if dynamic {
                 return (HashSet::new(), node.clone()); // Dynamic variables are not captured
             }
+            if context.get_variable_current_context(var_name).is_some() {
+                // If the variable is already defined in the current context, we don't need to capture it
+                return (HashSet::new(), node.clone());
+            }
             let mut required_vars = HashSet::new();
             required_vars.insert(var_name.clone());
-            required_vars = filter_required_variables(context, required_vars);
             (required_vars, node.clone())
         }
 
@@ -1647,29 +1643,6 @@ pub fn auto_capture(
                 "static" => false,
                 _ => dynamic, // Inherit dynamic status for other annotations
             };
-            if annotation == "required" {
-                // If it's a required annotation, we need to capture the variable
-                if let Some(var_name) = node.children.get(0) {
-                    if let ASTNodeType::Variable(var_name_str) = &var_name.node_type {
-                        let mut required_vars = HashSet::new();
-                        required_vars.insert(var_name_str.clone());
-                        required_vars = filter_required_variables(context, required_vars);
-                        context
-                            .define_variable(&Variable {
-                                name: var_name_str.clone(),
-                                assumed_type: AssumedType::Unknown, // Type doesn't matter much for capture
-                            })
-                            .unwrap_or_else(|err| {
-                                panic!(
-                                    "Failed to define captured variable '{}' in Annotation: {}",
-                                    var_name_str, err
-                                );
-                            });
-
-                        return (required_vars, node.clone()); // Still return required_vars because it's required
-                    }
-                }
-            }
             let mut required_vars = HashSet::new();
             let mut new_node = node.clone();
             new_node.children = Vec::new();
@@ -1679,7 +1652,6 @@ pub fn auto_capture(
                 required_vars.extend(child_req_vars);
                 new_node.children.push(new_child_node);
             }
-            required_vars = filter_required_variables(context, required_vars);
             (required_vars, new_node)
         }
 
@@ -1692,7 +1664,6 @@ pub fn auto_capture(
             // Analyze the value expression
             let (value_req_vars, new_value_node) = auto_capture(context, value_node, dynamic);
             required_vars.extend(value_req_vars);
-            required_vars = filter_required_variables(context, required_vars); // 先筛选后定义
 
             new_node.children.push(new_value_node);
             // Define the variable in the current context
@@ -1706,24 +1677,21 @@ pub fn auto_capture(
             (required_vars, new_node)
         }
 
-        ASTNodeType::Body => {
+        ASTNodeType::Frame => {
             // Create a new scope frame
-            context.push_frame();
             let mut required_vars = HashSet::new();
             let mut new_node = node.clone();
-            new_node.children = Vec::new();
 
-            // Analyze children within the new scope
-            for child in &node.children {
-                let (child_req_vars, new_child_node) = auto_capture(context, child, dynamic);
-                required_vars.extend(child_req_vars);
-                new_node.children.push(new_child_node);
-            }
-            // Pop the scope frame
+            context.push_frame();
+            let (child_req_vars, new_child_node) =
+                auto_capture(context, &node.children[0], dynamic);
             context
                 .pop_frame()
                 .unwrap_or_else(|_| panic!("Failed to pop frame after Body analysis"));
-            required_vars = filter_required_variables(context, required_vars);
+
+            required_vars.extend(child_req_vars);
+            new_node.children = vec![new_child_node];
+
             (required_vars, new_node)
         }
 
@@ -1734,6 +1702,14 @@ pub fn auto_capture(
             // 分析形参所需要的变量
             let (params_req_vars, new_params_node) = auto_capture(context, params, *is_dynamic_gen);
             required_vars.extend(params_req_vars);
+
+            for v in captured_vars {
+                if context.get_variable_current_context(&v).is_none() {
+                    // 如果捕获的变量在当前上下文中未定义，添加到 required_vars
+                    required_vars.insert(v.clone());
+                }
+            }
+
             if *is_dynamic_gen {
                 // 分析body
                 let (body_req_vars, new_body_node) = auto_capture(context, body, *is_dynamic_gen);
@@ -1745,16 +1721,12 @@ pub fn auto_capture(
                     end_token: node.end_token.clone(),
                     children: vec![new_params_node, new_body_node],
                 };
-                required_vars = filter_required_variables(context, required_vars);
                 return (required_vars, rebuilt_ast_node);
             }
 
-            // 如果不是动态生成的 Lambda，我们需要处理捕获的变量
-            let mut lambda_body_required_vars = HashSet::new();
-            lambda_body_required_vars.extend(captured_vars.iter().cloned());
-
             // 然后我们分析 Lambda 体
             context.push_context(); // Create a new context for the Lambda body
+            context.push_frame(); // Create a new frame for the Lambda body
             for var in PRE_ALLOCATED_VARIABLE_STRINGS {
                 context
                     .define_variable(&Variable {
@@ -1782,7 +1754,6 @@ pub fn auto_capture(
             }
 
             // 处理形参
-            // 我们这里
             match &params.node_type {
                 ASTNodeType::KeyValue => {
                     let param_name = &params.children[0];
@@ -1853,24 +1824,33 @@ pub fn auto_capture(
 
             // 分析 Lambda 体
             let (body_req_vars, new_body_node) = auto_capture(context, body, *is_dynamic_gen);
+            // 弹出 Lambda 的上下文帧
+            context.pop_context().unwrap_or_else(|_| {
+                panic!("Failed to pop context after Lambda definition");
+            });
 
-            lambda_body_required_vars.extend(body_req_vars);
-            required_vars.extend(lambda_body_required_vars.clone());
+            // 如果不是动态生成的 Lambda，我们需要处理 Lambda 需要的捕获变量
+            let mut rebuilt_lambda_required_vars = HashSet::new();
+            rebuilt_lambda_required_vars.extend(captured_vars.clone());
+            rebuilt_lambda_required_vars.extend(body_req_vars.clone());
+
+            for var in body_req_vars {
+                if context.get_variable_current_context(&var).is_none() {
+                    // 如果 Lambda 体需要的变量在当前上下文中未定义，添加到 required_vars
+                    required_vars.insert(var.clone());
+                }
+            }
 
             let rebuilt_ast_node = ASTNode {
                 node_type: ASTNodeType::LambdaDef(
                     *is_dynamic_gen,
-                    lambda_body_required_vars.into_iter().collect(),
+                    rebuilt_lambda_required_vars.into_iter().collect(),
                 ),
                 start_token: node.start_token.clone(),
                 end_token: node.end_token.clone(),
                 children: vec![new_params_node, new_body_node],
             };
-            // 弹出 Lambda 的上下文帧
-            context.pop_context().unwrap_or_else(|_| {
-                panic!("Failed to pop context after Lambda definition");
-            });
-            required_vars = filter_required_variables(context, required_vars);
+
             // 返回捕获的变量和重建的 ASTNode
             (required_vars, rebuilt_ast_node)
         }
@@ -1886,7 +1866,6 @@ pub fn auto_capture(
                 required_vars.extend(child_req_vars);
                 new_node.children.push(new_child_node);
             }
-            required_vars = filter_required_variables(context, required_vars);
             (required_vars, new_node)
         }
     }

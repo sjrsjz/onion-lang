@@ -144,12 +144,13 @@ impl<'t> IRGenerator<'t> {
         })
     }
 
+    #[stacksafe::stacksafe]
     pub fn generate_without_redirect(
         &mut self,
         ast_node: &ASTNode,
     ) -> Result<Vec<(DebugInfo, IR)>, IRGeneratorError> {
         match &ast_node.node_type {
-            ASTNodeType::Body => {
+            ASTNodeType::Frame => {
                 let mut instructions = Vec::new();
                 instructions.push((self.generate_debug_info(ast_node), IR::NewFrame));
                 self.scope_stack.push(Scope::Frame);
@@ -187,7 +188,10 @@ impl<'t> IRGenerator<'t> {
 
                     instructions.push((
                         self.generate_debug_info(ast_node),
-                        IR::LoadLambda("__main__".to_string(), captured_vars.clone()),
+                        IR::LoadLambda(
+                            "__main__".to_string(),
+                            captured_vars.iter().cloned().collect(),
+                        ),
                     ));
                 } else {
                     let (full_signature, signature) = self.new_function_signature();
@@ -208,7 +212,7 @@ impl<'t> IRGenerator<'t> {
                     instructions.push((self.generate_debug_info(ast_node), IR::ForkInstruction));
                     instructions.push((
                         self.generate_debug_info(ast_node),
-                        IR::LoadLambda(full_signature, captured_vars.clone()),
+                        IR::LoadLambda(full_signature, captured_vars.iter().cloned().collect()),
                     ));
                 }
                 Ok(instructions)
@@ -802,6 +806,7 @@ impl<'t> IRGenerator<'t> {
     }
 
     /// 生成IR指令
+    #[stacksafe::stacksafe]
     pub fn generate(
         &mut self,
         ast_node: &ASTNode,

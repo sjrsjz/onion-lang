@@ -50,7 +50,7 @@ impl From<ASTNodeType> for SemanticTokenTypes {
             ASTNodeType::Base64(_) => Self::Base64,
             ASTNodeType::Variable(_) => Self::Variable,
             ASTNodeType::Let(_) => Self::Let,
-            ASTNodeType::Body => Self::Body,
+            ASTNodeType::Frame => Self::Body,
             ASTNodeType::Assign => Self::Assign,
             ASTNodeType::LambdaDef(_, _) => Self::LambdaDef,
             ASTNodeType::Expressions => Self::Expressions,

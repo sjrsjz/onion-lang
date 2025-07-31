@@ -66,7 +66,7 @@ impl ReplExecutor {
         dir_stack: &mut onion_frontend::dir_stack::DirectoryStack,
     ) -> Result<(), String> {
         let ir_package = build_code(code, cycle_detector, dir_stack)
-            .map_err(|e| format!("Compilation failed: {}", e))?;
+            .map_err(|e| format!("Compilation failed\n{}", e))?;
 
         self.execute_ir_package(&ir_package)
     }

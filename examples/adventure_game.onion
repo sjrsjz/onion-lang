@@ -142,7 +142,7 @@ display_location := () -> {
     stdlib.io.println("");
     
     // 显示可用出口
-    if (keyof sync (() -> current_location.exits)()) {
+    if (keyof (sync (() -> current_location.exits))()) {
         stdlib.io.println(colorize("可前往的方向:", "bright_yellow", "bg_black"));
         exits := current_location.exits;
         i := mut 0;
@@ -157,7 +157,7 @@ display_location := () -> {
     };
     
     // 显示可获得的物品
-    if (keyof sync (() -> current_location.items)() and lengthof current_location.items > 0) {
+    if (keyof (sync (() -> current_location.items))() and lengthof current_location.items > 0) {
         stdlib.io.println(colorize("这里有物品:", "bright_cyan", "bg_black"));
         i := mut 0;
         while (i < lengthof current_location.items) {
@@ -170,7 +170,7 @@ display_location := () -> {
 
 // 处理事件
 handle_event := (event_name?) -> {
-    if (not keyof sync (() -> events.{event_name})()) {
+    if (not keyof (sync (() -> events.{event_name}))()) {
         return;
     };
     
@@ -250,7 +250,7 @@ simulate_exploration := () -> {
         
         // 触发事件
         current_location := world.{player.location};
-        if (keyof sync (() -> current_location.events)() and lengthof current_location.events > 0) {
+        if (keyof (sync (() -> current_location.events))() and lengthof current_location.events > 0) {
             event_name := current_location.events[0];
             game_ended := handle_event(event_name);
             if (game_ended) {
@@ -259,7 +259,7 @@ simulate_exploration := () -> {
         };
         
         // 自动拾取物品
-        if (keyof sync (() -> current_location.items)() and lengthof current_location.items > 0) {
+        if (keyof (sync (() -> current_location.items))() and lengthof current_location.items > 0) {
             j := mut 0;
             while (j < lengthof current_location.items) {
                 item := current_location.items[j];

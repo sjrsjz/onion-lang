@@ -198,7 +198,7 @@ impl Display for OnionObjectCell {
 /// OnionObject is the main type for all objects in the Onion VM.
 /// The VM's types are all immutable(Mut is a immutable pointer to a VM object)
 /// If we need to `mutate` an object, it is IMPOSSIBLE to mutate the object itself, we can only let the Mut object point to a new object.
-/// So all types in OnionObject do not implement `Clone`, because cloning an object is volition of the immutability principle.
+/// So all types defined in OnionObject do not implement `Clone`, because deep cloning an object is volition of the immutability principle.
 pub enum OnionObject {
     // immutable basic types
     Integer(i64),
@@ -1814,6 +1814,8 @@ impl OnionObject {
     pub fn key_of(&self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| match obj {
             OnionObject::Pair(pair) => Ok(pair.get_key().stabilize()),
+            OnionObject::Lambda(lambda) => Ok(lambda.0.get_parameter().stabilize()),
+            OnionObject::LazySet(set) => Ok(set.get_container().stabilize()),
             OnionObject::Custom(custom) => custom.key_of(),
             _ => Err(RuntimeError::InvalidOperation(
                 format!("key_of() not supported for {:?}", obj).into(),
@@ -1824,6 +1826,7 @@ impl OnionObject {
     pub fn value_of(&self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| match obj {
             OnionObject::Pair(pair) => Ok(pair.get_value().stabilize()),
+            OnionObject::LazySet(set) => Ok(set.get_filter().stabilize()),
             OnionObject::Undefined(s) => Ok(OnionStaticObject::new(OnionObject::String(Arc::new(
                 s.as_ref()
                     .map(|o| o.as_ref().clone())

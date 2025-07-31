@@ -1,0 +1,27 @@
+@required stdlib;
+
+x := 10;
+y := mut 20;
+
+f := () -> {
+    stdlib.io.println("Function f called with x:", x, "and y:", y);
+    y = 30; // 修改 y 的值
+};
+
+// g 和 f 是等效的，只不过静态分析器会自动捕获变量，当然我们也可以手动捕获，甚至可以手动捕获词法作用域中不存在的变量（前提是运行时存在）
+g := () -> &[x, y] {
+    stdlib.io.println("Function g called with x:", x, "and y:", y);
+    y = 40; // 修改 y 的值
+};
+
+f();
+
+stdlib.io.println("After calling f, y is now:", y);
+
+g();
+
+stdlib.io.println("After calling g, y is now:", y);
+
+// 我们可以通过成员运算符访问函数捕获的变量
+stdlib.io.println("Accessing captured variables in f: x =", f.x, ", y =", f.y);
+stdlib.io.println("Accessing captured variables in g: x =", g.x, ", y =", g.y);

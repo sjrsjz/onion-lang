@@ -5,7 +5,7 @@ Modules := mut ();
 @import "std/test_framework.onion";
 @import "std/combinators.onion";
 
-#Test {
+Test {
     // === Identity Combinator Tests ===
     
     TestIdentityWithNumber => () -> {

@@ -1,40 +1,47 @@
 @required stdlib;
-
-isinstance := (x?, class?) -> (valueof x) is class.parameter.interface;
-
-ClassA := (struct?, interface => mut {
-    print => () -> {
-        stdlib.io.println("这是类A的print方法");
-    },
-    to_string => () -> "类A的字符串表示: " + stdlib.types.to_string(self)
-}) -> struct : interface;
-
-ClassB := (struct?, interface => mut {
-    print => () -> {
-        stdlib.io.println("这是类B的print方法");
-    },
-    to_string => () -> "类B的字符串表示: " + stdlib.types.to_string(self)
-}) -> struct : interface;
-
-instanceA := #ClassA mut {
-    "name": "实例A",
-    "value": 42
+interface := (interface_definition?) -> {
+    pointer := mut interface_definition;
+    return (
+        new => (structure?) -> structure : pointer,
+        check => (instance?) -> {
+            (valueof instance) is pointer
+        },
+    )
 };
 
-stdlib.io.println("实例A的名称:", instanceA.name);
-
-instanceA.print();
-
-stdlib.io.println("实例A的字符串表示:", instanceA.to_string());
-
-if (isinstance(instanceA, ClassA)) {
-    stdlib.io.println("instanceA 是 ClassA 的实例");
-} else {
-    stdlib.io.println("instanceA 不是 ClassA 的实例");
+my_interface := interface {
+    method1 => () -> stdlib.io.println("Method 1 called"),
+    method2 => (arg?) -> stdlib.io.println("Method 2 called with argument:", arg),
+    method3 => () -> stdlib.io.println(self.data),
 };
 
-if (isinstance(instanceA, ClassB)) {
-    stdlib.io.println("instanceA 是 ClassB 的实例");
-} else {
-    stdlib.io.println("instanceA 不是 ClassB 的实例");
+my_interface_2 := interface {
+    method1 => () -> stdlib.io.println("Method 1 called"),
+    method2 => (arg?) -> stdlib.io.println("Method 2 called with argument:", arg),
+    method3 => () -> stdlib.io.println(self.data),
 };
+
+my_instance := my_interface.new {
+    data => "This is some data",
+};
+
+my_instance_2 := my_interface_2.new {
+    data => "This is some data",
+};
+
+
+stdlib.io.println("Is my_instance an instance of my_interface? ", my_interface.check(my_instance));
+stdlib.io.println("Is my_instance an instance of my_interface_2? ", my_interface_2.check(my_instance));
+my_instance.method1();
+stdlib.io.println("Calling method2 with 'Hello':");
+my_instance.method2("Hello");
+stdlib.io.println("Calling method3:");
+my_instance.method3();
+
+instance_guard_test := (x => my_interface.check) -> {
+    stdlib.io.println("Instance guard test passed with:", x.data);
+};
+
+instance_guard_test(my_instance); // This should work
+
+// instance_guard_test(my_instance_2); // This should fail, as my_instance_2 is not an instance of my_interface

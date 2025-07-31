@@ -1,12 +1,12 @@
 @required stdlib;
-request := stdlib.http.get(url => "https://www.baidu.com");
+request := stdlib.http.get("https://www.baidu.com");
 stdlib.io.println("======== HTTP请求测试 ========");
 
 result := mut undefined;
 f := () -> {
-    sync () -> {
+    (sync () -> {
         result = request();
-    }();
+    })();
 };
-async f();
-stdlib.io.println("请求结果:", result);
+(async f)();
+stdlib.io.println(stdlib.json.parse(result).body);

@@ -116,7 +116,7 @@ render_ascii_art := (text?, use_rainbow?) -> {
             char := text[char_index];
             char_upper := stdlib.string.uppercase(char);
             
-            if (keyof sync (() -> font_data.{char_upper})()) {
+            if (keyof (sync (() -> font_data.{char_upper}))()) {
                 char_data := font_data.{char_upper};
                 line := char_data[row];
                 

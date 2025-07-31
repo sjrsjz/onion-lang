@@ -1,16 +1,16 @@
 @required Modules;
-if (not keyof sync (() -> Modules.Option)()) {
+if (not keyof (sync (() -> Modules.Option))()) {
     // 定义临时的 Option 构造器和辅助函数
     _Option_Temp_Constructor := mut undefined;
-    _Some_Temp_Helper := (v?) -> _Option_Temp_Constructor(true : v);
-    _None_Temp_Helper := () -> _Option_Temp_Constructor(false : undefined);
+    _Some_Temp_Helper := (v?) -> _Option_Temp_Constructor.new(true : v);
+    _None_Temp_Helper := () -> _Option_Temp_Constructor.new(false : undefined);
 
     // 配置临时 Option 构造器
     _Option_Temp_Constructor = {
         @import "result.onion"; // 假设 result.onion 中的 Err 已通过其自身的缓存机制全局可用
         @import "prototype.onion";
         // Option 实例的接口定义
-        Option_Interface := #interface {
+        Option_Interface := interface {
             is_some => () -> keyof keyof self,
             is_none => () -> not keyof keyof self,
             map => (f?) -> {
@@ -57,7 +57,7 @@ if (not keyof sync (() -> Modules.Option)()) {
             },
             or_else => (f?) -> {
                 if (self.is_some()) {
-                    return _Option_Temp_Constructor(keyof self);
+                    return _Option_Temp_Constructor.new(keyof self);
                 } else {
                     return f();
                 }
@@ -74,8 +74,5 @@ if (not keyof sync (() -> Modules.Option)()) {
 Option := Modules.Option;
 
 // 使用缓存的全局 Option 构造器重新定义全局 Some 和 None 辅助函数
-Some := (v?) -> Option(true : v);
-None := () -> Option(false : undefined);
-
-// OptionType 定义使用全局 Option
-OptionType := (x?) -> (valueof x) is Option.parameter.interface;
+Some := (v?) -> Option.new(true : v);
+None := () -> Option.new(false : undefined);

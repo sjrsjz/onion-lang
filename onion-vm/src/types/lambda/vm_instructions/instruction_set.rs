@@ -6,7 +6,7 @@ use super::ir::DebugInfo;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum VMInstruction {
-    // 栈操作 (0-9)
+    // ===== 栈操作 (0-9) =====
     LoadNull = 0,
     LoadInt32 = 1,
     LoadInt64 = 2,
@@ -18,14 +18,14 @@ pub enum VMInstruction {
     LoadLambda = 8,
     LoadUndefined = 9, // 未定义值
 
-    // 数据结构构建 (10-19)
+    // ===== 数据结构构建 (10-19) =====
     BuildTuple = 10,
     BuildKeyValue = 11,
     BuildNamed = 12,
     BuildRange = 13,
     BuildSet = 14,
 
-    // 二元操作符 (20-39)
+    // ===== 二元操作符 (20-39) =====
     BinaryAdd = 20,    // +
     BinarySub = 21,    // -
     BinaryMul = 22,    // *
@@ -47,12 +47,12 @@ pub enum VMInstruction {
     BinaryIs = 38,     // is
     MapTo = 39,        // map to
 
-    // 一元操作 (40-49)
+    // ===== 一元操作 (40-49) =====
     UnaryBitNot = 40, // ~
     UnaryAbs = 41,    // abs
     UnaryNeg = 42,    // -
 
-    // 变量与引用 (50-69)
+    // ===== 变量与引用 (50-69) =====
     StoreVar = 50,   // 存储变量
     LoadVar = 51,    // 加载变量
     SetValue = 52,   // 设置值
@@ -60,38 +60,37 @@ pub enum VMInstruction {
     KeyOf = 55,      // 获取键
     ValueOf = 56,    // 获取值
     TypeOf = 57,     // 获取类型
-    Mut = 60,        // 创建引用
-    Const = 61,      // 解引用
-    Swap = 62,       // 交换栈两个值
-    LengthOf = 63,   // 获取对象长度
-    Launch = 65,     // 启动线程
-    Spawn = 66,      // 启动任务
-    MakeAsync = 67,  // 异步池化调度
-    MakeSync = 68,   // 同步池化调度
-    MakeAtomic = 69, // 将Lambda转换为标准调度
+    Mut = 58,        // 创建引用
+    Const = 59,      // 解引用
+    Swap = 60,       // 交换栈两个值
+    LengthOf = 61,   // 获取对象长度
+    Launch = 62,     // 启动线程
+    Spawn = 63,      // 启动任务
+    MakeAsync = 64,  // 异步池化调度
+    MakeSync = 65,   // 同步池化调度
+    MakeAtomic = 66, // 将Lambda转换为标准调度
 
-    // 控制流 (70-79)
+    // ===== 控制流 (70-79) =====
     Apply = 70,       // 函数应用/索引应用
-    Return = 72,      // 返回
-    Jump = 73,        // 跳转
-    JumpIfFalse = 74, // 条件跳转
-    Raise = 76,       // 抛出自定义值
+    Return = 71,      // 返回
+    Jump = 72,        // 跳转
+    JumpIfFalse = 73, // 条件跳转
+    Raise = 74,       // 抛出自定义值
 
-    // 帧操作 (80-89)
+    // ===== 帧操作 (80-89) =====
     NewFrame = 80,   // 新建帧
     PopFrame = 81,   // 弹出帧
     ResetStack = 82, // 重置栈
-    Pop = 83,
+    Pop = 83,        // 弹出栈顶
 
-    // 模块操作 (90-99)
+    // ===== 模块操作 (90-99) =====
     Import = 90, // 导入模块
 
-    // 特殊操作 (100-109)
+    // ===== 特殊操作 (100-109) =====
     ForkInstruction = 100, // 复制当前函数指令集
-    BindSelf = 101,        // 绑定self
-    Assert = 102,          // 断言
+    Assert = 101,          // 断言
 
-    // 其他
+    // ===== 其他 =====
     Nop = 255, // 空操作
 }
 
@@ -99,6 +98,7 @@ impl VMInstruction {
     /// 根据操作码获取指令
     pub fn from_opcode(opcode: u8) -> Option<Self> {
         match opcode {
+            // ===== 栈操作 (0-9) =====
             0 => Some(Self::LoadNull),
             1 => Some(Self::LoadInt32),
             2 => Some(Self::LoadInt64),
@@ -108,13 +108,16 @@ impl VMInstruction {
             6 => Some(Self::LoadBytes),
             7 => Some(Self::LoadBool),
             8 => Some(Self::LoadLambda),
+            9 => Some(Self::LoadUndefined),
 
+            // ===== 数据结构构建 (10-19) =====
             10 => Some(Self::BuildTuple),
             11 => Some(Self::BuildKeyValue),
             12 => Some(Self::BuildNamed),
             13 => Some(Self::BuildRange),
             14 => Some(Self::BuildSet),
 
+            // ===== 二元操作符 (20-39) =====
             20 => Some(Self::BinaryAdd),
             21 => Some(Self::BinarySub),
             22 => Some(Self::BinaryMul),
@@ -136,10 +139,12 @@ impl VMInstruction {
             38 => Some(Self::BinaryIs),
             39 => Some(Self::MapTo),
 
+            // ===== 一元操作 (40-49) =====
             40 => Some(Self::UnaryBitNot),
             41 => Some(Self::UnaryAbs),
             42 => Some(Self::UnaryNeg),
 
+            // ===== 变量与引用 (50-69) =====
             50 => Some(Self::StoreVar),
             51 => Some(Self::LoadVar),
             52 => Some(Self::SetValue),
@@ -147,32 +152,37 @@ impl VMInstruction {
             55 => Some(Self::KeyOf),
             56 => Some(Self::ValueOf),
             57 => Some(Self::TypeOf),
-            60 => Some(Self::Mut),
-            61 => Some(Self::Const),
-            62 => Some(Self::Swap),
-            63 => Some(Self::LengthOf),
-            65 => Some(Self::Launch),
-            66 => Some(Self::Spawn),
-            67 => Some(Self::MakeAsync),
-            68 => Some(Self::MakeSync),
-            69 => Some(Self::MakeAtomic),
+            58 => Some(Self::Mut),
+            59 => Some(Self::Const),
+            60 => Some(Self::Swap),
+            61 => Some(Self::LengthOf),
+            62 => Some(Self::Launch),
+            63 => Some(Self::Spawn),
+            64 => Some(Self::MakeAsync),
+            65 => Some(Self::MakeSync),
+            66 => Some(Self::MakeAtomic),
 
+            // ===== 控制流 (70-79) =====
             70 => Some(Self::Apply),
-            72 => Some(Self::Return),
-            73 => Some(Self::Jump),
-            74 => Some(Self::JumpIfFalse),
-            76 => Some(Self::Raise),
+            71 => Some(Self::Return),
+            72 => Some(Self::Jump),
+            73 => Some(Self::JumpIfFalse),
+            74 => Some(Self::Raise),
 
+            // ===== 帧操作 (80-89) =====
             80 => Some(Self::NewFrame),
             81 => Some(Self::PopFrame),
             82 => Some(Self::ResetStack),
             83 => Some(Self::Pop),
 
+            // ===== 模块操作 (90-99) =====
             90 => Some(Self::Import),
 
+            // ===== 特殊操作 (100-109) =====
             100 => Some(Self::ForkInstruction),
-            101 => Some(Self::BindSelf),
-            102 => Some(Self::Assert),
+            101 => Some(Self::Assert),
+
+            // ===== 其他 =====
             255 => Some(Self::Nop),
 
             _ => None,

@@ -1,4 +1,4 @@
 @required stdlib;
-result := stdlib.http.get(url => "http://example.com")();
+result := stdlib.http.get("http://example.com")();
 json := stdlib.json.parse(result);
 stdlib.io.println(json.body)

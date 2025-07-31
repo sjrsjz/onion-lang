@@ -5,7 +5,7 @@ Modules := mut ();
 A := Ok("A");
 @import "std/result.onion"; // 理应不会重复导入，因为已经在 Modules 中定义了 Result
 
-assert isinstance(A, Modules.Result);
+assert Modules.Result.check(A);
 
 @import "std/option.onion";
 stdlib.io.println(Ok("A").is_ok());

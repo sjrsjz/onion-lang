@@ -77,7 +77,6 @@ pub enum OnionObject {
 
     Tuple(Arc<OnionTuple>),
     Pair(Arc<OnionPair>),
-    Named(Arc<OnionNamed>),
     LazySet(Arc<OnionLazySet>),
     Lambda(Arc<OnionLambdaDefinition>),
     Custom(Arc<dyn OnionObjectExt>),
@@ -98,8 +97,7 @@ pub enum OnionObject {
 - `Null`: 空类型，表示无值。语法：`null`
 - `Undefined`: 未定义类型，表示一个未初始化的值，可以包含一个可选的错误信息。语法：`undefined`
 - `Tuple`: 元组类型，包含多个值的有序集合。语法：`<atom>, <atom>, ...`，例如 `1, "hello", true`
-- `Pair`: 键值对类型，包含一个键和一个值。语法：`<key-atom> : <value-atom>`，例如 `name : "Alice"`
-- `Named`: 命名键值对类型，包含一个键和一个值。语法：`<key-atom> => <value-atom>`，例如 `name => "Alice"`。其中 `<key-atom>` 如果是变量名则默认解析成字符串（即使没有引号），也可以用 `{}` 阻止字符串化
+- `Pair`: 键值对类型，包含一个键和一个值。语法：`<key-atom> : <value-atom>` 或 `<key-atom> => <value-atom>`，例如 `"name" : "Alice"` `name => "Alice"`，注意 `=>` 会自动将键为变量名的转换为字符串
 - `LazySet`: 懒加载集合类型。语法：`<container-atom> | <filter-atom>`，例如 `numbers | x > 5`
 - `InstructionPackage`: 指令包类型，包含一组指令和相关数据。语法：`import "path/to/package"`
 - `Lambda`: Lambda 函数类型，表示一个匿名函数。语法：
@@ -520,7 +518,7 @@ x := (1, 2, "hello", true); // 包含整数、字符串和布尔值
 
 == 键值对
 键值对是 Onion 语言中的一种数据结构，用于存储关联的键和值。它们可以用于表示原型对象、字典等数据结构。
-键值对可以使用 `:` 来定义，键可以是任意原子表达式，值可以是任意原子表达式组。
+键值对可以使用 `:` 或 `=>` 来定义，键可以是任意原子表达式，值可以是任意原子表达式组。
 
 ```onion
 // 定义一个键值对
@@ -580,172 +578,10 @@ obj := {
 greeting := obj.greet(); // 结果: "Hello, Alice"
 ```
 
-== 命名键值对
-
-命名键值对是 Onion 语言中的一种特殊的键值对，用于表示具有名称的键值对。它们可以用于表示对象、结构体等数据结构。
-命名键值对使用 `=>` 来定义，键可以是任意原子表达式，值可以是任意原子表达式组。
-
-与键值对不同的是，命名键值对默认将键转换为字符串，除非使用 `{}` 阻止这种转换。
-```onion
-// 定义一个命名键值对
-named_pair := name => "Alice"; // 键是字符串，值是字符串
-```
-
-其余大部分行为与键值对相同。不同之处如下
-- 命名键值对在实参中使用时，当函数被调用时会绑定键为字符串的命名键值对的值到函数作用域上
-
-Onion 提供两种语法糖：`x?` 表示 `x => undefined`，`x!` 表示 `x => x`。这两种语法糖可以用于简化命名键值对的定义。
+Onion 提供两种语法糖：`x?` 表示 `x => true`，用于在函数定义时表示永真约束。
 
 = 函数定义与调用
 
-== 函数参数绑定机制
-
-Onion 语言支持灵活的函数参数绑定机制，允许混合使用位置参数、命名参数和默认参数。
-
-=== 函数定义语法
-
-函数使用 lambda 表达式定义，参数必须包含默认值：
-
-```onion
-// 基本函数定义
-greet := (name, age) -> {
-    "Hello, " + name + "! You are " + age + " years old."
-};
-
-// 带默认参数的函数定义
-create_user := (
-    name => "Anonymous",     // 默认值为 "Anonymous"
-    age => 0,               // 默认值为 0
-    email => undefined,     // 默认值为 undefined
-    active => true          // 默认值为 true
-) -> {
-    (
-        "name": name,
-        "age": age, 
-        "email": email,
-        "active": active
-    )
-};
-```
-
-=== 参数绑定规则
-
-函数调用时，参数绑定遵循以下优先级和规则：
-
-==== 1. 命名参数优先绑定
-
-命名参数（使用 `=>` 定义的参数）会优先匹配形参中相同名称的参数：
-
-```onion
-// 函数定义
-process := (mode => "default", input => undefined, debug => false) -> {
-    "Processing " + input + " in " + mode + " mode, debug: " + debug
-};
-
-// 调用时命名参数会精确匹配
-result := process(debug => true, mode => "advanced");
-// 绑定结果：
-// mode = "advanced" (命名参数覆盖默认值)
-// input = undefined (保持默认值) 
-// debug = true (命名参数覆盖默认值)
-```
-
-==== 2. 位置参数填充未赋值槽位
-
-非命名参数会按顺序填充尚未被命名参数占用的参数槽位：
-
-```onion
-// 函数定义
-format_data := (prefix => "Data", content, suffix => "End") -> {
-    prefix + ": " + content + " (" + suffix + ")"
-};
-
-// 混合调用
-result := format_data("my_content", suffix => "Done");
-// 绑定过程：
-// 1. suffix => "Done" 命名绑定到 suffix 参数
-// 2. "my_content" 位置绑定到第一个未赋值的参数 content
-// 最终结果：prefix="Data", content="my_content", suffix="Done"
-```
-
-==== 3. 复杂绑定示例
-
-```onion
-// 复杂函数定义
-complex_func := (
-    a => undefined,
-    b => undefined, 
-    mode => "normal",
-    verbose => false,
-    timeout => 5000
-) -> {
-    // 函数体
-};
-
-// 各种调用方式
-result1 := complex_func("data1", mode => "fast", "data2");
-// 绑定结果：
-// a = "data1" (位置参数)
-// b = "data2" (位置参数，填充下一个未赋值槽位)
-// mode = "fast" (命名参数覆盖)
-// verbose = false (默认值)
-// timeout = 5000 (默认值)
-
-result2 := complex_func(timeout => 3000, "input", verbose => true);
-// 绑定结果：
-// a = "input" (位置参数，填充第一个未赋值槽位)
-// b = undefined (默认值)
-// mode = "normal" (默认值)
-// verbose = true (命名参数覆盖)
-// timeout = 3000 (命名参数覆盖)
-```
-
-=== 语法糖支持
-
-命名键值对支持两种语法糖，简化函数定义：
-
-```onion
-// 语法糖定义
-// x? 等价于 x => undefined
-// x! 等价于 x => x
-
-// 函数定义使用语法糖
-configure := (debug?, verbose!, timeout => 5000) -> {
-    // debug? 等价于 debug => undefined
-    // verbose! 等价于 verbose => verbose 
-    // 函数体...
-};
-
-// 调用时的语法糖
-debug_mode := true;
-verbose_mode := false;
-
-result := configure(debug, verbose_mode, timeout => 3000);
-// 等价于：
-// result := configure(debug => undefined, verbose => verbose_mode, timeout => 3000);
-```
-
-=== 参数绑定算法
-
-函数调用时的参数绑定按以下步骤执行：
-
-1. *初始化*：复制形参列表作为参数槽位，标记所有槽位为"未赋值"
-2. *命名参数绑定*：遍历实参中的命名参数，找到匹配的形参名称并赋值，标记对应槽位为"已赋值"
-3. *位置参数绑定*：遍历实参中的非命名参数，按顺序填充第一个"未赋值"的槽位
-4. *默认值填充*：所有仍为"未赋值"的槽位使用形参中定义的默认值
-
-```onion
-// 绑定算法示例
-example := (x => 1, y => 2, z => 3) -> x + y + z;
-
-// 调用：example(y => 20, 100, z => 30)
-// 步骤1：槽位 [x=>1(未赋值), y=>2(未赋值), z=>3(未赋值)]
-// 步骤2：处理 y=>20，槽位 [x=>1(未赋值), y=>20(已赋值), z=>3(未赋值)]
-//        处理 z=>30，槽位 [x=>1(未赋值), y=>20(已赋值), z=>30(已赋值)]
-// 步骤3：处理 100，填充第一个未赋值槽位 x，槽位 [x=>100(已赋值), y=>20(已赋值), z=>30(已赋值)]
-// 步骤4：无未赋值槽位，跳过
-// 最终：x=100, y=20, z=30，返回 150
-```
 == 自动捕获
 Onion 语言会尝试将函数作用域内未定义但被引用的变量通过隐式参数定义的方式传递给函数。
 ```onion
@@ -756,7 +592,7 @@ foo := () -> {
 };
 
 // 上述函数定义等价如下定义
-foo := (x!) -> {
+foo := () -> &x {
     x + 1
 };
 ```
@@ -771,13 +607,10 @@ Onion 语言中的 `self` 变量的值由成员访问操作符 `.` 绑定到当�
 可以通过 `self` 来访问当前对象的属性或方法。
 
 == parameter 属性
-Onion 语言中的 `parameter` 属性用于获取函数形参元组
-
-== capture 属性
-Onion 语言中的 `capture` 属性用于获取函数捕获的值（不是参数，是由 & 绑定的值）
+Onion 语言中的 `$parameter` 属性用于获取函数形参元组
 
 == signature 属性
-Onion 语言中的 `signature` 属性用于获取函数的签名字符串
+Onion 语言中的 `$signature` 属性用于获取函数的签名字符串
 
-== self 属性
-Onion 语言中的 `self` 属性用于获取函数调用时的调用者对象
+== 被捕获的变量
+当键不为 `$parameter`、`$signature` 时，`f.key` 会返回函数 `f` 中被捕获的名称为 `key` 的变量的值。

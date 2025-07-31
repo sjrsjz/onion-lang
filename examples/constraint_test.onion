@@ -10,15 +10,15 @@ print := (a => Union(Float, Integer), b => Union(Float, Integer)) -> {
 // Example usage
 print(3.14, 42); // Valid usage
 // print(3.14, 'not a number'); // Invalid usage, will raise an error
-// print(42, 3.14, 2); // Invalid usage, `stdlib` is required but not provided by function call, will raise an error
 
 DynamicCheck := (v?) -> {
-    return stdlib.io.input(hint => "Please enter `Hello`: ") == v;
+    return stdlib.io.input("Please enter `Hello`: ") == v;
 };
 
 // Example usage of DynamicCheck
 f := (v => DynamicCheck) -> {
     stdlib.io.println('DynamicCheck value:', v);
+    v
 };
 
 stdlib.io.println(try(() -> f("Hello")).unwrap_or("Failed to match DynamicCheck"));
@@ -33,7 +33,7 @@ stdlib.io.println(try(() -> foo(10)).unwrap_or("Failed to match Positive"));
 stdlib.io.println(try(() -> foo(-5)).unwrap_or("Failed to match Positive")); // Invalid usage, will raise an error
 
 
-interfaceA := #interface {
+interfaceA := interface {
     print => () -> {
         stdlib.io.println("Hello from interfaceA");
     },
@@ -45,7 +45,7 @@ interfaceA := #interface {
     }
 };
 
-interfaceB := #interface {
+interfaceB := interface {
     print => () -> {
         stdlib.io.println("Hello from interfaceB");
     },
@@ -57,7 +57,7 @@ interfaceB := #interface {
     }
 };
 
-instanceA := #interfaceA mut {
+instanceA := interfaceA.new {
     data => "This is instanceA",
 };
 
@@ -72,10 +72,10 @@ some_function_B := (obj => InstanceOf(interfaceB)) -> {
 
 instanceA.print();
 
-stdlib.io.println("Is instanceA an instance of interfaceA? ", isinstance(instanceA, interfaceA));
+stdlib.io.println("Is instanceA an instance of interfaceA? ", interfaceA.check(instanceA));
 some_function_A(instanceA); // Valid usage
 
-stdlib.io.println("Is instanceA an instance of interfaceB? ", isinstance(instanceA, interfaceB));
+stdlib.io.println("Is instanceA an instance of interfaceB? ", interfaceB.check(instanceA));
 // This will raise an error because instanceA does not implement interfaceB
 stdlib.io.println(
     try(() -> some_function_B(instanceA)).unwrap_or("Failed to match InstanceOf(interfaceA)")

@@ -12,10 +12,13 @@ use onion_frontend::{
     utils::cycle_detector::{self, CycleDetector},
 };
 use onion_vm::{
+    GC,
     lambda::{
         runnable::{Runnable, RuntimeError, StepResult},
         scheduler::scheduler::Scheduler,
-    }, onion_tuple, types::{
+    },
+    onion_tuple,
+    types::{
         lambda::{
             definition::{LambdaBody, LambdaType, OnionLambdaDefinition},
             launcher::OnionLambdaRunnableLauncher,
@@ -25,7 +28,8 @@ use onion_vm::{
         },
         object::OnionObject,
         tuple::OnionTuple,
-    }, unwrap_object, GC
+    },
+    unwrap_object,
 };
 
 mod lsp;
@@ -140,7 +144,7 @@ fn cmd_compile(file: PathBuf, output: Option<PathBuf>, bytecode: bool) -> Result
     if bytecode {
         // Compile to IR first, then to bytecode
         let ir_package = build_code(&code, visit_result.get_detector_mut(), &mut dir_stack)
-            .map_err(|e| format!("Compilation failed: {}", e))?;
+            .map_err(|e| format!("Compilation failed\n{}", e))?;
         let bytecode_package = compile_to_bytecode(&ir_package)
             .map_err(|e| format!("Bytecode compilation failed: {}", e))?;
         // Restore working directory before writing output
@@ -174,7 +178,7 @@ fn cmd_compile(file: PathBuf, output: Option<PathBuf>, bytecode: bool) -> Result
     } else {
         // Compile to IR
         let ir_package = build_code(&code, visit_result.get_detector_mut(), &mut dir_stack)
-            .map_err(|e| format!("Compilation failed: {}", e))?;
+            .map_err(|e| format!("Compilation failed\n{}", e))?;
 
         // Restore working directory before writing output
         std::env::set_current_dir(&current_dir)
@@ -231,7 +235,7 @@ fn cmd_display_ir(file: PathBuf) -> Result<(), String> {
         )
         .map_err(|e| format!("Cycle detection failed: {}", e))?;
     let ir_package = build_code(&code, visit_result.get_detector_mut(), &mut dir_stack)
-        .map_err(|e| format!("Compilation failed: {}", e))?;
+        .map_err(|e| format!("Compilation failed\n{}", e))?;
 
     println!("\n{}", "IR Code:".cyan().bold());
     println!("{}", format!("{:#?}", ir_package).dimmed());
@@ -318,7 +322,7 @@ fn execute_code(
     dir_stack: &mut onion_frontend::dir_stack::DirectoryStack,
 ) -> Result<(), String> {
     let ir_package = build_code(code, cycle_detector, dir_stack)
-        .map_err(|e| format!("Compilation failed: {}", e))?;
+        .map_err(|e| format!("Compilation failed\n{}", e))?;
 
     execute_ir_package(&ir_package)
 }
@@ -350,7 +354,7 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
         LambdaBody::Instruction(Arc::new(vm_instructions_package.clone())),
         &capture,
         "__main__".to_string(),
-        LambdaType::Normal
+        LambdaType::Normal,
     );
 
     let args = OnionTuple::new_static(vec![]);
@@ -424,11 +428,15 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
 
                     return Err("Execution failed with a returned error value.".to_string());
                 }
-                let is_undefined = result
+                let do_not_print = result
                     .get_value()
-                    .with_data(|data| Ok(unwrap_object!(data, OnionObject::Undefined).is_ok()))
+                    .with_data(|data| match data {
+                        OnionObject::Undefined(None) => Ok(true),
+                        OnionObject::Tuple(tuple) => Ok(tuple.get_elements().is_empty()),
+                        _ => Ok(false),
+                    })
                     .map_err(|e| format!("Failed to check if result is undefined: {:?}", e))?;
-                if is_undefined {
+                if do_not_print {
                     return Ok(());
                 }
                 // Print result and exit

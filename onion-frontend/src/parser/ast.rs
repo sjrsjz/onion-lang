@@ -1,7 +1,7 @@
 use super::diagnostics::find_line_and_col_from_source;
 use crate::parser::lexer::{Token, TokenType};
 use colored::*;
-use std::{fmt::Debug, vec};
+use std::{collections::HashSet, fmt::Debug, vec};
 use unicode_width::UnicodeWidthStr;
 
 #[derive(Debug)]
@@ -315,23 +315,23 @@ fn gather(tokens: GatheredTokens<'_>) -> Result<Vec<GatheredTokens<'_>>, ParserE
 pub enum ASTNodeType {
     Null, // Null
     Undefined,
-    String(String),               // String
-    Boolean(bool),                // Boolean
-    Number(String),               // Number (Integer, Float)
-    Base64(String),               // Base64
-    Variable(String),             // Variable
-    Let(String),                  // x := expression
-    Body,                         // {...}
-    Assign,                       // x = expression
-    LambdaDef(bool, Vec<String>), // tuple -> body or tuple -> dyn expression
-    Expressions,                  // expression1; expression2; ...
-    Apply,                        // x y
-    Operation(ASTNodeOperation),  // x + y, x - y, x * y, x / y ...
-    Tuple,                        // x, y, z, ...
-    AssumeTuple,                  // ...value
-    KeyValue,                     // x: y
-    GetAttr,                      // x.y
-    Return,                       // return expression
+    String(String),                   // String
+    Boolean(bool),                    // Boolean
+    Number(String),                   // Number (Integer, Float)
+    Base64(String),                   // Base64
+    Variable(String),                 // Variable
+    Let(String),                      // x := expression
+    Frame,                            // {...}
+    Assign,                           // x = expression
+    LambdaDef(bool, HashSet<String>), // tuple -> body or tuple -> dyn expression
+    Expressions,                      // expression1; expression2; ...
+    Apply,                            // x y
+    Operation(ASTNodeOperation),      // x + y, x - y, x * y, x / y ...
+    Tuple,                            // x, y, z, ...
+    AssumeTuple,                      // ...value
+    KeyValue,                         // x: y
+    GetAttr,                          // x.y
+    Return,                           // return expression
     If,    // if expression truecondition || if expression truecondition else falsecondition
     While, // while expression body
     Modifier(ASTNodeModifier), // modifier expression
@@ -462,6 +462,7 @@ impl NodeMatcher {
         self.matchers.push(matcher);
     }
 
+    #[stacksafe::stacksafe]
     fn match_node(
         &self,
         tokens: &Vec<GatheredTokens>,
@@ -478,7 +479,7 @@ impl NodeMatcher {
         let mut current_pos = current;
         while current_pos < tokens.len() {
             let remaining_tokens = &tokens[current_pos..].to_vec();
-            let (node, next_offset) = self.try_match_node(&remaining_tokens, 0)?;
+            let (node, next_offset) = self.match_longest_possible(&remaining_tokens, 0)?;
             if node.is_none() {
                 break;
             }
@@ -504,6 +505,9 @@ impl NodeMatcher {
             offset,
         ))
     }
+
+    #[allow(dead_code)]
+    #[deprecated]
     fn try_match_node(
         &self,
         tokens: &Vec<GatheredTokens>,
@@ -571,6 +575,47 @@ impl NodeMatcher {
         // 返回最佳匹配结果
         match best_match {
             Some((node, offset)) => Ok((Some(node), offset)),
+            None => Ok((None, 0)),
+        }
+    }
+
+    pub fn match_longest_possible(
+        &self,
+        tokens: &Vec<GatheredTokens>, // 直接使用切片，避免拥有权和拷贝
+        current: usize,
+    ) -> Result<(Option<ASTNode>, usize), ParserError> {
+        // 如果当前位置已经超出了 token 序列的边界，说明没有东西可以匹配了。
+        if current >= tokens.len() {
+            return Ok((None, 0));
+        }
+
+        let mut best_match: Option<(ASTNode, usize)> = None;
+        let remaining_tokens = &tokens[current..].to_vec();
+
+        // 遍历所有注册的语法规则匹配器
+        for matcher in &self.matchers {
+            match matcher(remaining_tokens, 0) {
+                Ok((Some(node), consumed_count)) => {
+                    // 更新最佳匹配
+                    best_match = Some((node, consumed_count));
+                    break;
+                }
+                Ok((None, _)) => {
+                    // 匹配器明确表示不匹配，继续尝试下一个匹配器
+                    continue;
+                }
+                Err(e) => {
+                    // 如果一个匹配器内部出错，可以选择立即返回错误，或者忽略并尝试下一个
+                    // 这里我们选择立即返回，因为这通常意味着一个严重的、意外的问题
+                    return Err(e);
+                }
+            }
+        }
+
+        // 返回找到的最佳匹配
+        // 如果没有任何匹配器成功，best_match 会是 None，函数会返回 Ok((None, 0))
+        match best_match {
+            Some((node, consumed)) => Ok((Some(node), consumed)),
             None => Ok((None, 0)),
         }
     }
@@ -2295,6 +2340,58 @@ fn match_lambda_def(
     }
 
     let mut body_start_index = current + 2; // Index after params ->
+    let mut capture_vars = HashSet::new();
+    if is_symbol(&tokens[body_start_index], "&") {
+        // If there's an '&' symbol, it indicates a capture
+        body_start_index += 1; // Skip the '&'
+        if body_start_index >= tokens.len() {
+            return Err(ParserError::MissingStructure(
+                tokens.last().unwrap().last().unwrap().clone(), // Point to the last token
+                "Lambda capture".to_string(),
+            ));
+        }
+        // then we expect a capture name or tuple
+        let capture = gather(tokens[body_start_index])?;
+        let (capture_node, capture_offset) = match_all(&capture, 0)?;
+        if capture_node.is_none() {
+            return Err(ParserError::MissingStructure(
+                tokens[body_start_index].first().unwrap().clone(), // Point to the capture token
+                "Lambda capture".to_string(),
+            ));
+        }
+        if capture_offset != capture.len() {
+            return Err(ParserError::NotFullyMatched(
+                capture.first().unwrap().first().unwrap().clone(),
+                capture.last().unwrap().last().unwrap().clone(),
+            ));
+        }
+        let capture = capture_node.unwrap();
+        match capture.node_type {
+            ASTNodeType::String(v) | ASTNodeType::Variable(v) => {
+                // Valid capture variable
+                capture_vars.insert(v);
+            }
+            ASTNodeType::Tuple => {
+                for child in &capture.children {
+                    if let ASTNodeType::String(v) | ASTNodeType::Variable(v) = &child.node_type {
+                        capture_vars.insert(v.clone());
+                    } else {
+                        return Err(ParserError::ErrorStructure(
+                            tokens[body_start_index].first().unwrap().clone(),
+                            "Capture must be a variable or tuple of variables".to_string(),
+                        ));
+                    }
+                }
+            }
+            _ => {
+                return Err(ParserError::ErrorStructure(
+                    tokens[body_start_index].first().unwrap().clone(),
+                    "Capture must be a variable or tuple of variables".to_string(),
+                ));
+            }
+        }
+        body_start_index += 1;
+    }
 
     // Check for 'dyn' keyword
     let is_dyn = body_start_index < tokens.len() && is_identifier(&tokens[body_start_index], "dyn");
@@ -2335,7 +2432,7 @@ fn match_lambda_def(
     Ok((
         Some(ASTNode::new(
             // Use the new ASTNodeType variant
-            ASTNodeType::LambdaDef(is_dyn, vec![]),
+            ASTNodeType::LambdaDef(is_dyn, capture_vars),
             tokens[current].first().cloned(), // Start of parameters
             tokens[current + total_offset - 1].last().cloned(), // End of body
             Some(vec![left, right]),
@@ -2904,7 +3001,7 @@ fn match_variable(
 
         return Ok((
             Some(ASTNode::new(
-                ASTNodeType::Body,
+                ASTNodeType::Frame,
                 tokens[current].first().cloned(),
                 tokens[current].last().cloned(),
                 body.map(|b| vec![b]),

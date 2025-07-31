@@ -276,14 +276,11 @@ impl LspServer {
             "in",
             "async",
             "await",
-            "emit",
-            "deepcopy",
             "import",
             "keyof",
             "valueof",
             "typeof",
             "dyn",
-            "copy",
             "mut",
             "const",
             "assert",
@@ -292,9 +289,11 @@ impl LspServer {
             "arguments",
             "is",
             "sync",
+            "atomic",
             "launch",
-            "share",
-            "spawn"
+            "spawn",
+            "self",
+            "this"
         ];
         for keyword in keywords {
             items.push(CompletionItem {

@@ -7,7 +7,7 @@ stdlib.io.println("======== JSON 模块测试开始 ========");
 stdlib.io.println("测试 1: JSON 解析");
 json_string := "{\"name\": \"Alice\", \"age\": 30, \"active\": true}";
 stdlib.io.println("原始 JSON:", json_string);
-parsed := stdlib.json.parse(json_string => json_string);
+parsed := stdlib.json.parse(json_string);
 stdlib.io.println("解析结果:", parsed);
 stdlib.io.println();
 
@@ -15,13 +15,13 @@ stdlib.io.println();
 stdlib.io.println("测试 2: 对象序列化");
 test_obj := {"name": "Bob", "score": 95.5, "passed": true};
 stdlib.io.println("原始对象:", test_obj);
-json_str := stdlib.json.stringify(object => test_obj);
+json_str := stdlib.json.stringify(test_obj);
 stdlib.io.println("序列化结果:", json_str);
 stdlib.io.println();
 
 // 测试 3: 格式化序列化
 stdlib.io.println("测试 3: 格式化序列化");
-pretty_json := stdlib.json.stringify_pretty(object => test_obj);
+pretty_json := stdlib.json.stringify_pretty(test_obj);
 stdlib.io.println("格式化结果:");
 stdlib.io.println(pretty_json);
 stdlib.io.println();
@@ -30,7 +30,7 @@ stdlib.io.println();
 stdlib.io.println("测试 4: 数组处理");
 test_array := [1, "hello", true, null];
 stdlib.io.println("原始数组:", test_array);
-array_json := stdlib.json.stringify(object => test_array);
+array_json := stdlib.json.stringify(test_array);
 stdlib.io.println("数组 JSON:", array_json);
 stdlib.io.println();
 
@@ -38,9 +38,9 @@ stdlib.io.println();
 stdlib.io.println("测试 5: 往返转换");
 original := "{\"temperature\": 23.5, \"humidity\": 60}";
 stdlib.io.println("原始:", original);
-parsed_again := stdlib.json.parse(json_string => original);
+parsed_again := stdlib.json.parse(original);
 stdlib.io.println("解析后:", parsed_again);
-stringified_again := stdlib.json.stringify(object => parsed_again);
+stringified_again := stdlib.json.stringify(parsed_again);
 stdlib.io.println("重新序列化:", stringified_again);
 
 stdlib.io.println("======== JSON 模块测试完成 ========");

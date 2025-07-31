@@ -246,11 +246,6 @@ impl IRTranslator {
                             .get_opcode(),
                     );
                 }
-                IR::BindSelf => {
-                    self.code.push(
-                        Opcode32::build_opcode(VMInstruction::BindSelf as u8, 0, 0, 0).get_opcode(),
-                    );
-                }
                 IR::BinaryOp(op) => {
                     let opcode = match op {
                         IROperation::Add => VMInstruction::BinaryAdd,

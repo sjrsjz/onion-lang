@@ -1020,9 +1020,8 @@ pub fn is_in(
                     let filter = filter.stabilize();
                     return Ok((None, filter));
                 };
-                let args = OnionTuple::new_static(vec![element]);
                 let filter = filter.stabilize();
-                return Ok((Some(args), filter));
+                return Ok((Some(element.clone()), filter));
             }
             _ => {
                 return Err(RuntimeError::DetailedError(
@@ -1439,7 +1438,7 @@ pub fn make_sync(
             ))
             .consume_and_stabilize()),
             _ => Err(RuntimeError::DetailedError(
-                format!("make_async requires a Lambda object, but found {}", value).into(),
+                format!("make_sync requires a Lambda object, but found {}", value).into(),
             )),
         }
     }));
@@ -1464,7 +1463,7 @@ pub fn make_atomic(
             ))
             .consume_and_stabilize()),
             _ => Err(RuntimeError::DetailedError(
-                format!("make_async requires a Lambda object, but found {}", value).into(),
+                format!("make_atomic requires a Lambda object, but found {}", value).into(),
             )),
         }
     }));
