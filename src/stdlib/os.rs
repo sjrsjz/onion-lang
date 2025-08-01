@@ -1,18 +1,24 @@
 use indexmap::IndexMap;
 use onion_vm::{
-    lambda::runnable::RuntimeError, onion_tuple, types::{object::{OnionObject, OnionObjectCell, OnionStaticObject}, tuple::OnionTuple}, GC
+    GC,
+    lambda::runnable::RuntimeError,
+    onion_tuple,
+    types::{
+        object::{OnionObject, OnionObjectCell, OnionStaticObject},
+        tuple::OnionTuple,
+    },
+    utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
-use rustc_hash::FxHashMap;
 use std::{env, process::Command};
 
 // 引入所需的辅助函数
 use super::{build_dict, build_string_tuple, wrap_native_function};
 
 fn get_string_arg<'a>(
-    argument: &'a FxHashMap<String, OnionStaticObject>,
+    argument: &'a OnionFastMap<String, OnionStaticObject>,
     name: &str,
 ) -> Result<&'a str, RuntimeError> {
-    let obj = argument.get(name).ok_or_else(|| {
+    let obj = argument.get(&name.to_string()).ok_or_else(|| {
         RuntimeError::DetailedError(
             format!("Function requires a '{}' argument", name)
                 .to_string()
@@ -31,7 +37,7 @@ fn get_string_arg<'a>(
 
 /// 执行系统命令
 fn system(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let cmd_str = get_string_arg(argument, "command")?;
@@ -91,7 +97,7 @@ fn system(
 
 /// 执行命令并返回退出码
 fn system_code(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let cmd_str = get_string_arg(argument, "command")?;
@@ -114,7 +120,7 @@ fn system_code(
 
 /// 改变当前工作目录
 fn chdir(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let path_str = get_string_arg(argument, "path")?;
@@ -128,7 +134,7 @@ fn chdir(
 
 /// 获取当前用户名
 fn username(
-    _argument: &FxHashMap<String, OnionStaticObject>, // No arguments needed
+    _argument: &OnionFastMap<String, OnionStaticObject>, // No arguments needed
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     match env::var("USERNAME").or_else(|_| env::var("USER")) {
@@ -139,7 +145,7 @@ fn username(
 
 /// 获取主目录路径
 fn home_dir(
-    _argument: &FxHashMap<String, OnionStaticObject>, // No arguments needed
+    _argument: &OnionFastMap<String, OnionStaticObject>, // No arguments needed
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     match dirs::home_dir() {
@@ -154,7 +160,7 @@ fn home_dir(
 
 /// 获取临时目录路径
 fn temp_dir(
-    _argument: &FxHashMap<String, OnionStaticObject>, // No arguments needed
+    _argument: &OnionFastMap<String, OnionStaticObject>, // No arguments needed
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let temp_path = env::temp_dir();
@@ -163,7 +169,7 @@ fn temp_dir(
 
 /// 检查文件或目录是否存在
 fn path_exists(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let path_str = get_string_arg(argument, "path")?;
@@ -173,7 +179,7 @@ fn path_exists(
 
 /// 检查路径是否是目录
 fn is_dir(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let path_str = get_string_arg(argument, "path")?;
@@ -183,7 +189,7 @@ fn is_dir(
 
 /// 检查路径是否是文件
 fn is_file(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let path_str = get_string_arg(argument, "path")?;
@@ -193,7 +199,7 @@ fn is_file(
 
 /// 连接路径
 fn path_join(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let base_str = get_string_arg(argument, "base")?;
@@ -214,8 +220,9 @@ pub fn build_module() -> OnionStaticObject {
         "system".to_string(),
         wrap_native_function(
             &command_arg,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "os::system".to_string(),
+            OnionKeyPool::create(vec!["command".to_string()]),
             &system,
         ),
     );
@@ -223,8 +230,9 @@ pub fn build_module() -> OnionStaticObject {
         "system_code".to_string(),
         wrap_native_function(
             &command_arg,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "os::system_code".to_string(),
+            OnionKeyPool::create(vec!["command".to_string()]),
             &system_code,
         ),
     );
@@ -232,8 +240,9 @@ pub fn build_module() -> OnionStaticObject {
         "chdir".to_string(),
         wrap_native_function(
             &path_arg,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "os::chdir".to_string(),
+            OnionKeyPool::create(vec!["path".to_string()]),
             &chdir,
         ),
     );
@@ -241,8 +250,9 @@ pub fn build_module() -> OnionStaticObject {
         "username".to_string(),
         wrap_native_function(
             &no_args,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "os::username".to_string(),
+            OnionKeyPool::create(vec![]),
             &username,
         ),
     );
@@ -250,8 +260,9 @@ pub fn build_module() -> OnionStaticObject {
         "home_dir".to_string(),
         wrap_native_function(
             &no_args,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "os::home_dir".to_string(),
+            OnionKeyPool::create(vec![]),
             &home_dir,
         ),
     );
@@ -259,8 +270,9 @@ pub fn build_module() -> OnionStaticObject {
         "temp_dir".to_string(),
         wrap_native_function(
             &no_args,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "os::temp_dir".to_string(),
+            OnionKeyPool::create(vec![]),
             &temp_dir,
         ),
     );
@@ -268,8 +280,9 @@ pub fn build_module() -> OnionStaticObject {
         "path_exists".to_string(),
         wrap_native_function(
             &path_arg,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "os::path_exists".to_string(),
+            OnionKeyPool::create(vec!["path".to_string()]),
             &path_exists,
         ),
     );
@@ -277,8 +290,9 @@ pub fn build_module() -> OnionStaticObject {
         "is_dir".to_string(),
         wrap_native_function(
             &path_arg,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "os::is_dir".to_string(),
+            OnionKeyPool::create(vec!["path".to_string()]),
             &is_dir,
         ),
     );
@@ -286,8 +300,9 @@ pub fn build_module() -> OnionStaticObject {
         "is_file".to_string(),
         wrap_native_function(
             &path_arg,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "os::is_file".to_string(),
+            OnionKeyPool::create(vec!["path".to_string()]),
             &is_file,
         ),
     );
@@ -295,8 +310,9 @@ pub fn build_module() -> OnionStaticObject {
         "path_join".to_string(),
         wrap_native_function(
             &build_string_tuple(&["base", "path"]),
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "os::path_join".to_string(),
+            OnionKeyPool::create(vec!["base".to_string(), "path".to_string()]),
             &path_join,
         ),
     );

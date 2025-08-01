@@ -29,7 +29,7 @@ pub struct IRTranslator {
     debug_infos: HashMap<usize, DebugInfo>,
 }
 
-pub const PRE_ALLOCATED_VARIABLE_STRINGS: [&str; 3] = ["this", "arguments", "self"];
+pub const PRE_ALLOCATED_VARIABLE_STRINGS: [&str; 2] = ["this", /*"arguments",*/ "self"];
 
 impl IRTranslator {
     pub fn new(ir_package: &IRPackage) -> Self {
@@ -507,8 +507,7 @@ impl IRTranslator {
                 }
                 IR::MakeSync => {
                     self.code.push(
-                        Opcode32::build_opcode(VMInstruction::MakeSync as u8, 0, 0, 0)
-                            .get_opcode(),
+                        Opcode32::build_opcode(VMInstruction::MakeSync as u8, 0, 0, 0).get_opcode(),
                     );
                 }
                 IR::MakeAtomic => {

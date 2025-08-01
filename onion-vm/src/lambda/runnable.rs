@@ -1,11 +1,10 @@
 use std::fmt::Display;
 
 use arc_gc::gc::GC;
-use rustc_hash::FxHashMap;
 
 use crate::{
     lambda::scheduler::async_scheduler::Task,
-    types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
+    types::object::{OnionObject, OnionObjectCell, OnionStaticObject}, utils::fastmap::OnionFastMap,
 };
 
 #[derive(Clone, Debug)]
@@ -83,8 +82,8 @@ pub trait Runnable: Send + Sync + 'static {
 
     fn capture(
         &mut self,
-        argument: &FxHashMap<String, OnionStaticObject>,
-        captured_vars: &FxHashMap<String, OnionObject>,
+        argument: &OnionFastMap<String, OnionStaticObject>,
+        captured_vars: &OnionFastMap<String, OnionObject>,
         gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         panic!("capture not implemented for this Runnable");

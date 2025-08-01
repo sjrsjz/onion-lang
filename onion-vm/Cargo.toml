@@ -27,7 +27,7 @@ base64 = "0.22"
 bincode = "1.3.3"
 rust-arc-gc = "0.2.1"
 rustc-hash = "2.1.1"
-serde = { workspace = true, optional = true }
+serde = { workspace = true, optional = true, features = ["rc"] }
 unicode-width = "0.2.1"
 
 [dev-dependencies]

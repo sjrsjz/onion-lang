@@ -1,4 +1,7 @@
+use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
+
+use crate::utils::fastmap::{OnionFastMap, OnionKeyPool};
 
 use super::ir::DebugInfo;
 
@@ -190,12 +193,13 @@ impl VMInstruction {
     }
 }
 
-use std::{collections::HashMap, fs};
+use std::{collections::HashMap, fs, sync::Arc};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VMInstructionPackage {
-    function_ips: HashMap<String, usize>, // 签名定位表
+    function_ips: FxHashMap<String, usize>, // 签名定位表
     code: Vec<u32>,
-    string_pool: Vec<String>,
+    string_pool: Arc<Vec<String>>,
+    string_to_index: Arc<FxHashMap<String, usize>>,
     index_pool: Vec<Vec<usize>>,
     bytes_pool: Vec<Vec<u8>>,
     debug_infos: HashMap<usize, DebugInfo>,
@@ -212,10 +216,16 @@ impl VMInstructionPackage {
         debug_infos: HashMap<usize, DebugInfo>,
         source: Option<String>,
     ) -> Self {
+        let string_to_index = string_pool
+            .iter()
+            .enumerate()
+            .map(|(index, string)| (string.clone(), index))
+            .collect();
         VMInstructionPackage {
-            function_ips,
+            function_ips: function_ips.into_iter().collect(),
             code,
-            string_pool,
+            string_pool: Arc::new(string_pool),
+            string_to_index: Arc::new(string_to_index),
             index_pool,
             bytes_pool,
             debug_infos,
@@ -223,7 +233,7 @@ impl VMInstructionPackage {
         }
     }
     #[inline(always)]
-    pub fn get_table(&self) -> &HashMap<String, usize> {
+    pub fn get_table(&self) -> &FxHashMap<String, usize> {
         &self.function_ips
     }
     #[inline(always)]
@@ -233,6 +243,10 @@ impl VMInstructionPackage {
     #[inline(always)]
     pub fn get_string_pool(&self) -> &Vec<String> {
         &self.string_pool
+    }
+    #[inline(always)]
+    pub fn get_string_index(&self, string: &str) -> Option<usize> {
+        self.string_to_index.get(string).copied()
     }
     #[inline(always)]
     pub fn get_index_pool(&self) -> &Vec<Vec<usize>> {
@@ -249,6 +263,18 @@ impl VMInstructionPackage {
     #[inline(always)]
     pub fn get_debug_info(&self) -> &HashMap<usize, DebugInfo> {
         &self.debug_infos
+    }
+    #[inline(always)]
+    pub fn create_fast_map<V>(&self) -> OnionFastMap<String, V> {
+        OnionFastMap::new(OnionKeyPool::new(
+            self.string_pool.clone(),
+            self.string_to_index.clone(),
+        ))
+    }
+
+    #[inline(always)]
+    pub fn create_key_pool(&self) -> OnionKeyPool<String> {
+        OnionKeyPool::new(self.string_pool.clone(), self.string_to_index.clone())
     }
 
     pub fn write_to_file(&self, path: &str) -> Result<(), std::io::Error> {

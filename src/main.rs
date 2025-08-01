@@ -1,6 +1,5 @@
 use clap::{Parser, Subcommand};
 use colored::*;
-use rustc_hash::FxHashMap;
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -30,6 +29,7 @@ use onion_vm::{
         tuple::OnionTuple,
     },
     unwrap_object,
+    utils::fastmap::OnionFastMap,
 };
 
 mod lsp;
@@ -346,8 +346,10 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
     }
     // Create standard library object
     let stdlib = stdlib::build_module();
-    let mut capture = FxHashMap::default();
-    capture.insert("stdlib".to_string(), stdlib.weak().clone());
+    let mut capture = OnionFastMap::new(vm_instructions_package.create_key_pool());
+
+    // 尝试将标准库对象添加到捕获变量中（当字符串池没有stdlib时会自动忽略）
+    capture.push(&"stdlib".to_string(), stdlib.weak().clone());
     // Create Lambda definition
     let lambda = OnionLambdaDefinition::new_static(
         &onion_tuple!(),
@@ -360,7 +362,7 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
     let args = OnionTuple::new_static(vec![]);
 
     let mut scheduler: Box<dyn Runnable> = Box::new(Scheduler::new(vec![Box::new(
-        OnionLambdaRunnableLauncher::new_static(&lambda, &args, |r| Ok(r))
+        OnionLambdaRunnableLauncher::new_static(lambda.weak(), args, |r| Ok(r))
             .map_err(|e| format!("Failed to create runnable Lambda: {:?}", e))?,
     )]));
     // Execute code

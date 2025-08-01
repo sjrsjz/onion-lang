@@ -6,19 +6,18 @@ use onion_vm::{
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         tuple::OnionTuple,
     },
+    utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
-use rustc_hash::FxHashMap;
 
 // 引入所需的辅助函数
 use crate::stdlib::{build_dict, build_string_tuple, wrap_native_function};
 
 // --- Helper functions for robust argument parsing ---
-
 fn get_bytes_arg<'a>(
-    argument: &'a FxHashMap<String, OnionStaticObject>,
+    argument: &'a OnionFastMap<String, OnionStaticObject>,
     name: &str,
 ) -> Result<&'a [u8], RuntimeError> {
-    let obj = argument.get(name).ok_or_else(|| {
+    let obj = argument.get(&name.to_string()).ok_or_else(|| {
         RuntimeError::DetailedError(
             format!("Function requires a '{}' argument", name)
                 .to_string()
@@ -36,10 +35,10 @@ fn get_bytes_arg<'a>(
 }
 
 fn get_integer_arg(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     name: &str,
 ) -> Result<i64, RuntimeError> {
-    let obj = argument.get(name).ok_or_else(|| {
+    let obj = argument.get(&name.to_string()).ok_or_else(|| {
         RuntimeError::DetailedError(
             format!("Function requires an '{}' argument", name)
                 .to_string()
@@ -57,10 +56,10 @@ fn get_integer_arg(
 }
 
 fn get_integer_tuple_arg(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     name: &str,
 ) -> Result<Vec<i64>, RuntimeError> {
-    let obj = argument.get(name).ok_or_else(|| {
+    let obj = argument.get(&name.to_string()).ok_or_else(|| {
         RuntimeError::DetailedError(
             format!("Function requires a '{}' argument", name)
                 .to_string()
@@ -91,7 +90,7 @@ fn get_integer_tuple_arg(
 // --- Refactored Native Functions ---
 
 fn length(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
@@ -99,7 +98,7 @@ fn length(
 }
 
 fn concat(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let a = get_bytes_arg(argument, "a")?;
@@ -109,7 +108,7 @@ fn concat(
 }
 
 fn slice(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
@@ -134,7 +133,7 @@ fn slice(
 }
 
 fn get_at(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
@@ -151,7 +150,7 @@ fn get_at(
 }
 
 fn set_at(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
@@ -182,7 +181,7 @@ fn set_at(
 }
 
 fn index_of(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
@@ -198,7 +197,7 @@ fn index_of(
 }
 
 fn contains(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
@@ -210,7 +209,7 @@ fn contains(
 }
 
 fn starts_with(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
@@ -219,7 +218,7 @@ fn starts_with(
 }
 
 fn ends_with(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
@@ -228,7 +227,7 @@ fn ends_with(
 }
 
 fn repeat(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
@@ -244,7 +243,7 @@ fn repeat(
 }
 
 fn is_empty(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
@@ -252,7 +251,7 @@ fn is_empty(
 }
 
 fn reverse(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
@@ -262,7 +261,7 @@ fn reverse(
 }
 
 fn to_string(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
@@ -272,10 +271,10 @@ fn to_string(
 }
 
 fn from_string(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let obj = argument.get("string").ok_or_else(|| {
+    let obj = argument.get(&"string".to_string()).ok_or_else(|| {
         RuntimeError::DetailedError("Function requires a 'string' argument".to_string().into())
     })?;
     match obj.weak() {
@@ -287,7 +286,7 @@ fn from_string(
 }
 
 fn pad_left(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
@@ -317,7 +316,7 @@ fn pad_left(
 }
 
 fn pad_right(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
@@ -347,7 +346,7 @@ fn pad_right(
 }
 
 fn from_integers(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let list = get_integer_tuple_arg(argument, "list")?;
@@ -366,7 +365,7 @@ fn from_integers(
 }
 
 fn to_integers(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
@@ -385,8 +384,9 @@ pub fn build_module() -> OnionStaticObject {
         "length".to_string(),
         wrap_native_function(
             &bytes_arg,
-            &FxHashMap::default(),
+            &OnionFastMap::new(OnionKeyPool::create(vec![])),
             "bytes::length".to_string(),
+            OnionKeyPool::create(vec!["bytes".to_string()]),
             &length,
         ),
     );
@@ -394,8 +394,9 @@ pub fn build_module() -> OnionStaticObject {
         "is_empty".to_string(),
         wrap_native_function(
             &bytes_arg,
-            &FxHashMap::default(),
+            &OnionFastMap::new(OnionKeyPool::create(vec![])),
             "bytes::is_empty".to_string(),
+            OnionKeyPool::create(vec!["bytes".to_string()]),
             &is_empty,
         ),
     );
@@ -403,8 +404,9 @@ pub fn build_module() -> OnionStaticObject {
         "reverse".to_string(),
         wrap_native_function(
             &bytes_arg,
-            &FxHashMap::default(),
+            &OnionFastMap::new(OnionKeyPool::create(vec![])),
             "bytes::reverse".to_string(),
+            OnionKeyPool::create(vec!["bytes".to_string()]),
             &reverse,
         ),
     );
@@ -412,8 +414,9 @@ pub fn build_module() -> OnionStaticObject {
         "to_string".to_string(),
         wrap_native_function(
             &bytes_arg,
-            &FxHashMap::default(),
+            &OnionFastMap::new(OnionKeyPool::create(vec![])),
             "bytes::to_string".to_string(),
+            OnionKeyPool::create(vec!["bytes".to_string()]),
             &to_string,
         ),
     );
@@ -421,8 +424,9 @@ pub fn build_module() -> OnionStaticObject {
         "to_integers".to_string(),
         wrap_native_function(
             &bytes_arg,
-            &FxHashMap::default(),
+            &OnionFastMap::new(OnionKeyPool::create(vec![])),
             "bytes::to_integers".to_string(),
+            OnionKeyPool::create(vec!["bytes".to_string()]),
             &to_integers,
         ),
     );
@@ -431,8 +435,9 @@ pub fn build_module() -> OnionStaticObject {
         "from_string".to_string(),
         wrap_native_function(
             &OnionObject::String("string".to_string().into()).stabilize(),
-            &FxHashMap::default(),
+            &OnionFastMap::new(OnionKeyPool::create(vec![])),
             "bytes::from_string".to_string(),
+            OnionKeyPool::create(vec!["string".to_string()]),
             &from_string,
         ),
     );
@@ -440,8 +445,9 @@ pub fn build_module() -> OnionStaticObject {
         "from_integers".to_string(),
         wrap_native_function(
             &OnionObject::String("list".to_string().into()).stabilize(),
-            &FxHashMap::default(),
+            &OnionFastMap::new(OnionKeyPool::create(vec![])),
             "bytes::from_integers".to_string(),
+            OnionKeyPool::create(vec!["list".to_string()]),
             &from_integers,
         ),
     );
@@ -450,8 +456,9 @@ pub fn build_module() -> OnionStaticObject {
         "concat".to_string(),
         wrap_native_function(
             &build_string_tuple(&["a", "b"]),
-            &FxHashMap::default(),
+            &OnionFastMap::new(OnionKeyPool::create(vec![])),
             "bytes::concat".to_string(),
+            OnionKeyPool::create(vec!["a".to_string(), "b".to_string()]),
             &concat,
         ),
     );
@@ -459,8 +466,13 @@ pub fn build_module() -> OnionStaticObject {
         "slice".to_string(),
         wrap_native_function(
             &build_string_tuple(&["bytes", "start", "length"]),
-            &FxHashMap::default(),
+            &OnionFastMap::new(OnionKeyPool::create(vec![])),
             "bytes::slice".to_string(),
+            OnionKeyPool::create(vec![
+                "bytes".to_string(),
+                "start".to_string(),
+                "length".to_string(),
+            ]),
             &slice,
         ),
     );
@@ -468,8 +480,9 @@ pub fn build_module() -> OnionStaticObject {
         "get_at".to_string(),
         wrap_native_function(
             &build_string_tuple(&["bytes", "index"]),
-            &FxHashMap::default(),
+            &OnionFastMap::new(OnionKeyPool::create(vec![])),
             "bytes::get_at".to_string(),
+            OnionKeyPool::create(vec!["bytes".to_string(), "index".to_string()]),
             &get_at,
         ),
     );
@@ -477,8 +490,13 @@ pub fn build_module() -> OnionStaticObject {
         "set_at".to_string(),
         wrap_native_function(
             &build_string_tuple(&["bytes", "index", "value"]),
-            &FxHashMap::default(),
+            &OnionFastMap::new(OnionKeyPool::create(vec![])),
             "bytes::set_at".to_string(),
+            OnionKeyPool::create(vec![
+                "bytes".to_string(),
+                "index".to_string(),
+                "value".to_string(),
+            ]),
             &set_at,
         ),
     );
@@ -486,8 +504,9 @@ pub fn build_module() -> OnionStaticObject {
         "index_of".to_string(),
         wrap_native_function(
             &build_string_tuple(&["bytes", "pattern"]),
-            &FxHashMap::default(),
+            &OnionFastMap::new(OnionKeyPool::create(vec![])),
             "bytes::index_of".to_string(),
+            OnionKeyPool::create(vec!["bytes".to_string(), "pattern".to_string()]),
             &index_of,
         ),
     );
@@ -495,8 +514,9 @@ pub fn build_module() -> OnionStaticObject {
         "contains".to_string(),
         wrap_native_function(
             &build_string_tuple(&["bytes", "pattern"]),
-            &FxHashMap::default(),
+            &OnionFastMap::new(OnionKeyPool::create(vec![])),
             "bytes::contains".to_string(),
+            OnionKeyPool::create(vec!["bytes".to_string(), "pattern".to_string()]),
             &contains,
         ),
     );
@@ -504,8 +524,9 @@ pub fn build_module() -> OnionStaticObject {
         "starts_with".to_string(),
         wrap_native_function(
             &build_string_tuple(&["bytes", "pattern"]),
-            &FxHashMap::default(),
+            &OnionFastMap::new(OnionKeyPool::create(vec![])),
             "bytes::starts_with".to_string(),
+            OnionKeyPool::create(vec!["bytes".to_string(), "pattern".to_string()]),
             &starts_with,
         ),
     );
@@ -513,8 +534,9 @@ pub fn build_module() -> OnionStaticObject {
         "ends_with".to_string(),
         wrap_native_function(
             &build_string_tuple(&["bytes", "pattern"]),
-            &FxHashMap::default(),
+            &OnionFastMap::new(OnionKeyPool::create(vec![])),
             "bytes::ends_with".to_string(),
+            OnionKeyPool::create(vec!["bytes".to_string(), "pattern".to_string()]),
             &ends_with,
         ),
     );
@@ -522,8 +544,9 @@ pub fn build_module() -> OnionStaticObject {
         "repeat".to_string(),
         wrap_native_function(
             &build_string_tuple(&["bytes", "count"]),
-            &FxHashMap::default(),
+            &OnionFastMap::new(OnionKeyPool::create(vec![])),
             "bytes::repeat".to_string(),
+            OnionKeyPool::create(vec!["bytes".to_string(), "count".to_string()]),
             &repeat,
         ),
     );
@@ -531,8 +554,13 @@ pub fn build_module() -> OnionStaticObject {
         "pad_left".to_string(),
         wrap_native_function(
             &build_string_tuple(&["bytes", "length", "pad_byte"]),
-            &FxHashMap::default(),
+            &OnionFastMap::new(OnionKeyPool::create(vec![])),
             "bytes::pad_left".to_string(),
+            OnionKeyPool::create(vec![
+                "bytes".to_string(),
+                "length".to_string(),
+                "pad_byte".to_string(),
+            ]),
             &pad_left,
         ),
     );
@@ -540,8 +568,13 @@ pub fn build_module() -> OnionStaticObject {
         "pad_right".to_string(),
         wrap_native_function(
             &build_string_tuple(&["bytes", "length", "pad_byte"]),
-            &FxHashMap::default(),
+            &OnionFastMap::new(OnionKeyPool::create(vec![])),
             "bytes::pad_right".to_string(),
+            OnionKeyPool::create(vec![
+                "bytes".to_string(),
+                "length".to_string(),
+                "pad_byte".to_string(),
+            ]),
             &pad_right,
         ),
     );

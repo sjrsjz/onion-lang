@@ -1,22 +1,18 @@
-use std::sync::Arc;
+use std::{ptr::addr_eq, sync::Arc};
 
 use arc_gc::gc::GC;
-use rustc_hash::FxHashMap;
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
     types::{
-        lambda::{
-            build_dict_from_hashmap,
-            vm_instructions::opcode::{
-                self, OpcodeArgument, build_operand_argument, decode_opcode, get_operand_arg,
-                get_processed_opcode,
-            },
+        lambda::vm_instructions::opcode::{
+            self, OpcodeArgument, build_operand_argument, decode_opcode, get_operand_arg,
+            get_processed_opcode,
         },
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
     },
-    utils::find_line_and_col_from_source,
+    utils::{fastmap::OnionFastMap, find_line_and_col_from_source},
 };
 
 use super::{
@@ -137,13 +133,28 @@ pub struct OnionLambdaRunnable {
 
 impl OnionLambdaRunnable {
     pub fn new(
-        argument: &FxHashMap<String, OnionStaticObject>,
-        capture: &FxHashMap<String, OnionObject>,
+        argument: &OnionFastMap<String, OnionStaticObject>,
+        capture: &OnionFastMap<String, OnionObject>,
         self_object: &OnionObject,
         this_lambda: &OnionStaticObject,
         instruction: Arc<VMInstructionPackage>,
         ip: isize,
     ) -> Result<Self, RuntimeError> {
+        if !addr_eq(argument.pool().keys(), instruction.get_string_pool()) {
+            panic!(
+                "Argument pool does not match instruction string pool: {:?} != {:?}",
+                argument.pool().keys(),
+                instruction.get_string_pool()
+            );
+        }
+        if !addr_eq(capture.pool().keys(), instruction.get_string_pool()) {
+            panic!(
+                "Capture pool does not match instruction string pool: {:?} != {:?}",
+                capture.pool().keys(),
+                instruction.get_string_pool()
+            );
+        }
+
         let mut new_context = Context::new();
         Context::push_frame(
             &mut new_context,
@@ -153,44 +164,32 @@ impl OnionLambdaRunnable {
             },
         );
 
-        let (index_this, index_self, index_arguments) = {
-            let string_pool = instruction.get_string_pool();
-
-            let index_this = string_pool
-                .iter()
-                .position(|s| s == "this")
-                .ok_or_else(|| {
-                    RuntimeError::InvalidOperation(
-                        "Missing required variable 'this' in string pool"
-                            .to_string()
-                            .into(),
-                    )
-                })?;
-
-            let index_self = string_pool
-                .iter()
-                .position(|s| s == "self")
-                .ok_or_else(|| {
-                    RuntimeError::InvalidOperation(
-                        "Missing required variable 'self' in string pool"
-                            .to_string()
-                            .into(),
-                    )
-                })?;
-
-            let index_arguments = string_pool
-                .iter()
-                .position(|s| s == "arguments")
-                .ok_or_else(|| {
-                    RuntimeError::InvalidOperation(
-                        "Missing required variable 'arguments' in string pool"
-                            .to_string()
-                            .into(),
-                    )
-                })?;
-
-            (index_this, index_self, index_arguments)
-        };
+        let index_this = instruction.get_string_index("this").ok_or_else(|| {
+            RuntimeError::InvalidOperation(
+                "Missing required variable 'this' in string pool"
+                    .to_string()
+                    .into(),
+            )
+        })?;
+        let index_self = instruction.get_string_index("self").ok_or_else(|| {
+            RuntimeError::InvalidOperation(
+                "Missing required variable 'self' in string pool"
+                    .to_string()
+                    .into(),
+            )
+        })?;
+        /*
+        let index_arguments = string_pool
+            .iter()
+            .position(|s| s == "arguments")
+            .ok_or_else(|| {
+                RuntimeError::InvalidOperation(
+                    "Missing required variable 'arguments' in string pool"
+                        .to_string()
+                        .into(),
+                )
+            })?;
+        */
 
         // 设置内置变量
         new_context
@@ -209,44 +208,37 @@ impl OnionLambdaRunnable {
                 )
             })?;
 
-        new_context
-            .let_variable(index_arguments, build_dict_from_hashmap(argument))
-            .map_err(|e| {
-                RuntimeError::InvalidOperation(
-                    format!("Failed to initialize 'arguments' variable: {}", e).into(),
-                )
-            })?;
+        // new_context
+        //     .let_variable(index_arguments, build_dict_from_hashmap(argument))
+        //     .map_err(|e| {
+        //         RuntimeError::InvalidOperation(
+        //             format!("Failed to initialize 'arguments' variable: {}", e).into(),
+        //         )
+        //     })?;
 
-        let pool = instruction.get_string_pool();
-
-        for (argument_name, value) in argument.iter() {
-            if let Some(index) = pool.iter().position(|s| s == argument_name) {
-                new_context
-                    .let_variable(index, value.clone())
-                    .map_err(|e| {
-                        RuntimeError::InvalidOperation(
-                            format!("Failed to initialize argument '{}': {}", argument_name, e)
-                                .into(),
-                        )
-                    })?;
-            }
+        for (argument_index, value) in argument.pairs() {
+            new_context
+                .let_variable(*argument_index, value.clone())
+                .map_err(|e| {
+                    RuntimeError::InvalidOperation(
+                        format!("Failed to initialize argument '{}': {}", argument_index, e).into(),
+                    )
+                })?;
         }
 
         // 设置捕获的变量
-        for (capture_name, value) in capture.iter() {
-            if let Some(index) = pool.iter().position(|s| s == capture_name) {
-                new_context
-                    .let_variable(index, value.stabilize())
-                    .map_err(|e| {
-                        RuntimeError::InvalidOperation(
-                            format!(
-                                "Failed to initialize captured variable '{}': {}",
-                                capture_name, e
-                            )
-                            .into(),
+        for (capture_index, value) in capture.pairs() {
+            new_context
+                .let_variable(*capture_index, value.stabilize())
+                .map_err(|e| {
+                    RuntimeError::InvalidOperation(
+                        format!(
+                            "Failed to initialize captured variable '{}': {}",
+                            capture_index, e
                         )
-                    })?;
-            }
+                        .into(),
+                    )
+                })?;
         }
 
         Ok(OnionLambdaRunnable {

@@ -14,8 +14,8 @@ use onion_vm::{
         object::{OnionObject, OnionObjectCell, OnionObjectExt, OnionStaticObject},
         tuple::OnionTuple,
     },
+    utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
-use rustc_hash::FxHashMap;
 
 // 引入所需的辅助函数和类型
 use super::ctypes::CTypes;
@@ -382,10 +382,10 @@ impl OnionObjectExt for CFunctionHandle {
 // --- Argument Parsing Helper Functions ---
 
 fn get_clib_arg(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     name: &str,
 ) -> Result<Arc<CLib>, RuntimeError> {
-    let obj = argument.get(name).ok_or_else(|| {
+    let obj = argument.get(&name.to_string()).ok_or_else(|| {
         RuntimeError::DetailedError(format!("Missing required argument: '{}'", name).into())
     })?;
     match obj.weak() {
@@ -405,10 +405,10 @@ fn get_clib_arg(
 }
 
 fn get_string_arg(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     name: &str,
 ) -> Result<String, RuntimeError> {
-    let obj = argument.get(name).ok_or_else(|| {
+    let obj = argument.get(&name.to_string()).ok_or_else(|| {
         RuntimeError::DetailedError(format!("Missing required argument: '{}'", name).into())
     })?;
     match obj.weak() {
@@ -420,10 +420,10 @@ fn get_string_arg(
 }
 
 fn get_string_tuple_arg(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     name: &str,
 ) -> Result<Vec<String>, RuntimeError> {
-    let obj = argument.get(name).ok_or_else(|| {
+    let obj = argument.get(&name.to_string()).ok_or_else(|| {
         RuntimeError::DetailedError(format!("Missing required argument: '{}'", name).into())
     })?;
     match obj.weak() {
@@ -446,10 +446,10 @@ fn get_string_tuple_arg(
 }
 
 fn get_ctypes_tuple_arg(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     name: &str,
 ) -> Result<Vec<CTypes>, RuntimeError> {
-    let obj = argument.get(name).ok_or_else(|| {
+    let obj = argument.get(&name.to_string()).ok_or_else(|| {
         RuntimeError::DetailedError(format!("Missing required argument: '{}'", name).into())
     })?;
     match obj.weak() {
@@ -484,7 +484,7 @@ fn get_ctypes_tuple_arg(
 // --- Refactored Native Functions ---
 
 fn lib_load(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let path = get_string_arg(argument, "path")?;
@@ -493,7 +493,7 @@ fn lib_load(
 }
 
 fn lib_get_function(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let library = get_clib_arg(argument, "library")?;
@@ -506,10 +506,10 @@ fn lib_get_function(
 }
 
 fn lib_call_function(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let handle_obj = argument.get("handle").ok_or_else(|| {
+    let handle_obj = argument.get(&"handle".to_string()).ok_or_else(|| {
         RuntimeError::DetailedError("Missing required argument: 'handle'".to_string().into())
     })?;
     let handle = match handle_obj.weak() {
@@ -546,8 +546,9 @@ pub fn build_module() -> OnionStaticObject {
         "load".to_string(),
         wrap_native_function(
             &OnionObject::String("path".to_string().into()).stabilize(),
-            &FxHashMap::default(),
+            &OnionFastMap::new(OnionKeyPool::create(vec![])),
             "lib::load".to_string(),
+            OnionKeyPool::create(vec!["path".to_string()]),
             &lib_load,
         ),
     );
@@ -555,8 +556,14 @@ pub fn build_module() -> OnionStaticObject {
         "get_function".to_string(),
         wrap_native_function(
             &build_string_tuple(&["library", "function", "return_type", "param_types"]),
-            &FxHashMap::default(),
+            &OnionFastMap::new(OnionKeyPool::create(vec![])),
             "lib::get_function".to_string(),
+            OnionKeyPool::create(vec![
+                "library".to_string(),
+                "function".to_string(),
+                "return_type".to_string(),
+                "param_types".to_string(),
+            ]),
             &lib_get_function,
         ),
     );
@@ -564,8 +571,9 @@ pub fn build_module() -> OnionStaticObject {
         "call".to_string(),
         wrap_native_function(
             &build_string_tuple(&["handle", "args"]),
-            &FxHashMap::default(),
+            &OnionFastMap::new(OnionKeyPool::create(vec![])),
             "lib::call".to_string(),
+            OnionKeyPool::create(vec!["handle".to_string(), "args".to_string()]),
             &lib_call_function,
         ),
     );

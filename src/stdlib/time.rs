@@ -15,18 +15,18 @@ use onion_vm::{
         tuple::OnionTuple,
     },
     unwrap_step_result,
+    utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
-use rustc_hash::FxHashMap;
 
 // 引入所需的辅助函数
 use super::{build_dict, build_string_tuple, wrap_native_function};
 
 // 辅助函数，用于获取并验证整数参数
 fn get_integer_arg(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     name: &str,
 ) -> Result<i64, RuntimeError> {
-    let obj = argument.get(name).ok_or_else(|| {
+    let obj = argument.get(&name.to_string()).ok_or_else(|| {
         RuntimeError::DetailedError(
             format!("Function requires an '{}' argument", name)
                 .to_string()
@@ -45,7 +45,7 @@ fn get_integer_arg(
 
 /// 获取当前时间戳（秒）
 fn timestamp(
-    _argument: &FxHashMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     SystemTime::now()
@@ -56,7 +56,7 @@ fn timestamp(
 
 /// 获取当前时间戳（毫秒）
 fn timestamp_millis(
-    _argument: &FxHashMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     SystemTime::now()
@@ -67,7 +67,7 @@ fn timestamp_millis(
 
 /// 获取当前时间戳（纳秒）
 fn timestamp_nanos(
-    _argument: &FxHashMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     SystemTime::now()
@@ -78,7 +78,7 @@ fn timestamp_nanos(
 
 /// 睡眠指定的秒数
 fn sleep_seconds(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let seconds = get_integer_arg(argument, "seconds")?;
@@ -93,7 +93,7 @@ fn sleep_seconds(
 
 /// 睡眠指定的毫秒数
 fn sleep_millis(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let millis = get_integer_arg(argument, "millis")?;
@@ -108,7 +108,7 @@ fn sleep_millis(
 
 /// 睡眠指定的微秒数
 fn sleep_micros(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let micros = get_integer_arg(argument, "micros")?;
@@ -141,7 +141,7 @@ fn format_timestamp(timestamp: u64) -> String {
 
 /// 获取格式化的当前时间字符串（UTC）
 fn now_utc(
-    _argument: &FxHashMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let duration = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|e| {
@@ -153,7 +153,7 @@ fn now_utc(
 
 /// 从时间戳格式化时间字符串
 fn format_time(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let timestamp = get_integer_arg(argument, "timestamp")?;
@@ -168,7 +168,7 @@ fn format_time(
 
 /// 计算两个时间戳之间的差值（秒）
 fn time_diff(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let start = get_integer_arg(argument, "start")?;
@@ -203,8 +203,8 @@ impl Runnable for AsyncSleep {
 
     fn capture(
         &mut self,
-        _argument: &FxHashMap<String, OnionStaticObject>,
-        _captured_vars: &FxHashMap<String, OnionObject>,
+        _argument: &OnionFastMap<String, OnionStaticObject>,
+        _captured_vars: &OnionFastMap<String, OnionObject>,
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         Ok(())
@@ -229,7 +229,7 @@ impl Runnable for AsyncSleep {
 }
 
 fn async_sleep(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let millis = get_integer_arg(argument, "millis")?;
@@ -241,13 +241,16 @@ fn async_sleep(
 
     Ok(OnionLambdaDefinition::new_static(
         &onion_tuple!(),
-        LambdaBody::NativeFunction(Arc::new(move || {
-            Box::new(AsyncSleep {
-                millis,
-                start_time: SystemTime::now(),
-            })
-        })),
-        &FxHashMap::default(),
+        LambdaBody::NativeFunction((
+            Arc::new(move || {
+                Box::new(AsyncSleep {
+                    millis,
+                    start_time: SystemTime::now(),
+                })
+            }),
+            OnionKeyPool::create(vec![]),
+        )),
+        &OnionFastMap::default(),
         "time::async_sleep".to_string(),
         LambdaType::Normal,
     ))
@@ -262,8 +265,9 @@ pub fn build_module() -> OnionStaticObject {
         "timestamp".to_string(),
         wrap_native_function(
             &no_args,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "time::timestamp".to_string(),
+            OnionKeyPool::create(vec![]),
             &timestamp,
         ),
     );
@@ -271,8 +275,9 @@ pub fn build_module() -> OnionStaticObject {
         "timestamp_millis".to_string(),
         wrap_native_function(
             &no_args,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "time::timestamp_millis".to_string(),
+            OnionKeyPool::create(vec![]),
             &timestamp_millis,
         ),
     );
@@ -280,8 +285,9 @@ pub fn build_module() -> OnionStaticObject {
         "timestamp_nanos".to_string(),
         wrap_native_function(
             &no_args,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "time::timestamp_nanos".to_string(),
+            OnionKeyPool::create(vec![]),
             &timestamp_nanos,
         ),
     );
@@ -289,8 +295,9 @@ pub fn build_module() -> OnionStaticObject {
         "now_utc".to_string(),
         wrap_native_function(
             &no_args,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "time::now_utc".to_string(),
+            OnionKeyPool::create(vec![]),
             &now_utc,
         ),
     );
@@ -299,8 +306,9 @@ pub fn build_module() -> OnionStaticObject {
         "sleep_seconds".to_string(),
         wrap_native_function(
             &OnionObject::String("seconds".to_string().into()).stabilize(),
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "time::sleep_seconds".to_string(),
+            OnionKeyPool::create(vec!["seconds".to_string()]),
             &sleep_seconds,
         ),
     );
@@ -309,8 +317,9 @@ pub fn build_module() -> OnionStaticObject {
         "sleep_millis".to_string(),
         wrap_native_function(
             &OnionObject::String("millis".to_string().into()).stabilize(),
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "time::sleep_millis".to_string(),
+            OnionKeyPool::create(vec!["millis".to_string()]),
             &sleep_millis,
         ),
     );
@@ -319,8 +328,9 @@ pub fn build_module() -> OnionStaticObject {
         "sleep_micros".to_string(),
         wrap_native_function(
             &OnionObject::String("micros".to_string().into()).stabilize(),
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "time::sleep_micros".to_string(),
+            OnionKeyPool::create(vec!["micros".to_string()]),
             &sleep_micros,
         ),
     );
@@ -329,8 +339,9 @@ pub fn build_module() -> OnionStaticObject {
         "format_time".to_string(),
         wrap_native_function(
             &OnionObject::String("timestamp".to_string().into()).stabilize(),
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "time::format_time".to_string(),
+            OnionKeyPool::create(vec!["timestamp".to_string()]),
             &format_time,
         ),
     );
@@ -339,8 +350,9 @@ pub fn build_module() -> OnionStaticObject {
         "time_diff".to_string(),
         wrap_native_function(
             &build_string_tuple(&["start", "end"]),
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "time::time_diff".to_string(),
+            OnionKeyPool::create(vec!["start".to_string(), "end".to_string()]),
             &time_diff,
         ),
     );
@@ -349,8 +361,9 @@ pub fn build_module() -> OnionStaticObject {
         "async_sleep".to_string(),
         wrap_native_function(
             &OnionObject::String("millis".to_string().into()).stabilize(),
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "time::async_sleep".to_string(),
+            OnionKeyPool::create(vec!["millis".to_string()]),
             &async_sleep,
         ),
     );

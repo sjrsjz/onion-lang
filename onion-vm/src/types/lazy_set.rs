@@ -5,13 +5,13 @@ use arc_gc::{
     gc::GC,
     traceable::GCTraceable,
 };
-use rustc_hash::FxHashMap;
 
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
     onion_tuple,
     types::lambda::{definition::LambdaType, launcher::OnionLambdaRunnableLauncher},
     unwrap_step_result,
+    utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
 
 use super::{
@@ -83,6 +83,7 @@ impl OnionLazySet {
             OnionObject::String(s) if s.as_str() == "container" => f(&self.container),
             OnionObject::String(s) if s.as_str() == "filter" => f(&self.filter),
             OnionObject::String(s) if s.as_str() == "collect" => {
+                let empty_pool = OnionKeyPool::create(vec![]);
                 let collector = OnionLazySetCollector {
                     container: self.container.stabilize(),
                     filter: self.filter.stabilize(),
@@ -91,11 +92,14 @@ impl OnionLazySet {
                 };
                 let collector = OnionLambdaDefinition::new_static(
                     &onion_tuple!(),
-                    LambdaBody::NativeFunction(Arc::new({
-                        let collector = collector.clone();
-                        move || Box::new(collector.clone())
-                    })),
-                    &FxHashMap::default(),
+                    LambdaBody::NativeFunction((
+                        Arc::new({
+                            let collector = collector.clone();
+                            move || Box::new(collector.clone())
+                        }),
+                        empty_pool.clone(),
+                    )),
+                    &OnionFastMap::new(empty_pool),
                     "collector".to_string(),
                     LambdaType::Normal,
                 );
@@ -172,8 +176,8 @@ impl Runnable for OnionLazySetCollector {
 
     fn capture(
         &mut self,
-        _argument: &FxHashMap<String, OnionStaticObject>,
-        _captured_vars: &FxHashMap<String, OnionObject>,
+        _argument: &OnionFastMap<String, OnionStaticObject>,
+        _captured_vars: &OnionFastMap<String, OnionObject>,
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         Ok(())
@@ -194,8 +198,8 @@ impl Runnable for OnionLazySetCollector {
                                     OnionObject::Lambda(_) => {
                                         let runnable =
                                             Box::new(OnionLambdaRunnableLauncher::new_static(
-                                                &self.filter,
-                                                &item.stabilize(),
+                                                filter,
+                                                item.stabilize(),
                                                 &|r| Ok(r),
                                             )?);
                                         Ok(StepResult::NewRunnable(runnable))

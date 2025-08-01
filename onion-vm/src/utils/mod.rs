@@ -1,5 +1,5 @@
 use crate::types::object::OnionObject;
-
+pub mod fastmap;
 
 const MAX_DEBUG_LEN: usize = 120; // 定义一个合理的单行最大长度
 

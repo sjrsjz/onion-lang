@@ -6,8 +6,8 @@ use onion_vm::{
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         tuple::OnionTuple,
     },
+    utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
-use rustc_hash::FxHashMap;
 use std::{fs, io::Write, path::Path};
 
 // 引入所需的辅助函数
@@ -15,10 +15,10 @@ use super::{build_dict, build_string_tuple, wrap_native_function};
 
 /// 读取文件内容作为字节
 fn read_file(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get("path") else {
+    let Some(path_obj) = argument.get(&"path".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "read_file requires a 'path' argument".to_string().into(),
         ));
@@ -39,15 +39,15 @@ fn read_file(
 
 /// 写入文件内容作为字节
 fn write_file(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get("path") else {
+    let Some(path_obj) = argument.get(&"path".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "write_file requires a 'path' argument".to_string().into(),
         ));
     };
-    let Some(content_obj) = argument.get("content") else {
+    let Some(content_obj) = argument.get(&"content".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "write_file requires a 'content' argument"
                 .to_string()
@@ -84,15 +84,15 @@ fn write_file(
 
 /// 追加文件内容作为字节
 fn append_file(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get("path") else {
+    let Some(path_obj) = argument.get(&"path".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "append_file requires a 'path' argument".to_string().into(),
         ));
     };
-    let Some(content_obj) = argument.get("content") else {
+    let Some(content_obj) = argument.get(&"content".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "append_file requires a 'content' argument"
                 .to_string()
@@ -138,10 +138,10 @@ fn append_file(
 
 /// 删除文件
 fn remove_file(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get("path") else {
+    let Some(path_obj) = argument.get(&"path".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "remove_file requires a 'path' argument".to_string().into(),
         ));
@@ -162,15 +162,15 @@ fn remove_file(
 
 /// 复制文件
 fn copy_file(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(src_obj) = argument.get("src") else {
+    let Some(src_obj) = argument.get(&"src".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "copy_file requires a 'src' argument".to_string().into(),
         ));
     };
-    let Some(dest_obj) = argument.get("dest") else {
+    let Some(dest_obj) = argument.get(&"dest".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "copy_file requires a 'dest' argument".to_string().into(),
         ));
@@ -199,15 +199,15 @@ fn copy_file(
 
 /// 重命名/移动文件
 fn rename_file(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(src_obj) = argument.get("src") else {
+    let Some(src_obj) = argument.get(&"src".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "rename_file requires a 'src' argument".to_string().into(),
         ));
     };
-    let Some(dest_obj) = argument.get("dest") else {
+    let Some(dest_obj) = argument.get(&"dest".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "rename_file requires a 'dest' argument".to_string().into(),
         ));
@@ -236,10 +236,10 @@ fn rename_file(
 
 /// 创建目录
 fn create_dir(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get("path") else {
+    let Some(path_obj) = argument.get(&"path".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "create_dir requires a 'path' argument".to_string().into(),
         ));
@@ -260,10 +260,10 @@ fn create_dir(
 
 /// 递归创建目录
 fn create_dir_all(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get("path") else {
+    let Some(path_obj) = argument.get(&"path".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "create_dir_all requires a 'path' argument"
                 .to_string()
@@ -286,10 +286,10 @@ fn create_dir_all(
 
 /// 删除空目录
 fn remove_dir(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get("path") else {
+    let Some(path_obj) = argument.get(&"path".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "remove_dir requires a 'path' argument".to_string().into(),
         ));
@@ -310,10 +310,10 @@ fn remove_dir(
 
 /// 递归删除目录
 fn remove_dir_all(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get("path") else {
+    let Some(path_obj) = argument.get(&"path".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "remove_dir_all requires a 'path' argument"
                 .to_string()
@@ -340,10 +340,10 @@ fn remove_dir_all(
 
 /// 列出目录内容
 fn read_dir(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get("path") else {
+    let Some(path_obj) = argument.get(&"path".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "read_dir requires a 'path' argument".to_string().into(),
         ));
@@ -381,10 +381,10 @@ fn read_dir(
 
 /// 获取文件元数据
 fn file_metadata(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get("path") else {
+    let Some(path_obj) = argument.get(&"path".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "file_metadata requires a 'path' argument"
                 .to_string()
@@ -435,10 +435,10 @@ fn file_metadata(
 
 /// 检查文件是否存在
 fn exists(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get("path") else {
+    let Some(path_obj) = argument.get(&"path".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "exists requires a 'path' argument".to_string().into(),
         ));
@@ -457,10 +457,10 @@ fn exists(
 
 /// 读取文本文件内容（UTF-8编码）
 fn read_text(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get("path") else {
+    let Some(path_obj) = argument.get(&"path".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "read_text requires a 'path' argument".to_string().into(),
         ));
@@ -490,15 +490,15 @@ fn read_text(
 
 /// 写入文本文件内容（UTF-8编码）
 fn write_text(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get("path") else {
+    let Some(path_obj) = argument.get(&"path".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "write_text requires a 'path' argument".to_string().into(),
         ));
     };
-    let Some(content_obj) = argument.get("content") else {
+    let Some(content_obj) = argument.get(&"content".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "write_text requires a 'content' argument"
                 .to_string()
@@ -525,15 +525,15 @@ fn write_text(
 
 /// 追加文本文件内容（UTF-8编码）
 fn append_text(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get("path") else {
+    let Some(path_obj) = argument.get(&"path".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "append_text requires a 'path' argument".to_string().into(),
         ));
     };
-    let Some(content_obj) = argument.get("content") else {
+    let Some(content_obj) = argument.get(&"content".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "append_text requires a 'content' argument"
                 .to_string()
@@ -583,8 +583,9 @@ pub fn build_module() -> OnionStaticObject {
         "read_file".to_string(),
         wrap_native_function(
             &single_path_param,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "fs::read_file".to_string(),
+            OnionKeyPool::create(vec!["path".to_string()]),
             &read_file,
         ),
     );
@@ -592,8 +593,9 @@ pub fn build_module() -> OnionStaticObject {
         "write_file".to_string(),
         wrap_native_function(
             &path_content_params,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "fs::write_file".to_string(),
+            OnionKeyPool::create(vec!["path".to_string(), "content".to_string()]),
             &write_file,
         ),
     );
@@ -601,8 +603,9 @@ pub fn build_module() -> OnionStaticObject {
         "append_file".to_string(),
         wrap_native_function(
             &path_content_params,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "fs::append_file".to_string(),
+            OnionKeyPool::create(vec!["path".to_string(), "content".to_string()]),
             &append_file,
         ),
     );
@@ -610,8 +613,9 @@ pub fn build_module() -> OnionStaticObject {
         "read_text".to_string(),
         wrap_native_function(
             &single_path_param,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "fs::read_text".to_string(),
+            OnionKeyPool::create(vec!["path".to_string()]),
             &read_text,
         ),
     );
@@ -619,8 +623,9 @@ pub fn build_module() -> OnionStaticObject {
         "write_text".to_string(),
         wrap_native_function(
             &path_content_params,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "fs::write_text".to_string(),
+            OnionKeyPool::create(vec!["path".to_string(), "content".to_string()]),
             &write_text,
         ),
     );
@@ -628,8 +633,9 @@ pub fn build_module() -> OnionStaticObject {
         "append_text".to_string(),
         wrap_native_function(
             &path_content_params,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "fs::append_text".to_string(),
+            OnionKeyPool::create(vec!["path".to_string(), "content".to_string()]),
             &append_text,
         ),
     );
@@ -637,8 +643,9 @@ pub fn build_module() -> OnionStaticObject {
         "remove_file".to_string(),
         wrap_native_function(
             &single_path_param,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "fs::remove_file".to_string(),
+            OnionKeyPool::create(vec!["path".to_string()]),
             &remove_file,
         ),
     );
@@ -646,8 +653,9 @@ pub fn build_module() -> OnionStaticObject {
         "copy_file".to_string(),
         wrap_native_function(
             &src_dest_params,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "fs::copy_file".to_string(),
+            OnionKeyPool::create(vec!["src".to_string(), "dest".to_string()]),
             &copy_file,
         ),
     );
@@ -655,8 +663,9 @@ pub fn build_module() -> OnionStaticObject {
         "rename_file".to_string(),
         wrap_native_function(
             &src_dest_params,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "fs::rename_file".to_string(),
+            OnionKeyPool::create(vec!["src".to_string(), "dest".to_string()]),
             &rename_file,
         ),
     );
@@ -664,8 +673,9 @@ pub fn build_module() -> OnionStaticObject {
         "create_dir".to_string(),
         wrap_native_function(
             &single_path_param,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "fs::create_dir".to_string(),
+            OnionKeyPool::create(vec!["path".to_string()]),
             &create_dir,
         ),
     );
@@ -673,8 +683,9 @@ pub fn build_module() -> OnionStaticObject {
         "create_dir_all".to_string(),
         wrap_native_function(
             &single_path_param,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "fs::create_dir_all".to_string(),
+            OnionKeyPool::create(vec!["path".to_string()]),
             &create_dir_all,
         ),
     );
@@ -682,8 +693,9 @@ pub fn build_module() -> OnionStaticObject {
         "remove_dir".to_string(),
         wrap_native_function(
             &single_path_param,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "fs::remove_dir".to_string(),
+            OnionKeyPool::create(vec!["path".to_string()]),
             &remove_dir,
         ),
     );
@@ -691,8 +703,9 @@ pub fn build_module() -> OnionStaticObject {
         "remove_dir_all".to_string(),
         wrap_native_function(
             &single_path_param,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "fs::remove_dir_all".to_string(),
+            OnionKeyPool::create(vec!["path".to_string()]),
             &remove_dir_all,
         ),
     );
@@ -700,8 +713,9 @@ pub fn build_module() -> OnionStaticObject {
         "read_dir".to_string(),
         wrap_native_function(
             &single_path_param,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "fs::read_dir".to_string(),
+            OnionKeyPool::create(vec!["path".to_string()]),
             &read_dir,
         ),
     );
@@ -709,8 +723,9 @@ pub fn build_module() -> OnionStaticObject {
         "file_metadata".to_string(),
         wrap_native_function(
             &single_path_param,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "fs::file_metadata".to_string(),
+            OnionKeyPool::create(vec!["path".to_string()]),
             &file_metadata,
         ),
     );
@@ -718,8 +733,9 @@ pub fn build_module() -> OnionStaticObject {
         "exists".to_string(),
         wrap_native_function(
             &single_path_param,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "fs::exists".to_string(),
+            OnionKeyPool::create(vec!["path".to_string()]),
             &exists,
         ),
     );

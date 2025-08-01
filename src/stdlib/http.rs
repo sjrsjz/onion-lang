@@ -14,8 +14,8 @@ use onion_vm::{
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         tuple::OnionTuple,
     },
+    utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
-use rustc_hash::FxHashMap;
 
 // 引入所需的辅助函数
 use super::{build_dict, build_string_tuple, wrap_native_function};
@@ -23,11 +23,11 @@ use super::{build_dict, build_string_tuple, wrap_native_function};
 // --- Helper functions for robust argument parsing ---
 
 fn get_string_arg<'a>(
-    arg_map: &'a FxHashMap<String, OnionStaticObject>,
+    arg_map: &'a OnionFastMap<String, OnionStaticObject>,
     name: &str,
 ) -> Result<String, RuntimeError> {
     arg_map
-        .get(name)
+        .get(&name.to_string())
         .ok_or_else(|| {
             RuntimeError::DetailedError(format!("Missing required argument: '{}'", name).into())
         })
@@ -40,10 +40,10 @@ fn get_string_arg<'a>(
 }
 
 fn get_optional_string_arg(
-    arg_map: &FxHashMap<String, OnionStaticObject>,
+    arg_map: &OnionFastMap<String, OnionStaticObject>,
     name: &str,
 ) -> Result<Option<String>, RuntimeError> {
-    match arg_map.get(name) {
+    match arg_map.get(&name.to_string()) {
         Some(obj) => match obj.weak() {
             OnionObject::String(s) => Ok(Some(s.to_string())),
             OnionObject::Null | OnionObject::Undefined(_) => Ok(None),
@@ -56,10 +56,10 @@ fn get_optional_string_arg(
 }
 
 fn get_headers_arg(
-    arg_map: &FxHashMap<String, OnionStaticObject>,
+    arg_map: &OnionFastMap<String, OnionStaticObject>,
     name: &str,
 ) -> Result<IndexMap<String, String>, RuntimeError> {
-    match arg_map.get(name) {
+    match arg_map.get(&name.to_string()) {
         Some(obj) => match obj.weak() {
             OnionObject::Tuple(tuple) => {
                 let mut headers = IndexMap::new();
@@ -254,8 +254,8 @@ impl Runnable for AsyncHttpRequest {
 
     fn capture(
         &mut self,
-        _argument: &FxHashMap<String, OnionStaticObject>,
-        _captured_vars: &FxHashMap<String, OnionObject>,
+        _argument: &OnionFastMap<String, OnionStaticObject>,
+        _captured_vars: &OnionFastMap<String, OnionObject>,
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         Ok(())
@@ -288,7 +288,7 @@ impl Runnable for AsyncHttpRequest {
 }
 
 fn http_request(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let url = get_string_arg(argument, "url")?;
@@ -297,45 +297,54 @@ fn http_request(
     let body = get_optional_string_arg(argument, "body")?;
 
     let request = AsyncHttpRequest::new(url, method, headers, body);
-    let lambda_body = LambdaBody::NativeFunction(Arc::new(move || Box::new(request.clone())));
+    let lambda_body = LambdaBody::NativeFunction((
+        Arc::new(move || Box::new(request.clone())),
+        OnionKeyPool::create(vec![]),
+    ));
 
     Ok(OnionLambdaDefinition::new_static(
         &onion_tuple!(),
         lambda_body,
-        &FxHashMap::default(),
+        &OnionFastMap::default(),
         "http::async_request".to_string(),
         LambdaType::Normal,
     ))
 }
 
 fn http_get(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let url = get_string_arg(argument, "url")?;
     let request = AsyncHttpRequest::new(url, "GET".to_string(), IndexMap::new(), None);
-    let lambda_body = LambdaBody::NativeFunction(Arc::new(move || Box::new(request.clone())));
+    let lambda_body = LambdaBody::NativeFunction((
+        Arc::new(move || Box::new(request.clone())),
+        OnionKeyPool::create(vec![]),
+    ));
     Ok(OnionLambdaDefinition::new_static(
         &onion_tuple!(),
         lambda_body,
-        &FxHashMap::default(),
+        &OnionFastMap::default(),
         "http::async_get".to_string(),
         LambdaType::Normal,
     ))
 }
 
 fn http_post(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let url = get_string_arg(argument, "url")?;
     let body = get_optional_string_arg(argument, "body")?;
     let request = AsyncHttpRequest::new(url, "POST".to_string(), IndexMap::new(), body);
-    let lambda_body = LambdaBody::NativeFunction(Arc::new(move || Box::new(request.clone())));
+    let lambda_body = LambdaBody::NativeFunction((
+        Arc::new(move || Box::new(request.clone())),
+        OnionKeyPool::create(vec![]),
+    ));
     Ok(OnionLambdaDefinition::new_static(
         &onion_tuple!(),
         lambda_body,
-        &FxHashMap::default(),
+        &OnionFastMap::default(),
         "http::async_post".to_string(),
         LambdaType::Normal,
     ))
@@ -343,57 +352,66 @@ fn http_post(
 
 // ... other http methods like put, delete, patch follow the same pattern as post/get ...
 fn http_put(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let url = get_string_arg(argument, "url")?;
     let body = get_optional_string_arg(argument, "body")?;
     let request = AsyncHttpRequest::new(url, "PUT".to_string(), IndexMap::new(), body);
-    let lambda_body = LambdaBody::NativeFunction(Arc::new(move || Box::new(request.clone())));
+    let lambda_body = LambdaBody::NativeFunction((
+        Arc::new(move || Box::new(request.clone())),
+        OnionKeyPool::create(vec![]),
+    ));
     Ok(OnionLambdaDefinition::new_static(
         &onion_tuple!(),
         lambda_body,
-        &FxHashMap::default(),
+        &OnionFastMap::default(),
         "http::async_put".to_string(),
         LambdaType::Normal,
     ))
 }
 
 fn http_delete(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let url = get_string_arg(argument, "url")?;
     let request = AsyncHttpRequest::new(url, "DELETE".to_string(), IndexMap::new(), None);
-    let lambda_body = LambdaBody::NativeFunction(Arc::new(move || Box::new(request.clone())));
+    let lambda_body = LambdaBody::NativeFunction((
+        Arc::new(move || Box::new(request.clone())),
+        OnionKeyPool::create(vec![]),
+    ));
     Ok(OnionLambdaDefinition::new_static(
         &onion_tuple!(),
         lambda_body,
-        &FxHashMap::default(),
+        &OnionFastMap::default(),
         "http::async_delete".to_string(),
         LambdaType::Normal,
     ))
 }
 
 fn http_patch(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let url = get_string_arg(argument, "url")?;
     let body = get_optional_string_arg(argument, "body")?;
     let request = AsyncHttpRequest::new(url, "PATCH".to_string(), IndexMap::new(), body);
-    let lambda_body = LambdaBody::NativeFunction(Arc::new(move || Box::new(request.clone())));
+    let lambda_body = LambdaBody::NativeFunction((
+        Arc::new(move || Box::new(request.clone())),
+        OnionKeyPool::create(vec![]),
+    ));
     Ok(OnionLambdaDefinition::new_static(
         &onion_tuple!(),
         lambda_body,
-        &FxHashMap::default(),
+        &OnionFastMap::default(),
         "http::async_patch".to_string(),
         LambdaType::Normal,
     ))
 }
 
 fn http_get_sync(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let url = get_string_arg(argument, "url")?;
@@ -402,7 +420,7 @@ fn http_get_sync(
 }
 
 fn http_post_sync(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let url = get_string_arg(argument, "url")?;
@@ -425,8 +443,9 @@ pub fn build_module() -> OnionStaticObject {
         "get".to_string(),
         wrap_native_function(
             &url_only_param,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "http::get".to_string(),
+            OnionKeyPool::create(vec!["url".to_string()]),
             &http_get,
         ),
     );
@@ -434,8 +453,9 @@ pub fn build_module() -> OnionStaticObject {
         "post".to_string(),
         wrap_native_function(
             &url_body_params,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "http::post".to_string(),
+            OnionKeyPool::create(vec!["url".to_string(), "body".to_string()]),
             &http_post,
         ),
     );
@@ -443,8 +463,9 @@ pub fn build_module() -> OnionStaticObject {
         "put".to_string(),
         wrap_native_function(
             &url_body_params,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "http::put".to_string(),
+            OnionKeyPool::create(vec!["url".to_string(), "body".to_string()]),
             &http_put,
         ),
     );
@@ -452,8 +473,9 @@ pub fn build_module() -> OnionStaticObject {
         "delete".to_string(),
         wrap_native_function(
             &url_only_param,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "http::delete".to_string(),
+            OnionKeyPool::create(vec!["url".to_string()]),
             &http_delete,
         ),
     );
@@ -461,8 +483,9 @@ pub fn build_module() -> OnionStaticObject {
         "patch".to_string(),
         wrap_native_function(
             &url_body_params,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "http::patch".to_string(),
+            OnionKeyPool::create(vec!["url".to_string(), "body".to_string()]),
             &http_patch,
         ),
     );
@@ -472,8 +495,9 @@ pub fn build_module() -> OnionStaticObject {
         "get_sync".to_string(),
         wrap_native_function(
             &url_only_param,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "http::get_sync".to_string(),
+            OnionKeyPool::create(vec!["url".to_string()]),
             &http_get_sync,
         ),
     );
@@ -481,8 +505,9 @@ pub fn build_module() -> OnionStaticObject {
         "post_sync".to_string(),
         wrap_native_function(
             &url_body_params,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "http::post_sync".to_string(),
+            OnionKeyPool::create(vec!["url".to_string(), "body".to_string()]),
             &http_post_sync,
         ),
     );
@@ -491,8 +516,14 @@ pub fn build_module() -> OnionStaticObject {
         "request".to_string(),
         wrap_native_function(
             &build_string_tuple(&["url", "method", "headers", "body"]),
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "http::request".to_string(),
+            OnionKeyPool::create(vec![
+                "url".to_string(),
+                "method".to_string(),
+                "headers".to_string(),
+                "body".to_string(),
+            ]),
             &http_request,
         ),
     );

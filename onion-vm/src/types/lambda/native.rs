@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use arc_gc::gc::GC;
-use rustc_hash::FxHashMap;
 
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
@@ -11,18 +10,19 @@ use crate::{
         tuple::OnionTuple,
     },
     unwrap_step_result,
+    utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
 
 pub struct NativeMethodGenerator<F>
 where
     F: Fn(
             Option<&OnionStaticObject>,
-            &FxHashMap<String, OnionStaticObject>,
+            &OnionFastMap<String, OnionStaticObject>,
             &mut GC<OnionObjectCell>,
         ) -> Result<OnionStaticObject, RuntimeError>
         + 'static,
 {
-    captured: FxHashMap<String, OnionStaticObject>,
+    captured: OnionFastMap<String, OnionStaticObject>,
     self_object: Option<OnionStaticObject>,
     function: &'static F,
 }
@@ -31,7 +31,7 @@ impl<F> Runnable for NativeMethodGenerator<F>
 where
     F: Fn(
             Option<&OnionStaticObject>,
-            &FxHashMap<String, OnionStaticObject>,
+            &OnionFastMap<String, OnionStaticObject>,
             &mut GC<OnionObjectCell>,
         ) -> Result<OnionStaticObject, RuntimeError>
         + Send
@@ -47,13 +47,14 @@ where
 
     fn capture(
         &mut self,
-        argument: &FxHashMap<String, OnionStaticObject>,
-        captured_vars: &FxHashMap<String, OnionObject>,
+        argument: &OnionFastMap<String, OnionStaticObject>,
+        captured_vars: &OnionFastMap<String, OnionObject>,
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         self.captured = argument.clone();
-        for (key, value) in captured_vars {
-            self.captured.insert(key.clone(), value.stabilize());
+        for (key, value) in captured_vars.pairs() {
+            self.captured
+                .push_with_index(key.clone(), value.stabilize());
         }
         Ok(())
     }
@@ -95,7 +96,7 @@ where
 
 pub(crate) fn native_int_converter(
     self_object: Option<&OnionStaticObject>,
-    _argument: &FxHashMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(self_obj) = self_object else {
@@ -158,7 +159,7 @@ pub(crate) fn native_int_converter(
 
 pub(crate) fn native_float_converter(
     self_object: Option<&OnionStaticObject>,
-    _argument: &FxHashMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(self_obj) = self_object else {
@@ -219,7 +220,7 @@ pub(crate) fn native_float_converter(
 
 pub(crate) fn native_string_converter(
     self_object: Option<&OnionStaticObject>,
-    _argument: &FxHashMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(self_obj) = self_object else {
@@ -290,7 +291,7 @@ pub(crate) fn native_string_converter(
 
 pub(crate) fn native_bool_converter(
     self_object: Option<&OnionStaticObject>,
-    _argument: &FxHashMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(self_obj) = self_object else {
@@ -345,7 +346,7 @@ pub(crate) fn native_bool_converter(
 
 pub(crate) fn native_bytes_converter(
     self_object: Option<&OnionStaticObject>,
-    _argument: &FxHashMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(self_obj) = self_object else {
@@ -410,7 +411,7 @@ pub(crate) fn native_bytes_converter(
 
 pub(crate) fn native_length_method(
     self_object: Option<&OnionStaticObject>,
-    _argument: &FxHashMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(self_obj) = self_object else {
@@ -442,7 +443,7 @@ pub(crate) fn native_length_method(
 
 pub(crate) fn native_elements_method(
     self_object: Option<&OnionStaticObject>,
-    _argument: &FxHashMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(self_obj) = self_object else {
@@ -500,30 +501,35 @@ pub(crate) fn native_elements_method(
 
 pub(crate) fn wrap_native_function<F>(
     params: &OnionStaticObject,
-    capture: &FxHashMap<String, OnionObject>,
+    capture: &OnionFastMap<String, OnionObject>,
     self_object: &OnionObject,
     signature: String,
+    string_pool: OnionKeyPool<String>,
     function: &'static F,
 ) -> OnionStaticObject
 where
     F: Fn(
             Option<&OnionStaticObject>,
-            &FxHashMap<String, OnionStaticObject>,
+            &OnionFastMap<String, OnionStaticObject>,
             &mut GC<OnionObjectCell>,
         ) -> Result<OnionStaticObject, RuntimeError>
         + Send
         + Sync
         + 'static,
 {
+    let cloned_pool = string_pool.clone();
     OnionLambdaDefinition::new_static_with_self(
         params,
-        LambdaBody::NativeFunction(Arc::new(|| {
-            Box::new(NativeMethodGenerator {
-                captured: FxHashMap::default(),
-                self_object: None,
-                function: function,
-            })
-        })),
+        LambdaBody::NativeFunction((
+            Arc::new(move || {
+                Box::new(NativeMethodGenerator {
+                    captured: OnionFastMap::new(string_pool.clone()),
+                    self_object: None,
+                    function: function,
+                })
+            }),
+            cloned_pool,
+        )),
         capture,
         self_object,
         signature,

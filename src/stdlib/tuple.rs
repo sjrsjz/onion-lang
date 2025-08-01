@@ -6,22 +6,22 @@ use onion_vm::{
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         tuple::OnionTuple,
     },
+    utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
-use rustc_hash::FxHashMap;
 
 use super::{build_dict, build_string_tuple, wrap_native_function};
 
 /// Pushes a value to a tuple, returning a new tuple.
 fn push(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(container) = argument.get("container") else {
+    let Some(container) = argument.get(&"container".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "push requires a 'container' argument".to_string().into(),
         ));
     };
-    let Some(value) = argument.get("value") else {
+    let Some(value) = argument.get(&"value".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "push requires a 'value' argument".to_string().into(),
         ));
@@ -43,10 +43,10 @@ fn push(
 
 /// Pops a value from a tuple, returning a new tuple.
 fn pop(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(container) = argument.get("container") else {
+    let Some(container) = argument.get(&"container".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "pop requires a 'container' argument".to_string().into(),
         ));
@@ -73,20 +73,20 @@ fn pop(
 
 /// Inserts a value into a tuple at a specific index, returning a new tuple.
 fn insert(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(container) = argument.get("container") else {
+    let Some(container) = argument.get(&"container".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "insert requires a 'container' argument".to_string().into(),
         ));
     };
-    let Some(index_obj) = argument.get("index") else {
+    let Some(index_obj) = argument.get(&"index".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "insert requires an 'index' argument".to_string().into(),
         ));
     };
-    let Some(value) = argument.get("value") else {
+    let Some(value) = argument.get(&"value".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "insert requires a 'value' argument".to_string().into(),
         ));
@@ -123,15 +123,15 @@ fn insert(
 
 /// Removes a value from a tuple at a specific index, returning a new tuple.
 fn remove(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(container) = argument.get("container") else {
+    let Some(container) = argument.get(&"container".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "remove requires a 'container' argument".to_string().into(),
         ));
     };
-    let Some(index_obj) = argument.get("index") else {
+    let Some(index_obj) = argument.get(&"index".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "remove requires an 'index' argument".to_string().into(),
         ));
@@ -175,8 +175,9 @@ pub fn build_module() -> OnionStaticObject {
         "push".to_string(),
         wrap_native_function(
             &build_string_tuple(&["container", "value"]),
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "tuple::push".to_string(),
+            OnionKeyPool::create(vec!["container".to_string(), "value".to_string()]),
             &push,
         ),
     );
@@ -186,8 +187,9 @@ pub fn build_module() -> OnionStaticObject {
         "pop".to_string(),
         wrap_native_function(
             &OnionObject::String("container".to_string().into()).stabilize(),
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "tuple::pop".to_string(),
+            OnionKeyPool::create(vec!["container".to_string()]),
             &pop,
         ),
     );
@@ -197,8 +199,13 @@ pub fn build_module() -> OnionStaticObject {
         "insert".to_string(),
         wrap_native_function(
             &build_string_tuple(&["container", "index", "value"]),
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "tuple::insert".to_string(),
+            OnionKeyPool::create(vec![
+                "container".to_string(),
+                "index".to_string(),
+                "value".to_string(),
+            ]),
             &insert,
         ),
     );
@@ -208,8 +215,9 @@ pub fn build_module() -> OnionStaticObject {
         "remove".to_string(),
         wrap_native_function(
             &build_string_tuple(&["container", "index"]),
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "tuple::remove".to_string(),
+            OnionKeyPool::create(vec!["container".to_string(), "index".to_string()]),
             &remove,
         ),
     );

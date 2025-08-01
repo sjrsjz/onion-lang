@@ -18,10 +18,10 @@ use onion_vm::{
         tuple::OnionTuple,
     },
     unwrap_object,
+    utils::fastmap::OnionFastMap,
 };
 
 use onion_frontend::{compile::build_code, utils::cycle_detector};
-use rustc_hash::FxHashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -87,9 +87,9 @@ impl ReplExecutor {
     ) -> Result<(), String> {
         // 创建标准库对象
         let stdlib = crate::stdlib::build_module();
-        let mut capture = FxHashMap::default();
-        capture.insert("stdlib".to_string(), stdlib.weak().clone());
-        capture.insert("Out".to_string(), self.out_tuple.weak().clone());
+        let mut capture = OnionFastMap::new(vm_instructions_package.create_key_pool());
+        capture.push(&"stdlib".to_string(), stdlib.weak().clone());
+        capture.push(&"Out".to_string(), self.out_tuple.weak().clone());
 
         // 创建Lambda定义，包含stdlib和Out两个参数
         let lambda = OnionLambdaDefinition::new_static(
@@ -102,7 +102,7 @@ impl ReplExecutor {
 
         let args = OnionTuple::new_static(vec![]);
         let mut scheduler: Box<dyn Runnable> = Box::new(Scheduler::new(vec![Box::new(
-            OnionLambdaRunnableLauncher::new_static(&lambda, &args, |r| Ok(r))
+            OnionLambdaRunnableLauncher::new_static(lambda.weak(), args, |r| Ok(r))
                 .map_err(|e| format!("Failed to create runnable Lambda: {:?}", e))?,
         )]));
 

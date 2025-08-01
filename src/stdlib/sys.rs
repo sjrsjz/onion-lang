@@ -4,9 +4,8 @@ use onion_vm::{
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         pair::OnionPair,
         tuple::OnionTuple,
-    }, GC
+    }, utils::fastmap::{OnionFastMap, OnionKeyPool}, GC
 };
-use rustc_hash::FxHashMap;
 use std::env;
 
 // 引入所需的辅助函数
@@ -14,10 +13,10 @@ use super::{build_dict, build_string_tuple, wrap_native_function};
 
 // 辅助函数，用于获取并验证字符串参数
 fn get_string_arg<'a>(
-    argument: &'a FxHashMap<String, OnionStaticObject>,
+    argument: &'a OnionFastMap<String, OnionStaticObject>,
     name: &str,
 ) -> Result<&'a str, RuntimeError> {
-    let obj = argument.get(name).ok_or_else(|| {
+    let obj = argument.get(&name.to_string()).ok_or_else(|| {
         RuntimeError::DetailedError(
             format!("Function requires a '{}' argument", name)
                 .to_string()
@@ -36,10 +35,10 @@ fn get_string_arg<'a>(
 
 // 辅助函数，用于获取并验证整数参数
 fn get_integer_arg(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     name: &str,
 ) -> Result<i64, RuntimeError> {
-    let obj = argument.get(name).ok_or_else(|| {
+    let obj = argument.get(&name.to_string()).ok_or_else(|| {
         RuntimeError::DetailedError(
             format!("Function requires an '{}' argument", name)
                 .to_string()
@@ -58,7 +57,7 @@ fn get_integer_arg(
 
 /// 获取系统命令行参数
 fn argv(
-    _argument: &FxHashMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let args: Vec<_> = env::args()
@@ -69,7 +68,7 @@ fn argv(
 
 /// 获取环境变量
 fn getenv(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let key_str = get_string_arg(argument, "key")?;
@@ -81,7 +80,7 @@ fn getenv(
 
 /// 设置环境变量
 fn setenv(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let key_str = get_string_arg(argument, "key")?;
@@ -92,7 +91,7 @@ fn setenv(
 
 /// 删除环境变量
 fn unsetenv(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let key_str = get_string_arg(argument, "key")?;
@@ -102,7 +101,7 @@ fn unsetenv(
 
 /// 获取所有环境变量
 fn environ(
-    _argument: &FxHashMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let env_vars: Vec<_> = env::vars()
@@ -117,7 +116,7 @@ fn environ(
 
 /// 获取当前工作目录
 fn getcwd(
-    _argument: &FxHashMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     match env::current_dir() {
@@ -130,7 +129,7 @@ fn getcwd(
 
 /// 退出程序
 fn exit(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let exit_code = get_integer_arg(argument, "code")?;
@@ -139,7 +138,7 @@ fn exit(
 
 /// 获取系统平台信息
 fn platform(
-    _argument: &FxHashMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let platform = if cfg!(target_os = "windows") {
@@ -156,7 +155,7 @@ fn platform(
 
 /// 获取系统架构信息
 fn arch(
-    _argument: &FxHashMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let arch = if cfg!(target_arch = "x86_64") {
@@ -175,7 +174,7 @@ fn arch(
 
 /// 获取程序执行路径
 fn executable(
-    _argument: &FxHashMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     match env::current_exe() {
@@ -198,8 +197,9 @@ pub fn build_module() -> OnionStaticObject {
         "argv".to_string(),
         wrap_native_function(
             &no_args,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "sys::argv".to_string(),
+            OnionKeyPool::create(vec![]),
             &argv,
         ),
     );
@@ -207,8 +207,9 @@ pub fn build_module() -> OnionStaticObject {
         "getenv".to_string(),
         wrap_native_function(
             &key_arg,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "sys::getenv".to_string(),
+            OnionKeyPool::create(vec!["key".to_string()]),
             &getenv,
         ),
     );
@@ -216,8 +217,9 @@ pub fn build_module() -> OnionStaticObject {
         "setenv".to_string(),
         wrap_native_function(
             &build_string_tuple(&["key", "value"]),
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "sys::setenv".to_string(),
+            OnionKeyPool::create(vec!["key".to_string(), "value".to_string()]),
             &setenv,
         ),
     );
@@ -225,8 +227,9 @@ pub fn build_module() -> OnionStaticObject {
         "unsetenv".to_string(),
         wrap_native_function(
             &key_arg,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "sys::unsetenv".to_string(),
+            OnionKeyPool::create(vec!["key".to_string()]),
             &unsetenv,
         ),
     );
@@ -234,8 +237,9 @@ pub fn build_module() -> OnionStaticObject {
         "environ".to_string(),
         wrap_native_function(
             &no_args,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "sys::environ".to_string(),
+            OnionKeyPool::create(vec![]),
             &environ,
         ),
     );
@@ -243,8 +247,9 @@ pub fn build_module() -> OnionStaticObject {
         "getcwd".to_string(),
         wrap_native_function(
             &no_args,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "sys::getcwd".to_string(),
+            OnionKeyPool::create(vec![]),
             &getcwd,
         ),
     );
@@ -252,8 +257,9 @@ pub fn build_module() -> OnionStaticObject {
         "exit".to_string(),
         wrap_native_function(
             &exit_arg,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "sys::exit".to_string(),
+            OnionKeyPool::create(vec!["code".to_string()]),
             &exit,
         ),
     );
@@ -261,8 +267,9 @@ pub fn build_module() -> OnionStaticObject {
         "platform".to_string(),
         wrap_native_function(
             &no_args,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "sys::platform".to_string(),
+            OnionKeyPool::create(vec![]),
             &platform,
         ),
     );
@@ -270,8 +277,9 @@ pub fn build_module() -> OnionStaticObject {
         "arch".to_string(),
         wrap_native_function(
             &no_args,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "sys::arch".to_string(),
+            OnionKeyPool::create(vec![]),
             &arch,
         ),
     );
@@ -279,8 +287,9 @@ pub fn build_module() -> OnionStaticObject {
         "executable".to_string(),
         wrap_native_function(
             &no_args,
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "sys::executable".to_string(),
+            OnionKeyPool::create(vec![]),
             &executable,
         ),
     );

@@ -47,8 +47,8 @@ impl Runnable for Mapping {
                         self.mapper.weak().with_data(|mapper_obj| match mapper_obj {
                             OnionObject::Lambda(_) => {
                                 let runnable = Box::new(OnionLambdaRunnableLauncher::new_static(
-                                    &self.mapper,
-                                    &element.stabilize(),
+                                    mapper_obj,
+                                    element.stabilize(),
                                     &|r| Ok(r),
                                 )?);
                                 Ok(StepResult::NewRunnable(runnable))

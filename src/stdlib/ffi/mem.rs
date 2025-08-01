@@ -8,8 +8,8 @@ use onion_vm::{
     GC,
     lambda::runnable::RuntimeError,
     types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
+    utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
-use rustc_hash::FxHashMap;
 
 // 引入所需的辅助函数
 use crate::stdlib::{build_dict, build_string_tuple, wrap_native_function};
@@ -17,10 +17,10 @@ use crate::stdlib::{build_dict, build_string_tuple, wrap_native_function};
 // --- Helper function for robust argument parsing ---
 
 fn get_integer_arg(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     name: &str,
 ) -> Result<i64, RuntimeError> {
-    let obj = argument.get(name).ok_or_else(|| {
+    let obj = argument.get(&name.to_string()).ok_or_else(|| {
         RuntimeError::DetailedError(
             format!("Function requires an '{}' argument", name)
                 .to_string()
@@ -41,7 +41,7 @@ fn get_integer_arg(
 
 /// 分配内存
 fn mem_alloc(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let size = get_integer_arg(argument, "size")?;
@@ -68,7 +68,7 @@ fn mem_alloc(
 
 /// 释放内存
 fn mem_free(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let ptr = get_integer_arg(argument, "ptr")?;
@@ -97,7 +97,7 @@ fn mem_free(
 
 /// 分配并清零内存
 fn mem_calloc(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let count = get_integer_arg(argument, "count")?;
@@ -134,7 +134,7 @@ fn mem_calloc(
 
 /// 读取内存内容到缓冲区
 fn mem_read(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let ptr = get_integer_arg(argument, "ptr")?;
@@ -159,11 +159,11 @@ fn mem_read(
 
 /// 写入缓冲区内容到内存
 fn mem_write(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let ptr = get_integer_arg(argument, "ptr")?;
-    let buffer_obj = argument.get("buffer").ok_or_else(|| {
+    let buffer_obj = argument.get(&"buffer".to_string()).ok_or_else(|| {
         RuntimeError::DetailedError("mem_write requires a 'buffer' argument".to_string().into())
     })?;
 
@@ -198,7 +198,7 @@ fn mem_write(
 
 /// 复制内存
 fn mem_copy(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let dest = get_integer_arg(argument, "dest")?;
@@ -234,8 +234,9 @@ pub fn build_module() -> OnionStaticObject {
         "alloc".to_string(),
         wrap_native_function(
             &OnionObject::String("size".to_string().into()).stabilize(),
-            &FxHashMap::default(),
+            &OnionFastMap::new(OnionKeyPool::create(vec![])),
             "mem::alloc".to_string(),
+            OnionKeyPool::create(vec!["size".to_string()]),
             &mem_alloc,
         ),
     );
@@ -243,8 +244,9 @@ pub fn build_module() -> OnionStaticObject {
         "free".to_string(),
         wrap_native_function(
             &build_string_tuple(&["ptr", "size"]),
-            &FxHashMap::default(),
+            &OnionFastMap::new(OnionKeyPool::create(vec![])),
             "mem::free".to_string(),
+            OnionKeyPool::create(vec!["ptr".to_string(), "size".to_string()]),
             &mem_free,
         ),
     );
@@ -252,8 +254,9 @@ pub fn build_module() -> OnionStaticObject {
         "calloc".to_string(),
         wrap_native_function(
             &build_string_tuple(&["count", "size"]),
-            &FxHashMap::default(),
+            &OnionFastMap::new(OnionKeyPool::create(vec![])),
             "mem::calloc".to_string(),
+            OnionKeyPool::create(vec!["count".to_string(), "size".to_string()]),
             &mem_calloc,
         ),
     );
@@ -261,8 +264,9 @@ pub fn build_module() -> OnionStaticObject {
         "read".to_string(),
         wrap_native_function(
             &build_string_tuple(&["ptr", "size"]),
-            &FxHashMap::default(),
+            &OnionFastMap::new(OnionKeyPool::create(vec![])),
             "mem::read".to_string(),
+            OnionKeyPool::create(vec!["ptr".to_string(), "size".to_string()]),
             &mem_read,
         ),
     );
@@ -270,8 +274,9 @@ pub fn build_module() -> OnionStaticObject {
         "write".to_string(),
         wrap_native_function(
             &build_string_tuple(&["ptr", "buffer"]),
-            &FxHashMap::default(),
+            &OnionFastMap::new(OnionKeyPool::create(vec![])),
             "mem::write".to_string(),
+            OnionKeyPool::create(vec!["ptr".to_string(), "buffer".to_string()]),
             &mem_write,
         ),
     );
@@ -279,8 +284,13 @@ pub fn build_module() -> OnionStaticObject {
         "copy".to_string(),
         wrap_native_function(
             &build_string_tuple(&["dest", "src", "size"]),
-            &FxHashMap::default(),
+            &OnionFastMap::new(OnionKeyPool::create(vec![])),
             "mem::copy".to_string(),
+            OnionKeyPool::create(vec![
+                "dest".to_string(),
+                "src".to_string(),
+                "size".to_string(),
+            ]),
             &mem_copy,
         ),
     );

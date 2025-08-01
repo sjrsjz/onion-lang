@@ -11,9 +11,8 @@ use onion_vm::{
         tuple::OnionTuple,
     },
     unwrap_step_result,
+    utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
-use rustc_hash::FxHashMap;
-
 mod bytes;
 mod ffi;
 mod fs;
@@ -50,12 +49,12 @@ pub fn build_string_tuple(strings: &[&str]) -> OnionStaticObject {
 pub struct NativeFunctionGenerator<F>
 where
     F: Fn(
-            &FxHashMap<String, OnionStaticObject>,
+            &OnionFastMap<String, OnionStaticObject>,
             &mut GC<OnionObjectCell>,
         ) -> Result<OnionStaticObject, RuntimeError>
         + 'static,
 {
-    captured: FxHashMap<String, OnionStaticObject>,
+    captured: OnionFastMap<String, OnionStaticObject>,
     self_object: Option<OnionStaticObject>,
     function: &'static F,
 }
@@ -63,7 +62,7 @@ where
 impl<F> Runnable for NativeFunctionGenerator<F>
 where
     F: Fn(
-            &FxHashMap<String, OnionStaticObject>,
+            &OnionFastMap<String, OnionStaticObject>,
             &mut GC<OnionObjectCell>,
         ) -> Result<OnionStaticObject, RuntimeError>
         + Send
@@ -78,13 +77,14 @@ where
 
     fn capture(
         &mut self,
-        argument: &FxHashMap<String, OnionStaticObject>,
-        captured_vars: &FxHashMap<String, OnionObject>,
+        argument: &OnionFastMap<String, OnionStaticObject>,
+        captured_vars: &OnionFastMap<String, OnionObject>,
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         self.captured = argument.clone();
-        for (key, value) in captured_vars {
-            self.captured.insert(key.clone(), value.stabilize());
+        for (key, value) in captured_vars.pairs() {
+            self.captured
+                .push_with_index(key.clone(), value.stabilize());
         }
         Ok(())
     }
@@ -124,28 +124,33 @@ where
 
 pub fn wrap_native_function<F>(
     params: &OnionStaticObject,
-    capture: &FxHashMap<String, OnionObject>,
+    capture: &OnionFastMap<String, OnionObject>,
     signature: String,
+    string_pool: OnionKeyPool<String>,
     function: &'static F,
 ) -> OnionStaticObject
 where
     F: Fn(
-            &FxHashMap<String, OnionStaticObject>,
+            &OnionFastMap<String, OnionStaticObject>,
             &mut GC<OnionObjectCell>,
         ) -> Result<OnionStaticObject, RuntimeError>
         + Send
         + Sync
         + 'static,
 {
+    let cloned_pool = string_pool.clone();
     OnionLambdaDefinition::new_static(
         params,
-        LambdaBody::NativeFunction(Arc::new(|| {
-            Box::new(NativeFunctionGenerator {
-                captured: FxHashMap::default(),
-                self_object: None,
-                function: function,
-            })
-        })),
+        LambdaBody::NativeFunction((
+            Arc::new(move || {
+                Box::new(NativeFunctionGenerator {
+                    captured: OnionFastMap::new(string_pool.clone()),
+                    self_object: None,
+                    function: function,
+                })
+            }),
+            cloned_pool,
+        )),
         capture,
         signature,
         LambdaType::Normal,

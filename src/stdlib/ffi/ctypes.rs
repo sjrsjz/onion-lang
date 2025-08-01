@@ -13,8 +13,8 @@ use onion_vm::{
         object::{OnionObject, OnionObjectCell, OnionObjectExt, OnionStaticObject},
         tuple::OnionTuple,
     },
+    utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
-use rustc_hash::FxHashMap;
 
 // 引入所需的辅助函数
 use crate::stdlib::{build_dict, wrap_native_function};
@@ -155,14 +155,16 @@ impl OnionObjectExt for CTypes {
 // --- Argument Parsing Helper Functions ---
 
 fn get_value_arg<'a>(
-    argument: &'a FxHashMap<String, OnionStaticObject>,
+    argument: &'a OnionFastMap<String, OnionStaticObject>,
 ) -> Result<&'a OnionStaticObject, RuntimeError> {
-    argument.get("value").ok_or_else(|| {
+    argument.get(&"value".to_string()).ok_or_else(|| {
         RuntimeError::DetailedError("Function requires a 'value' argument".to_string().into())
     })
 }
 
-fn get_integer_arg(argument: &FxHashMap<String, OnionStaticObject>) -> Result<i64, RuntimeError> {
+fn get_integer_arg(
+    argument: &OnionFastMap<String, OnionStaticObject>,
+) -> Result<i64, RuntimeError> {
     let obj = get_value_arg(argument)?;
     match obj.weak() {
         OnionObject::Integer(i) => Ok(*i),
@@ -178,7 +180,7 @@ enum NumericArg {
 }
 
 fn get_numeric_arg(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
 ) -> Result<NumericArg, RuntimeError> {
     let obj = get_value_arg(argument)?;
     match obj.weak() {
@@ -197,7 +199,7 @@ fn get_numeric_arg(
 macro_rules! c_int_constructor {
     ($name:ident, $type:ty, $ctype_variant:ident) => {
         fn $name(
-            argument: &FxHashMap<String, OnionStaticObject>,
+            argument: &OnionFastMap<String, OnionStaticObject>,
             _gc: &mut GC<OnionObjectCell>,
         ) -> Result<OnionStaticObject, RuntimeError> {
             let n = get_integer_arg(argument)?;
@@ -217,7 +219,7 @@ macro_rules! c_int_constructor {
 macro_rules! c_uint_constructor {
     ($name:ident, $type:ty, $ctype_variant:ident) => {
         fn $name(
-            argument: &FxHashMap<String, OnionStaticObject>,
+            argument: &OnionFastMap<String, OnionStaticObject>,
             _gc: &mut GC<OnionObjectCell>,
         ) -> Result<OnionStaticObject, RuntimeError> {
             let n = get_integer_arg(argument)?;
@@ -241,7 +243,7 @@ c_uint_constructor!(c_uint16, u16, CUInt16);
 c_uint_constructor!(c_uint32, u32, CUInt32);
 
 fn c_int64(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let n = get_integer_arg(argument)?;
@@ -249,7 +251,7 @@ fn c_int64(
 }
 
 fn c_uint64(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let n = get_integer_arg(argument)?;
@@ -263,7 +265,7 @@ fn c_uint64(
 }
 
 fn c_float(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let val = match get_numeric_arg(argument)? {
@@ -274,7 +276,7 @@ fn c_float(
 }
 
 fn c_double(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let val = match get_numeric_arg(argument)? {
@@ -285,7 +287,7 @@ fn c_double(
 }
 
 fn c_char(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let value_obj = get_value_arg(argument)?;
@@ -312,7 +314,7 @@ fn c_char(
 }
 
 fn c_uchar(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let value_obj = get_value_arg(argument)?;
@@ -339,7 +341,7 @@ fn c_uchar(
 }
 
 fn c_bool(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let value_obj = get_value_arg(argument)?;
@@ -348,7 +350,7 @@ fn c_bool(
 }
 
 fn c_string(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let value_obj = get_value_arg(argument)?;
@@ -357,7 +359,7 @@ fn c_string(
 }
 
 fn c_buffer(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let value_obj = get_value_arg(argument)?;
@@ -375,7 +377,7 @@ fn c_buffer(
 }
 
 fn c_pointer(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let n = get_integer_arg(argument)?;
@@ -389,7 +391,7 @@ fn c_pointer(
 }
 
 fn c_size(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let n = get_integer_arg(argument)?;
@@ -403,7 +405,7 @@ fn c_size(
 }
 
 fn c_ssize(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let n = get_integer_arg(argument)?;
@@ -411,14 +413,14 @@ fn c_ssize(
 }
 
 fn c_void(
-    _argument: &FxHashMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     Ok(OnionObject::Custom(Arc::new(CTypes::CVoid)).stabilize())
 }
 
 fn c_null(
-    _argument: &FxHashMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     Ok(OnionObject::Custom(Arc::new(CTypes::CNull)).stabilize())
@@ -437,14 +439,14 @@ pub fn build_module() -> OnionStaticObject {
                 $name.to_string(),
                 wrap_native_function(
                     &value_arg,
-                    &FxHashMap::default(),
+                    &OnionFastMap::new(OnionKeyPool::create(vec![])),
                     concat!("ctypes::", $name).to_string(),
+                    OnionKeyPool::create(vec!["value".to_string()]),
                     &$func,
                 ),
             );
         };
     }
-
     register_ctype!("i8", c_int8);
     register_ctype!("i16", c_int16);
     register_ctype!("i32", c_int32);
@@ -468,8 +470,9 @@ pub fn build_module() -> OnionStaticObject {
         "void".to_string(),
         wrap_native_function(
             &no_args,
-            &FxHashMap::default(),
+            &OnionFastMap::new(OnionKeyPool::create(vec![])),
             "ctypes::void".to_string(),
+            OnionKeyPool::create(vec![]),
             &c_void,
         ),
     );
@@ -477,8 +480,9 @@ pub fn build_module() -> OnionStaticObject {
         "null".to_string(),
         wrap_native_function(
             &no_args,
-            &FxHashMap::default(),
+            &OnionFastMap::new(OnionKeyPool::create(vec![])),
             "ctypes::null".to_string(),
+            OnionKeyPool::create(vec![]),
             &c_null,
         ),
     );

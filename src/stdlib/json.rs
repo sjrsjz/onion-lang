@@ -1,12 +1,12 @@
 use super::{build_dict, wrap_native_function};
 use indexmap::IndexMap;
 use onion_vm::types::{pair::OnionPair, tuple::OnionTuple};
+use onion_vm::utils::fastmap::{OnionFastMap, OnionKeyPool};
 use onion_vm::{
     GC,
     lambda::runnable::RuntimeError,
     types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
 };
-use rustc_hash::FxHashMap;
 use serde_json::Value;
 
 /// 将 OnionObject 递归转换为 serde_json::Value。
@@ -117,10 +117,10 @@ fn stringify_json_pretty(obj: OnionObject) -> Result<String, RuntimeError> {
 // --- 新的原生函数封装 (遵循 io 模块的模式) ---
 
 fn json_parse(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(json_string_obj) = argument.get("json_string") else {
+    let Some(json_string_obj) = argument.get(&"json_string".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "json.parse requires a 'json_string' argument"
                 .to_string()
@@ -137,10 +137,10 @@ fn json_parse(
 }
 
 fn json_stringify(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(object_to_stringify) = argument.get("object") else {
+    let Some(object_to_stringify) = argument.get(&"object".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "json.stringify requires an 'object' argument"
                 .to_string()
@@ -153,10 +153,10 @@ fn json_stringify(
 }
 
 fn json_stringify_pretty(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(object_to_stringify) = argument.get("object") else {
+    let Some(object_to_stringify) = argument.get(&"object".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "json.stringify_pretty requires an 'object' argument"
                 .to_string()
@@ -175,8 +175,9 @@ pub fn build_module() -> OnionStaticObject {
         "parse".to_string(),
         wrap_native_function(
             &OnionObject::String("json_string".to_string().into()).stabilize(),
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "json::parse".to_string(),
+            OnionKeyPool::create(vec!["json_string".to_string()]),
             &json_parse,
         ),
     );
@@ -185,8 +186,9 @@ pub fn build_module() -> OnionStaticObject {
         "stringify".to_string(),
         wrap_native_function(
             &OnionObject::String("object".to_string().into()).stabilize(),
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "json::stringify".to_string(),
+            OnionKeyPool::create(vec!["object".to_string()]),
             &json_stringify,
         ),
     );
@@ -195,8 +197,9 @@ pub fn build_module() -> OnionStaticObject {
         "stringify_pretty".to_string(),
         wrap_native_function(
             &OnionObject::String("object".to_string().into()).stabilize(),
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "json::stringify_pretty".to_string(),
+            OnionKeyPool::create(vec!["object".to_string()]),
             &json_stringify_pretty,
         ),
     );

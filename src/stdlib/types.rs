@@ -5,8 +5,8 @@ use onion_vm::{
     GC,
     lambda::runnable::RuntimeError,
     types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
+    utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
-use rustc_hash::FxHashMap;
 
 use crate::stdlib::{build_string_tuple, tuple};
 
@@ -14,10 +14,10 @@ use super::{build_dict, wrap_native_function};
 
 /// Convert object to string
 fn to_string(
-    argument: &FxHashMap<String, OnionStaticObject>, // Changed signature
+    argument: &OnionFastMap<String, OnionStaticObject>, // Changed signature
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(value) = argument.get("value") else {
+    let Some(value) = argument.get(&"value".to_string()) else {
         // Get parameter directly
         return Err(RuntimeError::DetailedError(
             "to_string requires a 'value' argument".to_string().into(),
@@ -29,10 +29,10 @@ fn to_string(
 
 /// Convert object to integer
 fn to_int(
-    argument: &FxHashMap<String, OnionStaticObject>, // Changed signature
+    argument: &OnionFastMap<String, OnionStaticObject>, // Changed signature
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(value) = argument.get("value") else {
+    let Some(value) = argument.get(&"value".to_string()) else {
         // Get parameter directly
         return Err(RuntimeError::DetailedError(
             "to_int requires a 'value' argument".to_string().into(),
@@ -57,10 +57,10 @@ fn to_int(
 
 /// Convert object to float
 fn to_float(
-    argument: &FxHashMap<String, OnionStaticObject>, // Changed signature
+    argument: &OnionFastMap<String, OnionStaticObject>, // Changed signature
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(value) = argument.get("value") else {
+    let Some(value) = argument.get(&"value".to_string()) else {
         // Get parameter directly
         return Err(RuntimeError::DetailedError(
             "to_float requires a 'value' argument".to_string().into(),
@@ -85,10 +85,10 @@ fn to_float(
 
 /// Convert object to boolean
 fn to_bool(
-    argument: &FxHashMap<String, OnionStaticObject>, // Changed signature
+    argument: &OnionFastMap<String, OnionStaticObject>, // Changed signature
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(value) = argument.get("value") else {
+    let Some(value) = argument.get(&"value".to_string()) else {
         // Get parameter directly
         return Err(RuntimeError::DetailedError(
             "to_bool requires a 'value' argument".to_string().into(),
@@ -119,10 +119,10 @@ fn to_bool(
 
 /// Get object type name
 fn type_of(
-    argument: &FxHashMap<String, OnionStaticObject>, // Changed signature
+    argument: &OnionFastMap<String, OnionStaticObject>, // Changed signature
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(value) = argument.get("value") else {
+    let Some(value) = argument.get(&"value".to_string()) else {
         // Get parameter directly
         return Err(RuntimeError::DetailedError(
             "type_of requires a 'value' argument".to_string().into(),
@@ -137,10 +137,10 @@ fn type_of(
 
 /// Check if object is an integer
 fn is_int(
-    argument: &FxHashMap<String, OnionStaticObject>, // Changed signature
+    argument: &OnionFastMap<String, OnionStaticObject>, // Changed signature
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(value) = argument.get("value") else {
+    let Some(value) = argument.get(&"value".to_string()) else {
         // Get parameter directly
         return Err(RuntimeError::DetailedError(
             "is_int requires a 'value' argument".to_string().into(),
@@ -155,10 +155,10 @@ fn is_int(
 
 /// Check if object is a float
 fn is_float(
-    argument: &FxHashMap<String, OnionStaticObject>, // Changed signature
+    argument: &OnionFastMap<String, OnionStaticObject>, // Changed signature
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(value) = argument.get("value") else {
+    let Some(value) = argument.get(&"value".to_string()) else {
         // Get parameter directly
         return Err(RuntimeError::DetailedError(
             "is_float requires a 'value' argument".to_string().into(),
@@ -173,10 +173,10 @@ fn is_float(
 
 /// Check if object is a string
 fn is_string(
-    argument: &FxHashMap<String, OnionStaticObject>, // Changed signature
+    argument: &OnionFastMap<String, OnionStaticObject>, // Changed signature
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(value) = argument.get("value") else {
+    let Some(value) = argument.get(&"value".to_string()) else {
         // Get parameter directly
         return Err(RuntimeError::DetailedError(
             "is_string requires a 'value' argument".to_string().into(),
@@ -191,10 +191,10 @@ fn is_string(
 
 /// Check if object is a boolean
 fn is_bool(
-    argument: &FxHashMap<String, OnionStaticObject>, // Changed signature
+    argument: &OnionFastMap<String, OnionStaticObject>, // Changed signature
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(value) = argument.get("value") else {
+    let Some(value) = argument.get(&"value".to_string()) else {
         // Get parameter directly
         return Err(RuntimeError::DetailedError(
             "is_bool requires a 'value' argument".to_string().into(),
@@ -209,10 +209,10 @@ fn is_bool(
 
 /// Check if object is bytes
 fn is_bytes(
-    argument: &FxHashMap<String, OnionStaticObject>, // Changed signature
+    argument: &OnionFastMap<String, OnionStaticObject>, // Changed signature
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(value) = argument.get("value") else {
+    let Some(value) = argument.get(&"value".to_string()) else {
         // Get parameter directly
         return Err(RuntimeError::DetailedError(
             "is_bytes requires a 'value' argument".to_string().into(),
@@ -227,10 +227,10 @@ fn is_bytes(
 
 /// Convert object to bytes
 fn to_bytes(
-    argument: &FxHashMap<String, OnionStaticObject>, // Changed signature
+    argument: &OnionFastMap<String, OnionStaticObject>, // Changed signature
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(value) = argument.get("value") else {
+    let Some(value) = argument.get(&"value".to_string()) else {
         // Get parameter directly
         return Err(RuntimeError::DetailedError(
             "to_bytes requires a 'value' argument".to_string().into(),
@@ -260,15 +260,15 @@ fn to_bytes(
 
 // get attr or undefined
 fn find(
-    argument: &FxHashMap<String, OnionStaticObject>, // Changed signature
+    argument: &OnionFastMap<String, OnionStaticObject>, // Changed signature
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(obj) = argument.get("obj") else {
+    let Some(obj) = argument.get(&"obj".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "find requires an 'obj' argument".to_string().into(),
         ));
     };
-    let Some(key) = argument.get("key") else {
+    let Some(key) = argument.get(&"key".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "find requires a 'key' argument".to_string().into(),
         ));
@@ -300,8 +300,9 @@ pub fn build_module() -> OnionStaticObject {
         "to_string".to_string(),
         wrap_native_function(
             &OnionObject::String("value".to_string().into()).stabilize(), // Simplified parameter definition
-            &FxHashMap::default(), // No default arguments for these
+            &OnionFastMap::default(), // No default arguments for these
             "types::to_string".to_string(),
+            OnionKeyPool::create(vec!["value".to_string()]),
             &to_string,
         ),
     );
@@ -310,8 +311,9 @@ pub fn build_module() -> OnionStaticObject {
         "to_int".to_string(),
         wrap_native_function(
             &OnionObject::String("value".to_string().into()).stabilize(),
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "types::to_int".to_string(),
+            OnionKeyPool::create(vec!["value".to_string()]),
             &to_int,
         ),
     );
@@ -320,8 +322,9 @@ pub fn build_module() -> OnionStaticObject {
         "to_float".to_string(),
         wrap_native_function(
             &OnionObject::String("value".to_string().into()).stabilize(),
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "types::to_float".to_string(),
+            OnionKeyPool::create(vec!["value".to_string()]),
             &to_float,
         ),
     );
@@ -330,8 +333,9 @@ pub fn build_module() -> OnionStaticObject {
         "to_bool".to_string(),
         wrap_native_function(
             &OnionObject::String("value".to_string().into()).stabilize(),
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "types::to_bool".to_string(),
+            OnionKeyPool::create(vec!["value".to_string()]),
             &to_bool,
         ),
     );
@@ -340,8 +344,9 @@ pub fn build_module() -> OnionStaticObject {
         "to_bytes".to_string(),
         wrap_native_function(
             &OnionObject::String("value".to_string().into()).stabilize(),
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "types::to_bytes".to_string(),
+            OnionKeyPool::create(vec!["value".to_string()]),
             &to_bytes,
         ),
     );
@@ -351,8 +356,9 @@ pub fn build_module() -> OnionStaticObject {
         "type_of".to_string(),
         wrap_native_function(
             &OnionObject::String("value".to_string().into()).stabilize(),
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "types::type_of".to_string(),
+            OnionKeyPool::create(vec!["value".to_string()]),
             &type_of,
         ),
     );
@@ -361,8 +367,9 @@ pub fn build_module() -> OnionStaticObject {
         "is_int".to_string(),
         wrap_native_function(
             &OnionObject::String("value".to_string().into()).stabilize(),
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "types::is_int".to_string(),
+            OnionKeyPool::create(vec!["value".to_string()]),
             &is_int,
         ),
     );
@@ -371,8 +378,9 @@ pub fn build_module() -> OnionStaticObject {
         "is_float".to_string(),
         wrap_native_function(
             &OnionObject::String("value".to_string().into()).stabilize(),
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "types::is_float".to_string(),
+            OnionKeyPool::create(vec!["value".to_string()]),
             &is_float,
         ),
     );
@@ -381,8 +389,9 @@ pub fn build_module() -> OnionStaticObject {
         "is_string".to_string(),
         wrap_native_function(
             &OnionObject::String("value".to_string().into()).stabilize(),
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "types::is_string".to_string(),
+            OnionKeyPool::create(vec!["value".to_string()]),
             &is_string,
         ),
     );
@@ -391,8 +400,9 @@ pub fn build_module() -> OnionStaticObject {
         "is_bool".to_string(),
         wrap_native_function(
             &OnionObject::String("value".to_string().into()).stabilize(),
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "types::is_bool".to_string(),
+            OnionKeyPool::create(vec!["value".to_string()]),
             &is_bool,
         ),
     );
@@ -401,8 +411,9 @@ pub fn build_module() -> OnionStaticObject {
         "is_bytes".to_string(),
         wrap_native_function(
             &OnionObject::String("value".to_string().into()).stabilize(),
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "types::is_bytes".to_string(),
+            OnionKeyPool::create(vec!["value".to_string()]),
             &is_bytes,
         ),
     );
@@ -412,8 +423,9 @@ pub fn build_module() -> OnionStaticObject {
         "find".to_string(),
         wrap_native_function(
             &build_string_tuple(&["obj", "key"]),
-            &FxHashMap::default(), // No default arguments for these
+            &OnionFastMap::default(), // No default arguments for these
             "types::find".to_string(),
+            OnionKeyPool::create(vec!["obj".to_string(), "key".to_string()]),
             &find,
         ),
     );

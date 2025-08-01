@@ -11,7 +11,6 @@ use arc_gc::{
     traceable::GCTraceable,
 };
 use base64::{Engine as _, engine::general_purpose};
-use rustc_hash::FxHashMap;
 
 use crate::{
     lambda::runnable::RuntimeError,
@@ -21,6 +20,7 @@ use crate::{
         native_float_converter, native_int_converter, native_length_method,
         native_string_converter, wrap_native_function,
     },
+    utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
 
 use super::{
@@ -1213,9 +1213,10 @@ impl OnionObject {
                         "int" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::int".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_int_converter,
                             );
                             return f(converter.weak());
@@ -1223,9 +1224,10 @@ impl OnionObject {
                         "float" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::float".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_float_converter,
                             );
                             return f(converter.weak());
@@ -1233,9 +1235,10 @@ impl OnionObject {
                         "string" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::string".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_string_converter,
                             );
                             return f(converter.weak());
@@ -1243,9 +1246,10 @@ impl OnionObject {
                         "bool" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::bool".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_bool_converter,
                             );
                             return f(converter.weak());
@@ -1253,9 +1257,10 @@ impl OnionObject {
                         "bytes" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::bytes".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_bytes_converter,
                             );
                             return f(converter.weak());
@@ -1280,9 +1285,10 @@ impl OnionObject {
                         "int" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::int".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_int_converter,
                             );
                             return f(converter.weak());
@@ -1290,9 +1296,10 @@ impl OnionObject {
                         "float" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::float".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_float_converter,
                             );
                             return f(converter.weak());
@@ -1300,9 +1307,10 @@ impl OnionObject {
                         "string" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::string".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_string_converter,
                             );
                             return f(converter.weak());
@@ -1310,9 +1318,10 @@ impl OnionObject {
                         "bool" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::bool".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_bool_converter,
                             );
                             return f(converter.weak());
@@ -1320,9 +1329,10 @@ impl OnionObject {
                         "bytes" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::bytes".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_bytes_converter,
                             );
                             return f(converter.weak());
@@ -1347,9 +1357,10 @@ impl OnionObject {
                         "int" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::int".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_int_converter,
                             );
                             return f(converter.weak());
@@ -1357,9 +1368,10 @@ impl OnionObject {
                         "float" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::float".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_float_converter,
                             );
                             return f(converter.weak());
@@ -1367,9 +1379,10 @@ impl OnionObject {
                         "string" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::string".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_string_converter,
                             );
                             return f(converter.weak());
@@ -1377,9 +1390,10 @@ impl OnionObject {
                         "bool" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::bool".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_bool_converter,
                             );
                             return f(converter.weak());
@@ -1387,9 +1401,10 @@ impl OnionObject {
                         "bytes" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::bytes".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_bytes_converter,
                             );
                             return f(converter.weak());
@@ -1420,9 +1435,10 @@ impl OnionObject {
                         "int" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::int".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_int_converter,
                             );
                             return f(converter.weak());
@@ -1430,9 +1446,10 @@ impl OnionObject {
                         "float" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::float".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_float_converter,
                             );
                             return f(converter.weak());
@@ -1440,9 +1457,10 @@ impl OnionObject {
                         "string" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::string".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_string_converter,
                             );
                             return f(converter.weak());
@@ -1450,9 +1468,10 @@ impl OnionObject {
                         "bool" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::bool".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_bool_converter,
                             );
                             return f(converter.weak());
@@ -1460,9 +1479,10 @@ impl OnionObject {
                         "bytes" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::bytes".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_bytes_converter,
                             );
                             return f(converter.weak());
@@ -1470,9 +1490,10 @@ impl OnionObject {
                         "length" => {
                             let length_method = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "builtin::length".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_length_method,
                             );
                             return f(length_method.weak());
@@ -1480,9 +1501,10 @@ impl OnionObject {
                         "elements" => {
                             let elements_method = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "builtin::elements".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_elements_method,
                             );
                             return f(elements_method.weak());
@@ -1510,9 +1532,10 @@ impl OnionObject {
                         "int" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::int".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_int_converter,
                             );
                             return f(converter.weak());
@@ -1520,9 +1543,10 @@ impl OnionObject {
                         "float" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::float".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_float_converter,
                             );
                             return f(converter.weak());
@@ -1530,9 +1554,10 @@ impl OnionObject {
                         "string" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::string".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_string_converter,
                             );
                             return f(converter.weak());
@@ -1540,9 +1565,10 @@ impl OnionObject {
                         "bool" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::bool".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_bool_converter,
                             );
                             return f(converter.weak());
@@ -1550,9 +1576,10 @@ impl OnionObject {
                         "bytes" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::bytes".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_bytes_converter,
                             );
                             return f(converter.weak());
@@ -1560,9 +1587,10 @@ impl OnionObject {
                         "length" => {
                             let length_method = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "builtin::length".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_length_method,
                             );
                             return f(length_method.weak());
@@ -1570,9 +1598,10 @@ impl OnionObject {
                         "elements" => {
                             let elements_method = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "builtin::elements".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_elements_method,
                             );
                             return f(elements_method.weak());
@@ -1597,9 +1626,10 @@ impl OnionObject {
                         "int" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::int".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_int_converter,
                             );
                             return f(converter.weak());
@@ -1607,9 +1637,10 @@ impl OnionObject {
                         "float" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::float".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_float_converter,
                             );
                             return f(converter.weak());
@@ -1617,9 +1648,10 @@ impl OnionObject {
                         "string" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::string".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_string_converter,
                             );
                             return f(converter.weak());
@@ -1627,9 +1659,10 @@ impl OnionObject {
                         "bool" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::bool".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_bool_converter,
                             );
                             return f(converter.weak());
@@ -1637,9 +1670,10 @@ impl OnionObject {
                         "bytes" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::bytes".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_bytes_converter,
                             );
                             return f(converter.weak());
@@ -1647,9 +1681,10 @@ impl OnionObject {
                         "length" => {
                             let length_method = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "builtin::length".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_length_method,
                             );
                             return f(length_method.weak());
@@ -1657,9 +1692,10 @@ impl OnionObject {
                         "elements" => {
                             let elements_method = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "builtin::elements".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_elements_method,
                             );
                             return f(elements_method.weak());
@@ -1684,9 +1720,10 @@ impl OnionObject {
                         "int" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::int".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_int_converter,
                             );
                             return f(converter.weak());
@@ -1694,9 +1731,10 @@ impl OnionObject {
                         "float" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::float".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_float_converter,
                             );
                             return f(converter.weak());
@@ -1704,9 +1742,10 @@ impl OnionObject {
                         "string" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::string".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_string_converter,
                             );
                             return f(converter.weak());
@@ -1714,9 +1753,10 @@ impl OnionObject {
                         "bool" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::bool".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_bool_converter,
                             );
                             return f(converter.weak());
@@ -1724,9 +1764,10 @@ impl OnionObject {
                         "bytes" => {
                             let converter = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::bytes".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_bytes_converter,
                             );
                             return f(converter.weak());
@@ -1734,9 +1775,10 @@ impl OnionObject {
                         "length" => {
                             let length_method = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "builtin::length".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_length_method,
                             );
                             return f(length_method.weak());
@@ -1744,9 +1786,10 @@ impl OnionObject {
                         "elements" => {
                             let elements_method = wrap_native_function(
                                 &onion_tuple!(),
-                                &FxHashMap::default(),
+                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "builtin::elements".to_string(),
+                                OnionKeyPool::create(vec![]),
                                 &native_elements_method,
                             );
                             return f(elements_method.weak());

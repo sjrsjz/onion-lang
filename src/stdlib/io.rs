@@ -2,19 +2,16 @@ use std::io::Write;
 
 use indexmap::IndexMap;
 use onion_vm::{
-    GC,
-    lambda::runnable::RuntimeError,
-    types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
+    lambda::runnable::RuntimeError, types::object::{OnionObject, OnionObjectCell, OnionStaticObject}, utils::fastmap::{OnionFastMap, OnionKeyPool}, GC
 };
-use rustc_hash::FxHashMap;
 
 use super::{build_dict, wrap_native_function};
 
 fn println(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(value) = argument.get("values") else {
+    let Some(value) = argument.get(&"values".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "println requires a 'values' argument".to_string().into(),
         ));
@@ -25,10 +22,10 @@ fn println(
 }
 
 fn print(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(value) = argument.get("values") else {
+    let Some(value) = argument.get(&"values".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "print requires a 'values' argument".to_string().into(),
         ));
@@ -39,10 +36,10 @@ fn print(
 }
 
 fn input(
-    argument: &FxHashMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(hint) = argument.get("hint") else {
+    let Some(hint) = argument.get(&"hint".to_string()) else {
         return Err(RuntimeError::DetailedError(
             "input requires a 'hint' argument".to_string().into(),
         ));
@@ -71,8 +68,9 @@ pub fn build_module() -> OnionStaticObject {
         "println".to_string(),
         wrap_native_function(
             &OnionObject::String("values".to_string().into()).stabilize(),
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "io::println".to_string(),
+            OnionKeyPool::create(vec!["values".to_string()]),
             &println,
         ),
     );
@@ -80,8 +78,9 @@ pub fn build_module() -> OnionStaticObject {
         "print".to_string(),
         wrap_native_function(
             &OnionObject::String("values".to_string().into()).stabilize(),
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "io::print".to_string(),
+            OnionKeyPool::create(vec!["values".to_string()]),
             &print,
         ),
     );
@@ -90,8 +89,9 @@ pub fn build_module() -> OnionStaticObject {
         "input".to_string(),
         wrap_native_function(
             &OnionObject::String("hint".to_string().into()).stabilize(),
-            &FxHashMap::default(),
+            &OnionFastMap::default(),
             "io::input".to_string(),
+            OnionKeyPool::create(vec!["hint".to_string()]),
             &input,
         ),
     );
