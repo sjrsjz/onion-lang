@@ -104,13 +104,24 @@ impl<K: PartialEq + Eq + Hash + Clone, V> OnionFastMap<K, V> {
 
     #[inline(always)]
     pub fn get(&self, key: &K) -> Option<&V> {
-        self.to_index(key)
-            .and_then(|index| self.pairs.get(index).map(|(_, v)| v))
+        // 1. 将 key 转换为其唯一的 ID
+        let target_id = self.to_index(key)?; // 如果 to_index 返回 None，则直接返回 None
+
+        // 2. 从后往前线性扫描 pairs Vec，查找匹配的 ID
+        //    从后往前可以正确处理“遮蔽”（shadowing）或“覆盖”（override）
+        self.pairs
+            .iter()
+            .rfind(|(id, _)| *id == target_id)
+            .map(|(_, v)| v)
     }
 
     #[inline(always)]
-    pub fn get_by_index(&self, index: usize) -> Option<&V> {
-        self.pairs.get(index).map(|(_, v)| v)
+    pub fn get_by_index(&self, target_index: usize) -> Option<&V> {
+        // 同样，需要线性扫描
+        self.pairs
+            .iter()
+            .rfind(|(id, _)| *id == target_index)
+            .map(|(_, v)| v)
     }
 }
 

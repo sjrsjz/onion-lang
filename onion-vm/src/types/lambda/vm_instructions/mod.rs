@@ -403,7 +403,7 @@ pub fn load_lambda(
             }
         }
 
-        OnionFastMap::new_with_pairs(captured_values, runnable.instruction.create_key_pool())
+        OnionFastMap::new_with_pairs(captured_values, package.create_key_pool())
     };
 
     let lambda = OnionLambdaDefinition::new_static(

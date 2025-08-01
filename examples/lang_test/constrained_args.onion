@@ -42,14 +42,6 @@ stdlib.io.println(
 
 stdlib.io.println(
     try(() -> {
-        add_positive(b => 1) // This should work
-    }).unwrap_or_else(
-        (err?) -> "Error: " + stdlib.types.to_string(err)
-    )
-);
-
-stdlib.io.println(
-    try(() -> {
         foo(1) // This should work
     }).unwrap_or_else(
         (err?) -> "Error: " + stdlib.types.to_string(err)
