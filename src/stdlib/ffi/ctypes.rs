@@ -56,24 +56,24 @@ impl OnionObjectExt for CTypes {
     }
     fn repr(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
         match self {
-            CTypes::CInt8(v) => Ok(format!("ctypes.i8({})", v)),
-            CTypes::CInt16(v) => Ok(format!("ctypes.i16({})", v)),
-            CTypes::CInt32(v) => Ok(format!("ctypes.i32({})", v)),
-            CTypes::CInt64(v) => Ok(format!("ctypes.i64({})", v)),
-            CTypes::CUInt8(v) => Ok(format!("ctypes.u8({})", v)),
-            CTypes::CUInt16(v) => Ok(format!("ctypes.u16({})", v)),
-            CTypes::CUInt32(v) => Ok(format!("ctypes.u32({})", v)),
-            CTypes::CUInt64(v) => Ok(format!("ctypes.u64({})", v)),
-            CTypes::CFloat(v) => Ok(format!("ctypes.f32({})", v)),
-            CTypes::CDouble(v) => Ok(format!("ctypes.f64({})", v)),
-            CTypes::CBool(v) => Ok(format!("ctypes.bool({})", v)),
-            CTypes::CString(v) => Ok(format!("ctypes.string({:?})", v)),
+            CTypes::CInt8(v) => Ok(format!("ctypes.i8({v})")),
+            CTypes::CInt16(v) => Ok(format!("ctypes.i16({v})")),
+            CTypes::CInt32(v) => Ok(format!("ctypes.i32({v})")),
+            CTypes::CInt64(v) => Ok(format!("ctypes.i64({v})")),
+            CTypes::CUInt8(v) => Ok(format!("ctypes.u8({v})")),
+            CTypes::CUInt16(v) => Ok(format!("ctypes.u16({v})")),
+            CTypes::CUInt32(v) => Ok(format!("ctypes.u32({v})")),
+            CTypes::CUInt64(v) => Ok(format!("ctypes.u64({v})")),
+            CTypes::CFloat(v) => Ok(format!("ctypes.f32({v})")),
+            CTypes::CDouble(v) => Ok(format!("ctypes.f64({v})")),
+            CTypes::CBool(v) => Ok(format!("ctypes.bool({v})")),
+            CTypes::CString(v) => Ok(format!("ctypes.string({v:?})")),
             CTypes::CBuffer(v) => Ok(format!("ctypes.buffer(len={})", v.len())),
-            CTypes::CPointer(v) => Ok(format!("ctypes.pointer({:#x})", v)),
-            CTypes::CChar(v) => Ok(format!("ctypes.char({})", v)),
-            CTypes::CUChar(v) => Ok(format!("ctypes.uchar({})", v)),
-            CTypes::CSize(v) => Ok(format!("ctypes.size({})", v)),
-            CTypes::CSSize(v) => Ok(format!("ctypes.ssize({})", v)),
+            CTypes::CPointer(v) => Ok(format!("ctypes.pointer({v:#x})")),
+            CTypes::CChar(v) => Ok(format!("ctypes.char({v})")),
+            CTypes::CUChar(v) => Ok(format!("ctypes.uchar({v})")),
+            CTypes::CSize(v) => Ok(format!("ctypes.size({v})")),
+            CTypes::CSSize(v) => Ok(format!("ctypes.ssize({v})")),
             CTypes::CVoid => Ok("ctypes.void".to_string()),
             CTypes::CNull => Ok("ctypes.null".to_string()),
         }
@@ -130,7 +130,7 @@ impl OnionObjectExt for CTypes {
                     f(v.weak())
                 }
                 _ => Err(RuntimeError::InvalidOperation(
-                    format!("Attribute '{}' not found on CTypes object", attr).into(),
+                    format!("Attribute '{attr}' not found on CTypes object").into(),
                 )),
             }
         } else {
@@ -154,9 +154,9 @@ impl OnionObjectExt for CTypes {
 
 // --- Argument Parsing Helper Functions ---
 
-fn get_value_arg<'a>(
-    argument: &'a OnionFastMap<String, OnionStaticObject>,
-) -> Result<&'a OnionStaticObject, RuntimeError> {
+fn get_value_arg(
+    argument: &OnionFastMap<String, OnionStaticObject>,
+) -> Result<&OnionStaticObject, RuntimeError> {
     argument.get(&"value".to_string()).ok_or_else(|| {
         RuntimeError::DetailedError("Function requires a 'value' argument".to_string().into())
     })
@@ -297,7 +297,7 @@ fn c_char(
                 Ok(OnionObject::Custom(Arc::new(CTypes::CChar(*n as i8))).stabilize())
             } else {
                 Err(RuntimeError::InvalidOperation(
-                    format!("Value {} out of range for char", n).into(),
+                    format!("Value {n} out of range for char").into(),
                 ))
             }
         }
@@ -324,7 +324,7 @@ fn c_uchar(
                 Ok(OnionObject::Custom(Arc::new(CTypes::CUChar(*n as u8))).stabilize())
             } else {
                 Err(RuntimeError::InvalidOperation(
-                    format!("Value {} out of range for unsigned char", n).into(),
+                    format!("Value {n} out of range for unsigned char").into(),
                 ))
             }
         }

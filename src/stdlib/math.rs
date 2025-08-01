@@ -299,7 +299,7 @@ fn asin(
                 ));
             }
         };
-        if val_f64 < -1.0 || val_f64 > 1.0 {
+        if !(-1.0..=1.0).contains(&val_f64) {
             Err(RuntimeError::InvalidOperation(
                 "asin requires a value between -1 and 1".to_string().into(),
             ))
@@ -329,7 +329,7 @@ fn acos(
                 ));
             }
         };
-        if val_f64 < -1.0 || val_f64 > 1.0 {
+        if !(-1.0..=1.0).contains(&val_f64) {
             Err(RuntimeError::InvalidOperation(
                 "acos requires a value between -1 and 1".to_string().into(),
             ))

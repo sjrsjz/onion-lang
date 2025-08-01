@@ -22,19 +22,19 @@ use super::{build_dict, build_string_tuple, wrap_native_function};
 
 // --- Helper functions for robust argument parsing ---
 
-fn get_string_arg<'a>(
-    arg_map: &'a OnionFastMap<String, OnionStaticObject>,
+fn get_string_arg(
+    arg_map: &OnionFastMap<String, OnionStaticObject>,
     name: &str,
 ) -> Result<String, RuntimeError> {
     arg_map
         .get(&name.to_string())
         .ok_or_else(|| {
-            RuntimeError::DetailedError(format!("Missing required argument: '{}'", name).into())
+            RuntimeError::DetailedError(format!("Missing required argument: '{name}'").into())
         })
         .and_then(|obj| match obj.weak() {
             OnionObject::String(s) => Ok(s.to_string()),
             _ => Err(RuntimeError::InvalidType(
-                format!("Argument '{}' must be a string", name).into(),
+                format!("Argument '{name}' must be a string").into(),
             )),
         })
 }
@@ -48,7 +48,7 @@ fn get_optional_string_arg(
             OnionObject::String(s) => Ok(Some(s.to_string())),
             OnionObject::Null | OnionObject::Undefined(_) => Ok(None),
             _ => Err(RuntimeError::InvalidType(
-                format!("Argument '{}' must be a string, null, or undefined", name).into(),
+                format!("Argument '{name}' must be a string, null, or undefined").into(),
             )),
         },
         None => Ok(None),
@@ -82,8 +82,7 @@ fn get_headers_arg(
             OnionObject::Null | OnionObject::Undefined(_) => Ok(IndexMap::new()),
             _ => Err(RuntimeError::InvalidType(
                 format!(
-                    "Argument '{}' must be a tuple of pairs, null, or undefined",
-                    name
+                    "Argument '{name}' must be a tuple of pairs, null, or undefined"
                 )
                 .into(),
             )),
@@ -152,7 +151,7 @@ impl AsyncHttpRequest {
     ) -> Result<String, String> {
         let rt = match tokio::runtime::Runtime::new() {
             Ok(rt) => rt,
-            Err(e) => return Err(format!("Failed to create async runtime: {}", e)),
+            Err(e) => return Err(format!("Failed to create async runtime: {e}")),
         };
 
         rt.block_on(async {
@@ -164,7 +163,7 @@ impl AsyncHttpRequest {
                 "DELETE" => client.delete(url),
                 "PATCH" => client.patch(url),
                 "HEAD" => client.head(url),
-                _ => return Err(format!("Unsupported HTTP method: {}", method)),
+                _ => return Err(format!("Unsupported HTTP method: {method}")),
             };
 
             if let Some(body_data) = body {
@@ -183,7 +182,7 @@ impl AsyncHttpRequest {
                     let response_body = response
                         .text()
                         .await
-                        .map_err(|e| format!("Failed to read response body: {}", e))?;
+                        .map_err(|e| format!("Failed to read response body: {e}"))?;
                     let response_json = serde_json::json!({
                         "status_code": status.as_u16(),
                         "status_text": status.canonical_reason().unwrap_or("Unknown"),
@@ -196,9 +195,9 @@ impl AsyncHttpRequest {
                     if e.is_timeout() {
                         Err("Request timeout".to_string())
                     } else if e.is_connect() {
-                        Err(format!("Connection error: {}", e))
+                        Err(format!("Connection error: {e}"))
                     } else {
-                        Err(format!("HTTP request failed: {}", e))
+                        Err(format!("HTTP request failed: {e}"))
                     }
                 }
             }
@@ -265,7 +264,7 @@ impl Runnable for AsyncHttpRequest {
         let headers_str = self
             .headers
             .iter()
-            .map(|(k, v)| format!("    - {}: {}", k, v))
+            .map(|(k, v)| format!("    - {k}: {v}"))
             .collect::<Vec<String>>()
             .join("\n");
         let body_info = self

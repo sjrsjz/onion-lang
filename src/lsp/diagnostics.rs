@@ -28,7 +28,7 @@ pub fn validate_document(
     let tokens = match std::panic::catch_unwind(|| lexer::tokenize(&document.content)) {
         Ok(tokens) => tokens,
         Err(e) => {
-            error!("Panic during lexical analysis: {:?}", e);
+            error!("Panic during lexical analysis: {e:?}");
             let diag = Diagnostic {
                 range: Range::default_range(),
                 severity: Some(DiagnosticSeverity::Error),
@@ -73,11 +73,11 @@ pub fn validate_document(
             let mut dir_stack = match DirectoryStack::new(Some(parent_dir)) {
                 Ok(stack) => stack,
                 Err(e) => {
-                    error!("Directory stack initialization failed: {}", e);
+                    error!("Directory stack initialization failed: {e}");
                     diagnostics.push(Diagnostic {
                         range: Range::default_range(),
                         severity: Some(DiagnosticSeverity::Error),
-                        message: format!("Directory stack failed: {}", e),
+                        message: format!("Directory stack failed: {e}"),
                         ..Default::default()
                     });
                     return (diagnostics, None);
@@ -115,18 +115,18 @@ pub fn validate_document(
                                 Some(tokens)
                             }
                             Err(e) => {
-                                error!("Semantic highlighting failed: {}", e);
+                                error!("Semantic highlighting failed: {e}");
                                 None
                             }
                         };
                     (diagnostics, semantic_tokens)
                 }
                 Err(err) => {
-                    error!("Cyclic dependency detected: {:?}", err);
+                    error!("Cyclic dependency detected: {err:?}");
                     diagnostics.push(Diagnostic {
                         range: Range::default_range(),
                         severity: Some(DiagnosticSeverity::Error),
-                        message: format!("Cyclic dependency detected: {}", err),
+                        message: format!("Cyclic dependency detected: {err}"),
                         ..Default::default()
                     });
                     (diagnostics, None)
@@ -167,7 +167,7 @@ fn process_analysis_results<T: AnalysisResult>(
                 Diagnostic {
                     range: get_node_range(node, &document.content),
                     severity: Some(DiagnosticSeverity::Error),
-                    message: format!("Invalid macro definition: {}", msg),
+                    message: format!("Invalid macro definition: {msg}"),
                     ..Default::default()
                 }
             }
@@ -193,7 +193,7 @@ fn process_analysis_results<T: AnalysisResult>(
             onion_frontend::parser::analyzer::AnalyzeWarn::CompileError(node, msg) => Diagnostic {
                 range: get_node_range(node, &document.content),
                 severity: Some(DiagnosticSeverity::Warning),
-                message: format!("@compile warning: {}", msg),
+                message: format!("@compile warning: {msg}"),
                 ..Default::default()
             },
         };
@@ -219,13 +219,13 @@ fn create_diagnostic_from_parser_error(
         ParserError::MissingStructure(token, expected) => Diagnostic {
             range: get_token_range(token, &document.content),
             severity: Some(DiagnosticSeverity::Error),
-            message: format!("Missing structure: Expected '{}' here", expected),
+            message: format!("Missing structure: Expected '{expected}' here"),
             ..Default::default()
         },
         ParserError::ErrorStructure(token, err) => Diagnostic {
             range: get_token_range(token, &document.content),
             severity: Some(DiagnosticSeverity::Error),
-            message: format!("Erroneous structure: {}", err),
+            message: format!("Erroneous structure: {err}"),
             ..Default::default()
         },
         ParserError::NotFullyMatched(start, end) => Diagnostic {

@@ -107,7 +107,7 @@ impl LspServer {
 
         // Trigger document validation
         self.validate_document(&uri);
-        info!("Document opened: {}", uri);
+        info!("Document opened: {uri}");
     }
 
     /// Handles document change notification
@@ -123,7 +123,7 @@ impl LspServer {
             info!("Updating existing document");
             doc
         } else {
-            info!("Document not found, creating new document: {}", uri);
+            info!("Document not found, creating new document: {uri}");
             // Determine initial content
             let initial_content = if !params.content_changes.is_empty() {
                 match &params.content_changes[0] {
@@ -190,7 +190,7 @@ impl LspServer {
         info!("Document closed: {}", params.text_document.uri);
         let uri = params.text_document.uri.clone();
         if self.documents.remove(&uri).is_none() {
-            warn!("Tried to close non-existent document: {}", uri);
+            warn!("Tried to close non-existent document: {uri}");
         }
     }
 
@@ -199,7 +199,7 @@ impl LspServer {
         &self,
         uri: &str,
     ) -> Option<(Vec<Diagnostic>, Option<Vec<SemanticTokenTypes>>)> {
-        info!("Validating document: {} started", uri);
+        info!("Validating document: {uri} started");
         if let Some(document) = self.documents.get(uri) {
             info!(
                 "Found document, version {}, content length {} bytes",
@@ -222,12 +222,12 @@ impl LspServer {
                     Some((diagnostics, semantic_tokens))
                 }
                 Err(e) => {
-                    error!("Panic during validation: {:?}", e);
+                    error!("Panic during validation: {e:?}");
                     Some((vec![], None)) // Return empty diagnostics list and no semantic tokens
                 }
             }
         } else {
-            warn!("Document not found for validation: {}", uri);
+            warn!("Document not found for validation: {uri}");
             None
         }
     }
@@ -246,7 +246,7 @@ impl LspServer {
         } else {
             Err(ResponseError {
                 code: error_codes::INVALID_PARAMS,
-                message: format!("Document not found: {}", uri),
+                message: format!("Document not found: {uri}"),
                 data: None,
             })
         }
@@ -386,7 +386,7 @@ impl LspServer {
                     }) {
                         Ok(path) => path.to_str().unwrap_or("").to_string(),
                         Err(e) => {
-                            error!("Failed to get absolute path: {}", e);
+                            error!("Failed to get absolute path: {e}");
                             return vec![]; // Return empty list
                         }
                     }
@@ -394,7 +394,7 @@ impl LspServer {
                 ) {
                     Ok(result) => result,
                     Err(e) => {
-                        error!("Cycle detection failed: {}", e);
+                        error!("Cycle detection failed: {e}");
                         return vec![]; // Return empty list
                     }
                 };
@@ -503,12 +503,11 @@ impl LspServer {
                     }
                 } else {
                     info!(
-                        "Analyzer did not capture context at break position {}",
-                        byte_offset
+                        "Analyzer did not capture context at break position {byte_offset}"
                     );
                 }
             } else {
-                warn!("Could not convert position {:?} to byte offset", position);
+                warn!("Could not convert position {position:?} to byte offset");
             }
         } else {
             warn!("Failed to parse document for completion: {}", document.uri);
@@ -599,7 +598,7 @@ pub fn run_lsp_server<R: BufRead, W: Write>(
             if header.to_lowercase().starts_with("content-length: ") {
                 content_length = header[16..]
                     .parse::<usize>()
-                    .map_err(|e| format!("Invalid Content-Length: {}", e))?;
+                    .map_err(|e| format!("Invalid Content-Length: {e}"))?;
             }
         }
 
@@ -611,10 +610,10 @@ pub fn run_lsp_server<R: BufRead, W: Write>(
         let mut buffer = vec![0; content_length];
         reader
             .read_exact(&mut buffer)
-            .map_err(|e| format!("Failed to read message: {}", e))?;
+            .map_err(|e| format!("Failed to read message: {e}"))?;
 
         let message =
-            String::from_utf8(buffer).map_err(|e| format!("Invalid UTF-8 in message: {}", e))?;
+            String::from_utf8(buffer).map_err(|e| format!("Invalid UTF-8 in message: {e}"))?;
 
         // Parse message type and handle
         if message.contains("\"id\":") {
@@ -629,7 +628,7 @@ pub fn run_lsp_server<R: BufRead, W: Write>(
                     match result {
                         Ok(response) => {
                             if let Err(e) = send_message(&mut writer, &response) {
-                                error!("Failed to send response: {}", e);
+                                error!("Failed to send response: {e}");
                                 // Consider breaking or returning error if sending fails critically
                             }
 
@@ -660,13 +659,13 @@ pub fn run_lsp_server<R: BufRead, W: Write>(
                                 }),
                             };
                             if let Err(e) = send_message(&mut writer, &error_response) {
-                                error!("Failed to send internal error response: {}", e);
+                                error!("Failed to send internal error response: {e}");
                             }
                         }
                     }
                 }
                 Err(e) => {
-                    error!("Failed to parse request: {}", e);
+                    error!("Failed to parse request: {e}");
                     // Try to extract ID from raw JSON
                     let id = serde_json::from_str::<Value>(&message)
                         .ok()
@@ -680,12 +679,12 @@ pub fn run_lsp_server<R: BufRead, W: Write>(
                         result: None,
                         error: Some(ResponseError {
                             code: error_codes::PARSE_ERROR,
-                            message: format!("Failed to parse request: {}", e),
+                            message: format!("Failed to parse request: {e}"),
                             data: None,
                         }),
                     };
                     if let Err(e) = send_message(&mut writer, &error_response) {
-                        error!("Failed to send parse error response: {}", e);
+                        error!("Failed to send parse error response: {e}");
                     }
                 }
             }
@@ -725,7 +724,7 @@ pub fn run_lsp_server<R: BufRead, W: Write>(
                     }
                 }
                 Err(e) => {
-                    error!("Failed to parse notification: {}", e);
+                    error!("Failed to parse notification: {e}");
                     // Notification parsing failed, just log
                 }
             }
@@ -760,7 +759,7 @@ fn handle_request(server: Arc<Mutex<LspServer>>, request: RequestMessage) -> Res
             Err(e) => {
                 response.error = Some(ResponseError {
                     code: error_codes::INVALID_PARAMS,
-                    message: format!("Invalid initialize params: {}", e),
+                    message: format!("Invalid initialize params: {e}"),
                     data: None,
                 });
             }
@@ -792,7 +791,7 @@ fn handle_request(server: Arc<Mutex<LspServer>>, request: RequestMessage) -> Res
                 Err(e) => {
                     response.error = Some(ResponseError {
                         code: error_codes::INVALID_PARAMS,
-                        message: format!("Invalid completion params: {}", e),
+                        message: format!("Invalid completion params: {e}"),
                         data: None,
                     });
                 }
@@ -839,7 +838,7 @@ fn handle_request(server: Arc<Mutex<LspServer>>, request: RequestMessage) -> Res
                     } else {
                         response.error = Some(ResponseError {
                             code: error_codes::INVALID_PARAMS,
-                            message: format!("Document not found: {}", uri),
+                            message: format!("Document not found: {uri}"),
                             data: None,
                         });
                     }
@@ -847,7 +846,7 @@ fn handle_request(server: Arc<Mutex<LspServer>>, request: RequestMessage) -> Res
                 Err(e) => {
                     response.error = Some(ResponseError {
                         code: error_codes::INVALID_PARAMS,
-                        message: format!("Invalid semantic tokens params: {}", e),
+                        message: format!("Invalid semantic tokens params: {e}"),
                         data: None,
                     });
                 }
@@ -916,7 +915,7 @@ fn handle_notification<W: Write>(
                     }
                 }
                 Err(e) => {
-                    error!("Invalid didOpen params: {}", e);
+                    error!("Invalid didOpen params: {e}");
                 }
             }
         }
@@ -938,7 +937,7 @@ fn handle_notification<W: Write>(
                     }
                 }
                 Err(e) => {
-                    error!("Invalid didChange params: {}", e);
+                    error!("Invalid didChange params: {e}");
                 }
             }
         }
@@ -949,7 +948,7 @@ fn handle_notification<W: Write>(
                     server.did_close(params);
                 }
                 Err(e) => {
-                    error!("Invalid didClose params: {}", e);
+                    error!("Invalid didClose params: {e}");
                 }
             }
         }
@@ -1038,18 +1037,18 @@ fn send_message<T: serde::Serialize, W: Write>(writer: &mut W, message: &T) -> R
     let json = serde_json::to_string(message).map_err(|e| e.to_string())?;
     let content = json.as_bytes();
 
-    debug!("Sending: {}", json);
+    debug!("Sending: {json}");
 
     write!(writer, "Content-Length: {}\r\n\r\n", content.len())
-        .map_err(|e| format!("Failed to write header: {}", e))?;
+        .map_err(|e| format!("Failed to write header: {e}"))?;
 
     writer
         .write_all(content)
-        .map_err(|e| format!("Failed to write content: {}", e))?;
+        .map_err(|e| format!("Failed to write content: {e}"))?;
 
     writer
         .flush()
-        .map_err(|e| format!("Failed to flush: {}", e))?;
+        .map_err(|e| format!("Failed to flush: {e}"))?;
 
     Ok(())
 }

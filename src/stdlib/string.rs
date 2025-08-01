@@ -15,7 +15,7 @@ fn get_string_arg<'a>(
 ) -> Result<&'a str, RuntimeError> {
     let obj = argument.get(&name.to_string()).ok_or_else(|| {
         RuntimeError::DetailedError(
-            format!("Function requires a '{}' argument", name)
+            format!("Function requires a '{name}' argument")
                 .to_string()
                 .into(),
         )
@@ -23,7 +23,7 @@ fn get_string_arg<'a>(
     match obj.weak() {
         OnionObject::String(s) => Ok(s.as_ref()),
         _ => Err(RuntimeError::InvalidType(
-            format!("Argument '{}' must be a string", name)
+            format!("Argument '{name}' must be a string")
                 .to_string()
                 .into(),
         )),
@@ -36,7 +36,7 @@ fn get_integer_arg(
 ) -> Result<i64, RuntimeError> {
     let obj = argument.get(&name.to_string()).ok_or_else(|| {
         RuntimeError::DetailedError(
-            format!("Function requires an '{}' argument", name)
+            format!("Function requires an '{name}' argument")
                 .to_string()
                 .into(),
         )
@@ -44,7 +44,7 @@ fn get_integer_arg(
     match obj.weak() {
         OnionObject::Integer(i) => Ok(*i),
         _ => Err(RuntimeError::InvalidType(
-            format!("Argument '{}' must be an integer", name)
+            format!("Argument '{name}' must be an integer")
                 .to_string()
                 .into(),
         )),

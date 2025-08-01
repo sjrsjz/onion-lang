@@ -43,14 +43,14 @@ fn to_int(
         OnionObject::String(s) => match s.trim().parse::<i64>() {
             Ok(i) => Ok(OnionObject::Integer(i).stabilize()),
             Err(e) => Err(RuntimeError::InvalidOperation(
-                format!("Cannot convert string '{}' to integer: {}", s, e).into(),
+                format!("Cannot convert string '{s}' to integer: {e}").into(),
             )),
         },
         OnionObject::Float(f) => Ok(OnionObject::Integer(*f as i64).stabilize()),
         OnionObject::Integer(i) => Ok(OnionObject::Integer(*i).stabilize()),
         OnionObject::Boolean(b) => Ok(OnionObject::Integer(if *b { 1 } else { 0 }).stabilize()),
         _ => Err(RuntimeError::InvalidOperation(
-            format!("Cannot convert {:?} to integer", data).into(),
+            format!("Cannot convert {data:?} to integer").into(),
         )),
     })
 }
@@ -71,14 +71,14 @@ fn to_float(
         OnionObject::String(s) => match s.trim().parse::<f64>() {
             Ok(f) => Ok(OnionObject::Float(f).stabilize()),
             Err(e) => Err(RuntimeError::InvalidOperation(
-                format!("Cannot convert string '{}' to float: {}", s, e).into(),
+                format!("Cannot convert string '{s}' to float: {e}").into(),
             )),
         },
         OnionObject::Integer(i) => Ok(OnionObject::Float(*i as f64).stabilize()),
         OnionObject::Float(f) => Ok(OnionObject::Float(*f).stabilize()),
         OnionObject::Boolean(b) => Ok(OnionObject::Float(if *b { 1.0 } else { 0.0 }).stabilize()),
         _ => Err(RuntimeError::InvalidOperation(
-            format!("Cannot convert {:?} to float", data).into(),
+            format!("Cannot convert {data:?} to float").into(),
         )),
     })
 }
@@ -104,7 +104,7 @@ fn to_bool(
                 Ok(OnionObject::Boolean(false).stabilize())
             } else {
                 Err(RuntimeError::InvalidOperation(
-                    format!("Cannot convert string '{}' to boolean", s).into(),
+                    format!("Cannot convert string '{s}' to boolean").into(),
                 ))
             }
         }
@@ -253,7 +253,7 @@ fn to_bytes(
         })
         .stabilize()),
         _ => Err(RuntimeError::InvalidOperation(
-            format!("Cannot convert {:?} to bytes", data).into(),
+            format!("Cannot convert {data:?} to bytes").into(),
         )),
     })
 }

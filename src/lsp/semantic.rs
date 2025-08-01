@@ -98,11 +98,7 @@ pub fn do_semantic(
     // 3. 获取根节点的 Source 对象用于比较
     let root_source = if let Some(token) = &ast.start_token {
         Some(token.source_code().clone().into())
-    } else if let Some(token) = &ast.end_token {
-        Some(token.source_code().clone().into())
-    } else {
-        None
-    };
+    } else { ast.end_token.as_ref().map(|token| token.source_code().clone().into()) };
 
     // 4. 严格遵循先序遍历，在字节图上标记类型。
     process_node(
@@ -184,7 +180,7 @@ fn process_node(
             }
         }
         ASTNodeType::Apply => {
-            if let Some(child) = node.children.get(0) {
+            if let Some(child) = node.children.first() {
                 if let ASTNodeType::Variable(_) = child.node_type {
                     if let Some((start, end)) = calculate_node_byte_range(child, char_map) {
                         mark_byte_range_as(

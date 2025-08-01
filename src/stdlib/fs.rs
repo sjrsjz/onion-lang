@@ -28,7 +28,7 @@ fn read_file(
         OnionObject::String(path_str) => match fs::read(path_str.as_ref()) {
             Ok(content) => Ok(OnionObject::Bytes(content.into()).stabilize()),
             Err(e) => Err(RuntimeError::DetailedError(
-                format!("Failed to read file '{}': {}", path_str, e).into(),
+                format!("Failed to read file '{path_str}': {e}").into(),
             )),
         },
         _ => Err(RuntimeError::InvalidType(
@@ -77,7 +77,7 @@ fn write_file(
     match fs::write(path_str.as_ref(), &content_bytes) {
         Ok(_) => Ok(OnionObject::Null.stabilize()),
         Err(e) => Err(RuntimeError::DetailedError(
-            format!("Failed to write file '{}': {}", path_str, e).into(),
+            format!("Failed to write file '{path_str}': {e}").into(),
         )),
     }
 }
@@ -127,11 +127,11 @@ fn append_file(
         Ok(mut file) => match file.write_all(&bytes_to_append) {
             Ok(_) => Ok(OnionObject::Null.stabilize()),
             Err(e) => Err(RuntimeError::DetailedError(
-                format!("Failed to append to file '{}': {}", path_str, e).into(),
+                format!("Failed to append to file '{path_str}': {e}").into(),
             )),
         },
         Err(e) => Err(RuntimeError::DetailedError(
-            format!("Failed to open file '{}' for appending: {}", path_str, e).into(),
+            format!("Failed to open file '{path_str}' for appending: {e}").into(),
         )),
     }
 }
@@ -151,7 +151,7 @@ fn remove_file(
         OnionObject::String(path_str) => match fs::remove_file(path_str.as_ref()) {
             Ok(_) => Ok(OnionObject::Null.stabilize()),
             Err(e) => Err(RuntimeError::DetailedError(
-                format!("Failed to remove file '{}': {}", path_str, e).into(),
+                format!("Failed to remove file '{path_str}': {e}").into(),
             )),
         },
         _ => Err(RuntimeError::InvalidType(
@@ -189,8 +189,7 @@ fn copy_file(
         Ok(_) => Ok(OnionObject::Null.stabilize()),
         Err(e) => Err(RuntimeError::DetailedError(
             format!(
-                "Failed to copy file from '{}' to '{}': {}",
-                src_str, dest_str, e
+                "Failed to copy file from '{src_str}' to '{dest_str}': {e}"
             )
             .into(),
         )),
@@ -226,8 +225,7 @@ fn rename_file(
         Ok(_) => Ok(OnionObject::Null.stabilize()),
         Err(e) => Err(RuntimeError::DetailedError(
             format!(
-                "Failed to rename file from '{}' to '{}': {}",
-                src_str, dest_str, e
+                "Failed to rename file from '{src_str}' to '{dest_str}': {e}"
             )
             .into(),
         )),
@@ -249,7 +247,7 @@ fn create_dir(
         OnionObject::String(path_str) => match fs::create_dir(path_str.as_ref()) {
             Ok(_) => Ok(OnionObject::Null.stabilize()),
             Err(e) => Err(RuntimeError::DetailedError(
-                format!("Failed to create directory '{}': {}", path_str, e).into(),
+                format!("Failed to create directory '{path_str}': {e}").into(),
             )),
         },
         _ => Err(RuntimeError::InvalidType(
@@ -275,7 +273,7 @@ fn create_dir_all(
         OnionObject::String(path_str) => match fs::create_dir_all(path_str.as_ref()) {
             Ok(_) => Ok(OnionObject::Null.stabilize()),
             Err(e) => Err(RuntimeError::DetailedError(
-                format!("Failed to create directories '{}': {}", path_str, e).into(),
+                format!("Failed to create directories '{path_str}': {e}").into(),
             )),
         },
         _ => Err(RuntimeError::InvalidType(
@@ -299,7 +297,7 @@ fn remove_dir(
         OnionObject::String(path_str) => match fs::remove_dir(path_str.as_ref()) {
             Ok(_) => Ok(OnionObject::Null.stabilize()),
             Err(e) => Err(RuntimeError::DetailedError(
-                format!("Failed to remove directory '{}': {}", path_str, e).into(),
+                format!("Failed to remove directory '{path_str}': {e}").into(),
             )),
         },
         _ => Err(RuntimeError::InvalidType(
@@ -326,8 +324,7 @@ fn remove_dir_all(
             Ok(_) => Ok(OnionObject::Null.stabilize()),
             Err(e) => Err(RuntimeError::DetailedError(
                 format!(
-                    "Failed to remove directory and its contents '{}': {}",
-                    path_str, e
+                    "Failed to remove directory and its contents '{path_str}': {e}"
                 )
                 .into(),
             )),
@@ -361,7 +358,7 @@ fn read_dir(
                         }
                         Err(e) => {
                             return Err(RuntimeError::DetailedError(
-                                format!("Error reading directory entry in '{}': {}", path_str, e)
+                                format!("Error reading directory entry in '{path_str}': {e}")
                                     .into(),
                             ));
                         }
@@ -370,7 +367,7 @@ fn read_dir(
                 Ok(OnionObject::Tuple(OnionTuple::new(files).into()).stabilize())
             }
             Err(e) => Err(RuntimeError::DetailedError(
-                format!("Failed to read directory '{}': {}", path_str, e).into(),
+                format!("Failed to read directory '{path_str}': {e}").into(),
             )),
         },
         _ => Err(RuntimeError::InvalidType(
@@ -424,7 +421,7 @@ fn file_metadata(
                 Ok(build_dict(meta))
             }
             Err(e) => Err(RuntimeError::DetailedError(
-                format!("Failed to get metadata for '{}': {}", path_str, e).into(),
+                format!("Failed to get metadata for '{path_str}': {e}").into(),
             )),
         },
         _ => Err(RuntimeError::InvalidType(
@@ -479,11 +476,11 @@ fn read_text(
         Ok(bytes) => match String::from_utf8(bytes) {
             Ok(text) => Ok(OnionObject::String(text.into()).stabilize()),
             Err(e) => Err(RuntimeError::DetailedError(
-                format!("Failed to decode file '{}' as UTF-8: {}", path_str, e).into(),
+                format!("Failed to decode file '{path_str}' as UTF-8: {e}").into(),
             )),
         },
         Err(e) => Err(RuntimeError::DetailedError(
-            format!("Failed to read file '{}': {}", path_str, e).into(),
+            format!("Failed to read file '{path_str}': {e}").into(),
         )),
     }
 }
@@ -518,7 +515,7 @@ fn write_text(
     match fs::write(path_str.as_ref(), content_str.as_bytes()) {
         Ok(_) => Ok(OnionObject::Null.stabilize()),
         Err(e) => Err(RuntimeError::DetailedError(
-            format!("Failed to write text file '{}': {}", path_str, e).into(),
+            format!("Failed to write text file '{path_str}': {e}").into(),
         )),
     }
 }
@@ -558,13 +555,12 @@ fn append_text(
         Ok(mut file) => match file.write_all(content_str.as_bytes()) {
             Ok(_) => Ok(OnionObject::Null.stabilize()),
             Err(e) => Err(RuntimeError::DetailedError(
-                format!("Failed to append to text file '{}': {}", path_str, e).into(),
+                format!("Failed to append to text file '{path_str}': {e}").into(),
             )),
         },
         Err(e) => Err(RuntimeError::DetailedError(
             format!(
-                "Failed to open text file '{}' for appending: {}",
-                path_str, e
+                "Failed to open text file '{path_str}' for appending: {e}"
             )
             .into(),
         )),

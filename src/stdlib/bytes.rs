@@ -19,7 +19,7 @@ fn get_bytes_arg<'a>(
 ) -> Result<&'a [u8], RuntimeError> {
     let obj = argument.get(&name.to_string()).ok_or_else(|| {
         RuntimeError::DetailedError(
-            format!("Function requires a '{}' argument", name)
+            format!("Function requires a '{name}' argument")
                 .to_string()
                 .into(),
         )
@@ -27,7 +27,7 @@ fn get_bytes_arg<'a>(
     match obj.weak() {
         OnionObject::Bytes(b) => Ok(b.as_ref()),
         _ => Err(RuntimeError::InvalidType(
-            format!("Argument '{}' must be bytes", name)
+            format!("Argument '{name}' must be bytes")
                 .to_string()
                 .into(),
         )),
@@ -40,7 +40,7 @@ fn get_integer_arg(
 ) -> Result<i64, RuntimeError> {
     let obj = argument.get(&name.to_string()).ok_or_else(|| {
         RuntimeError::DetailedError(
-            format!("Function requires an '{}' argument", name)
+            format!("Function requires an '{name}' argument")
                 .to_string()
                 .into(),
         )
@@ -48,7 +48,7 @@ fn get_integer_arg(
     match obj.weak() {
         OnionObject::Integer(i) => Ok(*i),
         _ => Err(RuntimeError::InvalidType(
-            format!("Argument '{}' must be an integer", name)
+            format!("Argument '{name}' must be an integer")
                 .to_string()
                 .into(),
         )),
@@ -61,7 +61,7 @@ fn get_integer_tuple_arg(
 ) -> Result<Vec<i64>, RuntimeError> {
     let obj = argument.get(&name.to_string()).ok_or_else(|| {
         RuntimeError::DetailedError(
-            format!("Function requires a '{}' argument", name)
+            format!("Function requires a '{name}' argument")
                 .to_string()
                 .into(),
         )
@@ -80,7 +80,7 @@ fn get_integer_tuple_arg(
             })
             .collect(),
         _ => Err(RuntimeError::InvalidType(
-            format!("Argument '{}' must be a tuple of integers", name)
+            format!("Argument '{name}' must be a tuple of integers")
                 .to_string()
                 .into(),
         )),
@@ -162,7 +162,7 @@ fn set_at(
             "Index cannot be negative".to_string().into(),
         ));
     }
-    if value < 0 || value > 255 {
+    if !(0..=255).contains(&value) {
         return Err(RuntimeError::InvalidOperation(
             "Value must be a valid byte (0-255)".to_string().into(),
         ));
@@ -298,7 +298,7 @@ fn pad_left(
             "Padding length cannot be negative".to_string().into(),
         ));
     }
-    if pad_byte_val < 0 || pad_byte_val > 255 {
+    if !(0..=255).contains(&pad_byte_val) {
         return Err(RuntimeError::InvalidOperation(
             "pad_byte must be a valid byte (0-255)".to_string().into(),
         ));
@@ -328,7 +328,7 @@ fn pad_right(
             "Padding length cannot be negative".to_string().into(),
         ));
     }
-    if pad_byte_val < 0 || pad_byte_val > 255 {
+    if !(0..=255).contains(&pad_byte_val) {
         return Err(RuntimeError::InvalidOperation(
             "pad_byte must be a valid byte (0-255)".to_string().into(),
         ));
@@ -352,7 +352,7 @@ fn from_integers(
     let list = get_integer_tuple_arg(argument, "list")?;
     let mut result = Vec::with_capacity(list.len());
     for i in list {
-        if i < 0 || i > 255 {
+        if !(0..=255).contains(&i) {
             return Err(RuntimeError::InvalidOperation(
                 "All integers in the list must be valid bytes (0-255)"
                     .to_string()

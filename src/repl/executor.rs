@@ -66,7 +66,7 @@ impl ReplExecutor {
         dir_stack: &mut onion_frontend::dir_stack::DirectoryStack,
     ) -> Result<(), String> {
         let ir_package = build_code(code, cycle_detector, dir_stack)
-            .map_err(|e| format!("Compilation failed\n{}", e))?;
+            .map_err(|e| format!("Compilation failed\n{e}"))?;
 
         self.execute_ir_package(&ir_package)
     }
@@ -75,7 +75,7 @@ impl ReplExecutor {
         let mut translator = IRTranslator::new(ir_package);
         translator
             .translate()
-            .map_err(|e| format!("IR translation failed: {:?}", e))?;
+            .map_err(|e| format!("IR translation failed: {e:?}"))?;
 
         let vm_instructions_package = translator.get_result();
         self.execute_bytecode_package(&vm_instructions_package)
@@ -102,8 +102,8 @@ impl ReplExecutor {
 
         let args = OnionTuple::new_static(vec![]);
         let mut scheduler: Box<dyn Runnable> = Box::new(Scheduler::new(vec![Box::new(
-            OnionLambdaRunnableLauncher::new_static(lambda.weak(), args, |r| Ok(r))
-                .map_err(|e| format!("Failed to create runnable Lambda: {:?}", e))?,
+            OnionLambdaRunnableLauncher::new_static(lambda.weak(), args, Ok)
+                .map_err(|e| format!("Failed to create runnable Lambda: {e:?}"))?,
         )]));
 
         let mut gc = GC::new_with_memory_threshold(1024 * 1024);
@@ -141,7 +141,7 @@ impl ReplExecutor {
                     eprintln!("An unrecoverable error was caught at the top level.");
 
                     eprintln!("\n{}", "Error Details:".yellow().underline());
-                    eprintln!("{}", error);
+                    eprintln!("{error}");
 
                     eprintln!(
                         "\n{}",
@@ -162,16 +162,16 @@ impl ReplExecutor {
                 StepResult::Return(ref result) => {
                     let result_borrowed = result.weak();
                     let result = unwrap_object!(result_borrowed, OnionObject::Pair)
-                        .map_err(|e| format!("Failed to unwrap result: {:?}", e))?;
+                        .map_err(|e| format!("Failed to unwrap result: {e:?}"))?;
                     let key = result.get_key();
                     let success = *unwrap_object!(key, OnionObject::Boolean)
-                        .map_err(|e| format!("Failed to get success key: {:?}", e))?;
+                        .map_err(|e| format!("Failed to get success key: {e:?}"))?;
 
                     if !success {
                         let error_msg = result
                             .get_value()
                             .to_string(&vec![])
-                            .map_err(|e| format!("Failed to get error message: {:?}", e))?;
+                            .map_err(|e| format!("Failed to get error message: {e:?}"))?;
 
                         eprintln!("{} {}", "Error:".red().bold(), error_msg);
 
@@ -191,14 +191,14 @@ impl ReplExecutor {
                     self.add_result_to_out(result_value.clone());
                     let is_undefined = result_value
                         .with_data(|data| Ok(unwrap_object!(data, OnionObject::Undefined).is_ok()))
-                        .map_err(|e| format!("Failed to check if result is Undefined: {:?}", e))?;
+                        .map_err(|e| format!("Failed to check if result is Undefined: {e:?}"))?;
                     if is_undefined {
                         break; // 如果结果是Undefined，则不需要打印
                     }
                     // 打印结果
                     let result_str = result_value
                         .to_string(&vec![])
-                        .map_err(|e| format!("Failed to get result value: {:?}", e))?;
+                        .map_err(|e| format!("Failed to get result value: {e:?}"))?;
                     println!("{} {}", "Result:".cyan(), result_str);
                     break;
                 }

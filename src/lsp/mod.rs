@@ -19,17 +19,17 @@ pub fn start_lsp_server(port: u16) -> Result<(), String> {
         .filter_level(log::LevelFilter::Debug)
         .init();
     
-    info!("Starting Onion LSP server on port {}...", port);
+    info!("Starting Onion LSP server on port {port}...");
     
     // 创建TCP监听器
-    let listener = match TcpListener::bind(format!("127.0.0.1:{}", port)) {
+    let listener = match TcpListener::bind(format!("127.0.0.1:{port}")) {
         Ok(listener) => listener,
-        Err(e) => return Err(format!("Failed to bind TCP socket on port {}: {}", port, e)),
+        Err(e) => return Err(format!("Failed to bind TCP socket on port {port}: {e}")),
     };
     
     // 等待客户端连接
-    info!("LSP server started and listening on port {}", port);
-    println!("Onion LSP server running on port {}", port);
+    info!("LSP server started and listening on port {port}");
+    println!("Onion LSP server running on port {port}");
     
     for stream in listener.incoming() {
         match stream {
@@ -38,11 +38,11 @@ pub fn start_lsp_server(port: u16) -> Result<(), String> {
                 
                 // 启动LSP会话
                 if let Err(e) = handle_client(stream) {
-                    error!("Error handling client: {}", e);
+                    error!("Error handling client: {e}");
                 }
             }
             Err(e) => {
-                error!("Connection failed: {}", e);
+                error!("Connection failed: {e}");
             }
         }
     }
@@ -54,11 +54,11 @@ pub fn start_lsp_server(port: u16) -> Result<(), String> {
 fn handle_client(stream: TcpStream) -> Result<(), String> {
     // 设置可选的超时
     if let Err(e) = stream.set_read_timeout(Some(std::time::Duration::from_secs(300))) {
-        return Err(format!("Failed to set read timeout: {}", e));
+        return Err(format!("Failed to set read timeout: {e}"));
     }
     
     if let Err(e) = stream.set_write_timeout(Some(std::time::Duration::from_secs(10))) {
-        return Err(format!("Failed to set write timeout: {}", e));
+        return Err(format!("Failed to set write timeout: {e}"));
     }
     
     info!("Creating new LSP session");
@@ -75,8 +75,8 @@ fn handle_client(stream: TcpStream) -> Result<(), String> {
             
             // 启动LSP会话
             server::run_lsp_server(server, reader, writer)
-                .map_err(|e| format!("LSP server error: {}", e))
+                .map_err(|e| format!("LSP server error: {e}"))
         },
-        Err(e) => Err(format!("Failed to clone TCP stream: {}", e))
+        Err(e) => Err(format!("Failed to clone TCP stream: {e}"))
     }
 }

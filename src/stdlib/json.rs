@@ -49,7 +49,7 @@ fn to_json(obj: OnionObject) -> Result<Value, RuntimeError> {
                 }
             }
             _ => Err(RuntimeError::InvalidType(
-                format!("Cannot convert type to JSON").into(),
+                "Cannot convert type to JSON".to_string().into(),
             )),
         }
     })
@@ -96,7 +96,7 @@ fn from_json(value: Value) -> Result<OnionStaticObject, RuntimeError> {
 /// 解析 JSON 字符串为 OnionObject
 fn parse_json(json_str: &str) -> Result<OnionStaticObject, RuntimeError> {
     let value: Value = serde_json::from_str(json_str)
-        .map_err(|e| RuntimeError::DetailedError(format!("JSON parse error: {}", e).into()))?;
+        .map_err(|e| RuntimeError::DetailedError(format!("JSON parse error: {e}").into()))?;
     from_json(value)
 }
 
@@ -104,14 +104,14 @@ fn parse_json(json_str: &str) -> Result<OnionStaticObject, RuntimeError> {
 fn stringify_json(obj: OnionObject) -> Result<String, RuntimeError> {
     let json_value = to_json(obj)?;
     serde_json::to_string(&json_value)
-        .map_err(|e| RuntimeError::DetailedError(format!("JSON stringify error: {}", e).into()))
+        .map_err(|e| RuntimeError::DetailedError(format!("JSON stringify error: {e}").into()))
 }
 
 /// 将 OnionObject 序列化为格式化的 JSON 字符串
 fn stringify_json_pretty(obj: OnionObject) -> Result<String, RuntimeError> {
     let json_value = to_json(obj)?;
     serde_json::to_string_pretty(&json_value)
-        .map_err(|e| RuntimeError::DetailedError(format!("JSON stringify error: {}", e).into()))
+        .map_err(|e| RuntimeError::DetailedError(format!("JSON stringify error: {e}").into()))
 }
 
 // --- 新的原生函数封装 (遵循 io 模块的模式) ---

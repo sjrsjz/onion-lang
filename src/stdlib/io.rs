@@ -48,13 +48,13 @@ fn input(
     print!("{}", hint.weak().to_string(&vec![])?);
     // flush
     std::io::stdout().flush().map_err(|e| {
-        RuntimeError::DetailedError(format!("Failed to flush stdout: {}", e).into())
+        RuntimeError::DetailedError(format!("Failed to flush stdout: {e}").into())
     })?;
     let input = {
         let mut buffer = String::new();
         if let Err(e) = std::io::stdin().read_line(&mut buffer) {
             return Err(RuntimeError::DetailedError(
-                format!("Failed to read input: {}", e).into(),
+                format!("Failed to read input: {e}").into(),
             ));
         }
         buffer.trim().to_string()

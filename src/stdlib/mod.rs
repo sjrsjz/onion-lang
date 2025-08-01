@@ -84,7 +84,7 @@ where
         self.captured = argument.clone();
         for (key, value) in captured_vars.pairs() {
             self.captured
-                .push_with_index(key.clone(), value.stabilize());
+                .push_with_index(*key, value.stabilize());
         }
         Ok(())
     }
@@ -107,7 +107,7 @@ where
 
         // Format the 'self' object, which acts as context for this runnable.
         let self_info = match &self.self_object {
-            Some(obj) => format!("{:?}", obj),
+            Some(obj) => format!("{obj:?}"),
             None => "(None)".to_string(),
         };
 
@@ -146,7 +146,7 @@ where
                 Box::new(NativeFunctionGenerator {
                     captured: OnionFastMap::new(string_pool.clone()),
                     self_object: None,
-                    function: function,
+                    function,
                 })
             }),
             cloned_pool,

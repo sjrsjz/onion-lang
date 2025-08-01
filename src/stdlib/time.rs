@@ -28,7 +28,7 @@ fn get_integer_arg(
 ) -> Result<i64, RuntimeError> {
     let obj = argument.get(&name.to_string()).ok_or_else(|| {
         RuntimeError::DetailedError(
-            format!("Function requires an '{}' argument", name)
+            format!("Function requires an '{name}' argument")
                 .to_string()
                 .into(),
         )
@@ -36,7 +36,7 @@ fn get_integer_arg(
     match obj.weak() {
         OnionObject::Integer(i) => Ok(*i),
         _ => Err(RuntimeError::InvalidType(
-            format!("Argument '{}' must be an integer", name)
+            format!("Argument '{name}' must be an integer")
                 .to_string()
                 .into(),
         )),
@@ -51,7 +51,7 @@ fn timestamp(
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| OnionObject::Integer(d.as_secs() as i64).stabilize())
-        .map_err(|e| RuntimeError::DetailedError(format!("Failed to get timestamp: {}", e).into()))
+        .map_err(|e| RuntimeError::DetailedError(format!("Failed to get timestamp: {e}").into()))
 }
 
 /// 获取当前时间戳（毫秒）
@@ -62,7 +62,7 @@ fn timestamp_millis(
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| OnionObject::Integer(d.as_millis() as i64).stabilize())
-        .map_err(|e| RuntimeError::DetailedError(format!("Failed to get timestamp: {}", e).into()))
+        .map_err(|e| RuntimeError::DetailedError(format!("Failed to get timestamp: {e}").into()))
 }
 
 /// 获取当前时间戳（纳秒）
@@ -73,7 +73,7 @@ fn timestamp_nanos(
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| OnionObject::Integer(d.as_nanos() as i64).stabilize()) // Note: might overflow on 32-bit systems in the future
-        .map_err(|e| RuntimeError::DetailedError(format!("Failed to get timestamp: {}", e).into()))
+        .map_err(|e| RuntimeError::DetailedError(format!("Failed to get timestamp: {e}").into()))
 }
 
 /// 睡眠指定的秒数
@@ -134,8 +134,7 @@ fn format_timestamp(timestamp: u64) -> String {
     let minute = (rem_secs % 3600) / 60;
     let second = rem_secs % 60;
     format!(
-        "{:04}-{:02}-{:02} {:02}:{:02}:{:02} UTC",
-        year, month, day, hour, minute, second
+        "{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02} UTC"
     )
 }
 
@@ -145,7 +144,7 @@ fn now_utc(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let duration = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|e| {
-        RuntimeError::DetailedError(format!("Failed to get current time: {}", e).into())
+        RuntimeError::DetailedError(format!("Failed to get current time: {e}").into())
     })?;
     let datetime = format_timestamp(duration.as_secs());
     Ok(OnionObject::String(datetime.into()).stabilize())
@@ -184,7 +183,7 @@ pub struct AsyncSleep {
 impl Runnable for AsyncSleep {
     fn step(&mut self, _gc: &mut GC<OnionObjectCell>) -> StepResult {
         let elapsed = unwrap_step_result!(self.start_time.elapsed().map_err(|e| {
-            RuntimeError::DetailedError(format!("Failed to get elapsed time: {}", e).into())
+            RuntimeError::DetailedError(format!("Failed to get elapsed time: {e}").into())
         }));
         if elapsed.as_millis() >= self.millis as u128 {
             StepResult::Return(OnionObject::Null.stabilize().into())
@@ -222,8 +221,7 @@ impl Runnable for AsyncSleep {
         let total_duration_ms = self.millis as u128;
         let remaining_ms = total_duration_ms.saturating_sub(elapsed_ms);
         format!(
-            "-> Pausing execution (sleep): {}ms / {}ms (~{}ms remaining)",
-            elapsed_ms, total_duration_ms, remaining_ms
+            "-> Pausing execution (sleep): {elapsed_ms}ms / {total_duration_ms}ms (~{remaining_ms}ms remaining)"
         )
     }
 }

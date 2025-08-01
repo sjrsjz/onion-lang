@@ -19,7 +19,6 @@ use rustyline::validate::MatchingBracketValidator;
 use crate::create_dir_stack;
 
 // Add this use statement
-use ctrlc;
 
 #[derive(Helper, Completer, Hinter, Validator)]
 struct ReplHelper {
@@ -67,7 +66,7 @@ impl Highlighter for ReplHelper {
 
 pub fn start_repl() -> Result<()> {
     let version = env!("CARGO_PKG_VERSION");
-    println!("{}", format!("Onion Language REPL v{}", version).cyan().bold());
+    println!("{}", format!("Onion Language REPL v{version}").cyan().bold());
     println!("{}", "Type \'exit\' or press Ctrl+C to quit".dimmed());
     println!();
 
@@ -225,11 +224,10 @@ fn print_repl_help() {
 
 fn get_history_file() -> Option<std::path::PathBuf> {
     dirs::config_dir()
-        .map(|mut path| {
+        .and_then(|mut path| {
             path.push("onion-lang");
             std::fs::create_dir_all(&path).ok()?;
             path.push("repl_history.txt");
             Some(path)
         })
-        .flatten()
 }

@@ -20,7 +20,7 @@ fn get_string_arg<'a>(
 ) -> Result<&'a str, RuntimeError> {
     let obj = argument.get(&name.to_string()).ok_or_else(|| {
         RuntimeError::DetailedError(
-            format!("Function requires a '{}' argument", name)
+            format!("Function requires a '{name}' argument")
                 .to_string()
                 .into(),
         )
@@ -28,7 +28,7 @@ fn get_string_arg<'a>(
     match obj.weak() {
         OnionObject::String(s) => Ok(s.as_ref()),
         _ => Err(RuntimeError::InvalidType(
-            format!("Argument '{}' must be a string", name)
+            format!("Argument '{name}' must be a string")
                 .to_string()
                 .into(),
         )),
@@ -90,7 +90,7 @@ fn system(
             Ok(build_dict(result))
         }
         Err(e) => Err(RuntimeError::DetailedError(
-            format!("Failed to execute command: {}", e).into(),
+            format!("Failed to execute command: {e}").into(),
         )),
     }
 }
@@ -113,7 +113,7 @@ fn system_code(
             Ok(OnionObject::Integer(code as i64).stabilize())
         }
         Err(e) => Err(RuntimeError::DetailedError(
-            format!("Failed to execute command: {}", e).into(),
+            format!("Failed to execute command: {e}").into(),
         )),
     }
 }
@@ -127,7 +127,7 @@ fn chdir(
     match env::set_current_dir(path_str) {
         Ok(_) => Ok(OnionObject::Null.stabilize()),
         Err(e) => Err(RuntimeError::DetailedError(
-            format!("Failed to change directory to '{}': {}", path_str, e).into(),
+            format!("Failed to change directory to '{path_str}': {e}").into(),
         )),
     }
 }

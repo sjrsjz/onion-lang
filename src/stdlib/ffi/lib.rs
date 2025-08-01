@@ -81,7 +81,7 @@ impl CLib {
                     library: Arc::new(lib),
                 })
                 .map_err(|e| {
-                    RuntimeError::InvalidOperation(format!("Failed to load library: {}", e).into())
+                    RuntimeError::InvalidOperation(format!("Failed to load library: {e}").into())
                 })
         }
     }
@@ -92,7 +92,7 @@ impl CLib {
                 .map(|sym: libloading::Symbol<unsafe extern "C" fn()>| *sym as *const u8)
                 .map_err(|e| {
                     RuntimeError::InvalidOperation(
-                        format!("Function '{}' not found: {}", name, e).into(),
+                        format!("Function '{name}' not found: {e}").into(),
                     )
                 })
         }
@@ -129,7 +129,7 @@ impl OnionObjectExt for CLib {
             match attr.as_ref().as_str() {
                 "path" => f(&OnionObject::String(self.path.clone().into())),
                 _ => Err(RuntimeError::InvalidOperation(
-                    format!("CLib has no attribute '{}'", attr).into(),
+                    format!("CLib has no attribute '{attr}'").into(),
                 )),
             }
         } else {
@@ -282,8 +282,7 @@ impl CFunctionHandle {
             }
             _ => Err(RuntimeError::InvalidOperation(
                 format!(
-                    "Type mismatch for FFI call: expected {}, got {:?}",
-                    expected_type, ctype
+                    "Type mismatch for FFI call: expected {expected_type}, got {ctype:?}"
                 )
                 .into(),
             )),
@@ -309,7 +308,7 @@ impl CFunctionHandle {
             "ssize" => Ok(Type::isize()),
             "pointer" | "string" | "buffer" | "wstring" => Ok(Type::pointer()),
             _ => Err(RuntimeError::InvalidOperation(
-                format!("Unsupported FFI type: {}", type_name).into(),
+                format!("Unsupported FFI type: {type_name}").into(),
             )),
         }
     }
@@ -363,7 +362,7 @@ impl OnionObjectExt for CFunctionHandle {
                     f(&OnionObject::Tuple(OnionTuple::new(types).into()))
                 }
                 _ => Err(RuntimeError::InvalidOperation(
-                    format!("CFunctionHandle has no attribute '{}'", attr).into(),
+                    format!("CFunctionHandle has no attribute '{attr}'").into(),
                 )),
             }
         } else {
@@ -386,7 +385,7 @@ fn get_clib_arg(
     name: &str,
 ) -> Result<Arc<CLib>, RuntimeError> {
     let obj = argument.get(&name.to_string()).ok_or_else(|| {
-        RuntimeError::DetailedError(format!("Missing required argument: '{}'", name).into())
+        RuntimeError::DetailedError(format!("Missing required argument: '{name}'").into())
     })?;
     match obj.weak() {
         OnionObject::Custom(custom) => custom
@@ -395,11 +394,11 @@ fn get_clib_arg(
             .map(|clib| Arc::new(clib.clone()))
             .ok_or_else(|| {
                 RuntimeError::InvalidType(
-                    format!("Argument '{}' must be a CLib object", name).into(),
+                    format!("Argument '{name}' must be a CLib object").into(),
                 )
             }),
         _ => Err(RuntimeError::InvalidType(
-            format!("Argument '{}' must be a CLib object", name).into(),
+            format!("Argument '{name}' must be a CLib object").into(),
         )),
     }
 }
@@ -409,12 +408,12 @@ fn get_string_arg(
     name: &str,
 ) -> Result<String, RuntimeError> {
     let obj = argument.get(&name.to_string()).ok_or_else(|| {
-        RuntimeError::DetailedError(format!("Missing required argument: '{}'", name).into())
+        RuntimeError::DetailedError(format!("Missing required argument: '{name}'").into())
     })?;
     match obj.weak() {
         OnionObject::String(s) => Ok(s.to_string()),
         _ => Err(RuntimeError::InvalidType(
-            format!("Argument '{}' must be a string", name).into(),
+            format!("Argument '{name}' must be a string").into(),
         )),
     }
 }
@@ -424,7 +423,7 @@ fn get_string_tuple_arg(
     name: &str,
 ) -> Result<Vec<String>, RuntimeError> {
     let obj = argument.get(&name.to_string()).ok_or_else(|| {
-        RuntimeError::DetailedError(format!("Missing required argument: '{}'", name).into())
+        RuntimeError::DetailedError(format!("Missing required argument: '{name}'").into())
     })?;
     match obj.weak() {
         OnionObject::Tuple(tuple) => tuple
@@ -440,7 +439,7 @@ fn get_string_tuple_arg(
             })
             .collect(),
         _ => Err(RuntimeError::InvalidType(
-            format!("Argument '{}' must be a tuple of strings", name).into(),
+            format!("Argument '{name}' must be a tuple of strings").into(),
         )),
     }
 }
@@ -450,7 +449,7 @@ fn get_ctypes_tuple_arg(
     name: &str,
 ) -> Result<Vec<CTypes>, RuntimeError> {
     let obj = argument.get(&name.to_string()).ok_or_else(|| {
-        RuntimeError::DetailedError(format!("Missing required argument: '{}'", name).into())
+        RuntimeError::DetailedError(format!("Missing required argument: '{name}'").into())
     })?;
     match obj.weak() {
         OnionObject::Tuple(tuple) => tuple
@@ -459,8 +458,7 @@ fn get_ctypes_tuple_arg(
             .map(|item| match item {
                 OnionObject::Custom(custom) => custom
                     .as_any()
-                    .downcast_ref::<CTypes>()
-                    .map(|ctype| ctype.clone())
+                    .downcast_ref::<CTypes>().cloned()
                     .ok_or_else(|| {
                         RuntimeError::InvalidType(
                             "All arguments for call must be CTypes objects"
@@ -476,7 +474,7 @@ fn get_ctypes_tuple_arg(
             })
             .collect(),
         _ => Err(RuntimeError::InvalidType(
-            format!("Argument '{}' must be a tuple of CTypes", name).into(),
+            format!("Argument '{name}' must be a tuple of CTypes").into(),
         )),
     }
 }
