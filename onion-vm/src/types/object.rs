@@ -11,7 +11,6 @@ use arc_gc::{
     traceable::GCTraceable,
 };
 use base64::{Engine as _, engine::general_purpose};
-
 use crate::{
     lambda::runnable::RuntimeError,
     onion_tuple,
@@ -278,9 +277,13 @@ pub trait OnionObjectExt: GCTraceable<OnionObjectCell> + Debug + Send + Sync + '
             format!("contains() not supported for {:?} and {:?}", self, other).into(),
         ))
     }
-    fn at(&self, index: i64) -> Result<OnionStaticObject, RuntimeError> {
+    fn apply(&self, value: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
         Err(RuntimeError::InvalidOperation(
-            format!("at() not supported for {:?} with index {}", self, index).into(),
+            format!(
+                "apply() not supported for {:?} with value {:?}",
+                self, value
+            )
+            .into(),
         ))
     }
 
@@ -1824,33 +1827,69 @@ impl OnionObject {
             )),
         })
     }
-    pub fn at(&self, index: i64) -> Result<OnionStaticObject, RuntimeError> {
-        self.with_data(|obj| match obj {
-            OnionObject::Tuple(tuple) => tuple.at(index),
-            OnionObject::String(s) => {
-                if index < 0 || index >= s.len() as i64 {
-                    return Err(RuntimeError::InvalidOperation(
-                        format!("Index out of bounds for String: {}", s).into(),
-                    ));
+    pub fn apply(&self, value: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
+        self.with_data(|obj| {
+            value.with_data(|value| match obj {
+                OnionObject::Tuple(tuple) => {
+                    let index = match value {
+                        OnionObject::Integer(i) => *i,
+                        _ => {
+                            return Err(RuntimeError::InvalidType(
+                                "Argument 'index' must be an integer".to_string().into(),
+                            ));
+                        }
+                    };
+
+                    let elements = tuple.get_elements();
+                    if (index as usize) < elements.len() {
+                        Ok(OnionStaticObject::new(elements[index as usize].clone()))
+                    } else {
+                        Err(RuntimeError::InvalidOperation(
+                            "Index out of bounds for tuple".to_string().into(),
+                        ))
+                    }
                 }
-                Ok(OnionStaticObject::new(OnionObject::String(Arc::new(
-                    s.chars().nth(index as usize).unwrap().to_string(),
-                ))))
-            }
-            OnionObject::Bytes(b) => {
-                if index < 0 || index >= b.len() as i64 {
-                    return Err(RuntimeError::InvalidOperation(
-                        format!("Index out of bounds for Bytes: {:?}", b).into(),
-                    ));
+                OnionObject::String(s) => {
+                    let index = match value {
+                        OnionObject::Integer(i) => *i,
+                        _ => {
+                            return Err(RuntimeError::InvalidType(
+                                "Argument 'index' must be an integer".to_string().into(),
+                            ));
+                        }
+                    };
+                    if index < 0 || index >= s.len() as i64 {
+                        return Err(RuntimeError::InvalidOperation(
+                            format!("Index out of bounds for String: {}", s).into(),
+                        ));
+                    }
+                    Ok(OnionStaticObject::new(OnionObject::String(Arc::new(
+                        s.chars().nth(index as usize).unwrap().to_string(),
+                    ))))
                 }
-                Ok(OnionStaticObject::new(OnionObject::Bytes(Arc::new(vec![
-                    b[index as usize],
-                ]))))
-            }
-            OnionObject::Custom(custom) => custom.at(index),
-            _ => Err(RuntimeError::InvalidOperation(
-                format!("index_of() not supported for {:?}", self).into(),
-            )),
+                OnionObject::Bytes(b) => {
+                    let index = match value {
+                        OnionObject::Integer(i) => *i,
+                        _ => {
+                            return Err(RuntimeError::InvalidType(
+                                "Argument 'index' must be an integer".to_string().into(),
+                            ));
+                        }
+                    };
+                    if index < 0 || index >= b.len() as i64 {
+                        return Err(RuntimeError::InvalidOperation(
+                            format!("Index out of bounds for Bytes: {:?}", b).into(),
+                        ));
+                    }
+                    Ok(OnionStaticObject::new(OnionObject::Bytes(Arc::new(vec![
+                        b[index as usize],
+                    ]))))
+                }
+                OnionObject::Custom(custom) => custom.apply(value),
+                _ => Err(RuntimeError::InvalidOperation(
+                    format!("index_of() not supported for {:?}", self).into(),
+                )),
+            })
         })
     }
 

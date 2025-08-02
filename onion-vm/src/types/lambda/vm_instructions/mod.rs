@@ -1090,24 +1090,10 @@ pub fn apply(
                 return Ok((StepResult::NewRunnable(new_runnable), None));
             }
             _ => {
-                // Extract the integer index value
-                let index_value = (argument.weak().with_data(|index_ref| {
-                    if let OnionObject::Integer(index) = index_ref {
-                        Ok(*index)
-                    } else {
-                        Err(RuntimeError::DetailedError(
-                            format!("Index must be an integer, but found {}", argument).into(),
-                        ))
-                    }
-                }))?;
-
-                // Get the element at the index
-                let element = {
-                    let obj_ref = object.weak();
-                    (obj_ref.at(index_value))?
-                };
-
-                return Ok((StepResult::Continue, Some(element)));
+                return Ok((
+                    StepResult::Continue,
+                    Some(object.weak().apply(argument.weak())?),
+                ));
             }
         }
     }));
