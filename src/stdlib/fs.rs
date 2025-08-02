@@ -3,6 +3,7 @@ use onion_vm::{
     GC,
     lambda::runnable::RuntimeError,
     types::{
+        lambda::parameter::LambdaParameter,
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         tuple::OnionTuple,
     },
@@ -11,7 +12,7 @@ use onion_vm::{
 use std::{fs, io::Write, path::Path};
 
 // 引入所需的辅助函数
-use super::{build_dict, build_string_tuple, wrap_native_function};
+use super::{build_dict, wrap_native_function};
 
 /// 读取文件内容作为字节
 fn read_file(
@@ -188,10 +189,7 @@ fn copy_file(
     match fs::copy(src_str.as_ref(), dest_str.as_ref()) {
         Ok(_) => Ok(OnionObject::Null.stabilize()),
         Err(e) => Err(RuntimeError::DetailedError(
-            format!(
-                "Failed to copy file from '{src_str}' to '{dest_str}': {e}"
-            )
-            .into(),
+            format!("Failed to copy file from '{src_str}' to '{dest_str}': {e}").into(),
         )),
     }
 }
@@ -224,10 +222,7 @@ fn rename_file(
     match fs::rename(src_str.as_ref(), dest_str.as_ref()) {
         Ok(_) => Ok(OnionObject::Null.stabilize()),
         Err(e) => Err(RuntimeError::DetailedError(
-            format!(
-                "Failed to rename file from '{src_str}' to '{dest_str}': {e}"
-            )
-            .into(),
+            format!("Failed to rename file from '{src_str}' to '{dest_str}': {e}").into(),
         )),
     }
 }
@@ -323,10 +318,7 @@ fn remove_dir_all(
         OnionObject::String(path_str) => match fs::remove_dir_all(path_str.as_ref()) {
             Ok(_) => Ok(OnionObject::Null.stabilize()),
             Err(e) => Err(RuntimeError::DetailedError(
-                format!(
-                    "Failed to remove directory and its contents '{path_str}': {e}"
-                )
-                .into(),
+                format!("Failed to remove directory and its contents '{path_str}': {e}").into(),
             )),
         },
         _ => Err(RuntimeError::InvalidType(
@@ -559,10 +551,7 @@ fn append_text(
             )),
         },
         Err(e) => Err(RuntimeError::DetailedError(
-            format!(
-                "Failed to open text file '{path_str}' for appending: {e}"
-            )
-            .into(),
+            format!("Failed to open text file '{path_str}' for appending: {e}").into(),
         )),
     }
 }
@@ -571,105 +560,42 @@ fn append_text(
 pub fn build_module() -> OnionStaticObject {
     let mut module = IndexMap::new();
 
-    let single_path_param = OnionObject::String("path".to_string().into()).stabilize();
-    let path_content_params = build_string_tuple(&["path", "content"]);
-    let src_dest_params = build_string_tuple(&["src", "dest"]);
-
+    // --- Single-argument functions: (path) ---
     module.insert(
         "read_file".to_string(),
         wrap_native_function(
-            &single_path_param,
-            &OnionFastMap::default(),
+            LambdaParameter::top("path"),
+            OnionFastMap::default(),
             "fs::read_file".to_string(),
             OnionKeyPool::create(vec!["path".to_string()]),
             &read_file,
         ),
     );
     module.insert(
-        "write_file".to_string(),
-        wrap_native_function(
-            &path_content_params,
-            &OnionFastMap::default(),
-            "fs::write_file".to_string(),
-            OnionKeyPool::create(vec!["path".to_string(), "content".to_string()]),
-            &write_file,
-        ),
-    );
-    module.insert(
-        "append_file".to_string(),
-        wrap_native_function(
-            &path_content_params,
-            &OnionFastMap::default(),
-            "fs::append_file".to_string(),
-            OnionKeyPool::create(vec!["path".to_string(), "content".to_string()]),
-            &append_file,
-        ),
-    );
-    module.insert(
         "read_text".to_string(),
         wrap_native_function(
-            &single_path_param,
-            &OnionFastMap::default(),
+            LambdaParameter::top("path"),
+            OnionFastMap::default(),
             "fs::read_text".to_string(),
             OnionKeyPool::create(vec!["path".to_string()]),
             &read_text,
         ),
     );
     module.insert(
-        "write_text".to_string(),
-        wrap_native_function(
-            &path_content_params,
-            &OnionFastMap::default(),
-            "fs::write_text".to_string(),
-            OnionKeyPool::create(vec!["path".to_string(), "content".to_string()]),
-            &write_text,
-        ),
-    );
-    module.insert(
-        "append_text".to_string(),
-        wrap_native_function(
-            &path_content_params,
-            &OnionFastMap::default(),
-            "fs::append_text".to_string(),
-            OnionKeyPool::create(vec!["path".to_string(), "content".to_string()]),
-            &append_text,
-        ),
-    );
-    module.insert(
         "remove_file".to_string(),
         wrap_native_function(
-            &single_path_param,
-            &OnionFastMap::default(),
+            LambdaParameter::top("path"),
+            OnionFastMap::default(),
             "fs::remove_file".to_string(),
             OnionKeyPool::create(vec!["path".to_string()]),
             &remove_file,
         ),
     );
     module.insert(
-        "copy_file".to_string(),
-        wrap_native_function(
-            &src_dest_params,
-            &OnionFastMap::default(),
-            "fs::copy_file".to_string(),
-            OnionKeyPool::create(vec!["src".to_string(), "dest".to_string()]),
-            &copy_file,
-        ),
-    );
-    module.insert(
-        "rename_file".to_string(),
-        wrap_native_function(
-            &src_dest_params,
-            &OnionFastMap::default(),
-            "fs::rename_file".to_string(),
-            OnionKeyPool::create(vec!["src".to_string(), "dest".to_string()]),
-            &rename_file,
-        ),
-    );
-    module.insert(
         "create_dir".to_string(),
         wrap_native_function(
-            &single_path_param,
-            &OnionFastMap::default(),
+            LambdaParameter::top("path"),
+            OnionFastMap::default(),
             "fs::create_dir".to_string(),
             OnionKeyPool::create(vec!["path".to_string()]),
             &create_dir,
@@ -678,8 +604,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "create_dir_all".to_string(),
         wrap_native_function(
-            &single_path_param,
-            &OnionFastMap::default(),
+            LambdaParameter::top("path"),
+            OnionFastMap::default(),
             "fs::create_dir_all".to_string(),
             OnionKeyPool::create(vec!["path".to_string()]),
             &create_dir_all,
@@ -688,8 +614,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "remove_dir".to_string(),
         wrap_native_function(
-            &single_path_param,
-            &OnionFastMap::default(),
+            LambdaParameter::top("path"),
+            OnionFastMap::default(),
             "fs::remove_dir".to_string(),
             OnionKeyPool::create(vec!["path".to_string()]),
             &remove_dir,
@@ -698,8 +624,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "remove_dir_all".to_string(),
         wrap_native_function(
-            &single_path_param,
-            &OnionFastMap::default(),
+            LambdaParameter::top("path"),
+            OnionFastMap::default(),
             "fs::remove_dir_all".to_string(),
             OnionKeyPool::create(vec!["path".to_string()]),
             &remove_dir_all,
@@ -708,8 +634,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "read_dir".to_string(),
         wrap_native_function(
-            &single_path_param,
-            &OnionFastMap::default(),
+            LambdaParameter::top("path"),
+            OnionFastMap::default(),
             "fs::read_dir".to_string(),
             OnionKeyPool::create(vec!["path".to_string()]),
             &read_dir,
@@ -718,8 +644,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "file_metadata".to_string(),
         wrap_native_function(
-            &single_path_param,
-            &OnionFastMap::default(),
+            LambdaParameter::top("path"),
+            OnionFastMap::default(),
             "fs::file_metadata".to_string(),
             OnionKeyPool::create(vec!["path".to_string()]),
             &file_metadata,
@@ -728,11 +654,83 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "exists".to_string(),
         wrap_native_function(
-            &single_path_param,
-            &OnionFastMap::default(),
+            LambdaParameter::top("path"),
+            OnionFastMap::default(),
             "fs::exists".to_string(),
             OnionKeyPool::create(vec!["path".to_string()]),
             &exists,
+        ),
+    );
+
+    // --- Two-argument functions: (path, content) ---
+    let path_content_params = LambdaParameter::Multiple(vec![
+        LambdaParameter::top("path"),
+        LambdaParameter::top("content"),
+    ]);
+    module.insert(
+        "write_file".to_string(),
+        wrap_native_function(
+            path_content_params.clone(),
+            OnionFastMap::default(),
+            "fs::write_file".to_string(),
+            OnionKeyPool::create(vec!["path".to_string(), "content".to_string()]),
+            &write_file,
+        ),
+    );
+    module.insert(
+        "append_file".to_string(),
+        wrap_native_function(
+            path_content_params.clone(),
+            OnionFastMap::default(),
+            "fs::append_file".to_string(),
+            OnionKeyPool::create(vec!["path".to_string(), "content".to_string()]),
+            &append_file,
+        ),
+    );
+    module.insert(
+        "write_text".to_string(),
+        wrap_native_function(
+            path_content_params.clone(),
+            OnionFastMap::default(),
+            "fs::write_text".to_string(),
+            OnionKeyPool::create(vec!["path".to_string(), "content".to_string()]),
+            &write_text,
+        ),
+    );
+    module.insert(
+        "append_text".to_string(),
+        wrap_native_function(
+            path_content_params, // Can move on the last use
+            OnionFastMap::default(),
+            "fs::append_text".to_string(),
+            OnionKeyPool::create(vec!["path".to_string(), "content".to_string()]),
+            &append_text,
+        ),
+    );
+
+    // --- Two-argument functions: (src, dest) ---
+    let src_dest_params = LambdaParameter::Multiple(vec![
+        LambdaParameter::top("src"),
+        LambdaParameter::top("dest"),
+    ]);
+    module.insert(
+        "copy_file".to_string(),
+        wrap_native_function(
+            src_dest_params.clone(),
+            OnionFastMap::default(),
+            "fs::copy_file".to_string(),
+            OnionKeyPool::create(vec!["src".to_string(), "dest".to_string()]),
+            &copy_file,
+        ),
+    );
+    module.insert(
+        "rename_file".to_string(),
+        wrap_native_function(
+            src_dest_params, // Can move on the last use
+            OnionFastMap::default(),
+            "fs::rename_file".to_string(),
+            OnionKeyPool::create(vec!["src".to_string(), "dest".to_string()]),
+            &rename_file,
         ),
     );
 

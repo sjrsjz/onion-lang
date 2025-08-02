@@ -2,17 +2,16 @@ use indexmap::IndexMap;
 use onion_vm::{
     GC,
     lambda::runnable::RuntimeError,
-    onion_tuple,
     types::{
+        lambda::parameter::LambdaParameter,
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
-        tuple::OnionTuple,
     },
     utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
 use std::{env, process::Command};
 
 // 引入所需的辅助函数
-use super::{build_dict, build_string_tuple, wrap_native_function};
+use super::{build_dict, wrap_native_function};
 
 fn get_string_arg<'a>(
     argument: &'a OnionFastMap<String, OnionStaticObject>,
@@ -212,15 +211,12 @@ fn path_join(
 pub fn build_module() -> OnionStaticObject {
     let mut module = IndexMap::new();
 
-    let command_arg = OnionObject::String("command".to_string().into()).stabilize();
-    let path_arg = OnionObject::String("path".to_string().into()).stabilize();
-    let no_args = onion_tuple!(); // Standard way to define no parameters
-
+    // --- Single-argument functions: command ---
     module.insert(
         "system".to_string(),
         wrap_native_function(
-            &command_arg,
-            &OnionFastMap::default(),
+            LambdaParameter::top("command"),
+            OnionFastMap::default(),
             "os::system".to_string(),
             OnionKeyPool::create(vec!["command".to_string()]),
             &system,
@@ -229,58 +225,30 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "system_code".to_string(),
         wrap_native_function(
-            &command_arg,
-            &OnionFastMap::default(),
+            LambdaParameter::top("command"),
+            OnionFastMap::default(),
             "os::system_code".to_string(),
             OnionKeyPool::create(vec!["command".to_string()]),
             &system_code,
         ),
     );
+
+    // --- Single-argument functions: path ---
     module.insert(
         "chdir".to_string(),
         wrap_native_function(
-            &path_arg,
-            &OnionFastMap::default(),
+            LambdaParameter::top("path"),
+            OnionFastMap::default(),
             "os::chdir".to_string(),
             OnionKeyPool::create(vec!["path".to_string()]),
             &chdir,
         ),
     );
     module.insert(
-        "username".to_string(),
-        wrap_native_function(
-            &no_args,
-            &OnionFastMap::default(),
-            "os::username".to_string(),
-            OnionKeyPool::create(vec![]),
-            &username,
-        ),
-    );
-    module.insert(
-        "home_dir".to_string(),
-        wrap_native_function(
-            &no_args,
-            &OnionFastMap::default(),
-            "os::home_dir".to_string(),
-            OnionKeyPool::create(vec![]),
-            &home_dir,
-        ),
-    );
-    module.insert(
-        "temp_dir".to_string(),
-        wrap_native_function(
-            &no_args,
-            &OnionFastMap::default(),
-            "os::temp_dir".to_string(),
-            OnionKeyPool::create(vec![]),
-            &temp_dir,
-        ),
-    );
-    module.insert(
         "path_exists".to_string(),
         wrap_native_function(
-            &path_arg,
-            &OnionFastMap::default(),
+            LambdaParameter::top("path"),
+            OnionFastMap::default(),
             "os::path_exists".to_string(),
             OnionKeyPool::create(vec!["path".to_string()]),
             &path_exists,
@@ -289,8 +257,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "is_dir".to_string(),
         wrap_native_function(
-            &path_arg,
-            &OnionFastMap::default(),
+            LambdaParameter::top("path"),
+            OnionFastMap::default(),
             "os::is_dir".to_string(),
             OnionKeyPool::create(vec!["path".to_string()]),
             &is_dir,
@@ -299,18 +267,55 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "is_file".to_string(),
         wrap_native_function(
-            &path_arg,
-            &OnionFastMap::default(),
+            LambdaParameter::top("path"),
+            OnionFastMap::default(),
             "os::is_file".to_string(),
             OnionKeyPool::create(vec!["path".to_string()]),
             &is_file,
         ),
     );
+
+    // --- No-argument functions ---
+    module.insert(
+        "username".to_string(),
+        wrap_native_function(
+            LambdaParameter::Multiple(vec![]),
+            OnionFastMap::default(),
+            "os::username".to_string(),
+            OnionKeyPool::create(vec![]),
+            &username,
+        ),
+    );
+    module.insert(
+        "home_dir".to_string(),
+        wrap_native_function(
+            LambdaParameter::Multiple(vec![]),
+            OnionFastMap::default(),
+            "os::home_dir".to_string(),
+            OnionKeyPool::create(vec![]),
+            &home_dir,
+        ),
+    );
+    module.insert(
+        "temp_dir".to_string(),
+        wrap_native_function(
+            LambdaParameter::Multiple(vec![]),
+            OnionFastMap::default(),
+            "os::temp_dir".to_string(),
+            OnionKeyPool::create(vec![]),
+            &temp_dir,
+        ),
+    );
+
+    // --- Multi-argument functions ---
     module.insert(
         "path_join".to_string(),
         wrap_native_function(
-            &build_string_tuple(&["base", "path"]),
-            &OnionFastMap::default(),
+            LambdaParameter::Multiple(vec![
+                LambdaParameter::top("base"),
+                LambdaParameter::top("path"),
+            ]),
+            OnionFastMap::default(),
             "os::path_join".to_string(),
             OnionKeyPool::create(vec!["base".to_string(), "path".to_string()]),
             &path_join,

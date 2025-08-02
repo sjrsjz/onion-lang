@@ -1,15 +1,19 @@
 use indexmap::IndexMap;
 use onion_vm::{
-    lambda::runnable::RuntimeError, onion_tuple, types::{
+    GC,
+    lambda::runnable::RuntimeError,
+    types::{
+        lambda::parameter::LambdaParameter,
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         pair::OnionPair,
         tuple::OnionTuple,
-    }, utils::fastmap::{OnionFastMap, OnionKeyPool}, GC
+    },
+    utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
 use std::env;
 
 // 引入所需的辅助函数
-use super::{build_dict, build_string_tuple, wrap_native_function};
+use super::{build_dict, wrap_native_function};
 
 // 辅助函数，用于获取并验证字符串参数
 fn get_string_arg<'a>(
@@ -189,105 +193,123 @@ fn executable(
 pub fn build_module() -> OnionStaticObject {
     let mut module = IndexMap::new();
 
-    let no_args = onion_tuple!();
-    let key_arg = OnionObject::String("key".to_string().into()).stabilize();
-    let exit_arg = OnionObject::String("code".to_string().into()).stabilize();
-
+    // sys.argv()
     module.insert(
         "argv".to_string(),
         wrap_native_function(
-            &no_args,
-            &OnionFastMap::default(),
+            LambdaParameter::Multiple(vec![]),
+            OnionFastMap::default(),
             "sys::argv".to_string(),
             OnionKeyPool::create(vec![]),
             &argv,
         ),
     );
+
+    // sys.getenv(key)
     module.insert(
         "getenv".to_string(),
         wrap_native_function(
-            &key_arg,
-            &OnionFastMap::default(),
+            LambdaParameter::top("key"),
+            OnionFastMap::default(),
             "sys::getenv".to_string(),
             OnionKeyPool::create(vec!["key".to_string()]),
             &getenv,
         ),
     );
+
+    // sys.setenv(key, value)
     module.insert(
         "setenv".to_string(),
         wrap_native_function(
-            &build_string_tuple(&["key", "value"]),
-            &OnionFastMap::default(),
+            LambdaParameter::Multiple(vec![
+                LambdaParameter::top("key"),
+                LambdaParameter::top("value"),
+            ]),
+            OnionFastMap::default(),
             "sys::setenv".to_string(),
             OnionKeyPool::create(vec!["key".to_string(), "value".to_string()]),
             &setenv,
         ),
     );
+
+    // sys.unsetenv(key)
     module.insert(
         "unsetenv".to_string(),
         wrap_native_function(
-            &key_arg,
-            &OnionFastMap::default(),
+            LambdaParameter::top("key"),
+            OnionFastMap::default(),
             "sys::unsetenv".to_string(),
             OnionKeyPool::create(vec!["key".to_string()]),
             &unsetenv,
         ),
     );
+
+    // sys.environ()
     module.insert(
         "environ".to_string(),
         wrap_native_function(
-            &no_args,
-            &OnionFastMap::default(),
+            LambdaParameter::Multiple(vec![]),
+            OnionFastMap::default(),
             "sys::environ".to_string(),
             OnionKeyPool::create(vec![]),
             &environ,
         ),
     );
+
+    // sys.getcwd()
     module.insert(
         "getcwd".to_string(),
         wrap_native_function(
-            &no_args,
-            &OnionFastMap::default(),
+            LambdaParameter::Multiple(vec![]),
+            OnionFastMap::default(),
             "sys::getcwd".to_string(),
             OnionKeyPool::create(vec![]),
             &getcwd,
         ),
     );
+
+    // sys.exit(code)
     module.insert(
         "exit".to_string(),
         wrap_native_function(
-            &exit_arg,
-            &OnionFastMap::default(),
+            LambdaParameter::top("code"),
+            OnionFastMap::default(),
             "sys::exit".to_string(),
             OnionKeyPool::create(vec!["code".to_string()]),
             &exit,
         ),
     );
+
+    // sys.platform()
     module.insert(
         "platform".to_string(),
         wrap_native_function(
-            &no_args,
-            &OnionFastMap::default(),
+            LambdaParameter::Multiple(vec![]),
+            OnionFastMap::default(),
             "sys::platform".to_string(),
             OnionKeyPool::create(vec![]),
             &platform,
         ),
     );
+
+    // sys.arch()
     module.insert(
         "arch".to_string(),
         wrap_native_function(
-            &no_args,
-            &OnionFastMap::default(),
+            LambdaParameter::Multiple(vec![]),
+            OnionFastMap::default(),
             "sys::arch".to_string(),
             OnionKeyPool::create(vec![]),
             &arch,
         ),
     );
+
+    // sys.executable()
     module.insert(
         "executable".to_string(),
         wrap_native_function(
-            &no_args,
-            &OnionFastMap::default(),
+            LambdaParameter::Multiple(vec![]),
+            OnionFastMap::default(),
             "sys::executable".to_string(),
             OnionKeyPool::create(vec![]),
             &executable,

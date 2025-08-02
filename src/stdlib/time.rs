@@ -8,18 +8,19 @@ use indexmap::IndexMap;
 use onion_vm::{
     GC,
     lambda::runnable::{Runnable, RuntimeError, StepResult},
-    onion_tuple,
     types::{
-        lambda::definition::{LambdaBody, LambdaType, OnionLambdaDefinition},
+        lambda::{
+            definition::{LambdaBody, LambdaType, OnionLambdaDefinition},
+            parameter::LambdaParameter,
+        },
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
-        tuple::OnionTuple,
     },
     unwrap_step_result,
     utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
 
 // 引入所需的辅助函数
-use super::{build_dict, build_string_tuple, wrap_native_function};
+use super::{build_dict, wrap_native_function};
 
 // 辅助函数，用于获取并验证整数参数
 fn get_integer_arg(
@@ -133,9 +134,7 @@ fn format_timestamp(timestamp: u64) -> String {
     let hour = rem_secs / 3600;
     let minute = (rem_secs % 3600) / 60;
     let second = rem_secs % 60;
-    format!(
-        "{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02} UTC"
-    )
+    format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02} UTC")
 }
 
 /// 获取格式化的当前时间字符串（UTC）
@@ -238,7 +237,7 @@ fn async_sleep(
     }
 
     Ok(OnionLambdaDefinition::new_static(
-        &onion_tuple!(),
+        LambdaParameter::Multiple(vec![]),
         LambdaBody::NativeFunction((
             Arc::new(move || {
                 Box::new(AsyncSleep {
@@ -248,7 +247,7 @@ fn async_sleep(
             }),
             OnionKeyPool::create(vec![]),
         )),
-        &OnionFastMap::default(),
+        OnionFastMap::default(),
         "time::async_sleep".to_string(),
         LambdaType::Normal,
     ))
@@ -257,13 +256,13 @@ fn async_sleep(
 /// 构建时间模块
 pub fn build_module() -> OnionStaticObject {
     let mut module = IndexMap::new();
-    let no_args = onion_tuple!();
 
+    // --- Functions with no arguments ---
     module.insert(
         "timestamp".to_string(),
         wrap_native_function(
-            &no_args,
-            &OnionFastMap::default(),
+            LambdaParameter::Multiple(vec![]),
+            OnionFastMap::default(),
             "time::timestamp".to_string(),
             OnionKeyPool::create(vec![]),
             &timestamp,
@@ -272,8 +271,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "timestamp_millis".to_string(),
         wrap_native_function(
-            &no_args,
-            &OnionFastMap::default(),
+            LambdaParameter::Multiple(vec![]),
+            OnionFastMap::default(),
             "time::timestamp_millis".to_string(),
             OnionKeyPool::create(vec![]),
             &timestamp_millis,
@@ -282,8 +281,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "timestamp_nanos".to_string(),
         wrap_native_function(
-            &no_args,
-            &OnionFastMap::default(),
+            LambdaParameter::Multiple(vec![]),
+            OnionFastMap::default(),
             "time::timestamp_nanos".to_string(),
             OnionKeyPool::create(vec![]),
             &timestamp_nanos,
@@ -292,19 +291,20 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "now_utc".to_string(),
         wrap_native_function(
-            &no_args,
-            &OnionFastMap::default(),
+            LambdaParameter::Multiple(vec![]),
+            OnionFastMap::default(),
             "time::now_utc".to_string(),
             OnionKeyPool::create(vec![]),
             &now_utc,
         ),
     );
 
+    // --- Functions with one argument ---
     module.insert(
         "sleep_seconds".to_string(),
         wrap_native_function(
-            &OnionObject::String("seconds".to_string().into()).stabilize(),
-            &OnionFastMap::default(),
+            LambdaParameter::top("seconds"),
+            OnionFastMap::default(),
             "time::sleep_seconds".to_string(),
             OnionKeyPool::create(vec!["seconds".to_string()]),
             &sleep_seconds,
@@ -314,8 +314,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "sleep_millis".to_string(),
         wrap_native_function(
-            &OnionObject::String("millis".to_string().into()).stabilize(),
-            &OnionFastMap::default(),
+            LambdaParameter::top("millis"),
+            OnionFastMap::default(),
             "time::sleep_millis".to_string(),
             OnionKeyPool::create(vec!["millis".to_string()]),
             &sleep_millis,
@@ -325,8 +325,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "sleep_micros".to_string(),
         wrap_native_function(
-            &OnionObject::String("micros".to_string().into()).stabilize(),
-            &OnionFastMap::default(),
+            LambdaParameter::top("micros"),
+            OnionFastMap::default(),
             "time::sleep_micros".to_string(),
             OnionKeyPool::create(vec!["micros".to_string()]),
             &sleep_micros,
@@ -336,8 +336,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "format_time".to_string(),
         wrap_native_function(
-            &OnionObject::String("timestamp".to_string().into()).stabilize(),
-            &OnionFastMap::default(),
+            LambdaParameter::top("timestamp"),
+            OnionFastMap::default(),
             "time::format_time".to_string(),
             OnionKeyPool::create(vec!["timestamp".to_string()]),
             &format_time,
@@ -345,24 +345,28 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     module.insert(
-        "time_diff".to_string(),
-        wrap_native_function(
-            &build_string_tuple(&["start", "end"]),
-            &OnionFastMap::default(),
-            "time::time_diff".to_string(),
-            OnionKeyPool::create(vec!["start".to_string(), "end".to_string()]),
-            &time_diff,
-        ),
-    );
-
-    module.insert(
         "async_sleep".to_string(),
         wrap_native_function(
-            &OnionObject::String("millis".to_string().into()).stabilize(),
-            &OnionFastMap::default(),
+            LambdaParameter::top("millis"),
+            OnionFastMap::default(),
             "time::async_sleep".to_string(),
             OnionKeyPool::create(vec!["millis".to_string()]),
             &async_sleep,
+        ),
+    );
+
+    // --- Functions with multiple arguments ---
+    module.insert(
+        "time_diff".to_string(),
+        wrap_native_function(
+            LambdaParameter::Multiple(vec![
+                LambdaParameter::top("start"),
+                LambdaParameter::top("end"),
+            ]),
+            OnionFastMap::default(),
+            "time::time_diff".to_string(),
+            OnionKeyPool::create(vec!["start".to_string(), "end".to_string()]),
+            &time_diff,
         ),
     );
 

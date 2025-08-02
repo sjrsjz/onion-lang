@@ -11,6 +11,7 @@ use onion_vm::{
     GC,
     lambda::runnable::RuntimeError,
     types::{
+        lambda::parameter::LambdaParameter,
         object::{OnionObject, OnionObjectCell, OnionObjectExt, OnionStaticObject},
         tuple::OnionTuple,
     },
@@ -19,7 +20,7 @@ use onion_vm::{
 
 // 引入所需的辅助函数和类型
 use super::ctypes::CTypes;
-use crate::stdlib::{build_dict, build_string_tuple, wrap_native_function};
+use crate::stdlib::{build_dict, wrap_native_function};
 
 // --- Core Structs and Implementations (CLib, CFunctionHandle, etc.) ---
 // The internal logic of these structs is sound and remains largely unchanged.
@@ -281,10 +282,8 @@ impl CFunctionHandle {
                 Ok((Type::pointer(), Argument::Ptr(std::ptr::null(), None)))
             }
             _ => Err(RuntimeError::InvalidOperation(
-                format!(
-                    "Type mismatch for FFI call: expected {expected_type}, got {ctype:?}"
-                )
-                .into(),
+                format!("Type mismatch for FFI call: expected {expected_type}, got {ctype:?}")
+                    .into(),
             )),
         }
     }
@@ -393,9 +392,7 @@ fn get_clib_arg(
             .downcast_ref::<CLib>()
             .map(|clib| Arc::new(clib.clone()))
             .ok_or_else(|| {
-                RuntimeError::InvalidType(
-                    format!("Argument '{name}' must be a CLib object").into(),
-                )
+                RuntimeError::InvalidType(format!("Argument '{name}' must be a CLib object").into())
             }),
         _ => Err(RuntimeError::InvalidType(
             format!("Argument '{name}' must be a CLib object").into(),
@@ -458,7 +455,8 @@ fn get_ctypes_tuple_arg(
             .map(|item| match item {
                 OnionObject::Custom(custom) => custom
                     .as_any()
-                    .downcast_ref::<CTypes>().cloned()
+                    .downcast_ref::<CTypes>()
+                    .cloned()
                     .ok_or_else(|| {
                         RuntimeError::InvalidType(
                             "All arguments for call must be CTypes objects"
@@ -540,21 +538,29 @@ fn lib_call_function(
 pub fn build_module() -> OnionStaticObject {
     let mut module = IndexMap::new();
 
+    // lib.load(path)
     module.insert(
         "load".to_string(),
         wrap_native_function(
-            &OnionObject::String("path".to_string().into()).stabilize(),
-            &OnionFastMap::new(OnionKeyPool::create(vec![])),
+            LambdaParameter::top("path"),
+            OnionFastMap::default(),
             "lib::load".to_string(),
             OnionKeyPool::create(vec!["path".to_string()]),
             &lib_load,
         ),
     );
+
+    // lib.get_function(library, function, return_type, param_types)
     module.insert(
         "get_function".to_string(),
         wrap_native_function(
-            &build_string_tuple(&["library", "function", "return_type", "param_types"]),
-            &OnionFastMap::new(OnionKeyPool::create(vec![])),
+            LambdaParameter::Multiple(vec![
+                LambdaParameter::top("library"),
+                LambdaParameter::top("function"),
+                LambdaParameter::top("return_type"),
+                LambdaParameter::top("param_types"),
+            ]),
+            OnionFastMap::default(),
             "lib::get_function".to_string(),
             OnionKeyPool::create(vec![
                 "library".to_string(),
@@ -565,11 +571,16 @@ pub fn build_module() -> OnionStaticObject {
             &lib_get_function,
         ),
     );
+
+    // lib.call(handle, args)
     module.insert(
         "call".to_string(),
         wrap_native_function(
-            &build_string_tuple(&["handle", "args"]),
-            &OnionFastMap::new(OnionKeyPool::create(vec![])),
+            LambdaParameter::Multiple(vec![
+                LambdaParameter::top("handle"),
+                LambdaParameter::top("args"),
+            ]),
+            OnionFastMap::default(),
             "lib::call".to_string(),
             OnionKeyPool::create(vec!["handle".to_string(), "args".to_string()]),
             &lib_call_function,

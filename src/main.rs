@@ -16,11 +16,11 @@ use onion_vm::{
         runnable::{Runnable, RuntimeError, StepResult},
         scheduler::scheduler::Scheduler,
     },
-    onion_tuple,
     types::{
         lambda::{
             definition::{LambdaBody, LambdaType, OnionLambdaDefinition},
             launcher::OnionLambdaRunnableLauncher,
+            parameter::LambdaParameter,
             vm_instructions::{
                 instruction_set::VMInstructionPackage, ir::IRPackage, ir_translator::IRTranslator,
             },
@@ -340,7 +340,9 @@ fn execute_ir_package(ir_package: &IRPackage) -> Result<(), String> {
 fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> Result<(), String> {
     let mut gc = GC::new_with_memory_threshold(1024 * 1024); // 1 MB threshold
 
-    if let Err(e) = VMInstructionPackage::validate(vm_instructions_package) { return Err(format!("Invalid VM instruction package: {e}")) }
+    if let Err(e) = VMInstructionPackage::validate(vm_instructions_package) {
+        return Err(format!("Invalid VM instruction package: {e}"));
+    }
     // Create standard library object
     let stdlib = stdlib::build_module();
     let mut capture = OnionFastMap::new(vm_instructions_package.create_key_pool());
@@ -349,9 +351,9 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
     capture.push(&"stdlib".to_string(), stdlib.weak().clone());
     // Create Lambda definition
     let lambda = OnionLambdaDefinition::new_static(
-        &onion_tuple!(),
+        LambdaParameter::Multiple(vec![]),
         LambdaBody::Instruction(Arc::new(vm_instructions_package.clone())),
-        &capture,
+        capture,
         "__main__".to_string(),
         LambdaType::Normal,
     );

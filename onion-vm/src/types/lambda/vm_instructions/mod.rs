@@ -18,7 +18,10 @@ use crate::{
     onion_tuple,
     types::{
         async_handle::OnionAsyncHandle,
-        lambda::{definition::LambdaType, launcher::OnionLambdaRunnableLauncher},
+        lambda::{
+            definition::LambdaType, launcher::OnionLambdaRunnableLauncher,
+            parameter::LambdaParameter,
+        },
         lazy_set::OnionLazySet,
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         pair::OnionPair,
@@ -323,9 +326,11 @@ pub fn load_lambda(
     )
     .clone();
 
-    let default_parameters = unwrap_step_result!(runnable.context.get_object_rev(1))
-        .weak()
-        .stabilize();
+    let default_parameters = unwrap_step_result!(
+        unwrap_step_result!(runnable.context.get_object_rev(1))
+            .weak()
+            .with_data(|obj| LambdaParameter::from_onion(obj))
+    );
 
     let instruction_package = unwrap_step_result!(runnable.context.get_object_rev(0))
         .weak()
@@ -407,9 +412,9 @@ pub fn load_lambda(
     };
 
     let lambda = OnionLambdaDefinition::new_static(
-        &default_parameters,
+        default_parameters,
         LambdaBody::Instruction(package.clone()),
-        &captured_value,
+        captured_value,
         signature,
         LambdaType::Normal,
     );

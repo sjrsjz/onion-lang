@@ -4,11 +4,14 @@ use indexmap::IndexMap;
 use onion_vm::{
     GC,
     lambda::runnable::RuntimeError,
-    types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
+    types::{
+        lambda::parameter::LambdaParameter,
+        object::{OnionObject, OnionObjectCell, OnionStaticObject},
+    },
     utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
 
-use crate::stdlib::{build_string_tuple, tuple};
+use crate::stdlib::tuple;
 
 use super::{build_dict, wrap_native_function};
 
@@ -299,8 +302,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "to_string".to_string(),
         wrap_native_function(
-            &OnionObject::String("value".to_string().into()).stabilize(), // Simplified parameter definition
-            &OnionFastMap::default(), // No default arguments for these
+            LambdaParameter::top("value"),
+            OnionFastMap::default(),
             "types::to_string".to_string(),
             OnionKeyPool::create(vec!["value".to_string()]),
             &to_string,
@@ -310,8 +313,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "to_int".to_string(),
         wrap_native_function(
-            &OnionObject::String("value".to_string().into()).stabilize(),
-            &OnionFastMap::default(),
+            LambdaParameter::top("value"),
+            OnionFastMap::default(),
             "types::to_int".to_string(),
             OnionKeyPool::create(vec!["value".to_string()]),
             &to_int,
@@ -321,8 +324,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "to_float".to_string(),
         wrap_native_function(
-            &OnionObject::String("value".to_string().into()).stabilize(),
-            &OnionFastMap::default(),
+            LambdaParameter::top("value"),
+            OnionFastMap::default(),
             "types::to_float".to_string(),
             OnionKeyPool::create(vec!["value".to_string()]),
             &to_float,
@@ -332,8 +335,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "to_bool".to_string(),
         wrap_native_function(
-            &OnionObject::String("value".to_string().into()).stabilize(),
-            &OnionFastMap::default(),
+            LambdaParameter::top("value"),
+            OnionFastMap::default(),
             "types::to_bool".to_string(),
             OnionKeyPool::create(vec!["value".to_string()]),
             &to_bool,
@@ -343,8 +346,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "to_bytes".to_string(),
         wrap_native_function(
-            &OnionObject::String("value".to_string().into()).stabilize(),
-            &OnionFastMap::default(),
+            LambdaParameter::top("value"),
+            OnionFastMap::default(),
             "types::to_bytes".to_string(),
             OnionKeyPool::create(vec!["value".to_string()]),
             &to_bytes,
@@ -355,8 +358,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "type_of".to_string(),
         wrap_native_function(
-            &OnionObject::String("value".to_string().into()).stabilize(),
-            &OnionFastMap::default(),
+            LambdaParameter::top("value"),
+            OnionFastMap::default(),
             "types::type_of".to_string(),
             OnionKeyPool::create(vec!["value".to_string()]),
             &type_of,
@@ -366,8 +369,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "is_int".to_string(),
         wrap_native_function(
-            &OnionObject::String("value".to_string().into()).stabilize(),
-            &OnionFastMap::default(),
+            LambdaParameter::top("value"),
+            OnionFastMap::default(),
             "types::is_int".to_string(),
             OnionKeyPool::create(vec!["value".to_string()]),
             &is_int,
@@ -377,8 +380,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "is_float".to_string(),
         wrap_native_function(
-            &OnionObject::String("value".to_string().into()).stabilize(),
-            &OnionFastMap::default(),
+            LambdaParameter::top("value"),
+            OnionFastMap::default(),
             "types::is_float".to_string(),
             OnionKeyPool::create(vec!["value".to_string()]),
             &is_float,
@@ -388,8 +391,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "is_string".to_string(),
         wrap_native_function(
-            &OnionObject::String("value".to_string().into()).stabilize(),
-            &OnionFastMap::default(),
+            LambdaParameter::top("value"),
+            OnionFastMap::default(),
             "types::is_string".to_string(),
             OnionKeyPool::create(vec!["value".to_string()]),
             &is_string,
@@ -399,8 +402,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "is_bool".to_string(),
         wrap_native_function(
-            &OnionObject::String("value".to_string().into()).stabilize(),
-            &OnionFastMap::default(),
+            LambdaParameter::top("value"),
+            OnionFastMap::default(),
             "types::is_bool".to_string(),
             OnionKeyPool::create(vec!["value".to_string()]),
             &is_bool,
@@ -410,8 +413,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "is_bytes".to_string(),
         wrap_native_function(
-            &OnionObject::String("value".to_string().into()).stabilize(),
-            &OnionFastMap::default(),
+            LambdaParameter::top("value"),
+            OnionFastMap::default(),
             "types::is_bytes".to_string(),
             OnionKeyPool::create(vec!["value".to_string()]),
             &is_bytes,
@@ -422,8 +425,11 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "find".to_string(),
         wrap_native_function(
-            &build_string_tuple(&["obj", "key"]),
-            &OnionFastMap::default(), // No default arguments for these
+            LambdaParameter::Multiple(vec![
+                LambdaParameter::top("obj"),
+                LambdaParameter::top("key"),
+            ]),
+            OnionFastMap::default(), // No default arguments for these
             "types::find".to_string(),
             OnionKeyPool::create(vec!["obj".to_string(), "key".to_string()]),
             &find,

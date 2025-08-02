@@ -8,8 +8,9 @@ use arc_gc::{
 
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
-    onion_tuple,
-    types::lambda::{definition::LambdaType, launcher::OnionLambdaRunnableLauncher},
+    types::lambda::{
+        definition::LambdaType, launcher::OnionLambdaRunnableLauncher, parameter::LambdaParameter,
+    },
     unwrap_step_result,
     utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
@@ -91,7 +92,7 @@ impl OnionLazySet {
                     current_index: 0,
                 };
                 let collector = OnionLambdaDefinition::new_static(
-                    &onion_tuple!(),
+                    LambdaParameter::Multiple(vec![]),
                     LambdaBody::NativeFunction((
                         Arc::new({
                             let collector = collector.clone();
@@ -99,7 +100,7 @@ impl OnionLazySet {
                         }),
                         empty_pool.clone(),
                     )),
-                    &OnionFastMap::new(empty_pool),
+                    OnionFastMap::new(empty_pool),
                     "collector".to_string(),
                     LambdaType::Normal,
                 );

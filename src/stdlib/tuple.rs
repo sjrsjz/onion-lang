@@ -3,13 +3,14 @@ use onion_vm::{
     GC,
     lambda::runnable::RuntimeError,
     types::{
+        lambda::parameter::LambdaParameter,
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         tuple::OnionTuple,
     },
     utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
 
-use super::{build_dict, build_string_tuple, wrap_native_function};
+use super::{build_dict, wrap_native_function};
 
 /// Pushes a value to a tuple, returning a new tuple.
 fn push(
@@ -174,20 +175,23 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "push".to_string(),
         wrap_native_function(
-            &build_string_tuple(&["container", "value"]),
-            &OnionFastMap::default(),
+            LambdaParameter::Multiple(vec![
+                LambdaParameter::top("container"),
+                LambdaParameter::top("value"),
+            ]),
+            OnionFastMap::default(),
             "tuple::push".to_string(),
             OnionKeyPool::create(vec!["container".to_string(), "value".to_string()]),
             &push,
         ),
     );
 
-    // tuple.pop(container) - 只有一个参数，直接用 String 定义更清晰
+    // tuple.pop(container)
     module.insert(
         "pop".to_string(),
         wrap_native_function(
-            &OnionObject::String("container".to_string().into()).stabilize(),
-            &OnionFastMap::default(),
+            LambdaParameter::top("container"),
+            OnionFastMap::default(),
             "tuple::pop".to_string(),
             OnionKeyPool::create(vec!["container".to_string()]),
             &pop,
@@ -198,8 +202,12 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "insert".to_string(),
         wrap_native_function(
-            &build_string_tuple(&["container", "index", "value"]),
-            &OnionFastMap::default(),
+            LambdaParameter::Multiple(vec![
+                LambdaParameter::top("container"),
+                LambdaParameter::top("index"),
+                LambdaParameter::top("value"),
+            ]),
+            OnionFastMap::default(),
             "tuple::insert".to_string(),
             OnionKeyPool::create(vec![
                 "container".to_string(),
@@ -214,8 +222,11 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "remove".to_string(),
         wrap_native_function(
-            &build_string_tuple(&["container", "index"]),
-            &OnionFastMap::default(),
+            LambdaParameter::Multiple(vec![
+                LambdaParameter::top("container"),
+                LambdaParameter::top("index"),
+            ]),
+            OnionFastMap::default(),
             "tuple::remove".to_string(),
             OnionKeyPool::create(vec!["container".to_string(), "index".to_string()]),
             &remove,

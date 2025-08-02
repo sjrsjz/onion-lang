@@ -13,7 +13,9 @@ use arc_gc::{
 use crate::{
     lambda::runnable::{Runnable, RuntimeError},
     types::{
-        lambda::vm_instructions::instruction_set::VMInstructionPackage,
+        lambda::{
+            parameter::LambdaParameter, vm_instructions::instruction_set::VMInstructionPackage,
+        },
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
     },
     utils::fastmap::{OnionFastMap, OnionKeyPool},
@@ -76,26 +78,32 @@ pub enum LambdaType {
 }
 
 pub struct OnionLambdaDefinition {
-    parameter: Arc<OnionObject>,
+    parameter: LambdaParameter,
+    flatten_param_keys: Vec<String>,
+    flatten_param_constraints: Vec<OnionObject>,
     body: LambdaBody,
-    capture: Arc<OnionFastMap<String, OnionObject>>,
+    capture: OnionFastMap<String, OnionObject>,
     signature: String,
     lambda_type: LambdaType,
 }
 
 impl OnionLambdaDefinition {
     pub fn new_static(
-        parameter: &OnionStaticObject,
+        parameter: LambdaParameter,
         body: LambdaBody,
-        capture: &OnionFastMap<String, OnionObject>,
+        capture: OnionFastMap<String, OnionObject>,
         signature: String,
         lambda_type: LambdaType,
     ) -> OnionStaticObject {
+        let flatten_param_keys = parameter.flatten_keys();
+        let flatten_param_constraints = parameter.flatten_constraints();
         OnionObject::Lambda((
             OnionLambdaDefinition {
-                parameter: parameter.weak().clone().into(),
+                parameter,
+                flatten_param_keys,
+                flatten_param_constraints,
                 body,
-                capture: capture.clone().into(),
+                capture,
                 signature,
                 lambda_type,
             }
@@ -106,18 +114,22 @@ impl OnionLambdaDefinition {
     }
 
     pub fn new_static_with_self(
-        parameter: &OnionStaticObject,
+        parameter: LambdaParameter,
         body: LambdaBody,
-        capture: &OnionFastMap<String, OnionObject>,
+        capture: OnionFastMap<String, OnionObject>,
         self_object: &OnionObject,
         signature: String,
         lambda_type: LambdaType,
     ) -> OnionStaticObject {
+        let flatten_param_keys = parameter.flatten_keys();
+        let flatten_param_constraints = parameter.flatten_constraints();
         OnionObject::Lambda((
             OnionLambdaDefinition {
-                parameter: parameter.weak().clone().into(),
+                parameter,
+                flatten_param_keys,
+                flatten_param_constraints,
                 body,
-                capture: capture.clone().into(),
+                capture,
                 signature,
                 lambda_type,
             }
@@ -135,6 +147,8 @@ impl OnionLambdaDefinition {
     pub fn with_lambda_type(&self, lambda_type: LambdaType) -> Self {
         OnionLambdaDefinition {
             parameter: self.parameter.clone(),
+            flatten_param_keys: self.flatten_param_keys.clone(),
+            flatten_param_constraints: self.flatten_param_constraints.clone(),
             body: self.body.clone(),
             capture: self.capture.clone(),
             signature: self.signature.clone(),
@@ -158,7 +172,7 @@ impl OnionLambdaDefinition {
             LambdaBody::Instruction(instruction) => {
                 let runnable = OnionLambdaRunnable::new(
                     argument,
-                    self.capture.as_ref(),
+                    &self.capture,
                     self_object,
                     this_lambda,
                     instruction.clone(),
@@ -179,7 +193,7 @@ impl OnionLambdaDefinition {
             }
             LambdaBody::NativeFunction((native_function, _)) => {
                 let mut runnable = native_function();
-                runnable.capture(argument, self.capture.as_ref(), gc)?;
+                runnable.capture(argument, &self.capture, gc)?;
                 runnable.bind_self_object(self_object, gc)?;
                 Ok(runnable)
             }
@@ -190,8 +204,16 @@ impl OnionLambdaDefinition {
         &self.signature
     }
 
-    pub fn get_parameter(&self) -> &OnionObject {
+    pub fn get_parameter(&self) -> &LambdaParameter {
         &self.parameter
+    }
+
+    pub fn get_flatten_param_keys(&self) -> &[String] {
+        &self.flatten_param_keys
+    }
+
+    pub fn get_flatten_param_constraints(&self) -> &[OnionObject] {
+        &self.flatten_param_constraints
     }
 
     pub fn get_capture(&self) -> &OnionFastMap<String, OnionObject> {
@@ -214,7 +236,10 @@ impl OnionLambdaDefinition {
         F: Fn(&OnionObject) -> Result<R, RuntimeError>,
     {
         match key {
-            OnionObject::String(s) if s.as_str() == "$parameter" => f(&self.parameter),
+            OnionObject::String(s) if s.as_str() == "$parameter" => {
+                let parameter = self.parameter.to_onion();
+                f(parameter.weak())
+            }
             OnionObject::String(s) if s.as_str() == "$signature" => {
                 f(&OnionObject::String(Arc::new(self.signature.clone())))
             }
@@ -231,13 +256,6 @@ impl OnionLambdaDefinition {
                 format!("Attribute '{:?}' not found in lambda definition", key).into(),
             )),
         }
-    }
-
-    pub fn with_parameter<F, R>(&self, f: F) -> Result<R, RuntimeError>
-    where
-        F: Fn(&OnionObject) -> Result<R, RuntimeError>,
-    {
-        self.parameter.with_data(f)
     }
 }
 

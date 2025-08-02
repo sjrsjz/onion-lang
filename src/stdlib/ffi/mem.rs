@@ -7,12 +7,15 @@ use indexmap::IndexMap;
 use onion_vm::{
     GC,
     lambda::runnable::RuntimeError,
-    types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
+    types::{
+        lambda::parameter::LambdaParameter,
+        object::{OnionObject, OnionObjectCell, OnionStaticObject},
+    },
     utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
 
 // 引入所需的辅助函数
-use crate::stdlib::{build_dict, build_string_tuple, wrap_native_function};
+use crate::stdlib::{build_dict, wrap_native_function};
 
 // --- Helper function for robust argument parsing ---
 
@@ -230,61 +233,88 @@ fn mem_copy(
 pub fn build_module() -> OnionStaticObject {
     let mut module = IndexMap::new();
 
+    // mem.alloc(size)
     module.insert(
         "alloc".to_string(),
         wrap_native_function(
-            &OnionObject::String("size".to_string().into()).stabilize(),
-            &OnionFastMap::new(OnionKeyPool::create(vec![])),
+            LambdaParameter::top("size"),
+            OnionFastMap::default(),
             "mem::alloc".to_string(),
             OnionKeyPool::create(vec!["size".to_string()]),
             &mem_alloc,
         ),
     );
+
+    // mem.free(ptr, size)
     module.insert(
         "free".to_string(),
         wrap_native_function(
-            &build_string_tuple(&["ptr", "size"]),
-            &OnionFastMap::new(OnionKeyPool::create(vec![])),
+            LambdaParameter::Multiple(vec![
+                LambdaParameter::top("ptr"),
+                LambdaParameter::top("size"),
+            ]),
+            OnionFastMap::default(),
             "mem::free".to_string(),
             OnionKeyPool::create(vec!["ptr".to_string(), "size".to_string()]),
             &mem_free,
         ),
     );
+
+    // mem.calloc(count, size)
     module.insert(
         "calloc".to_string(),
         wrap_native_function(
-            &build_string_tuple(&["count", "size"]),
-            &OnionFastMap::new(OnionKeyPool::create(vec![])),
+            LambdaParameter::Multiple(vec![
+                LambdaParameter::top("count"),
+                LambdaParameter::top("size"),
+            ]),
+            OnionFastMap::default(),
             "mem::calloc".to_string(),
             OnionKeyPool::create(vec!["count".to_string(), "size".to_string()]),
             &mem_calloc,
         ),
     );
+
+    // mem.read(ptr, size)
     module.insert(
         "read".to_string(),
         wrap_native_function(
-            &build_string_tuple(&["ptr", "size"]),
-            &OnionFastMap::new(OnionKeyPool::create(vec![])),
+            LambdaParameter::Multiple(vec![
+                LambdaParameter::top("ptr"),
+                LambdaParameter::top("size"),
+            ]),
+            OnionFastMap::default(),
             "mem::read".to_string(),
             OnionKeyPool::create(vec!["ptr".to_string(), "size".to_string()]),
             &mem_read,
         ),
     );
+
+    // mem.write(ptr, buffer)
     module.insert(
         "write".to_string(),
         wrap_native_function(
-            &build_string_tuple(&["ptr", "buffer"]),
-            &OnionFastMap::new(OnionKeyPool::create(vec![])),
+            LambdaParameter::Multiple(vec![
+                LambdaParameter::top("ptr"),
+                LambdaParameter::top("buffer"),
+            ]),
+            OnionFastMap::default(),
             "mem::write".to_string(),
             OnionKeyPool::create(vec!["ptr".to_string(), "buffer".to_string()]),
             &mem_write,
         ),
     );
+
+    // mem.copy(dest, src, size)
     module.insert(
         "copy".to_string(),
         wrap_native_function(
-            &build_string_tuple(&["dest", "src", "size"]),
-            &OnionFastMap::new(OnionKeyPool::create(vec![])),
+            LambdaParameter::Multiple(vec![
+                LambdaParameter::top("dest"),
+                LambdaParameter::top("src"),
+                LambdaParameter::top("size"),
+            ]),
+            OnionFastMap::default(),
             "mem::copy".to_string(),
             OnionKeyPool::create(vec![
                 "dest".to_string(),

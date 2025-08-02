@@ -8,10 +8,9 @@ use indexmap::IndexMap;
 use onion_vm::{
     GC,
     lambda::runnable::RuntimeError,
-    onion_tuple,
     types::{
+        lambda::parameter::LambdaParameter,
         object::{OnionObject, OnionObjectCell, OnionObjectExt, OnionStaticObject},
-        tuple::OnionTuple,
     },
     utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
@@ -430,16 +429,14 @@ fn c_null(
 
 pub fn build_module() -> OnionStaticObject {
     let mut module = IndexMap::new();
-    let value_arg = OnionObject::String("value".to_string().into()).stabilize();
-    let no_args = onion_tuple!();
 
     macro_rules! register_ctype {
         ($name:expr, $func:ident) => {
             module.insert(
                 $name.to_string(),
                 wrap_native_function(
-                    &value_arg,
-                    &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                    LambdaParameter::top("value"),
+                    OnionFastMap::default(),
                     concat!("ctypes::", $name).to_string(),
                     OnionKeyPool::create(vec!["value".to_string()]),
                     &$func,
@@ -469,8 +466,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "void".to_string(),
         wrap_native_function(
-            &no_args,
-            &OnionFastMap::new(OnionKeyPool::create(vec![])),
+            LambdaParameter::Multiple(vec![]),
+            OnionFastMap::default(),
             "ctypes::void".to_string(),
             OnionKeyPool::create(vec![]),
             &c_void,
@@ -479,8 +476,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "null".to_string(),
         wrap_native_function(
-            &no_args,
-            &OnionFastMap::new(OnionKeyPool::create(vec![])),
+            LambdaParameter::Multiple(vec![]),
+            OnionFastMap::default(),
             "ctypes::null".to_string(),
             OnionKeyPool::create(vec![]),
             &c_null,

@@ -8,7 +8,7 @@ use crate::{
         lambda::definition::OnionLambdaDefinition,
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
     },
-    unwrap_object, unwrap_step_result,
+    unwrap_step_result,
     utils::{
         fastmap::{OnionFastMap, OnionKeyPool},
         format_object_summary,
@@ -20,13 +20,12 @@ pub struct OnionLambdaRunnableLauncher {
     lambda: OnionStaticObject, // The OnionObject::Lambda itself
     lambda_ref: Arc<OnionLambdaDefinition>,
     lambda_self_object: OnionStaticObject,
-    argument: OnionStaticObject,
-    string_pool: OnionKeyPool<String>,
 
-    collected_arguments: OnionFastMap<String, OnionStaticObject>, // Arguments collected during processing
+    argument: OnionStaticObject, // hold the refs for flatten_argument
+    flatten_argument: Vec<OnionObject>,
+
+    string_pool: OnionKeyPool<String>,
     current_argument_index: usize, // Index into argument_elements for current phase
-    expect_argument_size: usize,
-    pair_to_insert: Option<(usize, OnionStaticObject)>, // If we are processing a pair, this is the key-value pair to insert
 
     runnable_mapper:
         Arc<dyn Fn(Box<dyn Runnable>) -> Result<Box<dyn Runnable>, RuntimeError> + Sync + Send>,
@@ -48,28 +47,20 @@ impl OnionLambdaRunnableLauncher {
                 "Cannot launch non-lambda object".to_string().into(),
             ));
         };
-        let expect_argument_size =
-            lambda_ref.with_parameter(|param: &OnionObject| match param {
-                OnionObject::Tuple(tuple) => Ok(tuple.get_elements().len()),
-                OnionObject::Pair(_) => Ok(1),
-                OnionObject::String(_) => Ok(1),
-                _ => Err(RuntimeError::InvalidType(
-                    "Expect tuple or pair or string for lambda's parameter"
-                        .to_string()
-                        .into(),
-                )),
-            })?;
         let key_pool = lambda_ref.create_key_pool();
+
+        let flatten_argument = lambda_ref
+            .get_parameter()
+            .unpack_arguments(argument.weak())?;
+
         Ok(Self {
             lambda: lambda.stabilize(),
             lambda_ref: lambda_ref.clone(),
             lambda_self_object: self_object.stabilize(),
-            argument: argument,
+            argument,
+            flatten_argument,
             string_pool: key_pool.clone(),
-            collected_arguments: OnionFastMap::new(key_pool),
             current_argument_index: 0,
-            expect_argument_size: expect_argument_size,
-            pair_to_insert: None,
             runnable_mapper: Arc::new(runnable_mapper),
         })
     }
@@ -94,9 +85,6 @@ impl Runnable for OnionLambdaRunnableLauncher {
             StepResult::Return(constraint_result) => {
                 // 我们在这里接收约束求解结果
                 if constraint_result.weak().to_boolean()? {
-                    if let Some((key, value)) = self.pair_to_insert.take() {
-                        self.collected_arguments.push_with_index(key, value);
-                    }
                     Ok(())
                 } else {
                     Err(RuntimeError::InvalidOperation(
@@ -128,9 +116,17 @@ impl Runnable for OnionLambdaRunnableLauncher {
     }
 
     fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> StepResult {
-        if self.current_argument_index == self.expect_argument_size {
+        if self.current_argument_index == self.lambda_ref.get_flatten_param_keys().len() {
+            let mut collected_arguments = OnionFastMap::new(self.string_pool.clone());
+            for i in 0..self.current_argument_index {
+                collected_arguments.push(
+                    &self.lambda_ref.get_flatten_param_keys()[i],
+                    self.flatten_argument[i].stabilize(),
+                );
+            }
+
             let runnable = unwrap_step_result!(self.lambda_ref.create_runnable(
-                &self.collected_arguments,
+                &collected_arguments,
                 &self.lambda,
                 self.lambda_self_object.weak(),
                 gc,
@@ -140,174 +136,53 @@ impl Runnable for OnionLambdaRunnableLauncher {
             return StepResult::ReplaceRunnable(mapped);
         }
 
-        if self.current_argument_index > self.expect_argument_size {
-            return StepResult::Error(RuntimeError::InvalidOperation(
-                "Too many arguments provided for lambda".to_string().into(),
-            ));
-        }
-
-        let result: Result<
-            (
-                Option<Box<dyn Runnable>>,
-                Option<(usize, OnionStaticObject)>,
-            ),
-            RuntimeError,
-        > = self.lambda_ref.with_parameter(|param| {
-
-            // 这里的 keyval 是一个可选的元组，包含了参数的索引和对应的值
-            // 键索引是指向被调用者的字符串池中的索引！这意味着如果VM要调用rust函数，rust函数的参数也必须在这个字符串池中
-            let mut keyval: Option<(usize, OnionStaticObject)> = None;
-
-            let runnable_result = match param {
-                OnionObject::Tuple(params_tuple) => {
-                    self.argument.weak().with_data(|argument| {
-                        let OnionObject::Tuple(argument_tuple) = argument else {
-                            return Err(RuntimeError::InvalidType(
-                                "Lambda arguments must be a Tuple when the parameter is a Tuple".to_string().into(),
-                            ));
-                        };
-                        if params_tuple.get_elements().len() != argument_tuple.get_elements().len()
-                        {
-                            return Err(RuntimeError::InvalidOperation(
-                                "Arity Mismatch".to_string().into(),
-                            ));
-                        }
-                        let param_def = params_tuple.get_elements().get(self.current_argument_index)
-                            .ok_or_else(|| {
-                                RuntimeError::InvalidOperation(
-                                    "Internal Error: Parameter index out of bounds"
-                                        .to_string()
-                                        .into(),
-                                )
-                            })?;
-                        let argument_value = argument_tuple
-                            .get_elements()
-                            .get(self.current_argument_index)
-                            .cloned()
-                            .ok_or_else(|| {
-                                RuntimeError::InvalidOperation(
-                                    "Internal Error: Argument index out of bounds"
-                                        .to_string()
-                                        .into(),
-                                )
-                            })?;
-                        param_def.with_data(|param_obj| {
-                            match param_obj {
-                                OnionObject::Pair(param_pair) => {
-                                    let param_name = param_pair.get_key().with_data(|o| unwrap_object!(o, OnionObject::String).map(|s| s.as_ref().clone()))?;
-                                    let constraint_obj = param_pair.get_value();
-                                    let key_index = self.collected_arguments.to_index(&param_name).ok_or_else(|| {
-                                        RuntimeError::InvalidOperation(
-                                            format!("Cannot find parameter '{}' in string pool", param_name).into(),
-                                        )
-                                    })?;
-                                    keyval = Some((key_index, argument_value.stabilize()));
-                                    constraint_obj.with_data(|constraint| match constraint {
-                                        OnionObject::Boolean(true) => Ok(None),
-                                        OnionObject::Boolean(false) => Err(RuntimeError::InvalidOperation(format!("Constraint check failed for parameter '{}'", param_name).into())),
-                                        lambda @ OnionObject::Lambda(_) => {
-                                            let launcher = OnionLambdaRunnableLauncher::new_static(
-                                                &lambda,
-                                                argument_value.stabilize(),
-                                                |r| Ok(r)
-                                            )?;
-                                            Ok(Some(Box::new(launcher) as Box<dyn Runnable>))
-                                        }
-                                        _ => Err(RuntimeError::InvalidType(format!("Invalid constraint type for parameter '{}'. Expected Boolean or Lambda.", param_name).into())),
-                                    })
-                                }
-                                OnionObject::String(param_name) => {
-                                    let key_index = self.collected_arguments.to_index(param_name.as_ref()).ok_or_else(|| {
-                                        RuntimeError::InvalidOperation(
-                                            format!("Cannot find parameter '{}' in string pool", param_name).into(),
-                                        )
-                                    })?;
-                                    keyval = Some((key_index, argument_value.stabilize()));
-                                    // Implicit `true` constraint means no runnable is needed.
-                                    Ok(None)
-                                }
-                                _ => Err(RuntimeError::InvalidType("Lambda parameter definition inside a tuple must be a String or a Pair".to_string().into())),
-                            }
-                        })
-                    })
-                }
-                OnionObject::Pair(single_param) => {
-                    let key = single_param.get_key().with_data(|o| {
-                        unwrap_object!(o, OnionObject::String).map(|s| self.collected_arguments.to_index(s.as_ref()).ok_or_else(|| {
-                            RuntimeError::InvalidOperation(
-                                format!("Cannot find parameter '{}' in string pool", s.as_ref()).into(),
-                            )
-                        }))
-                    })??;
-                    let v = single_param.get_value();
-
-                    // Assign to the local keyval.
-                    keyval = Some((key, self.argument.clone()));
-
-                    v.with_data(|constraint| match constraint {
-                        OnionObject::Boolean(true) => Ok(None),
-                        OnionObject::Boolean(false) => Err(RuntimeError::InvalidOperation(
+        let mut index = self.current_argument_index;
+        while index < self.lambda_ref.get_flatten_param_keys().len() {
+            match &self.lambda_ref.get_flatten_param_constraints()[index] {
+                OnionObject::Boolean(v) => {
+                    if !*v {
+                        self.current_argument_index = index + 1;
+                        return StepResult::Error(RuntimeError::InvalidOperation(
                             "Constraint check failed".to_string().into(),
-                        )),
-                        lambda @ OnionObject::Lambda(_) => {
-                            let launcher = OnionLambdaRunnableLauncher::new_static(
-                                &lambda,
-                                self.argument.clone(),
-                                |r| Ok(r),
-                            )?;
-                            Ok(Some(Box::new(launcher) as Box<dyn Runnable>))
-                        }
-                        _ => Err(RuntimeError::InvalidType(
-                            "Invalid constraint type".to_string().into(),
-                        )),
-                    })
+                        ));
+                    }
                 }
-                OnionObject::String(single_param) => {
-                    let key = self.collected_arguments.to_index(single_param.as_ref()).ok_or_else(|| {
-                        RuntimeError::InvalidOperation(
-                            format!("Cannot find parameter '{}' in string pool", single_param.as_ref()).into(),
+                lambda @ OnionObject::Lambda(_) => {
+                    self.current_argument_index = index + 1;
+                    return StepResult::NewRunnable(Box::new(unwrap_step_result!(
+                        OnionLambdaRunnableLauncher::new_static(
+                            lambda,
+                            self.flatten_argument[index].stabilize(),
+                            |r| Ok(r),
                         )
-                    })?;
-                    // Assign to the local keyval.
-                    keyval = Some((key, self.argument.clone()));
-                    Ok(None)
+                    )));
                 }
-                _ => Err(RuntimeError::InvalidType(
-                    "Expect tuple or pair for lambda's parameter"
-                        .to_string()
+                v => {
+                    self.current_argument_index = index + 1;
+                    return StepResult::Error(
+                        RuntimeError::InvalidType(
+                            format!(
+                                "Expect boolean or lambda for constraint, but found: {:?}",
+                                v
+                            )
+                            .into(),
+                        )
                         .into(),
-                )),
-            };
-
-            // Return the tuple containing both the runnable and the keyval.
-            runnable_result.map(|runnable| (runnable, keyval))
-        });
-
-        // Unpack the result tuple here.
-        let (constraint_runnable, returned_keyval) = unwrap_step_result!(result);
-        self.current_argument_index += 1;
-
-        match constraint_runnable {
-            Some(runnable) => {
-                // If there's a runnable, we need to defer insertion.
-                self.pair_to_insert = returned_keyval;
-                StepResult::NewRunnable(runnable)
-            }
-            None => {
-                // No runnable, so we can process the argument immediately.
-                if let Some((key, value)) = returned_keyval {
-                    self.collected_arguments.push_with_index(key, value);
+                    );
                 }
-                StepResult::Continue
             }
+            index += 1;
         }
+        self.current_argument_index = index;
+        StepResult::Continue
     }
 
     fn format_context(&self) -> String {
         "-> At lambda runnable launcher".to_string()
             + &format!(
                 " (current index: {}, expected: {})",
-                self.current_argument_index, self.expect_argument_size
+                self.current_argument_index,
+                self.lambda_ref.get_flatten_param_keys().len()
             )
             + &format!(", lambda: {}", format_object_summary(self.lambda.weak()))
     }

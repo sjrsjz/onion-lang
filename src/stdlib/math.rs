@@ -2,12 +2,15 @@ use indexmap::IndexMap;
 use onion_vm::{
     GC,
     lambda::runnable::RuntimeError,
-    types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
+    types::{
+        lambda::parameter::LambdaParameter,
+        object::{OnionObject, OnionObjectCell, OnionStaticObject},
+    },
     utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
 
 // 引入所需的辅助函数
-use super::{build_dict, build_string_tuple, wrap_native_function};
+use super::{build_dict, wrap_native_function};
 
 fn abs(
     argument: &OnionFastMap<String, OnionStaticObject>,
@@ -361,6 +364,7 @@ fn atan(
 pub fn build_module() -> OnionStaticObject {
     let mut module = IndexMap::new();
 
+    // --- Constants ---
     module.insert(
         "PI".to_string(),
         OnionObject::Float(std::f64::consts::PI).stabilize(),
@@ -370,14 +374,12 @@ pub fn build_module() -> OnionStaticObject {
         OnionObject::Float(std::f64::consts::E).stabilize(),
     );
 
-    let single_arg = OnionObject::String("value".to_string().into()).stabilize();
-    let pow_args = build_string_tuple(&["base", "exponent"]);
-
+    // --- Single-argument functions (all take "value") ---
     module.insert(
         "abs".to_string(),
         wrap_native_function(
-            &single_arg,
-            &OnionFastMap::default(),
+            LambdaParameter::top("value"),
+            OnionFastMap::default(),
             "math::abs".to_string(),
             OnionKeyPool::create(vec!["value".to_string()]),
             &abs,
@@ -386,8 +388,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "sin".to_string(),
         wrap_native_function(
-            &single_arg,
-            &OnionFastMap::default(),
+            LambdaParameter::top("value"),
+            OnionFastMap::default(),
             "math::sin".to_string(),
             OnionKeyPool::create(vec!["value".to_string()]),
             &sin,
@@ -396,8 +398,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "cos".to_string(),
         wrap_native_function(
-            &single_arg,
-            &OnionFastMap::default(),
+            LambdaParameter::top("value"),
+            OnionFastMap::default(),
             "math::cos".to_string(),
             OnionKeyPool::create(vec!["value".to_string()]),
             &cos,
@@ -406,8 +408,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "tan".to_string(),
         wrap_native_function(
-            &single_arg,
-            &OnionFastMap::default(),
+            LambdaParameter::top("value"),
+            OnionFastMap::default(),
             "math::tan".to_string(),
             OnionKeyPool::create(vec!["value".to_string()]),
             &tan,
@@ -416,8 +418,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "log".to_string(),
         wrap_native_function(
-            &single_arg,
-            &OnionFastMap::default(),
+            LambdaParameter::top("value"),
+            OnionFastMap::default(),
             "math::log".to_string(),
             OnionKeyPool::create(vec!["value".to_string()]),
             &log,
@@ -426,28 +428,18 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "sqrt".to_string(),
         wrap_native_function(
-            &single_arg,
-            &OnionFastMap::default(),
+            LambdaParameter::top("value"),
+            OnionFastMap::default(),
             "math::sqrt".to_string(),
             OnionKeyPool::create(vec!["value".to_string()]),
             &sqrt,
         ),
     );
     module.insert(
-        "pow".to_string(),
-        wrap_native_function(
-            &pow_args,
-            &OnionFastMap::default(),
-            "math::pow".to_string(),
-            OnionKeyPool::create(vec!["base".to_string(), "exponent".to_string()]),
-            &pow,
-        ),
-    );
-    module.insert(
         "exp".to_string(),
         wrap_native_function(
-            &single_arg,
-            &OnionFastMap::default(),
+            LambdaParameter::top("value"),
+            OnionFastMap::default(),
             "math::exp".to_string(),
             OnionKeyPool::create(vec!["value".to_string()]),
             &exp,
@@ -456,8 +448,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "floor".to_string(),
         wrap_native_function(
-            &single_arg,
-            &OnionFastMap::default(),
+            LambdaParameter::top("value"),
+            OnionFastMap::default(),
             "math::floor".to_string(),
             OnionKeyPool::create(vec!["value".to_string()]),
             &floor,
@@ -466,8 +458,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "ceil".to_string(),
         wrap_native_function(
-            &single_arg,
-            &OnionFastMap::default(),
+            LambdaParameter::top("value"),
+            OnionFastMap::default(),
             "math::ceil".to_string(),
             OnionKeyPool::create(vec!["value".to_string()]),
             &ceil,
@@ -476,8 +468,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "round".to_string(),
         wrap_native_function(
-            &single_arg,
-            &OnionFastMap::default(),
+            LambdaParameter::top("value"),
+            OnionFastMap::default(),
             "math::round".to_string(),
             OnionKeyPool::create(vec!["value".to_string()]),
             &round,
@@ -486,8 +478,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "asin".to_string(),
         wrap_native_function(
-            &single_arg,
-            &OnionFastMap::default(),
+            LambdaParameter::top("value"),
+            OnionFastMap::default(),
             "math::asin".to_string(),
             OnionKeyPool::create(vec!["value".to_string()]),
             &asin,
@@ -496,8 +488,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "acos".to_string(),
         wrap_native_function(
-            &single_arg,
-            &OnionFastMap::default(),
+            LambdaParameter::top("value"),
+            OnionFastMap::default(),
             "math::acos".to_string(),
             OnionKeyPool::create(vec!["value".to_string()]),
             &acos,
@@ -506,11 +498,26 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "atan".to_string(),
         wrap_native_function(
-            &single_arg,
-            &OnionFastMap::default(),
+            LambdaParameter::top("value"),
+            OnionFastMap::default(),
             "math::atan".to_string(),
             OnionKeyPool::create(vec!["value".to_string()]),
             &atan,
+        ),
+    );
+
+    // --- Multi-argument functions ---
+    module.insert(
+        "pow".to_string(),
+        wrap_native_function(
+            LambdaParameter::Multiple(vec![
+                LambdaParameter::top("base"),
+                LambdaParameter::top("exponent"),
+            ]),
+            OnionFastMap::default(),
+            "math::pow".to_string(),
+            OnionKeyPool::create(vec!["base".to_string(), "exponent".to_string()]),
+            &pow,
         ),
     );
 

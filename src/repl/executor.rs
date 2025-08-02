@@ -5,11 +5,11 @@ use onion_vm::{
         runnable::{Runnable, RuntimeError, StepResult},
         scheduler::scheduler::Scheduler,
     },
-    onion_tuple,
     types::{
         lambda::{
             definition::{LambdaBody, LambdaType, OnionLambdaDefinition},
             launcher::OnionLambdaRunnableLauncher,
+            parameter::LambdaParameter,
             vm_instructions::{
                 instruction_set::VMInstructionPackage, ir::IRPackage, ir_translator::IRTranslator,
             },
@@ -93,9 +93,9 @@ impl ReplExecutor {
 
         // 创建Lambda定义，包含stdlib和Out两个参数
         let lambda = OnionLambdaDefinition::new_static(
-            &onion_tuple!(),
+            LambdaParameter::Multiple(vec![]),
             LambdaBody::Instruction(Arc::new(vm_instructions_package.clone())),
-            &capture,
+            capture,
             "__main__".to_string(),
             LambdaType::Normal,
         );

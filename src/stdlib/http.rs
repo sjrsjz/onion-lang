@@ -8,17 +8,18 @@ use indexmap::IndexMap;
 use onion_vm::{
     GC,
     lambda::runnable::{Runnable, RuntimeError, StepResult},
-    onion_tuple,
     types::{
-        lambda::definition::{LambdaBody, LambdaType, OnionLambdaDefinition},
+        lambda::{
+            definition::{LambdaBody, LambdaType, OnionLambdaDefinition},
+            parameter::LambdaParameter,
+        },
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
-        tuple::OnionTuple,
     },
     utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
 
 // 引入所需的辅助函数
-use super::{build_dict, build_string_tuple, wrap_native_function};
+use super::{build_dict, wrap_native_function};
 
 // --- Helper functions for robust argument parsing ---
 
@@ -81,10 +82,7 @@ fn get_headers_arg(
             }
             OnionObject::Null | OnionObject::Undefined(_) => Ok(IndexMap::new()),
             _ => Err(RuntimeError::InvalidType(
-                format!(
-                    "Argument '{name}' must be a tuple of pairs, null, or undefined"
-                )
-                .into(),
+                format!("Argument '{name}' must be a tuple of pairs, null, or undefined").into(),
             )),
         },
         None => Ok(IndexMap::new()),
@@ -302,9 +300,9 @@ fn http_request(
     ));
 
     Ok(OnionLambdaDefinition::new_static(
-        &onion_tuple!(),
+        LambdaParameter::Multiple(vec![]),
         lambda_body,
-        &OnionFastMap::default(),
+        OnionFastMap::default(),
         "http::async_request".to_string(),
         LambdaType::Normal,
     ))
@@ -321,9 +319,9 @@ fn http_get(
         OnionKeyPool::create(vec![]),
     ));
     Ok(OnionLambdaDefinition::new_static(
-        &onion_tuple!(),
+        LambdaParameter::Multiple(vec![]),
         lambda_body,
-        &OnionFastMap::default(),
+        OnionFastMap::default(),
         "http::async_get".to_string(),
         LambdaType::Normal,
     ))
@@ -341,15 +339,14 @@ fn http_post(
         OnionKeyPool::create(vec![]),
     ));
     Ok(OnionLambdaDefinition::new_static(
-        &onion_tuple!(),
+        LambdaParameter::Multiple(vec![]),
         lambda_body,
-        &OnionFastMap::default(),
+        OnionFastMap::default(),
         "http::async_post".to_string(),
         LambdaType::Normal,
     ))
 }
 
-// ... other http methods like put, delete, patch follow the same pattern as post/get ...
 fn http_put(
     argument: &OnionFastMap<String, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
@@ -362,9 +359,9 @@ fn http_put(
         OnionKeyPool::create(vec![]),
     ));
     Ok(OnionLambdaDefinition::new_static(
-        &onion_tuple!(),
+        LambdaParameter::Multiple(vec![]),
         lambda_body,
-        &OnionFastMap::default(),
+        OnionFastMap::default(),
         "http::async_put".to_string(),
         LambdaType::Normal,
     ))
@@ -381,9 +378,9 @@ fn http_delete(
         OnionKeyPool::create(vec![]),
     ));
     Ok(OnionLambdaDefinition::new_static(
-        &onion_tuple!(),
+        LambdaParameter::Multiple(vec![]),
         lambda_body,
-        &OnionFastMap::default(),
+        OnionFastMap::default(),
         "http::async_delete".to_string(),
         LambdaType::Normal,
     ))
@@ -401,9 +398,9 @@ fn http_patch(
         OnionKeyPool::create(vec![]),
     ));
     Ok(OnionLambdaDefinition::new_static(
-        &onion_tuple!(),
+        LambdaParameter::Multiple(vec![]),
         lambda_body,
-        &OnionFastMap::default(),
+        OnionFastMap::default(),
         "http::async_patch".to_string(),
         LambdaType::Normal,
     ))
@@ -433,16 +430,12 @@ fn http_post_sync(
 pub fn build_module() -> OnionStaticObject {
     let mut module = IndexMap::new();
 
-    // Reusable parameter definitions
-    let url_only_param = OnionObject::String("url".to_string().into()).stabilize();
-    let url_body_params = build_string_tuple(&["url", "body"]);
-
     // --- Async Functions ---
     module.insert(
         "get".to_string(),
         wrap_native_function(
-            &url_only_param,
-            &OnionFastMap::default(),
+            LambdaParameter::top("url"),
+            OnionFastMap::default(),
             "http::get".to_string(),
             OnionKeyPool::create(vec!["url".to_string()]),
             &http_get,
@@ -451,8 +444,11 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "post".to_string(),
         wrap_native_function(
-            &url_body_params,
-            &OnionFastMap::default(),
+            LambdaParameter::Multiple(vec![
+                LambdaParameter::top("url"),
+                LambdaParameter::top("body"),
+            ]),
+            OnionFastMap::default(),
             "http::post".to_string(),
             OnionKeyPool::create(vec!["url".to_string(), "body".to_string()]),
             &http_post,
@@ -461,8 +457,11 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "put".to_string(),
         wrap_native_function(
-            &url_body_params,
-            &OnionFastMap::default(),
+            LambdaParameter::Multiple(vec![
+                LambdaParameter::top("url"),
+                LambdaParameter::top("body"),
+            ]),
+            OnionFastMap::default(),
             "http::put".to_string(),
             OnionKeyPool::create(vec!["url".to_string(), "body".to_string()]),
             &http_put,
@@ -471,8 +470,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "delete".to_string(),
         wrap_native_function(
-            &url_only_param,
-            &OnionFastMap::default(),
+            LambdaParameter::top("url"),
+            OnionFastMap::default(),
             "http::delete".to_string(),
             OnionKeyPool::create(vec!["url".to_string()]),
             &http_delete,
@@ -481,8 +480,11 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "patch".to_string(),
         wrap_native_function(
-            &url_body_params,
-            &OnionFastMap::default(),
+            LambdaParameter::Multiple(vec![
+                LambdaParameter::top("url"),
+                LambdaParameter::top("body"),
+            ]),
+            OnionFastMap::default(),
             "http::patch".to_string(),
             OnionKeyPool::create(vec!["url".to_string(), "body".to_string()]),
             &http_patch,
@@ -493,8 +495,8 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "get_sync".to_string(),
         wrap_native_function(
-            &url_only_param,
-            &OnionFastMap::default(),
+            LambdaParameter::top("url"),
+            OnionFastMap::default(),
             "http::get_sync".to_string(),
             OnionKeyPool::create(vec!["url".to_string()]),
             &http_get_sync,
@@ -503,19 +505,28 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "post_sync".to_string(),
         wrap_native_function(
-            &url_body_params,
-            &OnionFastMap::default(),
+            LambdaParameter::Multiple(vec![
+                LambdaParameter::top("url"),
+                LambdaParameter::top("body"),
+            ]),
+            OnionFastMap::default(),
             "http::post_sync".to_string(),
             OnionKeyPool::create(vec!["url".to_string(), "body".to_string()]),
             &http_post_sync,
         ),
     );
 
+    // --- Full Request Function ---
     module.insert(
         "request".to_string(),
         wrap_native_function(
-            &build_string_tuple(&["url", "method", "headers", "body"]),
-            &OnionFastMap::default(),
+            LambdaParameter::Multiple(vec![
+                LambdaParameter::top("url"),
+                LambdaParameter::top("method"),
+                LambdaParameter::top("headers"),
+                LambdaParameter::top("body"),
+            ]),
+            OnionFastMap::default(),
             "http::request".to_string(),
             OnionKeyPool::create(vec![
                 "url".to_string(),

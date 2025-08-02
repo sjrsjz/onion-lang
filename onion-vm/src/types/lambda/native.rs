@@ -5,7 +5,10 @@ use arc_gc::gc::GC;
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
     types::{
-        lambda::definition::{LambdaBody, LambdaType, OnionLambdaDefinition},
+        lambda::{
+            definition::{LambdaBody, LambdaType, OnionLambdaDefinition},
+            parameter::LambdaParameter,
+        },
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         tuple::OnionTuple,
     },
@@ -500,8 +503,8 @@ pub(crate) fn native_elements_method(
 }
 
 pub(crate) fn wrap_native_function<F>(
-    params: &OnionStaticObject,
-    capture: &OnionFastMap<String, OnionObject>,
+    params: LambdaParameter,
+    capture: OnionFastMap<String, OnionObject>,
     self_object: &OnionObject,
     signature: String,
     string_pool: OnionKeyPool<String>,

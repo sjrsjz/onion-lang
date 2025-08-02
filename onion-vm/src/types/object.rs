@@ -5,22 +5,24 @@ use std::{
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 
+use crate::{
+    lambda::runnable::RuntimeError,
+    types::lambda::{
+        native::{
+            native_bool_converter, native_bytes_converter, native_elements_method,
+            native_float_converter, native_int_converter, native_length_method,
+            native_string_converter, wrap_native_function,
+        },
+        parameter::LambdaParameter,
+    },
+    utils::fastmap::{OnionFastMap, OnionKeyPool},
+};
 use arc_gc::{
     arc::{GCArc, GCArcWeak},
     gc::GC,
     traceable::GCTraceable,
 };
 use base64::{Engine as _, engine::general_purpose};
-use crate::{
-    lambda::runnable::RuntimeError,
-    onion_tuple,
-    types::lambda::native::{
-        native_bool_converter, native_bytes_converter, native_elements_method,
-        native_float_converter, native_int_converter, native_length_method,
-        native_string_converter, wrap_native_function,
-    },
-    utils::fastmap::{OnionFastMap, OnionKeyPool},
-};
 
 use super::{
     lambda::{
@@ -663,12 +665,11 @@ impl OnionObject {
                 }
                 OnionObject::InstructionPackage(_) => Ok("InstructionPackage(...)".to_string()),
                 OnionObject::Lambda(lambda) => {
-                    let params = lambda.0.get_parameter().repr(&new_ptrs)?;
                     let body = lambda.0.get_body().to_string();
                     Ok(format!(
                         "{}::{} -> {}",
                         lambda.0.get_signature(),
-                        params,
+                        lambda.0.get_parameter(),
                         body
                     ))
                 }
@@ -731,15 +732,12 @@ impl OnionObject {
                     Ok(format!("[{} | {}]", container, filter))
                 }
                 OnionObject::InstructionPackage(_) => Ok("InstructionPackage(...)".to_string()),
-                OnionObject::Lambda(lambda) => {
-                    let params = lambda.0.get_parameter().repr(&new_ptrs)?;
-                    Ok(format!(
-                        "{}::{} -> {}",
-                        lambda.0.get_signature(),
-                        params,
-                        lambda.0.get_body()
-                    ))
-                }
+                OnionObject::Lambda(lambda) => Ok(format!(
+                    "{}::{} -> {}",
+                    lambda.0.get_signature(),
+                    lambda.0.get_parameter(),
+                    lambda.0.get_body()
+                )),
                 OnionObject::Mut(weak) => {
                     if let Some(strong) = weak.upgrade() {
                         let inner_repr = strong
@@ -1215,8 +1213,8 @@ impl OnionObject {
                     match key_str.as_str() {
                         "int" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::int".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1226,8 +1224,8 @@ impl OnionObject {
                         }
                         "float" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::float".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1237,8 +1235,8 @@ impl OnionObject {
                         }
                         "string" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::string".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1248,8 +1246,8 @@ impl OnionObject {
                         }
                         "bool" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::bool".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1259,8 +1257,8 @@ impl OnionObject {
                         }
                         "bytes" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::bytes".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1287,8 +1285,8 @@ impl OnionObject {
                     match key_str.as_str() {
                         "int" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::int".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1298,8 +1296,8 @@ impl OnionObject {
                         }
                         "float" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::float".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1309,8 +1307,8 @@ impl OnionObject {
                         }
                         "string" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::string".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1320,8 +1318,8 @@ impl OnionObject {
                         }
                         "bool" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::bool".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1331,8 +1329,8 @@ impl OnionObject {
                         }
                         "bytes" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::bytes".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1359,8 +1357,8 @@ impl OnionObject {
                     match key_str.as_str() {
                         "int" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::int".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1370,8 +1368,8 @@ impl OnionObject {
                         }
                         "float" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::float".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1381,8 +1379,8 @@ impl OnionObject {
                         }
                         "string" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::string".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1392,8 +1390,8 @@ impl OnionObject {
                         }
                         "bool" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::bool".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1403,8 +1401,8 @@ impl OnionObject {
                         }
                         "bytes" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::bytes".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1437,8 +1435,8 @@ impl OnionObject {
                     match key_str.as_str() {
                         "int" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::int".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1448,8 +1446,8 @@ impl OnionObject {
                         }
                         "float" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::float".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1459,8 +1457,8 @@ impl OnionObject {
                         }
                         "string" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::string".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1470,8 +1468,8 @@ impl OnionObject {
                         }
                         "bool" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::bool".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1481,8 +1479,8 @@ impl OnionObject {
                         }
                         "bytes" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::bytes".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1492,8 +1490,8 @@ impl OnionObject {
                         }
                         "length" => {
                             let length_method = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "builtin::length".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1503,8 +1501,8 @@ impl OnionObject {
                         }
                         "elements" => {
                             let elements_method = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "builtin::elements".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1534,8 +1532,8 @@ impl OnionObject {
                     match key_str.as_str() {
                         "int" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::int".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1545,8 +1543,8 @@ impl OnionObject {
                         }
                         "float" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::float".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1556,8 +1554,8 @@ impl OnionObject {
                         }
                         "string" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::string".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1567,8 +1565,8 @@ impl OnionObject {
                         }
                         "bool" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::bool".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1578,8 +1576,8 @@ impl OnionObject {
                         }
                         "bytes" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::bytes".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1589,8 +1587,8 @@ impl OnionObject {
                         }
                         "length" => {
                             let length_method = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "builtin::length".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1600,8 +1598,8 @@ impl OnionObject {
                         }
                         "elements" => {
                             let elements_method = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "builtin::elements".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1628,8 +1626,8 @@ impl OnionObject {
                     match key_str.as_str() {
                         "int" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::int".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1639,8 +1637,8 @@ impl OnionObject {
                         }
                         "float" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::float".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1650,8 +1648,8 @@ impl OnionObject {
                         }
                         "string" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::string".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1661,8 +1659,8 @@ impl OnionObject {
                         }
                         "bool" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::bool".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1672,8 +1670,8 @@ impl OnionObject {
                         }
                         "bytes" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::bytes".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1683,8 +1681,8 @@ impl OnionObject {
                         }
                         "length" => {
                             let length_method = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "builtin::length".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1694,8 +1692,8 @@ impl OnionObject {
                         }
                         "elements" => {
                             let elements_method = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "builtin::elements".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1722,8 +1720,8 @@ impl OnionObject {
                     match key_str.as_str() {
                         "int" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::int".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1733,8 +1731,8 @@ impl OnionObject {
                         }
                         "float" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::float".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1744,8 +1742,8 @@ impl OnionObject {
                         }
                         "string" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::string".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1755,8 +1753,8 @@ impl OnionObject {
                         }
                         "bool" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::bool".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1766,8 +1764,8 @@ impl OnionObject {
                         }
                         "bytes" => {
                             let converter = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "converter::bytes".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1777,8 +1775,8 @@ impl OnionObject {
                         }
                         "length" => {
                             let length_method = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "builtin::length".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1788,8 +1786,8 @@ impl OnionObject {
                         }
                         "elements" => {
                             let elements_method = wrap_native_function(
-                                &onion_tuple!(),
-                                &OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                LambdaParameter::Multiple(vec![]),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
                                 obj,
                                 "builtin::elements".to_string(),
                                 OnionKeyPool::create(vec![]),
@@ -1896,7 +1894,7 @@ impl OnionObject {
     pub fn key_of(&self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| match obj {
             OnionObject::Pair(pair) => Ok(pair.get_key().stabilize()),
-            OnionObject::Lambda(lambda) => Ok(lambda.0.get_parameter().stabilize()),
+            OnionObject::Lambda(lambda) => Ok(lambda.0.get_parameter().to_onion()),
             OnionObject::LazySet(set) => Ok(set.get_container().stabilize()),
             OnionObject::Custom(custom) => custom.key_of(),
             _ => Err(RuntimeError::InvalidOperation(

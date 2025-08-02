@@ -1,5 +1,6 @@
 use super::{build_dict, wrap_native_function};
 use indexmap::IndexMap;
+use onion_vm::types::lambda::parameter::LambdaParameter;
 use onion_vm::types::{pair::OnionPair, tuple::OnionTuple};
 use onion_vm::utils::fastmap::{OnionFastMap, OnionKeyPool};
 use onion_vm::{
@@ -167,37 +168,39 @@ fn json_stringify_pretty(
     let json_str = stringify_json_pretty(object_to_stringify.weak().clone())?;
     Ok(OnionObject::String(json_str.into()).stabilize())
 }
-
 pub fn build_module() -> OnionStaticObject {
     let mut module = IndexMap::new();
 
+    // json.parse(json_string)
     module.insert(
         "parse".to_string(),
         wrap_native_function(
-            &OnionObject::String("json_string".to_string().into()).stabilize(),
-            &OnionFastMap::default(),
+            LambdaParameter::top("json_string"), // <-- Changed here
+            OnionFastMap::default(),
             "json::parse".to_string(),
             OnionKeyPool::create(vec!["json_string".to_string()]),
             &json_parse,
         ),
     );
 
+    // json.stringify(object)
     module.insert(
         "stringify".to_string(),
         wrap_native_function(
-            &OnionObject::String("object".to_string().into()).stabilize(),
-            &OnionFastMap::default(),
+            LambdaParameter::top("object"), // <-- Changed here
+            OnionFastMap::default(),
             "json::stringify".to_string(),
             OnionKeyPool::create(vec!["object".to_string()]),
             &json_stringify,
         ),
     );
 
+    // json.stringify_pretty(object)
     module.insert(
         "stringify_pretty".to_string(),
         wrap_native_function(
-            &OnionObject::String("object".to_string().into()).stabilize(),
-            &OnionFastMap::default(),
+            LambdaParameter::top("object"), // <-- Changed here
+            OnionFastMap::default(),
             "json::stringify_pretty".to_string(),
             OnionKeyPool::create(vec!["object".to_string()]),
             &json_stringify_pretty,

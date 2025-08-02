@@ -12,6 +12,7 @@ pub mod launcher;
 pub(crate) mod native;
 pub mod runnable;
 pub mod vm_instructions;
+pub mod parameter;
 
 pub fn build_dict_from_hashmap(
     hashmap: &FxHashMap<String, OnionStaticObject>,

@@ -5,7 +5,10 @@ use onion_vm::{
     GC,
     lambda::runnable::{Runnable, RuntimeError, StepResult},
     types::{
-        lambda::definition::{LambdaBody, LambdaType, OnionLambdaDefinition},
+        lambda::{
+            definition::{LambdaBody, LambdaType, OnionLambdaDefinition},
+            parameter::LambdaParameter,
+        },
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         pair::OnionPair,
         tuple::OnionTuple,
@@ -37,15 +40,6 @@ pub fn build_dict(dict: IndexMap<String, OnionStaticObject>) -> OnionStaticObjec
     }
     OnionTuple::new_static_no_ref(&pairs)
 }
-
-pub fn build_string_tuple(strings: &[&str]) -> OnionStaticObject {
-    let mut elements = vec![];
-    for s in strings {
-        elements.push(OnionObject::String(s.to_string().into()).consume_and_stabilize());
-    }
-    OnionTuple::new_static_no_ref(&elements)
-}
-
 pub struct NativeFunctionGenerator<F>
 where
     F: Fn(
@@ -83,8 +77,7 @@ where
     ) -> Result<(), RuntimeError> {
         self.captured = argument.clone();
         for (key, value) in captured_vars.pairs() {
-            self.captured
-                .push_with_index(*key, value.stabilize());
+            self.captured.push_with_index(*key, value.stabilize());
         }
         Ok(())
     }
@@ -123,8 +116,8 @@ where
 }
 
 pub fn wrap_native_function<F>(
-    params: &OnionStaticObject,
-    capture: &OnionFastMap<String, OnionObject>,
+    params: LambdaParameter,
+    capture: OnionFastMap<String, OnionObject>,
     signature: String,
     string_pool: OnionKeyPool<String>,
     function: &'static F,
