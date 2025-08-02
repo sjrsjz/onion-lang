@@ -339,12 +339,19 @@ pub enum ASTNodeType {
     Continue, // continue
     Range, // x..y
     In,
-    Namespace(String),  // Type::Value
-    Set,                // collection | filter
-    Map,                // collection |> map
-    Annotation(String), // @annotation expr
-    Is,                 // x is y
+    Namespace(String), // Type::Value
+    Set,               // collection | filter
+    Map,               // collection |> map
+    Is,                // x is y
     Raise,
+
+    Dynamic, // 假设子表达式的所有变量都存在
+    Static,  // 假设子表达式的所有变量都在当前上下文中定义
+
+    Comptime, // 编译时计算的表达式
+    DataAST,  // 数据AST
+
+    Required(String), // 变量存在性占位符，我们不直接硬编码对应的AST，我们通过comptime中调用`required "var"`来生成
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -444,8 +451,7 @@ impl ASTNode {
     }
 }
 
-type MatcherFn =
-    Box<dyn Fn(&Vec<GatheredTokens>, usize) -> Result<(Option<ASTNode>, usize), ParserError>>;
+type MatcherFn = fn(&Vec<GatheredTokens>, usize) -> Result<(Option<ASTNode>, usize), ParserError>;
 
 struct NodeMatcher {
     matchers: Vec<MatcherFn>,
@@ -458,7 +464,10 @@ impl NodeMatcher {
         }
     }
 
-    fn add_matcher(&mut self, matcher: MatcherFn) {
+    fn add_matcher(
+        &mut self,
+        matcher: fn(&Vec<GatheredTokens>, usize) -> Result<(Option<ASTNode>, usize), ParserError>,
+    ) {
         self.matchers.push(matcher);
     }
 
@@ -724,216 +733,42 @@ fn match_all<'t>(
     current: usize,
 ) -> Result<(Option<ASTNode>, usize), ParserError> {
     let mut node_matcher = NodeMatcher::new();
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_expressions(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_annotation(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_return_emit_raise(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_tuple(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_let(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_assign(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_map(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_set_def(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_quick_call(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_lambda_def(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_named_to(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_key_value(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_while(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_control_flow(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_if(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_or(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_and(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_xor(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_not(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_operation_compare(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_operation_add_sub(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_operation_mul_div_mod(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_bitwise_shift(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_unary(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_power(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_range(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_in(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_is(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_as(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_modifier(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_quick_named_to(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_assume_tuple(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_alias(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_member_access_and_apply(tokens, current)
-        },
-    ));
-
-    node_matcher.add_matcher(Box::new(
-        |tokens, current| -> Result<(Option<ASTNode>, usize), ParserError> {
-            match_variable(tokens, current)
-        },
-    ));
-
+    node_matcher.add_matcher(match_expressions);
+    node_matcher.add_matcher(match_comptime_and_data_ast);
+    node_matcher.add_matcher(match_dynamic_and_static);
+    node_matcher.add_matcher(match_return_emit_raise);
+    node_matcher.add_matcher(match_tuple);
+    node_matcher.add_matcher(match_let);
+    node_matcher.add_matcher(match_assign);
+    node_matcher.add_matcher(match_map);
+    node_matcher.add_matcher(match_set_def);
+    node_matcher.add_matcher(match_quick_call);
+    node_matcher.add_matcher(match_lambda_def);
+    node_matcher.add_matcher(match_named_to);
+    node_matcher.add_matcher(match_key_value);
+    node_matcher.add_matcher(match_while);
+    node_matcher.add_matcher(match_break_and_continue);
+    node_matcher.add_matcher(match_if);
+    node_matcher.add_matcher(match_or);
+    node_matcher.add_matcher(match_and);
+    node_matcher.add_matcher(match_xor);
+    node_matcher.add_matcher(match_not);
+    node_matcher.add_matcher(match_operation_compare);
+    node_matcher.add_matcher(match_operation_add_sub);
+    node_matcher.add_matcher(match_operation_mul_div_mod);
+    node_matcher.add_matcher(match_bitwise_shift);
+    node_matcher.add_matcher(match_unary);
+    node_matcher.add_matcher(match_power);
+    node_matcher.add_matcher(match_range);
+    node_matcher.add_matcher(match_in);
+    node_matcher.add_matcher(match_is);
+    node_matcher.add_matcher(match_as);
+    node_matcher.add_matcher(match_modifier);
+    node_matcher.add_matcher(match_quick_named_to);
+    node_matcher.add_matcher(match_assume_tuple);
+    node_matcher.add_matcher(match_alias);
+    node_matcher.add_matcher(match_member_access_and_apply);
+    node_matcher.add_matcher(match_variable);
     node_matcher.match_node(tokens, current)
 }
 
@@ -988,7 +823,7 @@ fn match_expressions(
     ))
 }
 
-fn match_annotation(
+fn match_comptime_and_data_ast(
     tokens: &Vec<GatheredTokens>,
     current: usize,
 ) -> Result<(Option<ASTNode>, usize), ParserError> {
@@ -996,46 +831,58 @@ fn match_annotation(
         return Ok((None, 0));
     }
 
-    if !is_symbol(&tokens[current], "@") {
+    if !is_symbol(&tokens[current], "@") && !is_identifier(&tokens[current], "$") {
         return Ok((None, 0));
     }
 
-    if current + 1 >= tokens.len() {
-        return Err(ParserError::MissingStructure(
-            tokens[current][0].clone(),
-            "Annotation".to_string(),
-        ));
-    };
-
-    if tokens[current + 1].len() != 1 || tokens[current + 1][0] != TokenType::IDENTIFIER {
-        return Err(ParserError::ErrorStructure(
-            tokens[current][0].clone(),
-            "Annotation requires an Identifer".to_string(),
-        ));
-    };
-
-    let annotation = tokens[current + 1][0].token();
-    let right_tokens = tokens.get(current + 2..).unwrap_or(&[]).to_vec();
+    let right_tokens = tokens[current + 1..].to_vec();
     let (right, right_offset) = match_all(&right_tokens, 0)?;
     if right.is_none() {
         return Ok((None, 0));
     }
-
-    if right_offset != right_tokens.len() {
-        return Err(ParserError::NotFullyMatched(
-            right_tokens.first().unwrap().first().unwrap().clone(),
-            right_tokens.last().unwrap().last().unwrap().clone(),
-        ));
-    }
-
     let right = right.unwrap();
     let node = ASTNode::new(
-        ASTNodeType::Annotation(annotation.clone()),
+        if is_identifier(&tokens[current], "@") {
+            ASTNodeType::Comptime
+        } else {
+            ASTNodeType::DataAST
+        },
         tokens[current].first().cloned(),
         tokens[current + right_offset + 1].last().cloned(),
         Some(vec![right]),
     );
-    Ok((Some(node), right_offset + 2))
+    Ok((Some(node), right_offset + 1))
+}
+
+fn match_dynamic_and_static(
+    tokens: &Vec<GatheredTokens>,
+    current: usize,
+) -> Result<(Option<ASTNode>, usize), ParserError> {
+    if current >= tokens.len() {
+        return Ok((None, 0));
+    }
+
+    if !is_symbol(&tokens[current], "dynamic") && !is_identifier(&tokens[current], "static") {
+        return Ok((None, 0));
+    }
+
+    let right_tokens = tokens[current + 1..].to_vec();
+    let (right, right_offset) = match_all(&right_tokens, 0)?;
+    if right.is_none() {
+        return Ok((None, 0));
+    }
+    let right = right.unwrap();
+    let node = ASTNode::new(
+        if is_identifier(&tokens[current], "dynamic") {
+            ASTNodeType::Dynamic
+        } else {
+            ASTNodeType::Static
+        },
+        tokens[current].first().cloned(),
+        tokens[current + right_offset + 1].last().cloned(),
+        Some(vec![right]),
+    );
+    Ok((Some(node), right_offset + 1))
 }
 
 fn match_return_emit_raise(
@@ -1516,7 +1363,7 @@ fn match_if(
     ))
 }
 
-fn match_control_flow(
+fn match_break_and_continue(
     tokens: &Vec<GatheredTokens>,
     current: usize,
 ) -> Result<(Option<ASTNode>, usize), ParserError> {

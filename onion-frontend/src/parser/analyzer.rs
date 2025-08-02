@@ -1523,7 +1523,6 @@ fn analyze_node(
     }
 }
 
-
 #[stacksafe::stacksafe]
 fn analyze_tuple_params(
     source: &Option<Source>,
@@ -1703,10 +1702,12 @@ pub fn auto_capture(
             let (params_req_vars, new_params_node) = auto_capture(context, params, *is_dynamic_gen);
             required_vars.extend(params_req_vars);
 
-            for v in captured_vars {
-                if context.get_variable_current_context(&v).is_none() {
-                    // 如果捕获的变量在当前上下文中未定义，添加到 required_vars
-                    required_vars.insert(v.clone());
+            if !dynamic {
+                for v in captured_vars {
+                    if context.get_variable_current_context(&v).is_none() {
+                        // 如果捕获的变量在当前上下文中未定义，添加到 required_vars
+                        required_vars.insert(v.clone());
+                    }
                 }
             }
 
@@ -1834,10 +1835,12 @@ pub fn auto_capture(
             rebuilt_lambda_required_vars.extend(captured_vars.clone());
             rebuilt_lambda_required_vars.extend(body_req_vars.clone());
 
-            for var in body_req_vars {
-                if context.get_variable_current_context(&var).is_none() {
-                    // 如果 Lambda 体需要的变量在当前上下文中未定义，添加到 required_vars
-                    required_vars.insert(var.clone());
+            if !dynamic {
+                for var in body_req_vars {
+                    if context.get_variable_current_context(&var).is_none() {
+                        // 如果 Lambda 体需要的变量在当前上下文中未定义，添加到 required_vars
+                        required_vars.insert(var.clone());
+                    }
                 }
             }
 
