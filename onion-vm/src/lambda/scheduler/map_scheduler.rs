@@ -31,7 +31,7 @@ impl Runnable for Mapping {
                 Ok(())
             }
             _ => Err(RuntimeError::DetailedError(
-                "Unexpected step result in mapping".to_string().into(),
+                "Unexpected step result in mapping".into(),
             )),
         }
     }
@@ -67,7 +67,7 @@ impl Runnable for Mapping {
                     }
                 }
                 _ => Err(RuntimeError::InvalidType(
-                    "Container must be a tuple".to_string().into(),
+                    "Container must be a tuple".into(),
                 )),
             })
             .unwrap_or_else(|e| StepResult::Error(e))

@@ -160,7 +160,7 @@ impl OnionObjectExt for OnionThreadHandle {
                     Err(err) => Err(err),
                 },
                 Err(_) => Err(RuntimeError::DetailedError(
-                    "Thread join failed".to_string().into(),
+                    "Thread join failed".into(),
                 )),
             }
         } else {
@@ -178,7 +178,7 @@ impl OnionObjectExt for OnionThreadHandle {
         f: &mut dyn FnMut(&OnionObject) -> Result<(), RuntimeError>,
     ) -> Result<(), RuntimeError> {
         match key {
-            OnionObject::String(s) => match s.as_str() {
+            OnionObject::String(s) => match s.as_ref() {
                 "is_finished" => f(&OnionObject::Boolean(self.is_finished())),
                 "has_handle" => {
                     let guard = self.inner.lock().unwrap();

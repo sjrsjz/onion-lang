@@ -13,12 +13,12 @@ use onion_vm::{
 use super::{build_dict, wrap_native_function};
 
 fn abs(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(value) = argument.get(&"value".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "abs requires a 'value' argument".to_string().into(),
+            "abs requires a 'value' argument".into(),
         ));
     };
 
@@ -26,18 +26,18 @@ fn abs(
         OnionObject::Integer(n) => Ok(OnionObject::Integer(n.abs()).stabilize()),
         OnionObject::Float(f) => Ok(OnionObject::Float(f.abs()).stabilize()),
         _ => Err(RuntimeError::InvalidType(
-            "abs requires a numeric value".to_string().into(),
+            "abs requires a numeric value".into(),
         )),
     })
 }
 
 fn sin(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(value) = argument.get(&"value".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "sin requires a 'value' argument".to_string().into(),
+            "sin requires a 'value' argument".into(),
         ));
     };
 
@@ -45,18 +45,18 @@ fn sin(
         OnionObject::Integer(n) => Ok(OnionObject::Float((*n as f64).sin()).stabilize()),
         OnionObject::Float(f) => Ok(OnionObject::Float(f.sin()).stabilize()),
         _ => Err(RuntimeError::InvalidType(
-            "sin requires a numeric value".to_string().into(),
+            "sin requires a numeric value".into(),
         )),
     })
 }
 
 fn cos(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(value) = argument.get(&"value".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "cos requires a 'value' argument".to_string().into(),
+            "cos requires a 'value' argument".into(),
         ));
     };
 
@@ -64,18 +64,18 @@ fn cos(
         OnionObject::Integer(n) => Ok(OnionObject::Float((*n as f64).cos()).stabilize()),
         OnionObject::Float(f) => Ok(OnionObject::Float(f.cos()).stabilize()),
         _ => Err(RuntimeError::InvalidType(
-            "cos requires a numeric value".to_string().into(),
+            "cos requires a numeric value".into(),
         )),
     })
 }
 
 fn tan(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(value) = argument.get(&"value".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "tan requires a 'value' argument".to_string().into(),
+            "tan requires a 'value' argument".into(),
         ));
     };
 
@@ -83,18 +83,18 @@ fn tan(
         OnionObject::Integer(n) => Ok(OnionObject::Float((*n as f64).tan()).stabilize()),
         OnionObject::Float(f) => Ok(OnionObject::Float(f.tan()).stabilize()),
         _ => Err(RuntimeError::InvalidType(
-            "tan requires a numeric value".to_string().into(),
+            "tan requires a numeric value".into(),
         )),
     })
 }
 
 fn log(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(value) = argument.get(&"value".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "log requires a 'value' argument".to_string().into(),
+            "log requires a 'value' argument".into(),
         ));
     };
 
@@ -102,7 +102,7 @@ fn log(
         OnionObject::Integer(n) => {
             if *n <= 0 {
                 Err(RuntimeError::InvalidOperation(
-                    "log requires a positive value".to_string().into(),
+                    "log requires a positive value".into(),
                 ))
             } else {
                 Ok(OnionObject::Float((*n as f64).ln()).stabilize())
@@ -111,25 +111,25 @@ fn log(
         OnionObject::Float(f) => {
             if *f <= 0.0 {
                 Err(RuntimeError::InvalidOperation(
-                    "log requires a positive value".to_string().into(),
+                    "log requires a positive value".into(),
                 ))
             } else {
                 Ok(OnionObject::Float(f.ln()).stabilize())
             }
         }
         _ => Err(RuntimeError::InvalidType(
-            "log requires a numeric value".to_string().into(),
+            "log requires a numeric value".into(),
         )),
     })
 }
 
 fn sqrt(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(value) = argument.get(&"value".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "sqrt requires a 'value' argument".to_string().into(),
+            "sqrt requires a 'value' argument".into(),
         ));
     };
 
@@ -157,23 +157,23 @@ fn sqrt(
             }
         }
         _ => Err(RuntimeError::InvalidType(
-            "sqrt requires a numeric value".to_string().into(),
+            "sqrt requires a numeric value".into(),
         )),
     })
 }
 
 fn pow(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(base_obj) = argument.get(&"base".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "pow requires a 'base' argument".to_string().into(),
+            "pow requires a 'base' argument".into(),
         ));
     };
     let Some(exp_obj) = argument.get(&"exponent".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "pow requires an 'exponent' argument".to_string().into(),
+            "pow requires an 'exponent' argument".into(),
         ));
     };
 
@@ -207,12 +207,12 @@ fn pow(
 }
 
 fn exp(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(value) = argument.get(&"value".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "exp requires a 'value' argument".to_string().into(),
+            "exp requires a 'value' argument".into(),
         ));
     };
 
@@ -220,18 +220,18 @@ fn exp(
         OnionObject::Integer(n) => Ok(OnionObject::Float((*n as f64).exp()).stabilize()),
         OnionObject::Float(f) => Ok(OnionObject::Float(f.exp()).stabilize()),
         _ => Err(RuntimeError::InvalidType(
-            "exp requires a numeric value".to_string().into(),
+            "exp requires a numeric value".into(),
         )),
     })
 }
 
 fn floor(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(value) = argument.get(&"value".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "floor requires a 'value' argument".to_string().into(),
+            "floor requires a 'value' argument".into(),
         ));
     };
 
@@ -239,18 +239,18 @@ fn floor(
         OnionObject::Integer(n) => Ok(OnionObject::Integer(*n).stabilize()),
         OnionObject::Float(f) => Ok(OnionObject::Integer(f.floor() as i64).stabilize()),
         _ => Err(RuntimeError::InvalidType(
-            "floor requires a numeric value".to_string().into(),
+            "floor requires a numeric value".into(),
         )),
     })
 }
 
 fn ceil(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(value) = argument.get(&"value".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "ceil requires a 'value' argument".to_string().into(),
+            "ceil requires a 'value' argument".into(),
         ));
     };
 
@@ -258,18 +258,18 @@ fn ceil(
         OnionObject::Integer(n) => Ok(OnionObject::Integer(*n).stabilize()),
         OnionObject::Float(f) => Ok(OnionObject::Integer(f.ceil() as i64).stabilize()),
         _ => Err(RuntimeError::InvalidType(
-            "ceil requires a numeric value".to_string().into(),
+            "ceil requires a numeric value".into(),
         )),
     })
 }
 
 fn round(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(value) = argument.get(&"value".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "round requires a 'value' argument".to_string().into(),
+            "round requires a 'value' argument".into(),
         ));
     };
 
@@ -277,18 +277,18 @@ fn round(
         OnionObject::Integer(n) => Ok(OnionObject::Integer(*n).stabilize()),
         OnionObject::Float(f) => Ok(OnionObject::Integer(f.round() as i64).stabilize()),
         _ => Err(RuntimeError::InvalidType(
-            "round requires a numeric value".to_string().into(),
+            "round requires a numeric value".into(),
         )),
     })
 }
 
 fn asin(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(value) = argument.get(&"value".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "asin requires a 'value' argument".to_string().into(),
+            "asin requires a 'value' argument".into(),
         ));
     };
 
@@ -298,13 +298,13 @@ fn asin(
             OnionObject::Float(f) => *f,
             _ => {
                 return Err(RuntimeError::InvalidType(
-                    "asin requires a numeric value".to_string().into(),
+                    "asin requires a numeric value".into(),
                 ));
             }
         };
         if !(-1.0..=1.0).contains(&val_f64) {
             Err(RuntimeError::InvalidOperation(
-                "asin requires a value between -1 and 1".to_string().into(),
+                "asin requires a value between -1 and 1".into(),
             ))
         } else {
             Ok(OnionObject::Float(val_f64.asin()).stabilize())
@@ -313,12 +313,12 @@ fn asin(
 }
 
 fn acos(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(value) = argument.get(&"value".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "acos requires a 'value' argument".to_string().into(),
+            "acos requires a 'value' argument".into(),
         ));
     };
 
@@ -328,13 +328,13 @@ fn acos(
             OnionObject::Float(f) => *f,
             _ => {
                 return Err(RuntimeError::InvalidType(
-                    "acos requires a numeric value".to_string().into(),
+                    "acos requires a numeric value".into(),
                 ));
             }
         };
         if !(-1.0..=1.0).contains(&val_f64) {
             Err(RuntimeError::InvalidOperation(
-                "acos requires a value between -1 and 1".to_string().into(),
+                "acos requires a value between -1 and 1".into(),
             ))
         } else {
             Ok(OnionObject::Float(val_f64.acos()).stabilize())
@@ -343,12 +343,12 @@ fn acos(
 }
 
 fn atan(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(value) = argument.get(&"value".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "atan requires a 'value' argument".to_string().into(),
+            "atan requires a 'value' argument".into(),
         ));
     };
 
@@ -356,7 +356,7 @@ fn atan(
         OnionObject::Integer(n) => Ok(OnionObject::Float((*n as f64).atan()).stabilize()),
         OnionObject::Float(f) => Ok(OnionObject::Float(f.atan()).stabilize()),
         _ => Err(RuntimeError::InvalidType(
-            "atan requires a numeric value".to_string().into(),
+            "atan requires a numeric value".into(),
         )),
     })
 }

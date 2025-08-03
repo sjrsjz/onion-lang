@@ -81,9 +81,9 @@ impl OnionLazySet {
         F: Fn(&OnionObject) -> Result<R, RuntimeError>,
     {
         match key {
-            OnionObject::String(s) if s.as_str() == "container" => f(&self.container),
-            OnionObject::String(s) if s.as_str() == "filter" => f(&self.filter),
-            OnionObject::String(s) if s.as_str() == "collect" => {
+            OnionObject::String(s) if s.as_ref() == "container" => f(&self.container),
+            OnionObject::String(s) if s.as_ref() == "filter" => f(&self.filter),
+            OnionObject::String(s) if s.as_ref() == "collect" => {
                 let empty_pool = OnionKeyPool::create(vec![]);
                 let collector = OnionLazySetCollector {
                     container: self.container.stabilize(),
@@ -92,7 +92,7 @@ impl OnionLazySet {
                     current_index: 0,
                 };
                 let collector = OnionLambdaDefinition::new_static(
-                    LambdaParameter::Multiple(vec![]),
+                    LambdaParameter::Multiple(Box::new([])),
                     LambdaBody::NativeFunction((
                         Arc::new({
                             let collector = collector.clone();
@@ -101,7 +101,7 @@ impl OnionLazySet {
                         empty_pool.clone(),
                     )),
                     OnionFastMap::new(empty_pool),
-                    "collector".to_string(),
+                    "collector".into(),
                     LambdaType::Normal,
                 );
                 // Keep the collector alive until after we use its weak reference
@@ -149,7 +149,7 @@ impl Runnable for OnionLazySetCollector {
                                 }
                             }
                             _ => Err(RuntimeError::DetailedError(
-                                "Container must be a tuple".to_string().into(),
+                                "Container must be a tuple".into(),
                             )),
                         }
                     }
@@ -177,8 +177,8 @@ impl Runnable for OnionLazySetCollector {
 
     fn capture(
         &mut self,
-        _argument: &OnionFastMap<String, OnionStaticObject>,
-        _captured_vars: &OnionFastMap<String, OnionObject>,
+        _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
+        _captured_vars: &OnionFastMap<Box<str>, OnionObject>,
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         Ok(())
@@ -220,7 +220,7 @@ impl Runnable for OnionLazySetCollector {
                         }
                     }
                     _ => Err(RuntimeError::InvalidType(
-                        "Container must be a tuple".to_string().into(),
+                        "Container must be a tuple".into(),
                     )),
                 })
         )

@@ -121,8 +121,8 @@ pub fn load_string(
     _gc: &mut GC<OnionObjectCell>,
 ) -> StepResult {
     if let OpcodeArgument::String(value) = opcode.operand1 {
-        let string = OnionObject::String(Arc::new(
-            runnable.instruction.get_string_pool()[value as usize].clone(),
+        let string = OnionObject::String(Arc::from(
+            runnable.instruction.get_string_pool()[value as usize].as_ref(),
         ))
         .consume_and_stabilize();
         unwrap_step_result!(runnable.context.push_object(string));
@@ -144,8 +144,8 @@ pub fn load_bytes(
     _gc: &mut GC<OnionObjectCell>,
 ) -> StepResult {
     if let OpcodeArgument::ByteArray(value) = opcode.operand1 {
-        let bytes = OnionObject::Bytes(Arc::new(
-            runnable.instruction.get_bytes_pool()[value as usize].clone(),
+        let bytes = OnionObject::Bytes(Arc::from(
+            runnable.instruction.get_bytes_pool()[value as usize].as_slice(),
         ))
         .consume_and_stabilize();
         unwrap_step_result!(runnable.context.push_object(bytes));
@@ -494,7 +494,7 @@ pub fn get_var(
                 .get_string_pool()
                 .get(index as usize)
                 .cloned()
-                .unwrap_or_else(|| format!("Variable at index {}", index));
+                .unwrap_or_else(|| format!("Variable at index {}", index).into_boxed_str());
             return StepResult::Error(RuntimeError::DetailedError(
                 format!("Variable '{}' not found in context", var_name).into(),
             ));
@@ -583,7 +583,7 @@ pub fn type_of(
     let type_name = unwrap_step_result!(obj.weak().type_of());
     Context::replace_last_object(
         stack,
-        OnionObject::String(Arc::new(type_name)).consume_and_stabilize(),
+        OnionObject::String(Arc::from(type_name)).consume_and_stabilize(),
     );
     StepResult::Continue
 }
@@ -1291,7 +1291,7 @@ pub fn launch_thread(
                     StepResult::SpawnRunnable(_) => {
                         // 处理 SpawnRunnable 结果，由于同步调度器上级没有异步调度器，应当直接报错
                         return Err(RuntimeError::InvalidOperation(
-                            "Cannot spawn async task in sync context".to_string().into(),
+                            "Cannot spawn async task in sync context".into(),
                         ));
                     }
                     StepResult::Error(ref error) => match error {

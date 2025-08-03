@@ -102,7 +102,7 @@ impl OnionObjectExt for CTypes {
             )
             .stabilize()),
             CTypes::CUChar(v) => Ok(OnionObject::String(
-                std::str::from_utf8(&[*v]).unwrap_or("").to_string().into(),
+                std::str::from_utf8(&[*v]).unwrap_or("").into(),
             )
             .stabilize()),
             CTypes::CSize(v) => Ok(OnionObject::Integer(*v as i64).stabilize()),
@@ -134,7 +134,7 @@ impl OnionObjectExt for CTypes {
             }
         } else {
             Err(RuntimeError::InvalidType(
-                "Attribute key must be a string".to_string().into(),
+                "Attribute key must be a string".into(),
             ))
         }
     }
@@ -154,21 +154,21 @@ impl OnionObjectExt for CTypes {
 // --- Argument Parsing Helper Functions ---
 
 fn get_value_arg(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
 ) -> Result<&OnionStaticObject, RuntimeError> {
     argument.get(&"value".to_string()).ok_or_else(|| {
-        RuntimeError::DetailedError("Function requires a 'value' argument".to_string().into())
+        RuntimeError::DetailedError("Function requires a 'value' argument".into())
     })
 }
 
 fn get_integer_arg(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
 ) -> Result<i64, RuntimeError> {
     let obj = get_value_arg(argument)?;
     match obj.weak() {
         OnionObject::Integer(i) => Ok(*i),
         _ => Err(RuntimeError::InvalidType(
-            "Argument 'value' must be an integer".to_string().into(),
+            "Argument 'value' must be an integer".into(),
         )),
     }
 }
@@ -179,7 +179,7 @@ enum NumericArg {
 }
 
 fn get_numeric_arg(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
 ) -> Result<NumericArg, RuntimeError> {
     let obj = get_value_arg(argument)?;
     match obj.weak() {
@@ -198,7 +198,7 @@ fn get_numeric_arg(
 macro_rules! c_int_constructor {
     ($name:ident, $type:ty, $ctype_variant:ident) => {
         fn $name(
-            argument: &OnionFastMap<String, OnionStaticObject>,
+            argument: &OnionFastMap<Box<str>, OnionStaticObject>,
             _gc: &mut GC<OnionObjectCell>,
         ) -> Result<OnionStaticObject, RuntimeError> {
             let n = get_integer_arg(argument)?;
@@ -218,7 +218,7 @@ macro_rules! c_int_constructor {
 macro_rules! c_uint_constructor {
     ($name:ident, $type:ty, $ctype_variant:ident) => {
         fn $name(
-            argument: &OnionFastMap<String, OnionStaticObject>,
+            argument: &OnionFastMap<Box<str>, OnionStaticObject>,
             _gc: &mut GC<OnionObjectCell>,
         ) -> Result<OnionStaticObject, RuntimeError> {
             let n = get_integer_arg(argument)?;
@@ -242,7 +242,7 @@ c_uint_constructor!(c_uint16, u16, CUInt16);
 c_uint_constructor!(c_uint32, u32, CUInt32);
 
 fn c_int64(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let n = get_integer_arg(argument)?;
@@ -250,7 +250,7 @@ fn c_int64(
 }
 
 fn c_uint64(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let n = get_integer_arg(argument)?;
@@ -258,13 +258,13 @@ fn c_uint64(
         Ok(OnionObject::Custom(Arc::new(CTypes::CUInt64(n as u64))).stabilize())
     } else {
         Err(RuntimeError::InvalidOperation(
-            "c_uint64 requires a non-negative value".to_string().into(),
+            "c_uint64 requires a non-negative value".into(),
         ))
     }
 }
 
 fn c_float(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let val = match get_numeric_arg(argument)? {
@@ -275,7 +275,7 @@ fn c_float(
 }
 
 fn c_double(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let val = match get_numeric_arg(argument)? {
@@ -286,7 +286,7 @@ fn c_double(
 }
 
 fn c_char(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let value_obj = get_value_arg(argument)?;
@@ -313,7 +313,7 @@ fn c_char(
 }
 
 fn c_uchar(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let value_obj = get_value_arg(argument)?;
@@ -340,7 +340,7 @@ fn c_uchar(
 }
 
 fn c_bool(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let value_obj = get_value_arg(argument)?;
@@ -349,7 +349,7 @@ fn c_bool(
 }
 
 fn c_string(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let value_obj = get_value_arg(argument)?;
@@ -358,7 +358,7 @@ fn c_string(
 }
 
 fn c_buffer(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let value_obj = get_value_arg(argument)?;
@@ -370,13 +370,13 @@ fn c_buffer(
             Ok(OnionObject::Custom(Arc::new(CTypes::CBuffer(s.as_bytes().to_vec()))).stabilize())
         }
         _ => Err(RuntimeError::InvalidType(
-            "c_buffer requires bytes or a string".to_string().into(),
+            "c_buffer requires bytes or a string".into(),
         )),
     }
 }
 
 fn c_pointer(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let n = get_integer_arg(argument)?;
@@ -384,13 +384,13 @@ fn c_pointer(
         Ok(OnionObject::Custom(Arc::new(CTypes::CPointer(n as usize))).stabilize())
     } else {
         Err(RuntimeError::InvalidOperation(
-            "Pointer address must be non-negative".to_string().into(),
+            "Pointer address must be non-negative".into(),
         ))
     }
 }
 
 fn c_size(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let n = get_integer_arg(argument)?;
@@ -398,13 +398,13 @@ fn c_size(
         Ok(OnionObject::Custom(Arc::new(CTypes::CSize(n as usize))).stabilize())
     } else {
         Err(RuntimeError::InvalidOperation(
-            "size_t must be non-negative".to_string().into(),
+            "size_t must be non-negative".into(),
         ))
     }
 }
 
 fn c_ssize(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let n = get_integer_arg(argument)?;
@@ -412,14 +412,14 @@ fn c_ssize(
 }
 
 fn c_void(
-    _argument: &OnionFastMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     Ok(OnionObject::Custom(Arc::new(CTypes::CVoid)).stabilize())
 }
 
 fn c_null(
-    _argument: &OnionFastMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     Ok(OnionObject::Custom(Arc::new(CTypes::CNull)).stabilize())

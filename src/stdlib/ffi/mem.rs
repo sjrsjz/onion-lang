@@ -20,7 +20,7 @@ use crate::stdlib::{build_dict, wrap_native_function};
 // --- Helper function for robust argument parsing ---
 
 fn get_integer_arg(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     name: &str,
 ) -> Result<i64, RuntimeError> {
     let obj = argument.get(&name.to_string()).ok_or_else(|| {
@@ -44,24 +44,24 @@ fn get_integer_arg(
 
 /// 分配内存
 fn mem_alloc(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let size = get_integer_arg(argument, "size")?;
     if size <= 0 {
         return Err(RuntimeError::InvalidOperation(
-            "Size must be positive".to_string().into(),
+            "Size must be positive".into(),
         ));
     }
 
     let layout = Layout::from_size_align(size as usize, 1)
-        .map_err(|_| RuntimeError::InvalidOperation("Invalid memory layout".to_string().into()))?;
+        .map_err(|_| RuntimeError::InvalidOperation("Invalid memory layout".into()))?;
 
     unsafe {
         let ptr = alloc(layout);
         if ptr.is_null() {
             Err(RuntimeError::InvalidOperation(
-                "Memory allocation failed".to_string().into(),
+                "Memory allocation failed".into(),
             ))
         } else {
             Ok(OnionObject::Integer(ptr as usize as i64).stabilize())
@@ -71,7 +71,7 @@ fn mem_alloc(
 
 /// 释放内存
 fn mem_free(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let ptr = get_integer_arg(argument, "ptr")?;
@@ -79,17 +79,17 @@ fn mem_free(
 
     if ptr == 0 {
         return Err(RuntimeError::InvalidOperation(
-            "Cannot free a null pointer".to_string().into(),
+            "Cannot free a null pointer".into(),
         ));
     }
     if size <= 0 {
         return Err(RuntimeError::InvalidOperation(
-            "Size must be positive".to_string().into(),
+            "Size must be positive".into(),
         ));
     }
 
     let layout = Layout::from_size_align(size as usize, 1)
-        .map_err(|_| RuntimeError::InvalidOperation("Invalid memory layout".to_string().into()))?;
+        .map_err(|_| RuntimeError::InvalidOperation("Invalid memory layout".into()))?;
 
     unsafe {
         dealloc(ptr as usize as *mut u8, layout);
@@ -100,7 +100,7 @@ fn mem_free(
 
 /// 分配并清零内存
 fn mem_calloc(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let count = get_integer_arg(argument, "count")?;
@@ -108,25 +108,25 @@ fn mem_calloc(
 
     if count <= 0 || size <= 0 {
         return Err(RuntimeError::InvalidOperation(
-            "Count and size must be positive".to_string().into(),
+            "Count and size must be positive".into(),
         ));
     }
 
     let total_size = (count as usize).saturating_mul(size as usize);
     if total_size == 0 {
         return Err(RuntimeError::InvalidOperation(
-            "Total allocation size cannot be zero".to_string().into(),
+            "Total allocation size cannot be zero".into(),
         ));
     }
 
     let layout = Layout::from_size_align(total_size, 1)
-        .map_err(|_| RuntimeError::InvalidOperation("Invalid memory layout".to_string().into()))?;
+        .map_err(|_| RuntimeError::InvalidOperation("Invalid memory layout".into()))?;
 
     unsafe {
         let ptr = alloc(layout);
         if ptr.is_null() {
             Err(RuntimeError::InvalidOperation(
-                "Memory allocation failed".to_string().into(),
+                "Memory allocation failed".into(),
             ))
         } else {
             std::ptr::write_bytes(ptr, 0, total_size);
@@ -137,7 +137,7 @@ fn mem_calloc(
 
 /// 读取内存内容到缓冲区
 fn mem_read(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let ptr = get_integer_arg(argument, "ptr")?;
@@ -145,12 +145,12 @@ fn mem_read(
 
     if ptr == 0 {
         return Err(RuntimeError::InvalidOperation(
-            "Cannot read from a null pointer".to_string().into(),
+            "Cannot read from a null pointer".into(),
         ));
     }
     if size <= 0 {
         return Err(RuntimeError::InvalidOperation(
-            "Size must be positive".to_string().into(),
+            "Size must be positive".into(),
         ));
     }
 
@@ -162,17 +162,17 @@ fn mem_read(
 
 /// 写入缓冲区内容到内存
 fn mem_write(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let ptr = get_integer_arg(argument, "ptr")?;
     let buffer_obj = argument.get(&"buffer".to_string()).ok_or_else(|| {
-        RuntimeError::DetailedError("mem_write requires a 'buffer' argument".to_string().into())
+        RuntimeError::DetailedError("mem_write requires a 'buffer' argument".into())
     })?;
 
     if ptr == 0 {
         return Err(RuntimeError::InvalidOperation(
-            "Cannot write to a null pointer".to_string().into(),
+            "Cannot write to a null pointer".into(),
         ));
     }
 
@@ -201,7 +201,7 @@ fn mem_write(
 
 /// 复制内存
 fn mem_copy(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let dest = get_integer_arg(argument, "dest")?;
@@ -210,12 +210,12 @@ fn mem_copy(
 
     if dest == 0 || src == 0 {
         return Err(RuntimeError::InvalidOperation(
-            "Cannot copy from or to a null pointer".to_string().into(),
+            "Cannot copy from or to a null pointer".into(),
         ));
     }
     if size <= 0 {
         return Err(RuntimeError::InvalidOperation(
-            "Size must be positive".to_string().into(),
+            "Size must be positive".into(),
         ));
     }
 

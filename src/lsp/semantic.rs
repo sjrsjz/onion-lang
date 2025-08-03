@@ -58,7 +58,7 @@ impl From<ASTNodeType> for SemanticTokenTypes {
             ASTNodeType::Operation(_) => Self::Operation,
             ASTNodeType::Tuple => Self::Tuple,
             ASTNodeType::AssumeTuple => Self::AssumeTuple,
-            ASTNodeType::KeyValue => Self::KeyValue,
+            ASTNodeType::Pair => Self::KeyValue,
             ASTNodeType::GetAttr => Self::GetAttr,
             ASTNodeType::Return => Self::Return,
             ASTNodeType::If => Self::If,

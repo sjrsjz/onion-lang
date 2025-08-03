@@ -28,7 +28,7 @@ pub enum LambdaBody {
     NativeFunction(
         (
             Arc<dyn Fn() -> Box<dyn Runnable> + Send + Sync>,
-            OnionKeyPool<String>,
+            OnionKeyPool<Box<str>>,
         ),
     ),
 }
@@ -45,7 +45,7 @@ impl Clone for LambdaBody {
 }
 
 impl LambdaBody {
-    fn create_string_pool(&self) -> OnionKeyPool<String> {
+    fn create_string_pool(&self) -> OnionKeyPool<Box<str>> {
         match self {
             LambdaBody::Instruction(instruction) => instruction.create_key_pool(),
             LambdaBody::NativeFunction((_, key_pool)) => key_pool.clone(),
@@ -79,11 +79,11 @@ pub enum LambdaType {
 
 pub struct OnionLambdaDefinition {
     parameter: LambdaParameter,
-    flatten_param_keys: Vec<String>,
-    flatten_param_constraints: Vec<OnionObject>,
+    flatten_param_keys: Box<[Box<str>]>,
+    flatten_param_constraints: Box<[OnionObject]>,
     body: LambdaBody,
-    capture: OnionFastMap<String, OnionObject>,
-    signature: String,
+    capture: OnionFastMap<Box<str>, OnionObject>,
+    signature: Box<str>,
     lambda_type: LambdaType,
 }
 
@@ -91,8 +91,8 @@ impl OnionLambdaDefinition {
     pub fn new_static(
         parameter: LambdaParameter,
         body: LambdaBody,
-        capture: OnionFastMap<String, OnionObject>,
-        signature: String,
+        capture: OnionFastMap<Box<str>, OnionObject>,
+        signature: Box<str>,
         lambda_type: LambdaType,
     ) -> OnionStaticObject {
         let flatten_param_keys = parameter.flatten_keys();
@@ -116,9 +116,9 @@ impl OnionLambdaDefinition {
     pub fn new_static_with_self(
         parameter: LambdaParameter,
         body: LambdaBody,
-        capture: OnionFastMap<String, OnionObject>,
+        capture: OnionFastMap<Box<str>, OnionObject>,
         self_object: &OnionObject,
-        signature: String,
+        signature: Box<str>,
         lambda_type: LambdaType,
     ) -> OnionStaticObject {
         let flatten_param_keys = parameter.flatten_keys();
@@ -140,7 +140,7 @@ impl OnionLambdaDefinition {
     }
 
     // 从定义创建可用字符串池，Lambda自身只能使用这个字符串池中的字符串
-    pub fn create_key_pool(&self) -> OnionKeyPool<String> {
+    pub fn create_key_pool(&self) -> OnionKeyPool<Box<str>> {
         self.body.create_string_pool()
     }
 
@@ -163,7 +163,7 @@ impl OnionLambdaDefinition {
     // 显然我们在Launcher里已经严格保证argument所使用的字符串池是Lambda定义的字符串池
     pub fn create_runnable(
         &self,
-        argument: &OnionFastMap<String, OnionStaticObject>,
+        argument: &OnionFastMap<Box<str>, OnionStaticObject>,
         this_lambda: &OnionStaticObject,
         self_object: &OnionObject,
         gc: &mut GC<OnionObjectCell>,
@@ -176,7 +176,7 @@ impl OnionLambdaDefinition {
                     self_object,
                     this_lambda,
                     instruction.clone(),
-                    match instruction.get_table().get(&self.signature) {
+                    match instruction.get_table().get(self.signature.as_ref()) {
                         Some(ip) => *ip as isize,
                         None => {
                             return Err(RuntimeError::InvalidOperation(
@@ -208,7 +208,7 @@ impl OnionLambdaDefinition {
         &self.parameter
     }
 
-    pub fn get_flatten_param_keys(&self) -> &[String] {
+    pub fn get_flatten_param_keys(&self) -> &[Box<str>] {
         &self.flatten_param_keys
     }
 
@@ -216,7 +216,7 @@ impl OnionLambdaDefinition {
         &self.flatten_param_constraints
     }
 
-    pub fn get_capture(&self) -> &OnionFastMap<String, OnionObject> {
+    pub fn get_capture(&self) -> &OnionFastMap<Box<str>, OnionObject> {
         &self.capture
     }
 
@@ -236,12 +236,12 @@ impl OnionLambdaDefinition {
         F: Fn(&OnionObject) -> Result<R, RuntimeError>,
     {
         match key {
-            OnionObject::String(s) if s.as_str() == "$parameter" => {
+            OnionObject::String(s) if s.as_ref() == "$parameter" => {
                 let parameter = self.parameter.to_onion();
                 f(parameter.weak())
             }
-            OnionObject::String(s) if s.as_str() == "$signature" => {
-                f(&OnionObject::String(Arc::new(self.signature.clone())))
+            OnionObject::String(s) if s.as_ref() == "$signature" => {
+                f(&OnionObject::String(Arc::from(self.signature.clone())))
             }
             OnionObject::String(s) => {
                 if let Some(value) = self.capture.get(s.as_ref()) {

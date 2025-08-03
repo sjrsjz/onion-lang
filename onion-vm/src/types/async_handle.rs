@@ -171,7 +171,7 @@ impl OnionObjectExt for OnionAsyncHandle {
         f: &mut dyn FnMut(&OnionObject) -> Result<(), RuntimeError>,
     ) -> Result<(), RuntimeError> {
         match key {
-            OnionObject::String(s) => match s.as_str() {
+            OnionObject::String(s) => match s.as_ref() {
                 "is_finished" => f(&OnionObject::Boolean(self.is_finished())),
                 "has_result" => {
                     let guard = self.inner.lock().unwrap();

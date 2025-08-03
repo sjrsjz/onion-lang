@@ -135,13 +135,13 @@ impl OnionObjectExt for CLib {
             }
         } else {
             Err(RuntimeError::InvalidType(
-                "Attribute key must be a string".to_string().into(),
+                "Attribute key must be a string".into(),
             ))
         }
     }
     fn len(&self) -> Result<OnionStaticObject, RuntimeError> {
         Err(RuntimeError::InvalidOperation(
-            "CLib has no length".to_string().into(),
+            "CLib has no length".into(),
         ))
     }
 }
@@ -258,7 +258,7 @@ impl CFunctionHandle {
             }
             (CTypes::CString(s), "string") => {
                 let c_string = CString::new(s.as_str()).map_err(|_| {
-                    RuntimeError::InvalidOperation("String contains null byte".to_string().into())
+                    RuntimeError::InvalidOperation("String contains null byte".into())
                 })?;
                 let ptr = c_string.as_ptr();
                 Ok((
@@ -366,13 +366,13 @@ impl OnionObjectExt for CFunctionHandle {
             }
         } else {
             Err(RuntimeError::InvalidType(
-                "Attribute key must be a string".to_string().into(),
+                "Attribute key must be a string".into(),
             ))
         }
     }
     fn len(&self) -> Result<OnionStaticObject, RuntimeError> {
         Err(RuntimeError::InvalidOperation(
-            "CFunctionHandle has no length".to_string().into(),
+            "CFunctionHandle has no length".into(),
         ))
     }
 }
@@ -380,7 +380,7 @@ impl OnionObjectExt for CFunctionHandle {
 // --- Argument Parsing Helper Functions ---
 
 fn get_clib_arg(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     name: &str,
 ) -> Result<Arc<CLib>, RuntimeError> {
     let obj = argument.get(&name.to_string()).ok_or_else(|| {
@@ -401,7 +401,7 @@ fn get_clib_arg(
 }
 
 fn get_string_arg(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     name: &str,
 ) -> Result<String, RuntimeError> {
     let obj = argument.get(&name.to_string()).ok_or_else(|| {
@@ -416,7 +416,7 @@ fn get_string_arg(
 }
 
 fn get_string_tuple_arg(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     name: &str,
 ) -> Result<Vec<String>, RuntimeError> {
     let obj = argument.get(&name.to_string()).ok_or_else(|| {
@@ -442,7 +442,7 @@ fn get_string_tuple_arg(
 }
 
 fn get_ctypes_tuple_arg(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     name: &str,
 ) -> Result<Vec<CTypes>, RuntimeError> {
     let obj = argument.get(&name.to_string()).ok_or_else(|| {
@@ -480,7 +480,7 @@ fn get_ctypes_tuple_arg(
 // --- Refactored Native Functions ---
 
 fn lib_load(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let path = get_string_arg(argument, "path")?;
@@ -489,7 +489,7 @@ fn lib_load(
 }
 
 fn lib_get_function(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let library = get_clib_arg(argument, "library")?;
@@ -502,11 +502,11 @@ fn lib_get_function(
 }
 
 fn lib_call_function(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let handle_obj = argument.get(&"handle".to_string()).ok_or_else(|| {
-        RuntimeError::DetailedError("Missing required argument: 'handle'".to_string().into())
+        RuntimeError::DetailedError("Missing required argument: 'handle'".into())
     })?;
     let handle = match handle_obj.weak() {
         OnionObject::Custom(custom) => custom

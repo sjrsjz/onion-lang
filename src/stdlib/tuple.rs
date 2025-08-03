@@ -14,17 +14,17 @@ use super::{build_dict, wrap_native_function};
 
 /// Pushes a value to a tuple, returning a new tuple.
 fn push(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(container) = argument.get(&"container".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "push requires a 'container' argument".to_string().into(),
+            "push requires a 'container' argument".into(),
         ));
     };
     let Some(value) = argument.get(&"value".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "push requires a 'value' argument".to_string().into(),
+            "push requires a 'value' argument".into(),
         ));
     };
 
@@ -44,12 +44,12 @@ fn push(
 
 /// Pops a value from a tuple, returning a new tuple.
 fn pop(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(container) = argument.get(&"container".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "pop requires a 'container' argument".to_string().into(),
+            "pop requires a 'container' argument".into(),
         ));
     };
 
@@ -60,7 +60,7 @@ fn pop(
                 Ok(OnionObject::Tuple(OnionTuple::new(new_elements).into()).stabilize())
             } else {
                 Err(RuntimeError::InvalidOperation(
-                    "Cannot pop from an empty tuple".to_string().into(),
+                    "Cannot pop from an empty tuple".into(),
                 ))
             }
         }
@@ -74,22 +74,22 @@ fn pop(
 
 /// Inserts a value into a tuple at a specific index, returning a new tuple.
 fn insert(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(container) = argument.get(&"container".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "insert requires a 'container' argument".to_string().into(),
+            "insert requires a 'container' argument".into(),
         ));
     };
     let Some(index_obj) = argument.get(&"index".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "insert requires an 'index' argument".to_string().into(),
+            "insert requires an 'index' argument".into(),
         ));
     };
     let Some(value) = argument.get(&"value".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "insert requires a 'value' argument".to_string().into(),
+            "insert requires a 'value' argument".into(),
         ));
     };
 
@@ -99,7 +99,7 @@ fn insert(
                 OnionObject::Integer(i) => *i,
                 _ => {
                     return Err(RuntimeError::InvalidType(
-                        "Argument 'index' must be an integer".to_string().into(),
+                        "Argument 'index' must be an integer".into(),
                     ));
                 }
             };
@@ -110,7 +110,7 @@ fn insert(
                 Ok(OnionObject::Tuple(OnionTuple::new(new_elements).into()).stabilize())
             } else {
                 Err(RuntimeError::InvalidOperation(
-                    "Index out of bounds for insert".to_string().into(),
+                    "Index out of bounds for insert".into(),
                 ))
             }
         }
@@ -124,17 +124,17 @@ fn insert(
 
 /// Removes a value from a tuple at a specific index, returning a new tuple.
 fn remove(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(container) = argument.get(&"container".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "remove requires a 'container' argument".to_string().into(),
+            "remove requires a 'container' argument".into(),
         ));
     };
     let Some(index_obj) = argument.get(&"index".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "remove requires an 'index' argument".to_string().into(),
+            "remove requires an 'index' argument".into(),
         ));
     };
 
@@ -144,7 +144,7 @@ fn remove(
                 OnionObject::Integer(i) => *i,
                 _ => {
                     return Err(RuntimeError::InvalidType(
-                        "Argument 'index' must be an integer".to_string().into(),
+                        "Argument 'index' must be an integer".into(),
                     ));
                 }
             };
@@ -155,7 +155,7 @@ fn remove(
                 Ok(OnionObject::Tuple(OnionTuple::new(new_elements).into()).stabilize())
             } else {
                 Err(RuntimeError::InvalidOperation(
-                    "Index out of bounds for remove".to_string().into(),
+                    "Index out of bounds for remove".into(),
                 ))
             }
         }

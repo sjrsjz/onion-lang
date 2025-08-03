@@ -14,7 +14,7 @@ use std::{env, process::Command};
 use super::{build_dict, wrap_native_function};
 
 fn get_string_arg<'a>(
-    argument: &'a OnionFastMap<String, OnionStaticObject>,
+    argument: &'a OnionFastMap<Box<str>, OnionStaticObject>,
     name: &str,
 ) -> Result<&'a str, RuntimeError> {
     let obj = argument.get(&name.to_string()).ok_or_else(|| {
@@ -36,7 +36,7 @@ fn get_string_arg<'a>(
 
 /// 执行系统命令
 fn system(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let cmd_str = get_string_arg(argument, "command")?;
@@ -96,7 +96,7 @@ fn system(
 
 /// 执行命令并返回退出码
 fn system_code(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let cmd_str = get_string_arg(argument, "command")?;
@@ -119,7 +119,7 @@ fn system_code(
 
 /// 改变当前工作目录
 fn chdir(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let path_str = get_string_arg(argument, "path")?;
@@ -133,42 +133,42 @@ fn chdir(
 
 /// 获取当前用户名
 fn username(
-    _argument: &OnionFastMap<String, OnionStaticObject>, // No arguments needed
+    _argument: &OnionFastMap<Box<str>, OnionStaticObject>, // No arguments needed
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     match env::var("USERNAME").or_else(|_| env::var("USER")) {
         Ok(user) => Ok(OnionObject::String(user.into()).stabilize()),
-        Err(_) => Ok(OnionObject::String("unknown".to_string().into()).stabilize()),
+        Err(_) => Ok(OnionObject::String("unknown".into()).stabilize()),
     }
 }
 
 /// 获取主目录路径
 fn home_dir(
-    _argument: &OnionFastMap<String, OnionStaticObject>, // No arguments needed
+    _argument: &OnionFastMap<Box<str>, OnionStaticObject>, // No arguments needed
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     match dirs::home_dir() {
         Some(path) => {
-            Ok(OnionObject::String(path.to_string_lossy().to_string().into()).stabilize())
+            Ok(OnionObject::String(path.to_string_lossy().into()).stabilize())
         }
         None => Err(RuntimeError::DetailedError(
-            "Could not determine home directory".to_string().into(),
+            "Could not determine home directory".into(),
         )),
     }
 }
 
 /// 获取临时目录路径
 fn temp_dir(
-    _argument: &OnionFastMap<String, OnionStaticObject>, // No arguments needed
+    _argument: &OnionFastMap<Box<str>, OnionStaticObject>, // No arguments needed
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let temp_path = env::temp_dir();
-    Ok(OnionObject::String(temp_path.to_string_lossy().to_string().into()).stabilize())
+    Ok(OnionObject::String(temp_path.to_string_lossy().into()).stabilize())
 }
 
 /// 检查文件或目录是否存在
 fn path_exists(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let path_str = get_string_arg(argument, "path")?;
@@ -178,7 +178,7 @@ fn path_exists(
 
 /// 检查路径是否是目录
 fn is_dir(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let path_str = get_string_arg(argument, "path")?;
@@ -188,7 +188,7 @@ fn is_dir(
 
 /// 检查路径是否是文件
 fn is_file(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let path_str = get_string_arg(argument, "path")?;
@@ -198,13 +198,13 @@ fn is_file(
 
 /// 连接路径
 fn path_join(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let base_str = get_string_arg(argument, "base")?;
     let path_str = get_string_arg(argument, "path")?;
     let joined = std::path::Path::new(base_str).join(path_str);
-    Ok(OnionObject::String(joined.to_string_lossy().to_string().into()).stabilize())
+    Ok(OnionObject::String(joined.to_string_lossy().into()).stabilize())
 }
 
 /// 构建操作系统模块

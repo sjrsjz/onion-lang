@@ -24,7 +24,7 @@ pub struct OnionLambdaRunnableLauncher {
     argument: OnionStaticObject, // hold the refs for flatten_argument
     flatten_argument: Vec<OnionObject>,
 
-    string_pool: OnionKeyPool<String>,
+    string_pool: OnionKeyPool<Box<str>>,
     current_argument_index: usize, // Index into argument_elements for current phase
 
     runnable_mapper:
@@ -44,7 +44,7 @@ impl OnionLambdaRunnableLauncher {
     {
         let OnionObject::Lambda((lambda_ref, self_object)) = lambda else {
             return Err(RuntimeError::InvalidType(
-                "Cannot launch non-lambda object".to_string().into(),
+                "Cannot launch non-lambda object".into(),
             ));
         };
         let key_pool = lambda_ref.create_key_pool();
@@ -88,7 +88,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
                     Ok(())
                 } else {
                     Err(RuntimeError::InvalidOperation(
-                        "Constraint check failed".to_string().into(),
+                        "Constraint check failed".into(),
                     ))
                 }
             }
@@ -143,7 +143,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
                     if !*v {
                         self.current_argument_index = index + 1;
                         return StepResult::Error(RuntimeError::InvalidOperation(
-                            "Constraint check failed".to_string().into(),
+                            "Constraint check failed".into(),
                         ));
                     }
                 }

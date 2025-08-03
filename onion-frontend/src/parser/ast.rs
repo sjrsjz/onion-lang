@@ -4,7 +4,7 @@ use colored::*;
 use std::{collections::HashSet, fmt::Debug, vec};
 use unicode_width::UnicodeWidthStr;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ParserError {
     UnexpectedToken(Token),             // Token
     UnmatchedParenthesis(Token, Token), // (opening, closing)
@@ -315,11 +315,14 @@ fn gather(tokens: GatheredTokens<'_>) -> Result<Vec<GatheredTokens<'_>>, ParserE
 pub enum ASTNodeType {
     Null, // Null
     Undefined,
-    String(String),                   // String
-    Boolean(bool),                    // Boolean
-    Number(String),                   // Number (Integer, Float)
-    Base64(String),                   // Base64
-    Variable(String),                 // Variable
+    String(String), // String
+    Boolean(bool),  // Boolean
+    Number(String), // Number (Integer, Float)
+    Base64(String), // Base64
+
+    Variable(String), // Variable
+    Required(String), // 变量存在性占位符，我们不直接硬编码对应的AST，我们通过comptime中调用`required "var"`来生成
+
     Let(String),                      // x := expression
     Frame,                            // {...}
     Assign,                           // x = expression
@@ -329,7 +332,7 @@ pub enum ASTNodeType {
     Operation(ASTNodeOperation),      // x + y, x - y, x * y, x / y ...
     Tuple,                            // x, y, z, ...
     AssumeTuple,                      // ...value
-    KeyValue,                         // x: y
+    Pair,                             // x: y
     GetAttr,                          // x.y
     Return,                           // return expression
     If,    // if expression truecondition || if expression truecondition else falsecondition
@@ -349,9 +352,6 @@ pub enum ASTNodeType {
     Static,  // 假设子表达式的所有变量都在当前上下文中定义
 
     Comptime, // 编译时计算的表达式
-    DataAST,  // 数据AST
-
-    Required(String), // 变量存在性占位符，我们不直接硬编码对应的AST，我们通过comptime中调用`required "var"`来生成
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -734,10 +734,10 @@ fn match_all<'t>(
 ) -> Result<(Option<ASTNode>, usize), ParserError> {
     let mut node_matcher = NodeMatcher::new();
     node_matcher.add_matcher(match_expressions);
-    node_matcher.add_matcher(match_comptime_and_data_ast);
     node_matcher.add_matcher(match_dynamic_and_static);
     node_matcher.add_matcher(match_return_emit_raise);
     node_matcher.add_matcher(match_tuple);
+    node_matcher.add_matcher(match_comptime);
     node_matcher.add_matcher(match_let);
     node_matcher.add_matcher(match_assign);
     node_matcher.add_matcher(match_map);
@@ -745,7 +745,7 @@ fn match_all<'t>(
     node_matcher.add_matcher(match_quick_call);
     node_matcher.add_matcher(match_lambda_def);
     node_matcher.add_matcher(match_named_to);
-    node_matcher.add_matcher(match_key_value);
+    node_matcher.add_matcher(match_pair);
     node_matcher.add_matcher(match_while);
     node_matcher.add_matcher(match_break_and_continue);
     node_matcher.add_matcher(match_if);
@@ -823,7 +823,7 @@ fn match_expressions(
     ))
 }
 
-fn match_comptime_and_data_ast(
+fn match_comptime(
     tokens: &Vec<GatheredTokens>,
     current: usize,
 ) -> Result<(Option<ASTNode>, usize), ParserError> {
@@ -831,7 +831,7 @@ fn match_comptime_and_data_ast(
         return Ok((None, 0));
     }
 
-    if !is_symbol(&tokens[current], "@") && !is_identifier(&tokens[current], "$") {
+    if !is_symbol(&tokens[current], "@") {
         return Ok((None, 0));
     }
 
@@ -842,11 +842,7 @@ fn match_comptime_and_data_ast(
     }
     let right = right.unwrap();
     let node = ASTNode::new(
-        if is_identifier(&tokens[current], "@") {
-            ASTNodeType::Comptime
-        } else {
-            ASTNodeType::DataAST
-        },
+        ASTNodeType::Comptime,
         tokens[current].first().cloned(),
         tokens[current + right_offset + 1].last().cloned(),
         Some(vec![right]),
@@ -1162,7 +1158,7 @@ fn match_named_to(
 
     Ok((
         Some(ASTNode::new(
-            ASTNodeType::KeyValue,
+            ASTNodeType::Pair,
             tokens[current].first().cloned(),
             tokens[current + right_offset + 1].last().cloned(),
             Some(vec![left, right]),
@@ -1171,7 +1167,7 @@ fn match_named_to(
     ))
 }
 
-fn match_key_value(
+fn match_pair(
     tokens: &Vec<GatheredTokens>,
     current: usize,
 ) -> Result<(Option<ASTNode>, usize), ParserError> {
@@ -1211,7 +1207,7 @@ fn match_key_value(
 
     Ok((
         Some(ASTNode::new(
-            ASTNodeType::KeyValue,
+            ASTNodeType::Pair,
             tokens[current].first().cloned(),
             tokens[current + right_offset + 1].last().cloned(),
             Some(vec![left, right]),
@@ -2423,7 +2419,7 @@ fn match_quick_named_to(
         }
         return Ok((
             Some(ASTNode::new(
-                ASTNodeType::KeyValue,
+                ASTNodeType::Pair,
                 tokens[current].first().cloned(),
                 tokens.last().unwrap().last().cloned(),
                 Some(vec![

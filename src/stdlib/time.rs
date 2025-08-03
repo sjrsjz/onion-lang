@@ -24,7 +24,7 @@ use super::{build_dict, wrap_native_function};
 
 // 辅助函数，用于获取并验证整数参数
 fn get_integer_arg(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     name: &str,
 ) -> Result<i64, RuntimeError> {
     let obj = argument.get(&name.to_string()).ok_or_else(|| {
@@ -46,7 +46,7 @@ fn get_integer_arg(
 
 /// 获取当前时间戳（秒）
 fn timestamp(
-    _argument: &OnionFastMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     SystemTime::now()
@@ -57,7 +57,7 @@ fn timestamp(
 
 /// 获取当前时间戳（毫秒）
 fn timestamp_millis(
-    _argument: &OnionFastMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     SystemTime::now()
@@ -68,7 +68,7 @@ fn timestamp_millis(
 
 /// 获取当前时间戳（纳秒）
 fn timestamp_nanos(
-    _argument: &OnionFastMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     SystemTime::now()
@@ -79,13 +79,13 @@ fn timestamp_nanos(
 
 /// 睡眠指定的秒数
 fn sleep_seconds(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let seconds = get_integer_arg(argument, "seconds")?;
     if seconds < 0 {
         return Err(RuntimeError::DetailedError(
-            "Sleep duration cannot be negative".to_string().into(),
+            "Sleep duration cannot be negative".into(),
         ));
     }
     thread::sleep(Duration::from_secs(seconds as u64));
@@ -94,13 +94,13 @@ fn sleep_seconds(
 
 /// 睡眠指定的毫秒数
 fn sleep_millis(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let millis = get_integer_arg(argument, "millis")?;
     if millis < 0 {
         return Err(RuntimeError::DetailedError(
-            "Sleep duration cannot be negative".to_string().into(),
+            "Sleep duration cannot be negative".into(),
         ));
     }
     thread::sleep(Duration::from_millis(millis as u64));
@@ -109,13 +109,13 @@ fn sleep_millis(
 
 /// 睡眠指定的微秒数
 fn sleep_micros(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let micros = get_integer_arg(argument, "micros")?;
     if micros < 0 {
         return Err(RuntimeError::DetailedError(
-            "Sleep duration cannot be negative".to_string().into(),
+            "Sleep duration cannot be negative".into(),
         ));
     }
     thread::sleep(Duration::from_micros(micros as u64));
@@ -139,7 +139,7 @@ fn format_timestamp(timestamp: u64) -> String {
 
 /// 获取格式化的当前时间字符串（UTC）
 fn now_utc(
-    _argument: &OnionFastMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let duration = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|e| {
@@ -151,13 +151,13 @@ fn now_utc(
 
 /// 从时间戳格式化时间字符串
 fn format_time(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let timestamp = get_integer_arg(argument, "timestamp")?;
     if timestamp < 0 {
         return Err(RuntimeError::DetailedError(
-            "Timestamp cannot be negative".to_string().into(),
+            "Timestamp cannot be negative".into(),
         ));
     }
     let datetime = format_timestamp(timestamp as u64);
@@ -166,7 +166,7 @@ fn format_time(
 
 /// 计算两个时间戳之间的差值（秒）
 fn time_diff(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let start = get_integer_arg(argument, "start")?;
@@ -201,8 +201,8 @@ impl Runnable for AsyncSleep {
 
     fn capture(
         &mut self,
-        _argument: &OnionFastMap<String, OnionStaticObject>,
-        _captured_vars: &OnionFastMap<String, OnionObject>,
+        _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
+        _captured_vars: &OnionFastMap<Box<str>, OnionObject>,
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         Ok(())
@@ -226,13 +226,13 @@ impl Runnable for AsyncSleep {
 }
 
 fn async_sleep(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let millis = get_integer_arg(argument, "millis")?;
     if millis < 0 {
         return Err(RuntimeError::DetailedError(
-            "Sleep duration cannot be negative".to_string().into(),
+            "Sleep duration cannot be negative".into(),
         ));
     }
 

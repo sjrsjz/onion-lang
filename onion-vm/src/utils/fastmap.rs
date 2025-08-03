@@ -4,7 +4,7 @@ use rustc_hash::FxHashMap;
 
 #[derive(Debug, Clone)]
 pub struct OnionKeyPool<K: PartialEq + Eq + Hash + Clone> {
-    keys: Arc<Vec<K>>,
+    keys: Arc<[K]>,
     key_to_index: Arc<FxHashMap<K, usize>>,
 }
 
@@ -20,13 +20,13 @@ impl<K: PartialEq + Eq + Hash + Clone> OnionKeyPool<K> {
         }
     }
 
-    pub fn new(k: Arc<Vec<K>>, i: Arc<FxHashMap<K, usize>>) -> Self {
+    pub fn new(k: Arc<[K]>, i: Arc<FxHashMap<K, usize>>) -> Self {
         Self {
             keys: k,
             key_to_index: i,
         }
     }
-    pub fn keys(&self) -> &Vec<K> {
+    pub fn keys(&self) -> &[K] {
         &self.keys
     }
 
@@ -58,7 +58,11 @@ impl<K: PartialEq + Eq + Hash + Clone, V> OnionFastMap<K, V> {
     }
 
     #[inline(always)]
-    pub fn push(&mut self, key: &K, value: V) -> Option<()> {
+    pub fn push<Q: ?Sized>(&mut self, key: &Q, value: V) -> Option<()>
+    where
+        K: std::borrow::Borrow<Q>,
+        Q: std::hash::Hash + Eq,
+    {
         if let Some(index) = self.pool.indices().get(key).copied() {
             self.pairs.push((index, value));
             Some(())
@@ -93,7 +97,11 @@ impl<K: PartialEq + Eq + Hash + Clone, V> OnionFastMap<K, V> {
     }
 
     #[inline(always)]
-    pub fn to_index(&self, key: &K) -> Option<usize> {
+    pub fn to_index<Q: ?Sized>(&self, key: &Q) -> Option<usize>
+    where
+        K: std::borrow::Borrow<Q>,
+        Q: std::hash::Hash + Eq,
+    {
         self.pool.indices().get(key).copied()
     }
 
@@ -103,18 +111,17 @@ impl<K: PartialEq + Eq + Hash + Clone, V> OnionFastMap<K, V> {
     }
 
     #[inline(always)]
-    pub fn get(&self, key: &K) -> Option<&V> {
-        // 1. 将 key 转换为其唯一的 ID
-        let target_id = self.to_index(key)?; // 如果 to_index 返回 None，则直接返回 None
-
-        // 2. 从后往前线性扫描 pairs Vec，查找匹配的 ID
-        //    从后往前可以正确处理“遮蔽”（shadowing）或“覆盖”（override）
+    pub fn get<Q: ?Sized>(&self, key: &Q) -> Option<&V>
+    where
+        K: std::borrow::Borrow<Q>,
+        Q: std::hash::Hash + Eq,
+    {
+        let target_id = self.to_index(key)?;
         self.pairs
             .iter()
             .rfind(|(id, _)| *id == target_id)
             .map(|(_, v)| v)
     }
-
     #[inline(always)]
     pub fn get_by_index(&self, target_index: usize) -> Option<&V> {
         // 同样，需要线性扫描

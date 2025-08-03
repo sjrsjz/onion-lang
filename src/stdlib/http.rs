@@ -24,7 +24,7 @@ use super::{build_dict, wrap_native_function};
 // --- Helper functions for robust argument parsing ---
 
 fn get_string_arg(
-    arg_map: &OnionFastMap<String, OnionStaticObject>,
+    arg_map: &OnionFastMap<Box<str>, OnionStaticObject>,
     name: &str,
 ) -> Result<String, RuntimeError> {
     arg_map
@@ -41,7 +41,7 @@ fn get_string_arg(
 }
 
 fn get_optional_string_arg(
-    arg_map: &OnionFastMap<String, OnionStaticObject>,
+    arg_map: &OnionFastMap<Box<str>, OnionStaticObject>,
     name: &str,
 ) -> Result<Option<String>, RuntimeError> {
     match arg_map.get(&name.to_string()) {
@@ -57,7 +57,7 @@ fn get_optional_string_arg(
 }
 
 fn get_headers_arg(
-    arg_map: &OnionFastMap<String, OnionStaticObject>,
+    arg_map: &OnionFastMap<Box<str>, OnionStaticObject>,
     name: &str,
 ) -> Result<IndexMap<String, String>, RuntimeError> {
     match arg_map.get(&name.to_string()) {
@@ -73,7 +73,7 @@ fn get_headers_arg(
                         }
                         _ => {
                             return Err(RuntimeError::InvalidType(
-                                "Header elements must be key-value pairs".to_string().into(),
+                                "Header elements must be key-value pairs".into(),
                             ));
                         }
                     }
@@ -224,7 +224,7 @@ impl Runnable for AsyncHttpRequest {
                         "success": false,
                     });
                     StepResult::Return(
-                        OnionObject::String(response_json.to_string().into())
+                        OnionObject::String(response_json.into())
                             .stabilize()
                             .into(),
                     )
@@ -251,8 +251,8 @@ impl Runnable for AsyncHttpRequest {
 
     fn capture(
         &mut self,
-        _argument: &OnionFastMap<String, OnionStaticObject>,
-        _captured_vars: &OnionFastMap<String, OnionObject>,
+        _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
+        _captured_vars: &OnionFastMap<Box<str>, OnionObject>,
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         Ok(())
@@ -285,7 +285,7 @@ impl Runnable for AsyncHttpRequest {
 }
 
 fn http_request(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let url = get_string_arg(argument, "url")?;
@@ -309,7 +309,7 @@ fn http_request(
 }
 
 fn http_get(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let url = get_string_arg(argument, "url")?;
@@ -328,7 +328,7 @@ fn http_get(
 }
 
 fn http_post(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let url = get_string_arg(argument, "url")?;
@@ -348,7 +348,7 @@ fn http_post(
 }
 
 fn http_put(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let url = get_string_arg(argument, "url")?;
@@ -368,7 +368,7 @@ fn http_put(
 }
 
 fn http_delete(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let url = get_string_arg(argument, "url")?;
@@ -387,7 +387,7 @@ fn http_delete(
 }
 
 fn http_patch(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let url = get_string_arg(argument, "url")?;
@@ -407,7 +407,7 @@ fn http_patch(
 }
 
 fn http_get_sync(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let url = get_string_arg(argument, "url")?;
@@ -416,7 +416,7 @@ fn http_get_sync(
 }
 
 fn http_post_sync(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let url = get_string_arg(argument, "url")?;

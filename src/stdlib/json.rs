@@ -50,7 +50,7 @@ fn to_json(obj: OnionObject) -> Result<Value, RuntimeError> {
                 }
             }
             _ => Err(RuntimeError::InvalidType(
-                "Cannot convert type to JSON".to_string().into(),
+                "Cannot convert type to JSON".into(),
             )),
         }
     })
@@ -68,7 +68,7 @@ fn from_json(value: Value) -> Result<OnionStaticObject, RuntimeError> {
                 Ok(OnionObject::Float(f).stabilize())
             } else {
                 Err(RuntimeError::InvalidType(
-                    "Invalid JSON number format".to_string().into(),
+                    "Invalid JSON number format".into(),
                 ))
             }
         }
@@ -118,7 +118,7 @@ fn stringify_json_pretty(obj: OnionObject) -> Result<String, RuntimeError> {
 // --- 新的原生函数封装 (遵循 io 模块的模式) ---
 
 fn json_parse(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(json_string_obj) = argument.get(&"json_string".to_string()) else {
@@ -132,13 +132,13 @@ fn json_parse(
     json_string_obj.weak().with_data(|data| match data {
         OnionObject::String(s) => parse_json(s),
         _ => Err(RuntimeError::InvalidType(
-            "Argument 'json_string' must be a string".to_string().into(),
+            "Argument 'json_string' must be a string".into(),
         )),
     })
 }
 
 fn json_stringify(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(object_to_stringify) = argument.get(&"object".to_string()) else {
@@ -154,7 +154,7 @@ fn json_stringify(
 }
 
 fn json_stringify_pretty(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(object_to_stringify) = argument.get(&"object".to_string()) else {

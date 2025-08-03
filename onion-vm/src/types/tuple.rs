@@ -10,7 +10,7 @@ use crate::lambda::runnable::RuntimeError;
 use super::object::{OnionObject, OnionObjectCell, OnionStaticObject};
 
 pub struct OnionTuple {
-    elements: Vec<OnionObject>,
+    elements: Box<[OnionObject]>,
 }
 
 impl GCTraceable<OnionObjectCell> for OnionTuple {
@@ -58,7 +58,8 @@ impl OnionTuple {
                 elements: elements
                     .into_iter()
                     .map(|e| e.weak().clone())
-                    .collect::<Vec<_>>(),
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
             }
             .into(),
         ))
@@ -70,7 +71,8 @@ impl OnionTuple {
                 elements: elements
                     .into_iter()
                     .map(|e| e.weak().clone())
-                    .collect::<Vec<_>>(),
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
             }
             .into(),
         )
@@ -78,7 +80,7 @@ impl OnionTuple {
     }
 
     #[inline(always)]
-    pub fn get_elements(&self) -> &Vec<OnionObject> {
+    pub fn get_elements(&self) -> &Box<[OnionObject]> {
         &self.elements
     }
 
@@ -138,8 +140,12 @@ impl OnionTuple {
     pub fn binary_add(&self, other: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
         match other {
             OnionObject::Tuple(other_tuple) => {
-                let mut new_elements = self.elements.clone();
-                new_elements.extend(other_tuple.elements.clone());
+                let new_elements: Box<[OnionObject]> = self
+                    .elements
+                    .iter()
+                    .chain(other_tuple.elements.iter())
+                    .cloned()
+                    .collect();
                 Ok(OnionStaticObject::new(OnionObject::Tuple(
                     OnionTuple {
                         elements: new_elements,

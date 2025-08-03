@@ -104,7 +104,7 @@ pub struct IRGenerator<'t> {
     function_signature_generator: LabelGenerator,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub enum IRGeneratorError {
     InvalidASTNodeType(ASTNodeType),
@@ -162,17 +162,6 @@ impl<'t> IRGenerator<'t> {
                 }
                 self.scope_stack.pop();
                 instructions.push((self.generate_debug_info(ast_node), IR::PopFrame));
-                Ok(instructions)
-            }
-            ASTNodeType::Annotation(annotation) => {
-                if !vec!["static", "dynamic", "compile", "required"].contains(&annotation.as_str())
-                {
-                    return Ok(vec![]);
-                }
-                let mut instructions = Vec::new();
-                for child in &ast_node.children {
-                    instructions.extend(self.generate_without_redirect(child)?);
-                }
                 Ok(instructions)
             }
             ASTNodeType::LambdaDef(is_dyn, captured_vars) => {
@@ -432,7 +421,7 @@ impl<'t> IRGenerator<'t> {
                 ));
                 Ok(instructions)
             }
-            ASTNodeType::KeyValue => {
+            ASTNodeType::Pair => {
                 let mut instructions = Vec::new();
                 instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                 instructions.extend(self.generate_without_redirect(&ast_node.children[1])?);
@@ -751,6 +740,20 @@ impl<'t> IRGenerator<'t> {
                 instructions.extend(self.generate_without_redirect(&ast_node.children[1])?);
                 instructions.push((self.generate_debug_info(ast_node), IR::MapTo));
                 Ok(instructions)
+            }
+            ASTNodeType::Required(var_name) => {
+                let mut instructions = Vec::new();
+                instructions.push((
+                    self.generate_debug_info(ast_node),
+                    IR::Get(var_name.clone()),
+                ));
+                Ok(instructions)
+            }
+            _ => {
+                // 如果AST节点类型不被支持，返回错误
+                Err(IRGeneratorError::InvalidASTNodeType(
+                    ast_node.node_type.clone(),
+                ))
             }
         }
     }

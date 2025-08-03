@@ -125,7 +125,7 @@ impl Runnable for AsyncScheduler {
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         Err(RuntimeError::DetailedError(
-            "AsyncScheduler does not support receive".to_string().into(),
+            "AsyncScheduler does not support receive".into(),
         ))
     }
     

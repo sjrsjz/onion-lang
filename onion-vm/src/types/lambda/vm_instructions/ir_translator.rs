@@ -8,7 +8,7 @@ use super::ir::IROperation;
 use super::ir::IRPackage;
 use super::opcode::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub enum IRTranslatorError {
     InvalidInstruction(IR),

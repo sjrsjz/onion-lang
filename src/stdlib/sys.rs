@@ -17,7 +17,7 @@ use super::{build_dict, wrap_native_function};
 
 // 辅助函数，用于获取并验证字符串参数
 fn get_string_arg<'a>(
-    argument: &'a OnionFastMap<String, OnionStaticObject>,
+    argument: &'a OnionFastMap<Box<str>, OnionStaticObject>,
     name: &str,
 ) -> Result<&'a str, RuntimeError> {
     let obj = argument.get(&name.to_string()).ok_or_else(|| {
@@ -39,7 +39,7 @@ fn get_string_arg<'a>(
 
 // 辅助函数，用于获取并验证整数参数
 fn get_integer_arg(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     name: &str,
 ) -> Result<i64, RuntimeError> {
     let obj = argument.get(&name.to_string()).ok_or_else(|| {
@@ -61,7 +61,7 @@ fn get_integer_arg(
 
 /// 获取系统命令行参数
 fn argv(
-    _argument: &OnionFastMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let args: Vec<_> = env::args()
@@ -72,7 +72,7 @@ fn argv(
 
 /// 获取环境变量
 fn getenv(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let key_str = get_string_arg(argument, "key")?;
@@ -84,7 +84,7 @@ fn getenv(
 
 /// 设置环境变量
 fn setenv(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let key_str = get_string_arg(argument, "key")?;
@@ -95,7 +95,7 @@ fn setenv(
 
 /// 删除环境变量
 fn unsetenv(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let key_str = get_string_arg(argument, "key")?;
@@ -105,7 +105,7 @@ fn unsetenv(
 
 /// 获取所有环境变量
 fn environ(
-    _argument: &OnionFastMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let env_vars: Vec<_> = env::vars()
@@ -120,11 +120,11 @@ fn environ(
 
 /// 获取当前工作目录
 fn getcwd(
-    _argument: &OnionFastMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     match env::current_dir() {
-        Ok(path) => Ok(OnionObject::String(path.to_string_lossy().to_string().into()).stabilize()),
+        Ok(path) => Ok(OnionObject::String(path.to_string_lossy().into()).stabilize()),
         Err(e) => Err(RuntimeError::DetailedError(
             format!("Failed to get current directory: {e}").into(),
         )),
@@ -133,7 +133,7 @@ fn getcwd(
 
 /// 退出程序
 fn exit(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let exit_code = get_integer_arg(argument, "code")?;
@@ -142,7 +142,7 @@ fn exit(
 
 /// 获取系统平台信息
 fn platform(
-    _argument: &OnionFastMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let platform = if cfg!(target_os = "windows") {
@@ -154,12 +154,12 @@ fn platform(
     } else {
         "unknown"
     };
-    Ok(OnionObject::String(platform.to_string().into()).stabilize())
+    Ok(OnionObject::String(platform.into()).stabilize())
 }
 
 /// 获取系统架构信息
 fn arch(
-    _argument: &OnionFastMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let arch = if cfg!(target_arch = "x86_64") {
@@ -173,16 +173,16 @@ fn arch(
     } else {
         "unknown"
     };
-    Ok(OnionObject::String(arch.to_string().into()).stabilize())
+    Ok(OnionObject::String(arch.into()).stabilize())
 }
 
 /// 获取程序执行路径
 fn executable(
-    _argument: &OnionFastMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     match env::current_exe() {
-        Ok(path) => Ok(OnionObject::String(path.to_string_lossy().to_string().into()).stabilize()),
+        Ok(path) => Ok(OnionObject::String(path.to_string_lossy().into()).stabilize()),
         Err(e) => Err(RuntimeError::DetailedError(
             format!("Failed to get executable path: {e}").into(),
         )),

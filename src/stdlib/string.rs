@@ -14,7 +14,7 @@ use onion_vm::{
 use super::{build_dict, wrap_native_function};
 
 fn get_string_arg<'a>(
-    argument: &'a OnionFastMap<String, OnionStaticObject>,
+    argument: &'a OnionFastMap<Box<str>, OnionStaticObject>,
     name: &str,
 ) -> Result<&'a str, RuntimeError> {
     let obj = argument.get(&name.to_string()).ok_or_else(|| {
@@ -35,7 +35,7 @@ fn get_string_arg<'a>(
 }
 
 fn get_integer_arg(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     name: &str,
 ) -> Result<i64, RuntimeError> {
     let obj = argument.get(&name.to_string()).ok_or_else(|| {
@@ -56,7 +56,7 @@ fn get_integer_arg(
 }
 
 fn length(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let s = get_string_arg(argument, "string")?;
@@ -64,15 +64,15 @@ fn length(
 }
 
 fn trim(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let s = get_string_arg(argument, "string")?;
-    Ok(OnionObject::String(s.trim().to_string().into()).stabilize())
+    Ok(OnionObject::String(s.trim().into()).stabilize())
 }
 
 fn uppercase(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let s = get_string_arg(argument, "string")?;
@@ -80,7 +80,7 @@ fn uppercase(
 }
 
 fn lowercase(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let s = get_string_arg(argument, "string")?;
@@ -88,7 +88,7 @@ fn lowercase(
 }
 
 fn contains(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let string = get_string_arg(argument, "string")?;
@@ -97,7 +97,7 @@ fn contains(
 }
 
 fn concat(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let s1 = get_string_arg(argument, "a")?;
@@ -107,20 +107,20 @@ fn concat(
 }
 
 fn split(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let string = get_string_arg(argument, "string")?;
     let delimiter = get_string_arg(argument, "delimiter")?;
     let parts: Vec<_> = string
         .split(delimiter)
-        .map(|part| OnionObject::String(part.to_string().into()))
+        .map(|part| OnionObject::String(part.into()))
         .collect();
     Ok(OnionObject::Tuple(OnionTuple::new(parts).into()).stabilize())
 }
 
 fn replace(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let string = get_string_arg(argument, "string")?;
@@ -131,7 +131,7 @@ fn replace(
 }
 
 fn substr(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let string = get_string_arg(argument, "string")?;
@@ -153,7 +153,7 @@ fn substr(
 }
 
 fn index_of(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let string = get_string_arg(argument, "string")?;
@@ -163,7 +163,7 @@ fn index_of(
 }
 
 fn starts_with(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let string = get_string_arg(argument, "string")?;
@@ -172,7 +172,7 @@ fn starts_with(
 }
 
 fn ends_with(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let string = get_string_arg(argument, "string")?;
@@ -181,7 +181,7 @@ fn ends_with(
 }
 
 fn repeat(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let string = get_string_arg(argument, "string")?;
@@ -189,7 +189,7 @@ fn repeat(
 
     if count < 0 {
         return Err(RuntimeError::InvalidOperation(
-            "repeat count cannot be negative".to_string().into(),
+            "repeat count cannot be negative".into(),
         ));
     }
     let result = string.repeat(count as usize);
@@ -197,7 +197,7 @@ fn repeat(
 }
 
 fn pad_left(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let string = get_string_arg(argument, "string")?;
@@ -206,14 +206,14 @@ fn pad_left(
 
     if length < 0 {
         return Err(RuntimeError::InvalidOperation(
-            "padding length cannot be negative".to_string().into(),
+            "padding length cannot be negative".into(),
         ));
     }
     let target_len = length as usize;
     let s_char_len = string.chars().count();
 
     if s_char_len >= target_len {
-        return Ok(OnionObject::String(string.to_string().into()).stabilize());
+        return Ok(OnionObject::String(string.into()).stabilize());
     }
 
     let pad_char = pad_char_str.chars().next().unwrap_or(' ');
@@ -223,7 +223,7 @@ fn pad_left(
 }
 
 fn pad_right(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let string = get_string_arg(argument, "string")?;
@@ -232,14 +232,14 @@ fn pad_right(
 
     if length < 0 {
         return Err(RuntimeError::InvalidOperation(
-            "padding length cannot be negative".to_string().into(),
+            "padding length cannot be negative".into(),
         ));
     }
     let target_len = length as usize;
     let s_char_len = string.chars().count();
 
     if s_char_len >= target_len {
-        return Ok(OnionObject::String(string.to_string().into()).stabilize());
+        return Ok(OnionObject::String(string.into()).stabilize());
     }
 
     let pad_char = pad_char_str.chars().next().unwrap_or(' ');
@@ -249,7 +249,7 @@ fn pad_right(
 }
 
 fn is_empty(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let s = get_string_arg(argument, "string")?;
@@ -257,7 +257,7 @@ fn is_empty(
 }
 
 fn reverse(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let s = get_string_arg(argument, "string")?;

@@ -52,7 +52,7 @@ impl Runnable for Scheduler {
                                 return StepResult::Return(
                                     OnionPair::new_static(
                                         &OnionObject::Boolean(false).stabilize(),
-                                        &OnionObject::String(Arc::new(e.to_string())).stabilize(),
+                                        &OnionObject::String(Arc::from(e.to_string())).stabilize(),
                                     )
                                     .into(),
                                 );
@@ -90,7 +90,7 @@ impl Runnable for Scheduler {
             }
         } else {
             StepResult::Error(RuntimeError::DetailedError(
-                "No runnable in stack".to_string().into(),
+                "No runnable in stack".into(),
             ))
         }
     }
@@ -103,7 +103,7 @@ impl Runnable for Scheduler {
             runnable.receive(&step_result, gc)
         } else {
             Err(RuntimeError::DetailedError(
-                "No runnable in stack".to_string().into(),
+                "No runnable in stack".into(),
             ))
         }
     }

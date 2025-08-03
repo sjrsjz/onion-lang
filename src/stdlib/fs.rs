@@ -16,12 +16,12 @@ use super::{build_dict, wrap_native_function};
 
 /// 读取文件内容作为字节
 fn read_file(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(path_obj) = argument.get(&"path".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "read_file requires a 'path' argument".to_string().into(),
+            "read_file requires a 'path' argument".into(),
         ));
     };
 
@@ -33,19 +33,19 @@ fn read_file(
             )),
         },
         _ => Err(RuntimeError::InvalidType(
-            "Path must be a string".to_string().into(),
+            "Path must be a string".into(),
         )),
     })
 }
 
 /// 写入文件内容作为字节
 fn write_file(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(path_obj) = argument.get(&"path".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "write_file requires a 'path' argument".to_string().into(),
+            "write_file requires a 'path' argument".into(),
         ));
     };
     let Some(content_obj) = argument.get(&"content".to_string()) else {
@@ -60,7 +60,7 @@ fn write_file(
         OnionObject::String(s) => s.clone(),
         _ => {
             return Err(RuntimeError::InvalidType(
-                "Path must be a string".to_string().into(),
+                "Path must be a string".into(),
             ));
         }
     };
@@ -70,7 +70,7 @@ fn write_file(
         OnionObject::String(s) => s.as_bytes().to_vec(),
         _ => {
             return Err(RuntimeError::InvalidType(
-                "Content must be bytes or a string".to_string().into(),
+                "Content must be bytes or a string".into(),
             ));
         }
     };
@@ -85,12 +85,12 @@ fn write_file(
 
 /// 追加文件内容作为字节
 fn append_file(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(path_obj) = argument.get(&"path".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "append_file requires a 'path' argument".to_string().into(),
+            "append_file requires a 'path' argument".into(),
         ));
     };
     let Some(content_obj) = argument.get(&"content".to_string()) else {
@@ -105,7 +105,7 @@ fn append_file(
         OnionObject::String(s) => s.clone(),
         _ => {
             return Err(RuntimeError::InvalidType(
-                "Path must be a string".to_string().into(),
+                "Path must be a string".into(),
             ));
         }
     };
@@ -115,7 +115,7 @@ fn append_file(
         OnionObject::String(s) => s.as_bytes().to_vec(),
         _ => {
             return Err(RuntimeError::InvalidType(
-                "Content must be bytes or a string".to_string().into(),
+                "Content must be bytes or a string".into(),
             ));
         }
     };
@@ -139,12 +139,12 @@ fn append_file(
 
 /// 删除文件
 fn remove_file(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(path_obj) = argument.get(&"path".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "remove_file requires a 'path' argument".to_string().into(),
+            "remove_file requires a 'path' argument".into(),
         ));
     };
 
@@ -156,24 +156,24 @@ fn remove_file(
             )),
         },
         _ => Err(RuntimeError::InvalidType(
-            "Path must be a string".to_string().into(),
+            "Path must be a string".into(),
         )),
     }
 }
 
 /// 复制文件
 fn copy_file(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(src_obj) = argument.get(&"src".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "copy_file requires a 'src' argument".to_string().into(),
+            "copy_file requires a 'src' argument".into(),
         ));
     };
     let Some(dest_obj) = argument.get(&"dest".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "copy_file requires a 'dest' argument".to_string().into(),
+            "copy_file requires a 'dest' argument".into(),
         ));
     };
 
@@ -181,7 +181,7 @@ fn copy_file(
         (OnionObject::String(s), OnionObject::String(d)) => (s, d),
         _ => {
             return Err(RuntimeError::InvalidType(
-                "Source and destination must be strings".to_string().into(),
+                "Source and destination must be strings".into(),
             ));
         }
     };
@@ -196,17 +196,17 @@ fn copy_file(
 
 /// 重命名/移动文件
 fn rename_file(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(src_obj) = argument.get(&"src".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "rename_file requires a 'src' argument".to_string().into(),
+            "rename_file requires a 'src' argument".into(),
         ));
     };
     let Some(dest_obj) = argument.get(&"dest".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "rename_file requires a 'dest' argument".to_string().into(),
+            "rename_file requires a 'dest' argument".into(),
         ));
     };
 
@@ -214,7 +214,7 @@ fn rename_file(
         (OnionObject::String(s), OnionObject::String(d)) => (s, d),
         _ => {
             return Err(RuntimeError::InvalidType(
-                "Source and destination must be strings".to_string().into(),
+                "Source and destination must be strings".into(),
             ));
         }
     };
@@ -229,12 +229,12 @@ fn rename_file(
 
 /// 创建目录
 fn create_dir(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(path_obj) = argument.get(&"path".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "create_dir requires a 'path' argument".to_string().into(),
+            "create_dir requires a 'path' argument".into(),
         ));
     };
 
@@ -246,14 +246,14 @@ fn create_dir(
             )),
         },
         _ => Err(RuntimeError::InvalidType(
-            "Path must be a string".to_string().into(),
+            "Path must be a string".into(),
         )),
     }
 }
 
 /// 递归创建目录
 fn create_dir_all(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(path_obj) = argument.get(&"path".to_string()) else {
@@ -272,19 +272,19 @@ fn create_dir_all(
             )),
         },
         _ => Err(RuntimeError::InvalidType(
-            "Path must be a string".to_string().into(),
+            "Path must be a string".into(),
         )),
     }
 }
 
 /// 删除空目录
 fn remove_dir(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(path_obj) = argument.get(&"path".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "remove_dir requires a 'path' argument".to_string().into(),
+            "remove_dir requires a 'path' argument".into(),
         ));
     };
 
@@ -296,14 +296,14 @@ fn remove_dir(
             )),
         },
         _ => Err(RuntimeError::InvalidType(
-            "Path must be a string".to_string().into(),
+            "Path must be a string".into(),
         )),
     }
 }
 
 /// 递归删除目录
 fn remove_dir_all(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(path_obj) = argument.get(&"path".to_string()) else {
@@ -322,19 +322,19 @@ fn remove_dir_all(
             )),
         },
         _ => Err(RuntimeError::InvalidType(
-            "Path must be a string".to_string().into(),
+            "Path must be a string".into(),
         )),
     }
 }
 
 /// 列出目录内容
 fn read_dir(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(path_obj) = argument.get(&"path".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "read_dir requires a 'path' argument".to_string().into(),
+            "read_dir requires a 'path' argument".into(),
         ));
     };
 
@@ -363,14 +363,14 @@ fn read_dir(
             )),
         },
         _ => Err(RuntimeError::InvalidType(
-            "Path must be a string".to_string().into(),
+            "Path must be a string".into(),
         )),
     }
 }
 
 /// 获取文件元数据
 fn file_metadata(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(path_obj) = argument.get(&"path".to_string()) else {
@@ -417,19 +417,19 @@ fn file_metadata(
             )),
         },
         _ => Err(RuntimeError::InvalidType(
-            "Path must be a string".to_string().into(),
+            "Path must be a string".into(),
         )),
     }
 }
 
 /// 检查文件是否存在
 fn exists(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(path_obj) = argument.get(&"path".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "exists requires a 'path' argument".to_string().into(),
+            "exists requires a 'path' argument".into(),
         ));
     };
 
@@ -439,19 +439,19 @@ fn exists(
             Ok(OnionObject::Boolean(exists).stabilize())
         }
         _ => Err(RuntimeError::InvalidType(
-            "Path must be a string".to_string().into(),
+            "Path must be a string".into(),
         )),
     }
 }
 
 /// 读取文本文件内容（UTF-8编码）
 fn read_text(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(path_obj) = argument.get(&"path".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "read_text requires a 'path' argument".to_string().into(),
+            "read_text requires a 'path' argument".into(),
         ));
     };
 
@@ -459,7 +459,7 @@ fn read_text(
         OnionObject::String(s) => s,
         _ => {
             return Err(RuntimeError::InvalidType(
-                "Path must be a string".to_string().into(),
+                "Path must be a string".into(),
             ));
         }
     };
@@ -479,12 +479,12 @@ fn read_text(
 
 /// 写入文本文件内容（UTF-8编码）
 fn write_text(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(path_obj) = argument.get(&"path".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "write_text requires a 'path' argument".to_string().into(),
+            "write_text requires a 'path' argument".into(),
         ));
     };
     let Some(content_obj) = argument.get(&"content".to_string()) else {
@@ -499,7 +499,7 @@ fn write_text(
         (OnionObject::String(p), OnionObject::String(c)) => (p, c),
         _ => {
             return Err(RuntimeError::InvalidType(
-                "Path and content must be strings".to_string().into(),
+                "Path and content must be strings".into(),
             ));
         }
     };
@@ -514,12 +514,12 @@ fn write_text(
 
 /// 追加文本文件内容（UTF-8编码）
 fn append_text(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(path_obj) = argument.get(&"path".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "append_text requires a 'path' argument".to_string().into(),
+            "append_text requires a 'path' argument".into(),
         ));
     };
     let Some(content_obj) = argument.get(&"content".to_string()) else {
@@ -534,7 +534,7 @@ fn append_text(
         (OnionObject::String(p), OnionObject::String(c)) => (p, c),
         _ => {
             return Err(RuntimeError::InvalidType(
-                "Path and content must be strings".to_string().into(),
+                "Path and content must be strings".into(),
             ));
         }
     };

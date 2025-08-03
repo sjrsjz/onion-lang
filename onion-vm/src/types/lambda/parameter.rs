@@ -13,8 +13,8 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub enum LambdaParameter {
-    Single((String, OnionObject)),
-    Multiple(Vec<LambdaParameter>),
+    Single((Box<str>, OnionObject)),
+    Multiple(Box<[LambdaParameter]>),
 }
 
 impl GCTraceable<OnionObjectCell> for LambdaParameter {
@@ -58,11 +58,11 @@ impl Display for LambdaParameter {
 
 impl LambdaParameter {
     pub fn top(key: &str) -> Self {
-        Self::Single((key.to_string(), OnionObject::Boolean(true)))
+        Self::Single((key.into(), OnionObject::Boolean(true)))
     }
 
     pub fn bottom(key: &str) -> Self {
-        Self::Single((key.to_string(), OnionObject::Boolean(false)))
+        Self::Single((key.into(), OnionObject::Boolean(false)))
     }
 }
 
@@ -100,7 +100,7 @@ impl LambdaParameter {
     }
 
     #[allow(dead_code)]
-    pub fn key_at(&self, index: usize) -> Option<&String> {
+    pub fn key_at(&self, index: usize) -> Option<&str> {
         match self {
             LambdaParameter::Single((key, _)) => {
                 if index == 0 {
@@ -125,7 +125,7 @@ impl LambdaParameter {
     }
 
     #[allow(dead_code)]
-    pub fn at(&self, index: usize) -> Option<(&String, &OnionObject)> {
+    pub fn at(&self, index: usize) -> Option<(&str, &OnionObject)> {
         match self {
             LambdaParameter::Single((key, obj)) => {
                 if index == 0 {
@@ -173,7 +173,7 @@ impl LambdaParameter {
             match obj {
                 OnionObject::Pair(pair) => {
                     let key = match pair.get_key() {
-                        OnionObject::String(s) => s.as_ref().clone(),
+                        OnionObject::String(s) => s.as_ref(),
                         _ => {
                             return Err(RuntimeError::InvalidType(
                                 format!("Expected string key, found: {:?}", obj).into(),
@@ -181,19 +181,19 @@ impl LambdaParameter {
                         }
                     };
                     let value = pair.get_value();
-                    Ok(LambdaParameter::Single((key, value.clone())))
+                    Ok(LambdaParameter::Single((key.into(), value.clone())))
                 }
                 OnionObject::Tuple(tuple) => {
-                    let mut params = vec![];
+                    let mut params = Vec::with_capacity(tuple.get_elements().len());
                     for item in tuple.get_elements().iter() {
                         params.push(inner(item)?);
                     }
-                    Ok(LambdaParameter::Multiple(params))
+                    Ok(LambdaParameter::Multiple(params.into_boxed_slice()))
                 }
                 OnionObject::String(s) => {
                     // 处理单个字符串参数
                     Ok(LambdaParameter::Single((
-                        s.as_ref().clone(),
+                        Box::from(s.as_ref()),
                         OnionObject::Boolean(true),
                     )))
                 }
@@ -239,7 +239,7 @@ impl LambdaParameter {
                         OnionObject::Tuple(tuple) => {
                             if tuple.get_elements().len() != v.len() {
                                 return Err(RuntimeError::InvalidOperation(
-                                    "Arity Mismatch".to_string().into(),
+                                    "Arity Mismatch".into(),
                                 ));
                             }
                             for (i, object) in tuple.get_elements().iter().enumerate() {
@@ -264,9 +264,9 @@ impl LambdaParameter {
     /// Recursively flattens the parameter structure to produce a flat list of parameter names.
     ///
     /// For a parameter structure like `(a, (b, c))`, this will return `["a", "b", "c"]`.
-    pub fn flatten_keys(&self) -> Vec<String> {
+    pub fn flatten_keys(&self) -> Box<[Box<str>]> {
         let mut keys = Vec::with_capacity(self.len());
-        fn inner(param: &LambdaParameter, collected_keys: &mut Vec<String>) {
+        fn inner(param: &LambdaParameter, collected_keys: &mut Vec<Box<str>>) {
             match param {
                 LambdaParameter::Single((name, _)) => {
                     collected_keys.push(name.clone());
@@ -279,14 +279,14 @@ impl LambdaParameter {
             }
         }
         inner(self, &mut keys);
-        keys
+        keys.into_boxed_slice()
     }
 
     /// Recursively flattens the parameter structure to produce a flat list of constraint objects.
     ///
     /// For a parameter structure like `(a: Int, (b: String, c: Bool))`,
     /// this will return a Vec containing the OnionObject for `Int`, `String`, and `Bool`.
-    pub fn flatten_constraints(&self) -> Vec<OnionObject> {
+    pub fn flatten_constraints(&self) -> Box<[OnionObject]> {
         let mut constraints = Vec::with_capacity(self.len());
 
         fn inner(param: &LambdaParameter, collected_constraints: &mut Vec<OnionObject>) {
@@ -302,6 +302,6 @@ impl LambdaParameter {
             }
         }
         inner(self, &mut constraints);
-        constraints
+        constraints.into_boxed_slice()
     }
 }

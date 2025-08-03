@@ -133,8 +133,8 @@ pub struct OnionLambdaRunnable {
 
 impl OnionLambdaRunnable {
     pub fn new(
-        argument: &OnionFastMap<String, OnionStaticObject>,
-        capture: &OnionFastMap<String, OnionObject>,
+        argument: &OnionFastMap<Box<str>, OnionStaticObject>,
+        capture: &OnionFastMap<Box<str>, OnionObject>,
         self_object: &OnionObject,
         this_lambda: &OnionStaticObject,
         instruction: Arc<VMInstructionPackage>,
@@ -287,7 +287,7 @@ impl Runnable for OnionLambdaRunnable {
             let mut ip = self.ip as usize;
             if ip >= code_len {
                 return StepResult::Error(RuntimeError::DetailedError(
-                    "Instruction pointer out of bounds".to_string().into(),
+                    "Instruction pointer out of bounds".into(),
                 ));
             }
 

@@ -17,13 +17,13 @@ use super::{build_dict, wrap_native_function};
 
 /// Convert object to string
 fn to_string(
-    argument: &OnionFastMap<String, OnionStaticObject>, // Changed signature
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>, // Changed signature
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(value) = argument.get(&"value".to_string()) else {
         // Get parameter directly
         return Err(RuntimeError::DetailedError(
-            "to_string requires a 'value' argument".to_string().into(),
+            "to_string requires a 'value' argument".into(),
         ));
     };
     let string_representation = value.weak().to_string(&vec![])?;
@@ -32,13 +32,13 @@ fn to_string(
 
 /// Convert object to integer
 fn to_int(
-    argument: &OnionFastMap<String, OnionStaticObject>, // Changed signature
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>, // Changed signature
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(value) = argument.get(&"value".to_string()) else {
         // Get parameter directly
         return Err(RuntimeError::DetailedError(
-            "to_int requires a 'value' argument".to_string().into(),
+            "to_int requires a 'value' argument".into(),
         ));
     };
 
@@ -60,13 +60,13 @@ fn to_int(
 
 /// Convert object to float
 fn to_float(
-    argument: &OnionFastMap<String, OnionStaticObject>, // Changed signature
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>, // Changed signature
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(value) = argument.get(&"value".to_string()) else {
         // Get parameter directly
         return Err(RuntimeError::DetailedError(
-            "to_float requires a 'value' argument".to_string().into(),
+            "to_float requires a 'value' argument".into(),
         ));
     };
 
@@ -88,13 +88,13 @@ fn to_float(
 
 /// Convert object to boolean
 fn to_bool(
-    argument: &OnionFastMap<String, OnionStaticObject>, // Changed signature
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>, // Changed signature
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(value) = argument.get(&"value".to_string()) else {
         // Get parameter directly
         return Err(RuntimeError::DetailedError(
-            "to_bool requires a 'value' argument".to_string().into(),
+            "to_bool requires a 'value' argument".into(),
         ));
     };
 
@@ -122,13 +122,13 @@ fn to_bool(
 
 /// Get object type name
 fn type_of(
-    argument: &OnionFastMap<String, OnionStaticObject>, // Changed signature
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>, // Changed signature
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(value) = argument.get(&"value".to_string()) else {
         // Get parameter directly
         return Err(RuntimeError::DetailedError(
-            "type_of requires a 'value' argument".to_string().into(),
+            "type_of requires a 'value' argument".into(),
         ));
     };
 
@@ -140,13 +140,13 @@ fn type_of(
 
 /// Check if object is an integer
 fn is_int(
-    argument: &OnionFastMap<String, OnionStaticObject>, // Changed signature
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>, // Changed signature
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(value) = argument.get(&"value".to_string()) else {
         // Get parameter directly
         return Err(RuntimeError::DetailedError(
-            "is_int requires a 'value' argument".to_string().into(),
+            "is_int requires a 'value' argument".into(),
         ));
     };
 
@@ -158,13 +158,13 @@ fn is_int(
 
 /// Check if object is a float
 fn is_float(
-    argument: &OnionFastMap<String, OnionStaticObject>, // Changed signature
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>, // Changed signature
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(value) = argument.get(&"value".to_string()) else {
         // Get parameter directly
         return Err(RuntimeError::DetailedError(
-            "is_float requires a 'value' argument".to_string().into(),
+            "is_float requires a 'value' argument".into(),
         ));
     };
 
@@ -176,13 +176,13 @@ fn is_float(
 
 /// Check if object is a string
 fn is_string(
-    argument: &OnionFastMap<String, OnionStaticObject>, // Changed signature
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>, // Changed signature
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(value) = argument.get(&"value".to_string()) else {
         // Get parameter directly
         return Err(RuntimeError::DetailedError(
-            "is_string requires a 'value' argument".to_string().into(),
+            "is_string requires a 'value' argument".into(),
         ));
     };
 
@@ -194,13 +194,13 @@ fn is_string(
 
 /// Check if object is a boolean
 fn is_bool(
-    argument: &OnionFastMap<String, OnionStaticObject>, // Changed signature
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>, // Changed signature
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(value) = argument.get(&"value".to_string()) else {
         // Get parameter directly
         return Err(RuntimeError::DetailedError(
-            "is_bool requires a 'value' argument".to_string().into(),
+            "is_bool requires a 'value' argument".into(),
         ));
     };
 
@@ -212,13 +212,13 @@ fn is_bool(
 
 /// Check if object is bytes
 fn is_bytes(
-    argument: &OnionFastMap<String, OnionStaticObject>, // Changed signature
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>, // Changed signature
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(value) = argument.get(&"value".to_string()) else {
         // Get parameter directly
         return Err(RuntimeError::DetailedError(
-            "is_bytes requires a 'value' argument".to_string().into(),
+            "is_bytes requires a 'value' argument".into(),
         ));
     };
 
@@ -230,13 +230,13 @@ fn is_bytes(
 
 /// Convert object to bytes
 fn to_bytes(
-    argument: &OnionFastMap<String, OnionStaticObject>, // Changed signature
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>, // Changed signature
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(value) = argument.get(&"value".to_string()) else {
         // Get parameter directly
         return Err(RuntimeError::DetailedError(
-            "to_bytes requires a 'value' argument".to_string().into(),
+            "to_bytes requires a 'value' argument".into(),
         ));
     };
 
@@ -263,17 +263,17 @@ fn to_bytes(
 
 // get attr or undefined
 fn find(
-    argument: &OnionFastMap<String, OnionStaticObject>, // Changed signature
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>, // Changed signature
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(obj) = argument.get(&"obj".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "find requires an 'obj' argument".to_string().into(),
+            "find requires an 'obj' argument".into(),
         ));
     };
     let Some(key) = argument.get(&"key".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "find requires a 'key' argument".to_string().into(),
+            "find requires a 'key' argument".into(),
         ));
     };
 

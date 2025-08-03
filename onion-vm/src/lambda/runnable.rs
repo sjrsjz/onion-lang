@@ -4,20 +4,21 @@ use arc_gc::gc::GC;
 
 use crate::{
     lambda::scheduler::async_scheduler::Task,
-    types::object::{OnionObject, OnionObjectCell, OnionStaticObject}, utils::fastmap::OnionFastMap,
+    types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
+    utils::fastmap::OnionFastMap,
 };
 
 #[derive(Clone, Debug)]
 pub enum RuntimeError {
     Pending, // 当前指令需要重复检查直到条件满足，考虑到大部分函数返回值是 `Result`，因此 Pending 只是取代 StepResult::Pending 的一个方式，告诉VM需要
     // 重复检查当前指令直到条件满足
-    StepError(Box<String>),
-    DetailedError(Box<String>),
-    InvalidType(Box<String>),
-    InvalidOperation(Box<String>),
-    CustomValue(Box<OnionStaticObject>),
     BrokenReference,
-    BorrowError(Box<String>),
+    StepError(Box<str>),
+    DetailedError(Box<str>),
+    InvalidType(Box<str>),
+    InvalidOperation(Box<str>),
+    CustomValue(Box<OnionStaticObject>),
+    BorrowError(Box<str>),
 }
 
 impl Display for RuntimeError {
@@ -48,11 +49,7 @@ impl StepResult {
     pub fn unwrap_error(self) -> RuntimeError {
         match self {
             StepResult::Error(error) => error,
-            _ => RuntimeError::StepError(
-                "Expected an error, but got a different result"
-                    .to_string()
-                    .into(),
-            ),
+            _ => RuntimeError::StepError("Expected an error, but got a different result".into()),
         }
     }
 }
@@ -76,14 +73,14 @@ pub trait Runnable: Send + Sync + 'static {
         gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         Err(RuntimeError::DetailedError(
-            "receive not implemented".to_string().into(),
+            "receive not implemented".into(),
         ))
     }
 
     fn capture(
         &mut self,
-        argument: &OnionFastMap<String, OnionStaticObject>,
-        captured_vars: &OnionFastMap<String, OnionObject>,
+        argument: &OnionFastMap<Box<str>, OnionStaticObject>,
+        captured_vars: &OnionFastMap<Box<str>, OnionObject>,
         gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         panic!("capture not implemented for this Runnable");
@@ -95,7 +92,7 @@ pub trait Runnable: Send + Sync + 'static {
         gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         Err(RuntimeError::DetailedError(
-            "bind_self_object not implemented".to_string().into(),
+            "bind_self_object not implemented".into(),
         ))
     }
 

@@ -15,7 +15,7 @@ use crate::stdlib::{build_dict, wrap_native_function};
 
 // --- Helper functions for robust argument parsing ---
 fn get_bytes_arg<'a>(
-    argument: &'a OnionFastMap<String, OnionStaticObject>,
+    argument: &'a OnionFastMap<Box<str>, OnionStaticObject>,
     name: &str,
 ) -> Result<&'a [u8], RuntimeError> {
     let obj = argument.get(&name.to_string()).ok_or_else(|| {
@@ -36,7 +36,7 @@ fn get_bytes_arg<'a>(
 }
 
 fn get_integer_arg(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     name: &str,
 ) -> Result<i64, RuntimeError> {
     let obj = argument.get(&name.to_string()).ok_or_else(|| {
@@ -57,7 +57,7 @@ fn get_integer_arg(
 }
 
 fn get_integer_tuple_arg(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     name: &str,
 ) -> Result<Vec<i64>, RuntimeError> {
     let obj = argument.get(&name.to_string()).ok_or_else(|| {
@@ -91,7 +91,7 @@ fn get_integer_tuple_arg(
 // --- Refactored Native Functions ---
 
 fn length(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
@@ -99,7 +99,7 @@ fn length(
 }
 
 fn concat(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let a = get_bytes_arg(argument, "a")?;
@@ -109,7 +109,7 @@ fn concat(
 }
 
 fn slice(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
@@ -134,24 +134,24 @@ fn slice(
 }
 
 fn get_at(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
     let index = get_integer_arg(argument, "index")?;
     if index < 0 {
         return Err(RuntimeError::InvalidOperation(
-            "Index cannot be negative".to_string().into(),
+            "Index cannot be negative".into(),
         ));
     }
     bytes
         .get(index as usize)
         .map(|&byte| OnionObject::Integer(byte as i64).stabilize())
-        .ok_or_else(|| RuntimeError::InvalidOperation("Index out of bounds".to_string().into()))
+        .ok_or_else(|| RuntimeError::InvalidOperation("Index out of bounds".into()))
 }
 
 fn set_at(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
@@ -160,19 +160,19 @@ fn set_at(
 
     if index < 0 {
         return Err(RuntimeError::InvalidOperation(
-            "Index cannot be negative".to_string().into(),
+            "Index cannot be negative".into(),
         ));
     }
     if !(0..=255).contains(&value) {
         return Err(RuntimeError::InvalidOperation(
-            "Value must be a valid byte (0-255)".to_string().into(),
+            "Value must be a valid byte (0-255)".into(),
         ));
     }
 
     let idx = index as usize;
     if idx >= bytes.len() {
         return Err(RuntimeError::InvalidOperation(
-            "Index out of bounds".to_string().into(),
+            "Index out of bounds".into(),
         ));
     }
 
@@ -182,7 +182,7 @@ fn set_at(
 }
 
 fn index_of(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
@@ -198,7 +198,7 @@ fn index_of(
 }
 
 fn contains(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
@@ -210,7 +210,7 @@ fn contains(
 }
 
 fn starts_with(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
@@ -219,7 +219,7 @@ fn starts_with(
 }
 
 fn ends_with(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
@@ -228,7 +228,7 @@ fn ends_with(
 }
 
 fn repeat(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
@@ -236,7 +236,7 @@ fn repeat(
 
     if count < 0 {
         return Err(RuntimeError::InvalidOperation(
-            "Repeat count cannot be negative".to_string().into(),
+            "Repeat count cannot be negative".into(),
         ));
     }
 
@@ -244,7 +244,7 @@ fn repeat(
 }
 
 fn is_empty(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
@@ -252,7 +252,7 @@ fn is_empty(
 }
 
 fn reverse(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
@@ -262,32 +262,32 @@ fn reverse(
 }
 
 fn to_string(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
     String::from_utf8(bytes.to_vec())
         .map(|s| OnionObject::String(s.into()).stabilize())
-        .map_err(|_| RuntimeError::InvalidOperation("Bytes are not valid UTF-8".to_string().into()))
+        .map_err(|_| RuntimeError::InvalidOperation("Bytes are not valid UTF-8".into()))
 }
 
 fn from_string(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let obj = argument.get(&"string".to_string()).ok_or_else(|| {
-        RuntimeError::DetailedError("Function requires a 'string' argument".to_string().into())
+        RuntimeError::DetailedError("Function requires a 'string' argument".into())
     })?;
     match obj.weak() {
         OnionObject::String(s) => Ok(OnionObject::Bytes(s.as_bytes().to_vec().into()).stabilize()),
         _ => Err(RuntimeError::InvalidType(
-            "Argument 'string' must be a string".to_string().into(),
+            "Argument 'string' must be a string".into(),
         )),
     }
 }
 
 fn pad_left(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
@@ -296,12 +296,12 @@ fn pad_left(
 
     if length < 0 {
         return Err(RuntimeError::InvalidOperation(
-            "Padding length cannot be negative".to_string().into(),
+            "Padding length cannot be negative".into(),
         ));
     }
     if !(0..=255).contains(&pad_byte_val) {
         return Err(RuntimeError::InvalidOperation(
-            "pad_byte must be a valid byte (0-255)".to_string().into(),
+            "pad_byte must be a valid byte (0-255)".into(),
         ));
     }
 
@@ -317,7 +317,7 @@ fn pad_left(
 }
 
 fn pad_right(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
@@ -326,12 +326,12 @@ fn pad_right(
 
     if length < 0 {
         return Err(RuntimeError::InvalidOperation(
-            "Padding length cannot be negative".to_string().into(),
+            "Padding length cannot be negative".into(),
         ));
     }
     if !(0..=255).contains(&pad_byte_val) {
         return Err(RuntimeError::InvalidOperation(
-            "pad_byte must be a valid byte (0-255)".to_string().into(),
+            "pad_byte must be a valid byte (0-255)".into(),
         ));
     }
 
@@ -347,7 +347,7 @@ fn pad_right(
 }
 
 fn from_integers(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let list = get_integer_tuple_arg(argument, "list")?;
@@ -366,7 +366,7 @@ fn from_integers(
 }
 
 fn to_integers(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;

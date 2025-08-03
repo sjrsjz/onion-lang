@@ -20,12 +20,12 @@ pub struct NativeMethodGenerator<F>
 where
     F: Fn(
             Option<&OnionStaticObject>,
-            &OnionFastMap<String, OnionStaticObject>,
+            &OnionFastMap<Box<str>, OnionStaticObject>,
             &mut GC<OnionObjectCell>,
         ) -> Result<OnionStaticObject, RuntimeError>
         + 'static,
 {
-    captured: OnionFastMap<String, OnionStaticObject>,
+    captured: OnionFastMap<Box<str>, OnionStaticObject>,
     self_object: Option<OnionStaticObject>,
     function: &'static F,
 }
@@ -34,7 +34,7 @@ impl<F> Runnable for NativeMethodGenerator<F>
 where
     F: Fn(
             Option<&OnionStaticObject>,
-            &OnionFastMap<String, OnionStaticObject>,
+            &OnionFastMap<Box<str>, OnionStaticObject>,
             &mut GC<OnionObjectCell>,
         ) -> Result<OnionStaticObject, RuntimeError>
         + Send
@@ -50,8 +50,8 @@ where
 
     fn capture(
         &mut self,
-        argument: &OnionFastMap<String, OnionStaticObject>,
-        captured_vars: &OnionFastMap<String, OnionObject>,
+        argument: &OnionFastMap<Box<str>, OnionStaticObject>,
+        captured_vars: &OnionFastMap<Box<str>, OnionObject>,
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<(), RuntimeError> {
         self.captured = argument.clone();
@@ -99,7 +99,7 @@ where
 
 pub(crate) fn native_int_converter(
     self_object: Option<&OnionStaticObject>,
-    _argument: &OnionFastMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(self_obj) = self_object else {
@@ -162,7 +162,7 @@ pub(crate) fn native_int_converter(
 
 pub(crate) fn native_float_converter(
     self_object: Option<&OnionStaticObject>,
-    _argument: &OnionFastMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(self_obj) = self_object else {
@@ -206,7 +206,7 @@ pub(crate) fn native_float_converter(
                         )),
                     },
                     Err(_) => Err(RuntimeError::DetailedError(
-                        "Cannot convert non-UTF8 bytes to float".to_string().into(),
+                        "Cannot convert non-UTF8 bytes to float".into(),
                     )),
                 }
             }
@@ -223,7 +223,7 @@ pub(crate) fn native_float_converter(
 
 pub(crate) fn native_string_converter(
     self_object: Option<&OnionStaticObject>,
-    _argument: &OnionFastMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(self_obj) = self_object else {
@@ -242,46 +242,39 @@ pub(crate) fn native_string_converter(
             }
             OnionObject::Integer(v) => {
                 // 整数转字符串
-                Ok(OnionObject::String(std::sync::Arc::new(v.to_string())).stabilize())
+                Ok(OnionObject::String(Arc::from(v.to_string())).stabilize())
             }
             OnionObject::Float(v) => {
                 // 浮点数转字符串
-                Ok(OnionObject::String(std::sync::Arc::new(v.to_string())).stabilize())
+                Ok(OnionObject::String(Arc::from(v.to_string())).stabilize())
             }
             OnionObject::Boolean(b) => {
                 // 布尔值转字符串
-                Ok(OnionObject::String(std::sync::Arc::new(b.to_string())).stabilize())
+                Ok(OnionObject::String(Arc::from(b.to_string())).stabilize())
             }
             OnionObject::Bytes(bytes) => {
                 // 字节数组转字符串（UTF-8）
                 match std::str::from_utf8(bytes) {
-                    Ok(s) => {
-                        Ok(OnionObject::String(std::sync::Arc::new(s.to_string())).stabilize())
-                    }
+                    Ok(s) => Ok(OnionObject::String(Arc::from(s.to_string())).stabilize()),
                     Err(_) => {
                         // 如果不是有效UTF-8，使用lossy转换
                         let s = String::from_utf8_lossy(bytes);
-                        Ok(OnionObject::String(std::sync::Arc::new(s.to_string())).stabilize())
+                        Ok(OnionObject::String(Arc::from(s.to_string())).stabilize())
                     }
                 }
             }
-            OnionObject::Null => {
-                Ok(OnionObject::String(std::sync::Arc::new("null".to_string())).stabilize())
-            }
+            OnionObject::Null => Ok(OnionObject::String(Arc::from("null")).stabilize()),
             OnionObject::Undefined(_) => {
-                Ok(OnionObject::String(std::sync::Arc::new("undefined".to_string())).stabilize())
+                Ok(OnionObject::String(Arc::from("undefined")).stabilize())
             }
-            OnionObject::Range(start, end) => Ok(OnionObject::String(std::sync::Arc::new(
-                format!("{}..{}", start, end),
-            ))
-            .stabilize()),
+            OnionObject::Range(start, end) => {
+                Ok(OnionObject::String(Arc::from(format!("{}..{}", start, end))).stabilize())
+            }
             _ => {
                 // 对于复杂对象，使用 repr 方法
                 match obj.repr(&vec![]) {
-                    Ok(repr_str) => {
-                        Ok(OnionObject::String(std::sync::Arc::new(repr_str)).stabilize())
-                    }
-                    Err(_) => Ok(OnionObject::String(std::sync::Arc::new(format!(
+                    Ok(repr_str) => Ok(OnionObject::String(Arc::from(repr_str)).stabilize()),
+                    Err(_) => Ok(OnionObject::String(Arc::from(format!(
                         "<{}>",
                         obj.type_of().unwrap_or("object".to_string())
                     )))
@@ -294,7 +287,7 @@ pub(crate) fn native_string_converter(
 
 pub(crate) fn native_bool_converter(
     self_object: Option<&OnionStaticObject>,
-    _argument: &OnionFastMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(self_obj) = self_object else {
@@ -349,7 +342,7 @@ pub(crate) fn native_bool_converter(
 
 pub(crate) fn native_bytes_converter(
     self_object: Option<&OnionStaticObject>,
-    _argument: &OnionFastMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(self_obj) = self_object else {
@@ -368,19 +361,19 @@ pub(crate) fn native_bytes_converter(
             }
             OnionObject::String(s) => {
                 // 字符串转字节数组（UTF-8编码）
-                Ok(OnionObject::Bytes(std::sync::Arc::new(s.as_bytes().to_vec())).stabilize())
+                Ok(OnionObject::Bytes(Arc::from(s.as_bytes().to_vec())).stabilize())
             }
             OnionObject::Integer(v) => {
                 // 整数转字节数组（大端序）
-                Ok(OnionObject::Bytes(std::sync::Arc::new(v.to_be_bytes().to_vec())).stabilize())
+                Ok(OnionObject::Bytes(Arc::from(v.to_be_bytes().to_vec())).stabilize())
             }
             OnionObject::Float(v) => {
                 // 浮点数转字节数组（大端序）
-                Ok(OnionObject::Bytes(std::sync::Arc::new(v.to_be_bytes().to_vec())).stabilize())
+                Ok(OnionObject::Bytes(Arc::from(v.to_be_bytes().to_vec())).stabilize())
             }
             OnionObject::Boolean(b) => {
                 // 布尔值转字节数组：true->1, false->0
-                Ok(OnionObject::Bytes(std::sync::Arc::new(vec![if *b { 1 } else { 0 }])).stabilize())
+                Ok(OnionObject::Bytes(Arc::from(vec![if *b { 1 } else { 0 }])).stabilize())
             }
             OnionObject::Tuple(tuple) => {
                 // 元组转字节数组：尝试将每个元素转换为字节
@@ -398,12 +391,12 @@ pub(crate) fn native_bytes_converter(
                         }
                         _ => {
                             return Err(RuntimeError::DetailedError(
-                                "Tuple elements must be integers in range 0-255 to convert to bytes".to_string().into(),
+                                "Tuple elements must be integers in range 0-255 to convert to bytes".into(),
                             ));
                         }
                     }
                 }
-                Ok(OnionObject::Bytes(std::sync::Arc::new(result)).stabilize())
+                Ok(OnionObject::Bytes(Arc::from(result)).stabilize())
             }
             _ => Err(RuntimeError::DetailedError(
                 format!("Cannot convert {} to bytes", obj.type_of().unwrap_or("unknown".to_string())).into(),
@@ -414,7 +407,7 @@ pub(crate) fn native_bytes_converter(
 
 pub(crate) fn native_length_method(
     self_object: Option<&OnionStaticObject>,
-    _argument: &OnionFastMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(self_obj) = self_object else {
@@ -446,7 +439,7 @@ pub(crate) fn native_length_method(
 
 pub(crate) fn native_elements_method(
     self_object: Option<&OnionStaticObject>,
-    _argument: &OnionFastMap<String, OnionStaticObject>,
+    _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(self_obj) = self_object else {
@@ -463,9 +456,7 @@ pub(crate) fn native_elements_method(
                 let elements = OnionTuple::new_static_no_ref(
                     &s.chars()
                         .map(|c| {
-                            OnionStaticObject::new(OnionObject::String(std::sync::Arc::new(
-                                c.to_string(),
-                            )))
+                            OnionStaticObject::new(OnionObject::String(Arc::from(c.to_string())))
                         })
                         .collect::<Vec<_>>(),
                 );
@@ -504,16 +495,16 @@ pub(crate) fn native_elements_method(
 
 pub(crate) fn wrap_native_function<F>(
     params: LambdaParameter,
-    capture: OnionFastMap<String, OnionObject>,
+    capture: OnionFastMap<Box<str>, OnionObject>,
     self_object: &OnionObject,
-    signature: String,
-    string_pool: OnionKeyPool<String>,
+    signature: &'static str,
+    string_pool: OnionKeyPool<Box<str>>,
     function: &'static F,
 ) -> OnionStaticObject
 where
     F: Fn(
             Option<&OnionStaticObject>,
-            &OnionFastMap<String, OnionStaticObject>,
+            &OnionFastMap<Box<str>, OnionStaticObject>,
             &mut GC<OnionObjectCell>,
         ) -> Result<OnionStaticObject, RuntimeError>
         + Send
@@ -535,7 +526,7 @@ where
         )),
         capture,
         self_object,
-        signature,
+        Box::from(signature),
         LambdaType::Normal,
     )
 }

@@ -198,8 +198,8 @@ use std::{collections::HashMap, fs, sync::Arc};
 pub struct VMInstructionPackage {
     function_ips: FxHashMap<String, usize>, // 签名定位表
     code: Vec<u32>,
-    string_pool: Arc<Vec<String>>,
-    string_to_index: Arc<FxHashMap<String, usize>>,
+    string_pool: Arc<[Box<str>]>,
+    string_to_index: Arc<FxHashMap<Box<str>, usize>>,
     index_pool: Vec<Vec<usize>>,
     bytes_pool: Vec<Vec<u8>>,
     debug_infos: HashMap<usize, DebugInfo>,
@@ -219,12 +219,17 @@ impl VMInstructionPackage {
         let string_to_index = string_pool
             .iter()
             .enumerate()
-            .map(|(index, string)| (string.clone(), index))
+            .map(|(index, string)| (string.clone().into_boxed_str(), index))
             .collect();
         VMInstructionPackage {
             function_ips: function_ips.into_iter().collect(),
             code,
-            string_pool: Arc::new(string_pool),
+            string_pool: Arc::from(
+                string_pool
+                    .into_iter()
+                    .map(|s| s.into_boxed_str())
+                    .collect::<Vec<_>>(),
+            ),
             string_to_index: Arc::new(string_to_index),
             index_pool,
             bytes_pool,
@@ -241,7 +246,7 @@ impl VMInstructionPackage {
         &self.code
     }
     #[inline(always)]
-    pub fn get_string_pool(&self) -> &Vec<String> {
+    pub fn get_string_pool(&self) -> &[Box<str>] {
         &self.string_pool
     }
     #[inline(always)]
@@ -265,7 +270,7 @@ impl VMInstructionPackage {
         &self.debug_infos
     }
     #[inline(always)]
-    pub fn create_fast_map<V>(&self) -> OnionFastMap<String, V> {
+    pub fn create_fast_map<V>(&self) -> OnionFastMap<Box<str>, V> {
         OnionFastMap::new(OnionKeyPool::new(
             self.string_pool.clone(),
             self.string_to_index.clone(),
@@ -273,7 +278,7 @@ impl VMInstructionPackage {
     }
 
     #[inline(always)]
-    pub fn create_key_pool(&self) -> OnionKeyPool<String> {
+    pub fn create_key_pool(&self) -> OnionKeyPool<Box<str>> {
         OnionKeyPool::new(self.string_pool.clone(), self.string_to_index.clone())
     }
 

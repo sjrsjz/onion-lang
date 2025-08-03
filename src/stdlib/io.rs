@@ -8,40 +8,40 @@ use onion_vm::{
 use super::{build_dict, wrap_native_function};
 
 fn println(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(value) = argument.get(&"values".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "println requires a 'values' argument".to_string().into(),
+            "println requires a 'values' argument".into(),
         ));
     };
 
     println!("{}", value.weak().to_string(&vec![])?);
-    Ok(OnionObject::Undefined(Some("Print completed".to_string().into())).stabilize())
+    Ok(OnionObject::Undefined(Some("Print completed".into())).stabilize())
 }
 
 fn print(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(value) = argument.get(&"values".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "print requires a 'values' argument".to_string().into(),
+            "print requires a 'values' argument".into(),
         ));
     };
 
     print!("{}", value.weak().to_string(&vec![])?);
-    Ok(OnionObject::Undefined(Some("Print completed".to_string().into())).stabilize())
+    Ok(OnionObject::Undefined(Some("Print completed".into())).stabilize())
 }
 
 fn input(
-    argument: &OnionFastMap<String, OnionStaticObject>,
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let Some(hint) = argument.get(&"hint".to_string()) else {
         return Err(RuntimeError::DetailedError(
-            "input requires a 'hint' argument".to_string().into(),
+            "input requires a 'hint' argument".into(),
         ));
     };
 
