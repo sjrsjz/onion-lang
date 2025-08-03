@@ -82,6 +82,21 @@ pub struct Range {
     pub end: Position,
 }
 
+impl Range {
+    pub fn default_range() -> Self {
+        Self {
+            start: Position {
+                line: 0,
+                character: 0,
+            },
+            end: Position {
+                line: 0,
+                character: 1,
+            },
+        }
+    }
+}
+
 /// LSP 位置信息
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]

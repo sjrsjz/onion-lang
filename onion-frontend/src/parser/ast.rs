@@ -844,7 +844,7 @@ fn match_comptime(
     let node = ASTNode::new(
         ASTNodeType::Comptime,
         tokens[current].first().cloned(),
-        tokens[current + right_offset + 1].last().cloned(),
+        tokens[current + right_offset].last().cloned(),
         Some(vec![right]),
     );
     Ok((Some(node), right_offset + 1))

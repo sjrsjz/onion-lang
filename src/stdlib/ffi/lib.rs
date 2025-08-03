@@ -127,7 +127,7 @@ impl OnionObjectExt for CLib {
         f: &mut dyn FnMut(&OnionObject) -> Result<(), RuntimeError>,
     ) -> Result<(), RuntimeError> {
         if let OnionObject::String(attr) = key {
-            match attr.as_ref().as_str() {
+            match attr.as_ref() {
                 "path" => f(&OnionObject::String(self.path.clone().into())),
                 _ => Err(RuntimeError::InvalidOperation(
                     format!("CLib has no attribute '{attr}'").into(),
@@ -140,9 +140,7 @@ impl OnionObjectExt for CLib {
         }
     }
     fn len(&self) -> Result<OnionStaticObject, RuntimeError> {
-        Err(RuntimeError::InvalidOperation(
-            "CLib has no length".into(),
-        ))
+        Err(RuntimeError::InvalidOperation("CLib has no length".into()))
     }
 }
 
@@ -346,7 +344,7 @@ impl OnionObjectExt for CFunctionHandle {
         f: &mut dyn FnMut(&OnionObject) -> Result<(), RuntimeError>,
     ) -> Result<(), RuntimeError> {
         if let OnionObject::String(attr) = key {
-            match attr.as_ref().as_str() {
+            match attr.as_ref() {
                 "name" => f(&OnionObject::String(self.function_name.clone().into())),
                 "library" => f(&OnionObject::Custom(Arc::new(
                     self.library.as_ref().clone(),
@@ -383,7 +381,7 @@ fn get_clib_arg(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     name: &str,
 ) -> Result<Arc<CLib>, RuntimeError> {
-    let obj = argument.get(&name.to_string()).ok_or_else(|| {
+    let obj = argument.get(name).ok_or_else(|| {
         RuntimeError::DetailedError(format!("Missing required argument: '{name}'").into())
     })?;
     match obj.weak() {
@@ -404,7 +402,7 @@ fn get_string_arg(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     name: &str,
 ) -> Result<String, RuntimeError> {
-    let obj = argument.get(&name.to_string()).ok_or_else(|| {
+    let obj = argument.get(name).ok_or_else(|| {
         RuntimeError::DetailedError(format!("Missing required argument: '{name}'").into())
     })?;
     match obj.weak() {
@@ -419,7 +417,7 @@ fn get_string_tuple_arg(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     name: &str,
 ) -> Result<Vec<String>, RuntimeError> {
-    let obj = argument.get(&name.to_string()).ok_or_else(|| {
+    let obj = argument.get(name).ok_or_else(|| {
         RuntimeError::DetailedError(format!("Missing required argument: '{name}'").into())
     })?;
     match obj.weak() {
@@ -445,7 +443,7 @@ fn get_ctypes_tuple_arg(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     name: &str,
 ) -> Result<Vec<CTypes>, RuntimeError> {
-    let obj = argument.get(&name.to_string()).ok_or_else(|| {
+    let obj = argument.get(name).ok_or_else(|| {
         RuntimeError::DetailedError(format!("Missing required argument: '{name}'").into())
     })?;
     match obj.weak() {
@@ -505,9 +503,9 @@ fn lib_call_function(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let handle_obj = argument.get(&"handle".to_string()).ok_or_else(|| {
-        RuntimeError::DetailedError("Missing required argument: 'handle'".into())
-    })?;
+    let handle_obj = argument
+        .get("handle")
+        .ok_or_else(|| RuntimeError::DetailedError("Missing required argument: 'handle'".into()))?;
     let handle = match handle_obj.weak() {
         OnionObject::Custom(custom) => custom
             .as_any()
@@ -544,8 +542,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("path"),
             OnionFastMap::default(),
-            "lib::load".to_string(),
-            OnionKeyPool::create(vec!["path".to_string()]),
+            "lib::load",
+            OnionKeyPool::create(vec!["path".into()]),
             &lib_load,
         ),
     );
@@ -554,19 +552,22 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "get_function".to_string(),
         wrap_native_function(
-            LambdaParameter::Multiple(vec![
-                LambdaParameter::top("library"),
-                LambdaParameter::top("function"),
-                LambdaParameter::top("return_type"),
-                LambdaParameter::top("param_types"),
-            ]),
+            LambdaParameter::Multiple(
+                [
+                    LambdaParameter::top("library"),
+                    LambdaParameter::top("function"),
+                    LambdaParameter::top("return_type"),
+                    LambdaParameter::top("param_types"),
+                ]
+                .into(),
+            ),
             OnionFastMap::default(),
-            "lib::get_function".to_string(),
+            "lib::get_function",
             OnionKeyPool::create(vec![
-                "library".to_string(),
-                "function".to_string(),
-                "return_type".to_string(),
-                "param_types".to_string(),
+                "library".into(),
+                "function".into(),
+                "return_type".into(),
+                "param_types".into(),
             ]),
             &lib_get_function,
         ),
@@ -576,13 +577,12 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "call".to_string(),
         wrap_native_function(
-            LambdaParameter::Multiple(vec![
-                LambdaParameter::top("handle"),
-                LambdaParameter::top("args"),
-            ]),
+            LambdaParameter::Multiple(
+                [LambdaParameter::top("handle"), LambdaParameter::top("args")].into(),
+            ),
             OnionFastMap::default(),
-            "lib::call".to_string(),
-            OnionKeyPool::create(vec!["handle".to_string(), "args".to_string()]),
+            "lib::call",
+            OnionKeyPool::create(vec!["handle".into(), "args".into()]),
             &lib_call_function,
         ),
     );

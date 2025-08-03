@@ -2,7 +2,13 @@ use std::io::Write;
 
 use indexmap::IndexMap;
 use onion_vm::{
-    lambda::runnable::RuntimeError, types::{lambda::parameter::LambdaParameter, object::{OnionObject, OnionObjectCell, OnionStaticObject}}, utils::fastmap::{OnionFastMap, OnionKeyPool}, GC
+    GC,
+    lambda::runnable::RuntimeError,
+    types::{
+        lambda::parameter::LambdaParameter,
+        object::{OnionObject, OnionObjectCell, OnionStaticObject},
+    },
+    utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
 
 use super::{build_dict, wrap_native_function};
@@ -11,7 +17,7 @@ fn println(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(value) = argument.get(&"values".to_string()) else {
+    let Some(value) = argument.get("values") else {
         return Err(RuntimeError::DetailedError(
             "println requires a 'values' argument".into(),
         ));
@@ -25,7 +31,7 @@ fn print(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(value) = argument.get(&"values".to_string()) else {
+    let Some(value) = argument.get("values") else {
         return Err(RuntimeError::DetailedError(
             "print requires a 'values' argument".into(),
         ));
@@ -39,7 +45,7 @@ fn input(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(hint) = argument.get(&"hint".to_string()) else {
+    let Some(hint) = argument.get("hint") else {
         return Err(RuntimeError::DetailedError(
             "input requires a 'hint' argument".into(),
         ));
@@ -71,8 +77,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("values"), // <-- Changed here
             OnionFastMap::default(),
-            "io::println".to_string(),
-            OnionKeyPool::create(vec!["values".to_string()]),
+            "io::println",
+            OnionKeyPool::create(vec!["values".into()]),
             &println,
         ),
     );
@@ -83,8 +89,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("values"), // <-- Changed here
             OnionFastMap::default(),
-            "io::print".to_string(),
-            OnionKeyPool::create(vec!["values".to_string()]),
+            "io::print",
+            OnionKeyPool::create(vec!["values".into()]),
             &print,
         ),
     );
@@ -95,8 +101,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("hint"), // <-- Changed here
             OnionFastMap::default(),
-            "io::input".to_string(),
-            OnionKeyPool::create(vec!["hint".to_string()]),
+            "io::input",
+            OnionKeyPool::create(vec!["hint".into()]),
             &input,
         ),
     );

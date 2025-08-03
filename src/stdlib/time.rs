@@ -27,7 +27,7 @@ fn get_integer_arg(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     name: &str,
 ) -> Result<i64, RuntimeError> {
-    let obj = argument.get(&name.to_string()).ok_or_else(|| {
+    let obj = argument.get(name).ok_or_else(|| {
         RuntimeError::DetailedError(
             format!("Function requires an '{name}' argument")
                 .to_string()
@@ -237,7 +237,7 @@ fn async_sleep(
     }
 
     Ok(OnionLambdaDefinition::new_static(
-        LambdaParameter::Multiple(vec![]),
+        LambdaParameter::Multiple([].into()),
         LambdaBody::NativeFunction((
             Arc::new(move || {
                 Box::new(AsyncSleep {
@@ -248,7 +248,7 @@ fn async_sleep(
             OnionKeyPool::create(vec![]),
         )),
         OnionFastMap::default(),
-        "time::async_sleep".to_string(),
+        "time::async_sleep".into(),
         LambdaType::Normal,
     ))
 }
@@ -261,9 +261,9 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "timestamp".to_string(),
         wrap_native_function(
-            LambdaParameter::Multiple(vec![]),
+            LambdaParameter::Multiple([].into()),
             OnionFastMap::default(),
-            "time::timestamp".to_string(),
+            "time::timestamp",
             OnionKeyPool::create(vec![]),
             &timestamp,
         ),
@@ -271,9 +271,9 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "timestamp_millis".to_string(),
         wrap_native_function(
-            LambdaParameter::Multiple(vec![]),
+            LambdaParameter::Multiple([].into()),
             OnionFastMap::default(),
-            "time::timestamp_millis".to_string(),
+            "time::timestamp_millis",
             OnionKeyPool::create(vec![]),
             &timestamp_millis,
         ),
@@ -281,9 +281,9 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "timestamp_nanos".to_string(),
         wrap_native_function(
-            LambdaParameter::Multiple(vec![]),
+            LambdaParameter::Multiple([].into()),
             OnionFastMap::default(),
-            "time::timestamp_nanos".to_string(),
+            "time::timestamp_nanos",
             OnionKeyPool::create(vec![]),
             &timestamp_nanos,
         ),
@@ -291,9 +291,9 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "now_utc".to_string(),
         wrap_native_function(
-            LambdaParameter::Multiple(vec![]),
+            LambdaParameter::Multiple([].into()),
             OnionFastMap::default(),
-            "time::now_utc".to_string(),
+            "time::now_utc",
             OnionKeyPool::create(vec![]),
             &now_utc,
         ),
@@ -305,8 +305,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("seconds"),
             OnionFastMap::default(),
-            "time::sleep_seconds".to_string(),
-            OnionKeyPool::create(vec!["seconds".to_string()]),
+            "time::sleep_seconds",
+            OnionKeyPool::create(vec!["seconds".into()]),
             &sleep_seconds,
         ),
     );
@@ -316,8 +316,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("millis"),
             OnionFastMap::default(),
-            "time::sleep_millis".to_string(),
-            OnionKeyPool::create(vec!["millis".to_string()]),
+            "time::sleep_millis",
+            OnionKeyPool::create(vec!["millis".into()]),
             &sleep_millis,
         ),
     );
@@ -327,8 +327,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("micros"),
             OnionFastMap::default(),
-            "time::sleep_micros".to_string(),
-            OnionKeyPool::create(vec!["micros".to_string()]),
+            "time::sleep_micros",
+            OnionKeyPool::create(vec!["micros".into()]),
             &sleep_micros,
         ),
     );
@@ -338,8 +338,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("timestamp"),
             OnionFastMap::default(),
-            "time::format_time".to_string(),
-            OnionKeyPool::create(vec!["timestamp".to_string()]),
+            "time::format_time",
+            OnionKeyPool::create(vec!["timestamp".into()]),
             &format_time,
         ),
     );
@@ -349,8 +349,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("millis"),
             OnionFastMap::default(),
-            "time::async_sleep".to_string(),
-            OnionKeyPool::create(vec!["millis".to_string()]),
+            "time::async_sleep",
+            OnionKeyPool::create(vec!["millis".into()]),
             &async_sleep,
         ),
     );
@@ -359,13 +359,12 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "time_diff".to_string(),
         wrap_native_function(
-            LambdaParameter::Multiple(vec![
-                LambdaParameter::top("start"),
-                LambdaParameter::top("end"),
-            ]),
+            LambdaParameter::Multiple(
+                [LambdaParameter::top("start"), LambdaParameter::top("end")].into(),
+            ),
             OnionFastMap::default(),
-            "time::time_diff".to_string(),
-            OnionKeyPool::create(vec!["start".to_string(), "end".to_string()]),
+            "time::time_diff",
+            OnionKeyPool::create(vec!["start".into(), "end".into()]),
             &time_diff,
         ),
     );

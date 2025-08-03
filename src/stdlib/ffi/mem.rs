@@ -23,7 +23,7 @@ fn get_integer_arg(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     name: &str,
 ) -> Result<i64, RuntimeError> {
-    let obj = argument.get(&name.to_string()).ok_or_else(|| {
+    let obj = argument.get(name).ok_or_else(|| {
         RuntimeError::DetailedError(
             format!("Function requires an '{name}' argument")
                 .to_string()
@@ -156,7 +156,7 @@ fn mem_read(
 
     unsafe {
         let slice = std::slice::from_raw_parts(ptr as usize as *const u8, size as usize);
-        Ok(OnionObject::Bytes(Arc::new(slice.to_vec())).stabilize())
+        Ok(OnionObject::Bytes(Arc::from(slice)).stabilize())
     }
 }
 
@@ -166,7 +166,7 @@ fn mem_write(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let ptr = get_integer_arg(argument, "ptr")?;
-    let buffer_obj = argument.get(&"buffer".to_string()).ok_or_else(|| {
+    let buffer_obj = argument.get("buffer").ok_or_else(|| {
         RuntimeError::DetailedError("mem_write requires a 'buffer' argument".into())
     })?;
 
@@ -178,7 +178,7 @@ fn mem_write(
 
     let bytes_to_write = match buffer_obj.weak() {
         OnionObject::Bytes(b) => b.clone(),
-        OnionObject::String(s) => Arc::new(s.as_bytes().to_vec()),
+        OnionObject::String(s) => Arc::from(s.as_bytes()),
         _ => {
             return Err(RuntimeError::InvalidType(
                 "Argument 'buffer' must be bytes or a string"
@@ -239,8 +239,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("size"),
             OnionFastMap::default(),
-            "mem::alloc".to_string(),
-            OnionKeyPool::create(vec!["size".to_string()]),
+            "mem::alloc",
+            OnionKeyPool::create(vec!["size".into()]),
             &mem_alloc,
         ),
     );
@@ -249,13 +249,12 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "free".to_string(),
         wrap_native_function(
-            LambdaParameter::Multiple(vec![
-                LambdaParameter::top("ptr"),
-                LambdaParameter::top("size"),
-            ]),
+            LambdaParameter::Multiple(
+                [LambdaParameter::top("ptr"), LambdaParameter::top("size")].into(),
+            ),
             OnionFastMap::default(),
-            "mem::free".to_string(),
-            OnionKeyPool::create(vec!["ptr".to_string(), "size".to_string()]),
+            "mem::free",
+            OnionKeyPool::create(vec!["ptr".into(), "size".into()]),
             &mem_free,
         ),
     );
@@ -264,13 +263,12 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "calloc".to_string(),
         wrap_native_function(
-            LambdaParameter::Multiple(vec![
-                LambdaParameter::top("count"),
-                LambdaParameter::top("size"),
-            ]),
+            LambdaParameter::Multiple(
+                [LambdaParameter::top("count"), LambdaParameter::top("size")].into(),
+            ),
             OnionFastMap::default(),
-            "mem::calloc".to_string(),
-            OnionKeyPool::create(vec!["count".to_string(), "size".to_string()]),
+            "mem::calloc",
+            OnionKeyPool::create(vec!["count".into(), "size".into()]),
             &mem_calloc,
         ),
     );
@@ -279,13 +277,12 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "read".to_string(),
         wrap_native_function(
-            LambdaParameter::Multiple(vec![
-                LambdaParameter::top("ptr"),
-                LambdaParameter::top("size"),
-            ]),
+            LambdaParameter::Multiple(
+                [LambdaParameter::top("ptr"), LambdaParameter::top("size")].into(),
+            ),
             OnionFastMap::default(),
-            "mem::read".to_string(),
-            OnionKeyPool::create(vec!["ptr".to_string(), "size".to_string()]),
+            "mem::read",
+            OnionKeyPool::create(vec!["ptr".into(), "size".into()]),
             &mem_read,
         ),
     );
@@ -294,13 +291,12 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "write".to_string(),
         wrap_native_function(
-            LambdaParameter::Multiple(vec![
-                LambdaParameter::top("ptr"),
-                LambdaParameter::top("buffer"),
-            ]),
+            LambdaParameter::Multiple(
+                [LambdaParameter::top("ptr"), LambdaParameter::top("buffer")].into(),
+            ),
             OnionFastMap::default(),
-            "mem::write".to_string(),
-            OnionKeyPool::create(vec!["ptr".to_string(), "buffer".to_string()]),
+            "mem::write",
+            OnionKeyPool::create(vec!["ptr".into(), "buffer".into()]),
             &mem_write,
         ),
     );
@@ -309,18 +305,17 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "copy".to_string(),
         wrap_native_function(
-            LambdaParameter::Multiple(vec![
-                LambdaParameter::top("dest"),
-                LambdaParameter::top("src"),
-                LambdaParameter::top("size"),
-            ]),
+            LambdaParameter::Multiple(
+                [
+                    LambdaParameter::top("dest"),
+                    LambdaParameter::top("src"),
+                    LambdaParameter::top("size"),
+                ]
+                .into(),
+            ),
             OnionFastMap::default(),
-            "mem::copy".to_string(),
-            OnionKeyPool::create(vec![
-                "dest".to_string(),
-                "src".to_string(),
-                "size".to_string(),
-            ]),
+            "mem::copy",
+            OnionKeyPool::create(vec!["dest".into(), "src".into(), "size".into()]),
             &mem_copy,
         ),
     );

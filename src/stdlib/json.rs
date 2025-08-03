@@ -14,7 +14,7 @@ use serde_json::Value;
 fn to_json(obj: OnionObject) -> Result<Value, RuntimeError> {
     obj.with_data(|data| {
         match data {
-            OnionObject::String(s) => Ok(Value::String(s.as_ref().clone())),
+            OnionObject::String(s) => Ok(Value::String(s.to_string())),
             OnionObject::Integer(n) => Ok(Value::Number(serde_json::Number::from(*n))),
             OnionObject::Float(f) => Ok(Value::Number(serde_json::Number::from_f64(*f).unwrap())),
             OnionObject::Boolean(b) => Ok(Value::Bool(*b)),
@@ -121,7 +121,7 @@ fn json_parse(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(json_string_obj) = argument.get(&"json_string".to_string()) else {
+    let Some(json_string_obj) = argument.get("json_string") else {
         return Err(RuntimeError::DetailedError(
             "json.parse requires a 'json_string' argument"
                 .to_string()
@@ -141,7 +141,7 @@ fn json_stringify(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(object_to_stringify) = argument.get(&"object".to_string()) else {
+    let Some(object_to_stringify) = argument.get("object") else {
         return Err(RuntimeError::DetailedError(
             "json.stringify requires an 'object' argument"
                 .to_string()
@@ -157,7 +157,7 @@ fn json_stringify_pretty(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(object_to_stringify) = argument.get(&"object".to_string()) else {
+    let Some(object_to_stringify) = argument.get("object") else {
         return Err(RuntimeError::DetailedError(
             "json.stringify_pretty requires an 'object' argument"
                 .to_string()
@@ -177,8 +177,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("json_string"), // <-- Changed here
             OnionFastMap::default(),
-            "json::parse".to_string(),
-            OnionKeyPool::create(vec!["json_string".to_string()]),
+            "json::parse",
+            OnionKeyPool::create(vec!["json_string".into()]),
             &json_parse,
         ),
     );
@@ -189,8 +189,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("object"), // <-- Changed here
             OnionFastMap::default(),
-            "json::stringify".to_string(),
-            OnionKeyPool::create(vec!["object".to_string()]),
+            "json::stringify",
+            OnionKeyPool::create(vec!["object".into()]),
             &json_stringify,
         ),
     );
@@ -201,8 +201,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("object"), // <-- Changed here
             OnionFastMap::default(),
-            "json::stringify_pretty".to_string(),
-            OnionKeyPool::create(vec!["object".to_string()]),
+            "json::stringify_pretty",
+            OnionKeyPool::create(vec!["object".into()]),
             &json_stringify_pretty,
         ),
     );

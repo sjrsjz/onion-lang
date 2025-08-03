@@ -17,7 +17,7 @@ fn get_string_arg<'a>(
     argument: &'a OnionFastMap<Box<str>, OnionStaticObject>,
     name: &str,
 ) -> Result<&'a str, RuntimeError> {
-    let obj = argument.get(&name.to_string()).ok_or_else(|| {
+    let obj = argument.get(name).ok_or_else(|| {
         RuntimeError::DetailedError(
             format!("Function requires a '{name}' argument")
                 .to_string()
@@ -38,7 +38,7 @@ fn get_integer_arg(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     name: &str,
 ) -> Result<i64, RuntimeError> {
-    let obj = argument.get(&name.to_string()).ok_or_else(|| {
+    let obj = argument.get(name).ok_or_else(|| {
         RuntimeError::DetailedError(
             format!("Function requires an '{name}' argument")
                 .to_string()
@@ -274,8 +274,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("string"),
             OnionFastMap::default(),
-            "string::length".to_string(),
-            OnionKeyPool::create(vec!["string".to_string()]),
+            "string::length",
+            OnionKeyPool::create(vec!["string".into()]),
             &length,
         ),
     );
@@ -284,8 +284,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("string"),
             OnionFastMap::default(),
-            "string::trim".to_string(),
-            OnionKeyPool::create(vec!["string".to_string()]),
+            "string::trim",
+            OnionKeyPool::create(vec!["string".into()]),
             &trim,
         ),
     );
@@ -294,8 +294,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("string"),
             OnionFastMap::default(),
-            "string::uppercase".to_string(),
-            OnionKeyPool::create(vec!["string".to_string()]),
+            "string::uppercase",
+            OnionKeyPool::create(vec!["string".into()]),
             &uppercase,
         ),
     );
@@ -304,8 +304,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("string"),
             OnionFastMap::default(),
-            "string::lowercase".to_string(),
-            OnionKeyPool::create(vec!["string".to_string()]),
+            "string::lowercase",
+            OnionKeyPool::create(vec!["string".into()]),
             &lowercase,
         ),
     );
@@ -314,8 +314,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("string"),
             OnionFastMap::default(),
-            "string::is_empty".to_string(),
-            OnionKeyPool::create(vec!["string".to_string()]),
+            "string::is_empty",
+            OnionKeyPool::create(vec!["string".into()]),
             &is_empty,
         ),
     );
@@ -324,8 +324,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("string"),
             OnionFastMap::default(),
-            "string::reverse".to_string(),
-            OnionKeyPool::create(vec!["string".to_string()]),
+            "string::reverse",
+            OnionKeyPool::create(vec!["string".into()]),
             &reverse,
         ),
     );
@@ -334,88 +334,108 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "contains".to_string(),
         wrap_native_function(
-            LambdaParameter::Multiple(vec![
-                LambdaParameter::top("string"),
-                LambdaParameter::top("substring"),
-            ]),
+            LambdaParameter::Multiple(
+                [
+                    LambdaParameter::top("string"),
+                    LambdaParameter::top("substring"),
+                ]
+                .into(),
+            ),
             OnionFastMap::default(),
-            "string::contains".to_string(),
-            OnionKeyPool::create(vec!["string".to_string(), "substring".to_string()]),
+            "string::contains",
+            OnionKeyPool::create(vec!["string".into(), "substring".into()]),
             &contains,
         ),
     );
     module.insert(
         "concat".to_string(),
         wrap_native_function(
-            LambdaParameter::Multiple(vec![LambdaParameter::top("a"), LambdaParameter::top("b")]),
+            LambdaParameter::Multiple(
+                [LambdaParameter::top("a"), LambdaParameter::top("b")].into(),
+            ),
             OnionFastMap::default(),
-            "string::concat".to_string(),
-            OnionKeyPool::create(vec!["a".to_string(), "b".to_string()]),
+            "string::concat",
+            OnionKeyPool::create(vec!["a".into(), "b".into()]),
             &concat,
         ),
     );
     module.insert(
         "split".to_string(),
         wrap_native_function(
-            LambdaParameter::Multiple(vec![
-                LambdaParameter::top("string"),
-                LambdaParameter::top("delimiter"),
-            ]),
+            LambdaParameter::Multiple(
+                [
+                    LambdaParameter::top("string"),
+                    LambdaParameter::top("delimiter"),
+                ]
+                .into(),
+            ),
             OnionFastMap::default(),
-            "string::split".to_string(),
-            OnionKeyPool::create(vec!["string".to_string(), "delimiter".to_string()]),
+            "string::split",
+            OnionKeyPool::create(vec!["string".into(), "delimiter".into()]),
             &split,
         ),
     );
     module.insert(
         "index_of".to_string(),
         wrap_native_function(
-            LambdaParameter::Multiple(vec![
-                LambdaParameter::top("string"),
-                LambdaParameter::top("substring"),
-            ]),
+            LambdaParameter::Multiple(
+                [
+                    LambdaParameter::top("string"),
+                    LambdaParameter::top("substring"),
+                ]
+                .into(),
+            ),
             OnionFastMap::default(),
-            "string::index_of".to_string(),
-            OnionKeyPool::create(vec!["string".to_string(), "substring".to_string()]),
+            "string::index_of",
+            OnionKeyPool::create(vec!["string".into(), "substring".into()]),
             &index_of,
         ),
     );
     module.insert(
         "starts_with".to_string(),
         wrap_native_function(
-            LambdaParameter::Multiple(vec![
-                LambdaParameter::top("string"),
-                LambdaParameter::top("prefix"),
-            ]),
+            LambdaParameter::Multiple(
+                [
+                    LambdaParameter::top("string"),
+                    LambdaParameter::top("prefix"),
+                ]
+                .into(),
+            ),
             OnionFastMap::default(),
-            "string::starts_with".to_string(),
-            OnionKeyPool::create(vec!["string".to_string(), "prefix".to_string()]),
+            "string::starts_with",
+            OnionKeyPool::create(vec!["string".into(), "prefix".into()]),
             &starts_with,
         ),
     );
     module.insert(
         "ends_with".to_string(),
         wrap_native_function(
-            LambdaParameter::Multiple(vec![
-                LambdaParameter::top("string"),
-                LambdaParameter::top("suffix"),
-            ]),
+            LambdaParameter::Multiple(
+                [
+                    LambdaParameter::top("string"),
+                    LambdaParameter::top("suffix"),
+                ]
+                .into(),
+            ),
             OnionFastMap::default(),
-            "string::ends_with".to_string(),
-            OnionKeyPool::create(vec!["string".to_string(), "suffix".to_string()]),
+            "string::ends_with",
+            OnionKeyPool::create(vec!["string".into(), "suffix".into()]),
             &ends_with,
         ),
     );
     module.insert(
         "repeat".to_string(),
         wrap_native_function(
-            LambdaParameter::Multiple(vec![
-                LambdaParameter::top("string"),
-                LambdaParameter::top("count"),
-            ]),
+            LambdaParameter::Multiple(
+                [
+                    LambdaParameter::top("string"),
+                    LambdaParameter::top("count"),
+                ]
+                .into(),
+            ),
             OnionFastMap::default(),
-            "string::repeat".to_string(),
-            OnionKeyPool::create(vec!["string".to_string(), "count".to_string()]),
+            "string::repeat",
+            OnionKeyPool::create(vec!["string".into(), "count".into()]),
             &repeat,
         ),
     );
@@ -424,72 +444,68 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "replace".to_string(),
         wrap_native_function(
-            LambdaParameter::Multiple(vec![
-                LambdaParameter::top("string"),
-                LambdaParameter::top("from"),
-                LambdaParameter::top("to"),
-            ]),
+            LambdaParameter::Multiple(
+                [
+                    LambdaParameter::top("string"),
+                    LambdaParameter::top("from"),
+                    LambdaParameter::top("to"),
+                ]
+                .into(),
+            ),
             OnionFastMap::default(),
-            "string::replace".to_string(),
-            OnionKeyPool::create(vec![
-                "string".to_string(),
-                "from".to_string(),
-                "to".to_string(),
-            ]),
+            "string::replace",
+            OnionKeyPool::create(vec!["string".into(), "from".into(), "to".into()]),
             &replace,
         ),
     );
     module.insert(
         "substr".to_string(),
         wrap_native_function(
-            LambdaParameter::Multiple(vec![
-                LambdaParameter::top("string"),
-                LambdaParameter::top("start"),
-                LambdaParameter::top("length"),
-            ]),
+            LambdaParameter::Multiple(
+                [
+                    LambdaParameter::top("string"),
+                    LambdaParameter::top("start"),
+                    LambdaParameter::top("length"),
+                ]
+                .into(),
+            ),
             OnionFastMap::default(),
-            "string::substr".to_string(),
-            OnionKeyPool::create(vec![
-                "string".to_string(),
-                "start".to_string(),
-                "length".to_string(),
-            ]),
+            "string::substr",
+            OnionKeyPool::create(vec!["string".into(), "start".into(), "length".into()]),
             &substr,
         ),
     );
     module.insert(
         "pad_left".to_string(),
         wrap_native_function(
-            LambdaParameter::Multiple(vec![
-                LambdaParameter::top("string"),
-                LambdaParameter::top("length"),
-                LambdaParameter::top("pad_char"),
-            ]),
+            LambdaParameter::Multiple(
+                [
+                    LambdaParameter::top("string"),
+                    LambdaParameter::top("length"),
+                    LambdaParameter::top("pad_char"),
+                ]
+                .into(),
+            ),
             OnionFastMap::default(),
-            "string::pad_left".to_string(),
-            OnionKeyPool::create(vec![
-                "string".to_string(),
-                "length".to_string(),
-                "pad_char".to_string(),
-            ]),
+            "string::pad_left",
+            OnionKeyPool::create(vec!["string".into(), "length".into(), "pad_char".into()]),
             &pad_left,
         ),
     );
     module.insert(
         "pad_right".to_string(),
         wrap_native_function(
-            LambdaParameter::Multiple(vec![
-                LambdaParameter::top("string"),
-                LambdaParameter::top("length"),
-                LambdaParameter::top("pad_char"),
-            ]),
+            LambdaParameter::Multiple(
+                [
+                    LambdaParameter::top("string"),
+                    LambdaParameter::top("length"),
+                    LambdaParameter::top("pad_char"),
+                ]
+                .into(),
+            ),
             OnionFastMap::default(),
-            "string::pad_right".to_string(),
-            OnionKeyPool::create(vec![
-                "string".to_string(),
-                "length".to_string(),
-                "pad_char".to_string(),
-            ]),
+            "string::pad_right",
+            OnionKeyPool::create(vec!["string".into(), "length".into(), "pad_char".into()]),
             &pad_right,
         ),
     );

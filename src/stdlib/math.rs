@@ -16,7 +16,7 @@ fn abs(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(value) = argument.get(&"value".to_string()) else {
+    let Some(value) = argument.get("value") else {
         return Err(RuntimeError::DetailedError(
             "abs requires a 'value' argument".into(),
         ));
@@ -35,7 +35,7 @@ fn sin(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(value) = argument.get(&"value".to_string()) else {
+    let Some(value) = argument.get("value") else {
         return Err(RuntimeError::DetailedError(
             "sin requires a 'value' argument".into(),
         ));
@@ -54,7 +54,7 @@ fn cos(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(value) = argument.get(&"value".to_string()) else {
+    let Some(value) = argument.get("value") else {
         return Err(RuntimeError::DetailedError(
             "cos requires a 'value' argument".into(),
         ));
@@ -73,7 +73,7 @@ fn tan(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(value) = argument.get(&"value".to_string()) else {
+    let Some(value) = argument.get("value") else {
         return Err(RuntimeError::DetailedError(
             "tan requires a 'value' argument".into(),
         ));
@@ -92,7 +92,7 @@ fn log(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(value) = argument.get(&"value".to_string()) else {
+    let Some(value) = argument.get("value") else {
         return Err(RuntimeError::DetailedError(
             "log requires a 'value' argument".into(),
         ));
@@ -127,7 +127,7 @@ fn sqrt(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(value) = argument.get(&"value".to_string()) else {
+    let Some(value) = argument.get("value") else {
         return Err(RuntimeError::DetailedError(
             "sqrt requires a 'value' argument".into(),
         ));
@@ -166,12 +166,12 @@ fn pow(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(base_obj) = argument.get(&"base".to_string()) else {
+    let Some(base_obj) = argument.get("base") else {
         return Err(RuntimeError::DetailedError(
             "pow requires a 'base' argument".into(),
         ));
     };
-    let Some(exp_obj) = argument.get(&"exponent".to_string()) else {
+    let Some(exp_obj) = argument.get("exponent") else {
         return Err(RuntimeError::DetailedError(
             "pow requires an 'exponent' argument".into(),
         ));
@@ -210,7 +210,7 @@ fn exp(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(value) = argument.get(&"value".to_string()) else {
+    let Some(value) = argument.get("value") else {
         return Err(RuntimeError::DetailedError(
             "exp requires a 'value' argument".into(),
         ));
@@ -229,7 +229,7 @@ fn floor(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(value) = argument.get(&"value".to_string()) else {
+    let Some(value) = argument.get("value") else {
         return Err(RuntimeError::DetailedError(
             "floor requires a 'value' argument".into(),
         ));
@@ -248,7 +248,7 @@ fn ceil(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(value) = argument.get(&"value".to_string()) else {
+    let Some(value) = argument.get("value") else {
         return Err(RuntimeError::DetailedError(
             "ceil requires a 'value' argument".into(),
         ));
@@ -267,7 +267,7 @@ fn round(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(value) = argument.get(&"value".to_string()) else {
+    let Some(value) = argument.get("value") else {
         return Err(RuntimeError::DetailedError(
             "round requires a 'value' argument".into(),
         ));
@@ -286,7 +286,7 @@ fn asin(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(value) = argument.get(&"value".to_string()) else {
+    let Some(value) = argument.get("value") else {
         return Err(RuntimeError::DetailedError(
             "asin requires a 'value' argument".into(),
         ));
@@ -316,7 +316,7 @@ fn acos(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(value) = argument.get(&"value".to_string()) else {
+    let Some(value) = argument.get("value") else {
         return Err(RuntimeError::DetailedError(
             "acos requires a 'value' argument".into(),
         ));
@@ -346,7 +346,7 @@ fn atan(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(value) = argument.get(&"value".to_string()) else {
+    let Some(value) = argument.get("value") else {
         return Err(RuntimeError::DetailedError(
             "atan requires a 'value' argument".into(),
         ));
@@ -380,8 +380,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("value"),
             OnionFastMap::default(),
-            "math::abs".to_string(),
-            OnionKeyPool::create(vec!["value".to_string()]),
+            "math::abs",
+            OnionKeyPool::create(vec!["value".into()]),
             &abs,
         ),
     );
@@ -390,8 +390,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("value"),
             OnionFastMap::default(),
-            "math::sin".to_string(),
-            OnionKeyPool::create(vec!["value".to_string()]),
+            "math::sin",
+            OnionKeyPool::create(vec!["value".into()]),
             &sin,
         ),
     );
@@ -400,8 +400,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("value"),
             OnionFastMap::default(),
-            "math::cos".to_string(),
-            OnionKeyPool::create(vec!["value".to_string()]),
+            "math::cos",
+            OnionKeyPool::create(vec!["value".into()]),
             &cos,
         ),
     );
@@ -410,8 +410,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("value"),
             OnionFastMap::default(),
-            "math::tan".to_string(),
-            OnionKeyPool::create(vec!["value".to_string()]),
+            "math::tan",
+            OnionKeyPool::create(vec!["value".into()]),
             &tan,
         ),
     );
@@ -420,8 +420,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("value"),
             OnionFastMap::default(),
-            "math::log".to_string(),
-            OnionKeyPool::create(vec!["value".to_string()]),
+            "math::log",
+            OnionKeyPool::create(vec!["value".into()]),
             &log,
         ),
     );
@@ -430,8 +430,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("value"),
             OnionFastMap::default(),
-            "math::sqrt".to_string(),
-            OnionKeyPool::create(vec!["value".to_string()]),
+            "math::sqrt",
+            OnionKeyPool::create(vec!["value".into()]),
             &sqrt,
         ),
     );
@@ -440,8 +440,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("value"),
             OnionFastMap::default(),
-            "math::exp".to_string(),
-            OnionKeyPool::create(vec!["value".to_string()]),
+            "math::exp",
+            OnionKeyPool::create(vec!["value".into()]),
             &exp,
         ),
     );
@@ -450,8 +450,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("value"),
             OnionFastMap::default(),
-            "math::floor".to_string(),
-            OnionKeyPool::create(vec!["value".to_string()]),
+            "math::floor",
+            OnionKeyPool::create(vec!["value".into()]),
             &floor,
         ),
     );
@@ -460,8 +460,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("value"),
             OnionFastMap::default(),
-            "math::ceil".to_string(),
-            OnionKeyPool::create(vec!["value".to_string()]),
+            "math::ceil",
+            OnionKeyPool::create(vec!["value".into()]),
             &ceil,
         ),
     );
@@ -470,8 +470,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("value"),
             OnionFastMap::default(),
-            "math::round".to_string(),
-            OnionKeyPool::create(vec!["value".to_string()]),
+            "math::round",
+            OnionKeyPool::create(vec!["value".into()]),
             &round,
         ),
     );
@@ -480,8 +480,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("value"),
             OnionFastMap::default(),
-            "math::asin".to_string(),
-            OnionKeyPool::create(vec!["value".to_string()]),
+            "math::asin",
+            OnionKeyPool::create(vec!["value".into()]),
             &asin,
         ),
     );
@@ -490,8 +490,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("value"),
             OnionFastMap::default(),
-            "math::acos".to_string(),
-            OnionKeyPool::create(vec!["value".to_string()]),
+            "math::acos",
+            OnionKeyPool::create(vec!["value".into()]),
             &acos,
         ),
     );
@@ -500,8 +500,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("value"),
             OnionFastMap::default(),
-            "math::atan".to_string(),
-            OnionKeyPool::create(vec!["value".to_string()]),
+            "math::atan",
+            OnionKeyPool::create(vec!["value".into()]),
             &atan,
         ),
     );
@@ -510,13 +510,16 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "pow".to_string(),
         wrap_native_function(
-            LambdaParameter::Multiple(vec![
-                LambdaParameter::top("base"),
-                LambdaParameter::top("exponent"),
-            ]),
+            LambdaParameter::Multiple(
+                [
+                    LambdaParameter::top("base"),
+                    LambdaParameter::top("exponent"),
+                ]
+                .into(),
+            ),
             OnionFastMap::default(),
-            "math::pow".to_string(),
-            OnionKeyPool::create(vec!["base".to_string(), "exponent".to_string()]),
+            "math::pow",
+            OnionKeyPool::create(vec!["base".into(), "exponent".into()]),
             &pow,
         ),
     );

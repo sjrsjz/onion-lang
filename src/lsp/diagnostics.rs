@@ -1,21 +1,30 @@
-use log::{debug, error, info};
+use std::collections::HashMap;
+use std::panic::catch_unwind;
+
+use log::{error, info};
 use onion_frontend::parser::analyzer::{
-    analyze_ast, auto_capture_and_rebuild, expand_macro, AnalysisResult,
+    AnalysisResult, AnalyzeError, AnalyzeWarn, analyze_ast, auto_capture_and_rebuild,
 };
-use onion_frontend::parser::ast::{ast_token_stream, build_ast, ASTNode, ParserError};
-use onion_frontend::parser::lexer::{lexer, Token};
-use onion_frontend::utils::cycle_detector;
+use onion_frontend::parser::ast::{ASTNode, ASTNodeType, ParserError, ast_token_stream, build_ast};
+use onion_frontend::parser::comptime::solver::{ComptimeError, ComptimeSolver, ComptimeWarning};
+use onion_frontend::parser::lexer::{Token, lexer};
+use onion_frontend::utils::cycle_detector::CycleDetector;
 use url::Url;
 
 use super::document::TextDocument;
 use super::protocol::*;
-use super::semantic::{do_semantic, SemanticTokenTypes};
+use super::semantic::{SemanticTokenTypes, do_semantic};
 use onion_frontend::dir_stack::DirectoryStack;
 
-/// Validates the document, generating diagnostics and semantic tokens.
+// =======================================================================
+//                       主验证函数 (Main Validation Function)
+// =======================================================================
+
+/// 使用现代化的、感知编译时计算的编译管线来验证文档。
 pub fn validate_document(
     document: &TextDocument,
 ) -> (Vec<Diagnostic>, Option<Vec<SemanticTokenTypes>>) {
+    // 返回 SemanticToken
     if document.content.is_empty() {
         info!(
             "Document content is empty, skipping validation: {}",
@@ -24,182 +33,257 @@ pub fn validate_document(
         return (Vec::new(), None);
     }
 
-    info!("Performing lexical analysis: {}", document.uri);
-    let tokens = match std::panic::catch_unwind(|| lexer::tokenize(&document.content)) {
-        Ok(tokens) => tokens,
-        Err(e) => {
-            error!("Panic during lexical analysis: {e:?}");
-            let diag = Diagnostic {
-                range: Range::default_range(),
-                severity: Some(DiagnosticSeverity::Error),
-                source: Some("onion-lsp".to_string()),
-                message: "Lexical analysis failed unexpectedly. This may be a bug in the lexer."
-                    .to_string(),
-                ..Default::default()
-            };
-            return (vec![diag], None);
+    // --- 1. 词法和语法分析 ---
+    info!(
+        "Performing lexical and syntax analysis for: {}",
+        document.uri
+    );
+    let (ast, tokens) = match parse_source_to_ast_with_tokens(&document.content, document) {
+        Ok(res) => res,
+        Err(diag) => return (vec![diag], None),
+    };
+    info!("Syntax analysis successful.");
+
+    // --- 2. 初始化编译时环境 ---
+    let mut diagnostics = Vec::new();
+    let solver_result = new_solver_for_file(&document.uri);
+    let mut comptime_solver = match solver_result {
+        Ok(solver) => solver,
+        Err(diag) => return (vec![diag], None),
+    };
+
+    // --- 3. 编译时求解与宏展开 ---
+    info!("Starting compile-time solving for: {}", document.uri);
+    let solved_ast = match comptime_solver.solve(&ast) {
+        Ok(solved_ast) => solved_ast,
+        Err(_) => {
+            error!("Comptime solving failed for: {}", document.uri);
+            diagnostics.extend(process_comptime_results(&comptime_solver, document));
+            // 尽力而为：即使编译时求解失败，也尝试对原始 AST 进行语义高亮。
+            let semantic_tokens = do_semantic(&document.content, &ast, &tokens).ok();
+            return (diagnostics, semantic_tokens);
         }
     };
-    info!("Lexical analysis complete, {} tokens found", tokens.len());
+    // 收集 comptime 阶段成功后的所有诊断信息（主要是警告）
+    diagnostics.extend(process_comptime_results(&comptime_solver, document));
+    info!("Compile-time solving successful.");
 
-    let filtered_tokens = lexer::reject_comment(&tokens);
-    debug!("{} tokens after filtering comments", filtered_tokens.len());
-    if filtered_tokens.is_empty() {
-        return (Vec::new(), None);
+    // --- 4. 最终语义分析 ---
+    info!("Starting final semantic analysis for: {}", document.uri);
+    let (_required_vars, final_ast) = auto_capture_and_rebuild(&solved_ast);
+    let analysis_result = analyze_ast(&final_ast, None); // 假设 analyze_ast 仍然需要
+    diagnostics.extend(process_analysis_results(&analysis_result, document));
+    info!("Final semantic analysis complete.");
+
+    // --- 5. 语义高亮 ---
+    info!("Starting semantic highlighting analysis.");
+    let semantic_tokens = match do_semantic(&document.content, &final_ast, &tokens) {
+        Ok(tokens) => {
+            info!(
+                "Semantic highlighting successful, {} tokens generated",
+                tokens.len()
+            );
+            Some(tokens)
+        }
+        Err(e) => {
+            error!("Semantic highlighting failed: {}", e);
+            None
+        }
+    };
+
+    (diagnostics, semantic_tokens)
+}
+
+// =======================================================================
+//                        核心辅助结构与函数
+// =======================================================================
+
+// 为 ComptimeSolver 实现一个专门用于 LSP 的构造函数
+pub fn new_solver_for_file(uri: &str) -> Result<ComptimeSolver, Diagnostic> {
+    let file_path = Url::parse(uri)
+        .map_err(|_| Diagnostic {
+            range: Range::default_range(),
+            severity: Some(DiagnosticSeverity::Error),
+            message: format!("Invalid URI: {}", uri),
+            ..Default::default()
+        })?
+        .to_file_path()
+        .map_err(|_| Diagnostic {
+            range: Range::default_range(),
+            severity: Some(DiagnosticSeverity::Error),
+            message: format!("URI is not a valid file path: {}", uri),
+            ..Default::default()
+        })?;
+
+    let parent_dir = file_path.parent();
+    let _dir_stack = DirectoryStack::new(parent_dir).map_err(|e| Diagnostic {
+        range: Range::default_range(),
+        severity: Some(DiagnosticSeverity::Error),
+        message: format!("Failed to initialize directory stack: {}", e),
+        ..Default::default()
+    })?;
+
+    let import_cycle_detector = CycleDetector::new()
+        .enter(file_path)
+        .expect("Cycle detector should not fail on the first entry");
+
+    // 假设 ComptimeSolver::new 的最终签名是这样
+    Ok(ComptimeSolver::new(HashMap::new(), import_cycle_detector))
+}
+
+/// 将 ComptimeSolver 的结果转换为 LSP Diagnostics 的统一入口。
+fn process_comptime_results(solver: &ComptimeSolver, document: &TextDocument) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
+
+    for error in solver.errors() {
+        diagnostics.extend(comptime_error_to_diagnostics(error, document));
+    }
+    for warning in solver.warnings() {
+        diagnostics.extend(comptime_warning_to_diagnostics(warning, document));
     }
 
-    info!("Starting syntax analysis");
-    // 注意：ast_token_stream::from_stream 不应 panic，如果它 panic，说明有逻辑错误
-    let gathered = ast_token_stream::from_stream(&filtered_tokens);
+    diagnostics
+}
 
-    match build_ast(gathered) {
-        Ok(ast) => {
-            info!(
-                "Document parsed successfully. Starting semantic analysis: {}",
-                document.uri
-            );
-            // Semantic analysis logic starts here
-            let mut diagnostics = Vec::new();
-
-            // Setup directory context for analysis
-            let file_path = match Url::parse(&document.uri) {
-                Ok(url) if url.scheme() == "file" => url.to_file_path().unwrap(),
-                _ => {
-                    error!("Invalid or non-file URI: {}", document.uri);
-                    return (diagnostics, None);
-                }
-            };
-            let parent_dir = file_path.parent().unwrap();
-            let mut dir_stack = match DirectoryStack::new(Some(parent_dir)) {
-                Ok(stack) => stack,
-                Err(e) => {
-                    error!("Directory stack initialization failed: {e}");
-                    diagnostics.push(Diagnostic {
-                        range: Range::default_range(),
-                        severity: Some(DiagnosticSeverity::Error),
-                        message: format!("Directory stack failed: {e}"),
-                        ..Default::default()
-                    });
-                    return (diagnostics, None);
-                }
-            };
-
-            let mut cycle_detector = cycle_detector::CycleDetector::new();
-            let file_path_str = file_path.to_str().unwrap_or_default().to_string();
-            let visit_result = cycle_detector.visit(file_path_str);
-            match visit_result {
-                Ok(mut guard) => {
-                    // --- Macro Expansion Phase ---
-                    let macro_result = expand_macro(&ast, guard.get_detector_mut(), &mut dir_stack);
-                    diagnostics.extend(process_analysis_results(&macro_result, document));
-
-                    // --- Main Analysis Phase ---
-                    let ast_after_macro = auto_capture_and_rebuild(&macro_result.result_node).1;
-                    let analysis_result = analyze_ast(
-                        &ast_after_macro,
-                        None,
-                        guard.get_detector_mut(),
-                        &mut dir_stack,
-                    );
-                    diagnostics.extend(process_analysis_results(&analysis_result, document));
-
-                    // --- Semantic Highlighting ---
-                    info!("Starting semantic highlighting analysis");
-                    let semantic_tokens =
-                        match do_semantic(&document.content, ast_after_macro, &tokens) {
-                            Ok(tokens) => {
-                                info!(
-                                    "Semantic highlighting successful, {} tokens generated",
-                                    tokens.len()
-                                );
-                                Some(tokens)
-                            }
-                            Err(e) => {
-                                error!("Semantic highlighting failed: {e}");
-                                None
-                            }
-                        };
-                    (diagnostics, semantic_tokens)
-                }
-                Err(err) => {
-                    error!("Cyclic dependency detected: {err:?}");
-                    diagnostics.push(Diagnostic {
-                        range: Range::default_range(),
-                        severity: Some(DiagnosticSeverity::Error),
-                        message: format!("Cyclic dependency detected: {err}"),
-                        ..Default::default()
-                    });
-                    (diagnostics, None)
-                }
-            }
-        }
-        Err(parse_error) => {
-            info!("Document parsing failed: {}", document.uri);
-            // 直接从结构化的 ParserError 创建诊断信息
-            let diagnostic = create_diagnostic_from_parser_error(&parse_error, document);
-            (vec![diagnostic], None)
-        }
+/// 将 ComptimeError 转换为 LSP Diagnostics。
+fn comptime_error_to_diagnostics(
+    error: &ComptimeError,
+    document: &TextDocument,
+) -> Vec<Diagnostic> {
+    match error {
+        ComptimeError::AnalysisError(errors) => errors
+            .iter()
+            .map(|e| diagnostic_from_analyze_error(e, document))
+            .collect(),
+        ComptimeError::RuntimeError(err) => vec![Diagnostic {
+            range: Range::default_range(), // 运行时错误通常没有精确位置
+            severity: Some(DiagnosticSeverity::Error),
+            message: format!("Compile-time runtime error: {}", err),
+            source: Some("onion-lsp (comptime)".to_string()),
+            ..Default::default()
+        }],
+        ComptimeError::IRGeneratorError(err) => vec![Diagnostic {
+            range: Range::default_range(),
+            severity: Some(DiagnosticSeverity::Error),
+            message: format!("Internal compiler error (IR generation): {}", err),
+            source: Some("onion-lsp (internal)".to_string()),
+            ..Default::default()
+        }],
+        ComptimeError::IRTranslatorError(err) => vec![Diagnostic {
+            range: Range::default_range(),
+            severity: Some(DiagnosticSeverity::Error),
+            message: format!("Internal compiler error (IR translation): {}", err),
+            source: Some("onion-lsp (internal)".to_string()),
+            ..Default::default()
+        }],
     }
 }
 
+/// 将 ComptimeWarning 转换为 LSP Diagnostics。
+fn comptime_warning_to_diagnostics(
+    warning: &ComptimeWarning,
+    document: &TextDocument,
+) -> Vec<Diagnostic> {
+    match warning {
+        ComptimeWarning::AnalysisWarning(warnings) => warnings
+            .iter()
+            .map(|w| diagnostic_from_analyze_warn(w, document))
+            .collect(),
+    }
+}
+
+// =======================================================================
+//                已有的、重构后的错误处理与位置计算辅助函数
+// =======================================================================
+
+/// **(新)** 将单个 AnalyzeError 转换为 Diagnostic。
+fn diagnostic_from_analyze_error(error: &AnalyzeError, document: &TextDocument) -> Diagnostic {
+    match error {
+        AnalyzeError::UndefinedVariable(node) => Diagnostic {
+            range: get_node_range(node, &document.content),
+            severity: Some(DiagnosticSeverity::Error),
+            message: format!(
+                "Undefined variable: '{}'",
+                node.start_token
+                    .as_ref()
+                    .map_or("".to_string(), |t| t.origin_token())
+            ),
+            ..Default::default()
+        },
+        AnalyzeError::InvalidMacroDefinition(node, msg) => Diagnostic {
+            range: get_node_range(node, &document.content),
+            severity: Some(DiagnosticSeverity::Error),
+            message: format!("Invalid macro definition: {}", msg),
+            ..Default::default()
+        },
+        AnalyzeError::ParserError(p_err) => create_diagnostic_from_parser_error(p_err, document),
+        AnalyzeError::DetailedError(node, msg) => Diagnostic {
+            range: get_node_range(node, &document.content),
+            severity: Some(DiagnosticSeverity::Error),
+            message: msg.clone(),
+            ..Default::default()
+        },
+    }
+}
+
+/// **(新)** 将单个 AnalyzeWarn 转换为 Diagnostic。
+fn diagnostic_from_analyze_warn(warn: &AnalyzeWarn, document: &TextDocument) -> Diagnostic {
+    match warn {
+        AnalyzeWarn::CompileError(node, msg) => Diagnostic {
+            range: get_node_range(node, &document.content),
+            severity: Some(DiagnosticSeverity::Warning),
+            message: format!("@compile warning: {}", msg),
+            ..Default::default()
+        },
+    }
+}
+
+/// 将 `AnalysisResult` trait 对象的结果转换为 Diagnostics。
 fn process_analysis_results<T: AnalysisResult>(
     output: &T,
     document: &TextDocument,
 ) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
-
-    // Process errors by calling the trait method
     for error in output.errors() {
-        let diagnostic = match error {
-            // ... the body of this match statement remains exactly the same
-            onion_frontend::parser::analyzer::AnalyzeError::UndefinedVariable(node) => Diagnostic {
-                range: get_node_range(node, &document.content),
-                severity: Some(DiagnosticSeverity::Error),
-                message: format!(
-                    "Undefined variable: '{}'",
-                    node.start_token
-                        .as_ref()
-                        .map_or("".to_string(), |t| t.origin_token())
-                ),
-                ..Default::default()
-            },
-            onion_frontend::parser::analyzer::AnalyzeError::InvalidMacroDefinition(node, msg) => {
-                Diagnostic {
-                    range: get_node_range(node, &document.content),
-                    severity: Some(DiagnosticSeverity::Error),
-                    message: format!("Invalid macro definition: {msg}"),
-                    ..Default::default()
-                }
-            }
-            onion_frontend::parser::analyzer::AnalyzeError::ParserError(p_err) => {
-                create_diagnostic_from_parser_error(p_err, document)
-            }
-            onion_frontend::parser::analyzer::AnalyzeError::DetailedError(node, msg) => {
-                Diagnostic {
-                    range: get_node_range(node, &document.content),
-                    severity: Some(DiagnosticSeverity::Error),
-                    message: msg.clone(),
-                    ..Default::default()
-                }
-            }
-        };
-        diagnostics.push(diagnostic);
+        diagnostics.push(diagnostic_from_analyze_error(error, document));
     }
-
-    // Process warnings by calling the trait method
     for warn in output.warnings() {
-        let diagnostic = match warn {
-            // ... the body of this match statement also remains the same
-            onion_frontend::parser::analyzer::AnalyzeWarn::CompileError(node, msg) => Diagnostic {
-                range: get_node_range(node, &document.content),
-                severity: Some(DiagnosticSeverity::Warning),
-                message: format!("@compile warning: {msg}"),
-                ..Default::default()
-            },
-        };
-        diagnostics.push(diagnostic);
+        diagnostics.push(diagnostic_from_analyze_warn(warn, document));
     }
     diagnostics
+}
+
+/// 解析源码文本为 AST，并同时返回原始 Tokens。
+pub fn parse_source_to_ast_with_tokens(
+    source: &str,
+    document: &TextDocument,
+) -> Result<(ASTNode, Vec<Token>), Diagnostic> {
+    let tokens = match catch_unwind(|| lexer::tokenize(source)) {
+        Ok(tokens) => tokens,
+        Err(e) => {
+            error!("Panic during lexical analysis: {:?}", e);
+            return Err(Diagnostic {
+                range: Range::default_range(),
+                severity: Some(DiagnosticSeverity::Error),
+                source: Some("onion-lsp".to_string()),
+                message: "Lexical analysis failed unexpectedly (panic). This is a bug.".to_string(),
+                ..Default::default()
+            });
+        }
+    };
+
+    let filtered_tokens = lexer::reject_comment(&tokens);
+    if filtered_tokens.is_empty() {
+        return Ok((
+            ASTNode::new(ASTNodeType::Expressions, None, None, Some(vec![])),
+            tokens,
+        ));
+    }
+
+    let gathered = ast_token_stream::from_stream(&filtered_tokens);
+    build_ast(gathered)
+        .map(|ast| (ast, tokens))
+        .map_err(|parse_error| create_diagnostic_from_parser_error(&parse_error, document))
 }
 /// **(Rewritten Helper)** Creates an LSP Diagnostic from a ParserError.
 fn create_diagnostic_from_parser_error(
@@ -308,20 +392,4 @@ fn get_line_col_from_char_pos(text: &str, char_pos: usize) -> (usize, usize) {
     }
     let column = char_pos - last_newline_char_pos;
     (line, column)
-}
-
-// Add a default implementation for Range to simplify Diagnostic creation
-impl Range {
-    fn default_range() -> Self {
-        Self {
-            start: Position {
-                line: 0,
-                character: 0,
-            },
-            end: Position {
-                line: 0,
-                character: 1,
-            },
-        }
-    }
 }

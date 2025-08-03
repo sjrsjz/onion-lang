@@ -1,19 +1,14 @@
 use std::collections::{HashMap, HashSet}; // Add HashSet
 use std::io::{BufRead, Write};
-use std::panic;
-use std::path::Path;
+use std::panic::{self, AssertUnwindSafe, catch_unwind};
 use std::sync::{Arc, Mutex}; // Add panic module
 
 use log::{debug, error, info, warn};
-use onion_frontend::utils::cycle_detector;
 use serde_json::Value;
-use url::Url;
 
+use crate::lsp::diagnostics::{self, new_solver_for_file};
 use crate::lsp::semantic::encode_semantic_tokens;
-use onion_frontend::dir_stack::DirectoryStack;
-use onion_frontend::parser::analyzer::{self, auto_capture_and_rebuild};
-use onion_frontend::parser::ast::build_ast;
-use onion_frontend::parser::lexer;
+use onion_frontend::parser::analyzer::{self, AssumedType, auto_capture_and_rebuild};
 
 use super::capabilities::initialize_capabilities;
 use super::document::TextDocument;
@@ -40,7 +35,6 @@ pub struct LspServer {
     /// Workspace root directory
     root_uri: Option<String>,
 }
-
 impl LspServer {
     /// Creates a new LSP server instance
     pub fn new() -> Self {
@@ -104,9 +98,6 @@ impl LspServer {
             params.text_document.text,
         );
         self.documents.insert(uri.clone(), document);
-
-        // Trigger document validation
-        self.validate_document(&uri);
         info!("Document opened: {uri}");
     }
 
@@ -118,73 +109,29 @@ impl LspServer {
             uri, params.text_document.version
         );
 
-        // Get or create document
-        let document = if let Some(doc) = self.documents.get_mut(&uri) {
-            info!("Updating existing document");
-            doc
-        } else {
+        let document = self.documents.entry(uri.clone()).or_insert_with(|| {
             info!("Document not found, creating new document: {uri}");
-            // Determine initial content
-            let initial_content = if !params.content_changes.is_empty() {
-                match &params.content_changes[0] {
-                    TextDocumentContentChangeEvent::Full { text } => text.clone(),
-                    TextDocumentContentChangeEvent::Incremental { .. } => String::new(),
-                }
-            } else {
-                String::new()
-            };
+            TextDocument::new(uri, "onion".to_string(), 0, String::new())
+        });
 
-            let doc = TextDocument::new(
-                uri.clone(),
-                "onion".to_string(), // Assuming language is onion
-                params.text_document.version,
-                initial_content,
-            );
-
-            self.documents.insert(uri.clone(), doc);
-            self.documents.get_mut(&uri).unwrap()
-        };
-
-        // Apply all changes
-        for (i, change) in params.content_changes.iter().enumerate() {
+        for change in params.content_changes {
             match change {
                 TextDocumentContentChangeEvent::Full { text } => {
-                    info!(
-                        "Applying full change #{}: content length {} bytes",
-                        i,
-                        text.len()
-                    );
-                    document.update_content(text.clone());
+                    document.update_content(text);
                 }
                 TextDocumentContentChangeEvent::Incremental { range, text } => {
-                    info!(
-                        "Applying incremental change #{}: range [{},{}]-[{},{}], text length {} bytes",
-                        i,
-                        range.start.line,
-                        range.start.character,
-                        range.end.line,
-                        range.end.character,
-                        text.len()
-                    );
-                    document.apply_incremental_change(range.clone(), text.clone());
+                    document.apply_incremental_change(range, text);
                 }
             }
         }
 
-        // Update document version
-        let old_version = document.version;
         document.version = params.text_document.version;
-        info!(
-            "Document version updated from {} to {}",
-            old_version, document.version
-        );
-
-        // Print current document content (for debugging)
         debug!(
             "Updated document content (first 100 chars): {}",
             &document.content.chars().take(100).collect::<String>()
         );
     }
+
     /// Handles document close notification
     pub fn did_close(&mut self, params: DidCloseTextDocumentParams) {
         info!("Document closed: {}", params.text_document.uri);
@@ -194,7 +141,8 @@ impl LspServer {
         }
     }
 
-    // Validates document and sends diagnostic messages
+    /// Validates a document and returns diagnostics and semantic tokens.
+    /// This is a thin wrapper that calls the main validation logic.
     fn validate_document(
         &self,
         uri: &str,
@@ -207,23 +155,27 @@ impl LspServer {
                 document.content.len()
             );
 
-            // Generate diagnostics and semantic tokens
-            match std::panic::catch_unwind(|| super::diagnostics::validate_document(document)) {
+            match catch_unwind(AssertUnwindSafe(|| {
+                diagnostics::validate_document(document)
+            })) {
                 Ok((diagnostics, semantic_tokens)) => {
+                    let st_len = semantic_tokens.as_ref().map_or(0, |t| t.len());
                     info!(
-                        "Validation complete: {} diagnostics generated",
-                        diagnostics.len()
+                        "Validation complete: {} diagnostics, {} semantic tokens generated",
+                        diagnostics.len(),
+                        st_len
                     );
-                    if let Some(tokens) = &semantic_tokens {
-                        info!("Semantic highlighting: {} tokens generated", tokens.len());
-                    } else {
-                        info!("Semantic highlighting: Failed to generate tokens");
-                    }
                     Some((diagnostics, semantic_tokens))
                 }
                 Err(e) => {
-                    error!("Panic during validation: {e:?}");
-                    Some((vec![], None)) // Return empty diagnostics list and no semantic tokens
+                    error!("Panic during validation: {:?}", e);
+                    let diag = Diagnostic {
+                        range: Range::default_range(),
+                        severity: Some(DiagnosticSeverity::Error),
+                        message: "Validation process failed unexpectedly (panic). This is a bug in the LSP.".to_string(),
+                        ..Default::default()
+                    };
+                    Some((vec![diag], None))
                 }
             }
         } else {
@@ -231,6 +183,7 @@ impl LspServer {
             None
         }
     }
+
     /// Handles auto-completion request
     pub fn completion(
         &self,
@@ -239,9 +192,7 @@ impl LspServer {
         let uri = params.text_document.uri.clone();
 
         if let Some(document) = self.documents.get(&uri) {
-            // Calculate completion items from document content and position
             let items = self.calculate_completions(document, params.position);
-
             Ok(CompletionResponse::List(items))
         } else {
             Err(ResponseError {
@@ -293,7 +244,7 @@ impl LspServer {
             "launch",
             "spawn",
             "self",
-            "this"
+            "this",
         ];
         for keyword in keywords {
             items.push(CompletionItem {
@@ -333,185 +284,67 @@ impl LspServer {
             });
         }
 
-        // --- Use analyzer to get variable context ---
-        // 1. Parse AST
-        let lex_result = lexer::lexer::tokenize(&document.content);
-        let lex_result = lexer::lexer::reject_comment(&lex_result);
-        let parse_result = build_ast(&lex_result);
-        if let Ok(ast) = parse_result {
-            // 2. Convert LSP Position to byte offset
-            if let Some(byte_offset) = position_to_byte_offset(&document.content, position.clone())
-            {
-                // 1. Parse URI
-                let file_path = match Url::parse(&document.uri) {
-                    Ok(url) if url.scheme() == "file" => {
-                        match url.to_file_path() {
-                            Ok(path) => path,
-                            Err(_) => {
-                                error!("Failed to convert URI to file path: {}", document.uri);
-                                return vec![]; // Return empty list
-                            }
-                        }
-                    }
-                    _ => {
-                        error!("Invalid URI scheme: {}", document.uri);
-                        return vec![]; // Return empty list
-                    }
-                };
-
-                // 2. Get parent directory
-                let parent_dir = match file_path.parent() {
-                    Some(dir) => dir.to_path_buf(),
-                    None => {
-                        error!(
-                            "Failed to get parent directory for file: {}",
-                            file_path.display()
-                        );
-                        return vec![]; // Return empty list
-                    }
-                };
-                let mut dir_stack = DirectoryStack::new(Some(&parent_dir)).unwrap();
-
-                let mut cycle_detector = cycle_detector::CycleDetector::new();
-                let mut visit_result = match cycle_detector.visit(
-                    match dir_stack.translate(match file_path.to_str() {
-                        Some(path) => Path::new(path),
-                        None => {
-                            error!(
-                                "Failed to convert file path to string: {}",
-                                file_path.display()
-                            );
-                            return vec![]; // Return empty list
-                        }
-                    }) {
-                        Ok(path) => path.to_str().unwrap_or("").to_string(),
-                        Err(e) => {
-                            error!("Failed to get absolute path: {e}");
-                            return vec![]; // Return empty list
-                        }
-                    }
-                    .to_string(),
-                ) {
-                    Ok(result) => result,
-                    Err(e) => {
-                        error!("Cycle detection failed: {e}");
-                        return vec![]; // Return empty list
-                    }
-                };
-
-                let macro_result =
-                    analyzer::expand_macro(&ast, visit_result.get_detector_mut(), &mut dir_stack);
-                if !macro_result.errors.is_empty() {
-                    error!(
-                        "Macro expansion errors: {}",
-                        macro_result
-                            .errors
-                            .iter()
-                            .map(|e| e.to_string())
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    );
-                }
-                if !macro_result.warnings.is_empty() {
-                    warn!(
-                        "Macro expansion warnings: {}",
-                        macro_result
-                            .warnings
-                            .iter()
-                            .map(|w| w.to_string())
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    );
-                }
-                let ast = auto_capture_and_rebuild(&macro_result.result_node).1;
-
-                // 3. Call analyzer to get context at specific position
-                let analysis_output = analyzer::analyze_ast(
-                    &ast,
-                    Some(byte_offset),
-                    visit_result.get_detector_mut(),
-                    &mut dir_stack,
-                );
-
-                // 4. If analyzer captured context at breakpoint, extract variables
-                if let Some(context) = analysis_output.context_at_break {
-                    // Iterate scope frames from inner to outer
-                    for context in context.all_contexts().iter().rev() {
-                        for frame in context.iter().rev() {
-                            for var in &frame.variables {
-                                // Add to HashSet to ensure uniqueness
-                                if unique_vars.insert(var.name.clone()) {
-                                    // Determine CompletionItemKind and detail based on variable type
-                                    let (kind, detail) = match var.assumed_type {
-                                        analyzer::AssumedType::Lambda => (
-                                            CompletionItemKind::Function,
-                                            format!("Function: {}", var.name),
-                                        ),
-                                        analyzer::AssumedType::String => (
-                                            CompletionItemKind::Variable,
-                                            format!("String: {}", var.name),
-                                        ),
-                                        analyzer::AssumedType::Number => (
-                                            CompletionItemKind::Variable,
-                                            format!("Number: {}", var.name),
-                                        ),
-                                        analyzer::AssumedType::Boolean => (
-                                            CompletionItemKind::Variable,
-                                            format!("Boolean: {}", var.name),
-                                        ),
-                                        analyzer::AssumedType::Base64 => (
-                                            CompletionItemKind::Variable,
-                                            format!("Base64: {}", var.name),
-                                        ),
-                                        analyzer::AssumedType::Null => (
-                                            CompletionItemKind::Variable,
-                                            format!("Null: {}", var.name),
-                                        ),
-                                        analyzer::AssumedType::Undefined => (
-                                            CompletionItemKind::Variable,
-                                            format!("Undefined: {}", var.name),
-                                        ),
-                                        analyzer::AssumedType::Tuple => (
-                                            CompletionItemKind::Class,
-                                            format!("Tuple: {}", var.name),
-                                        ),
-                                        analyzer::AssumedType::KeyVal => (
-                                            CompletionItemKind::Variable,
-                                            format!("KeyValue: {}", var.name),
-                                        ),
-                                        // Add more branches for other types
-                                        _ => (
-                                            CompletionItemKind::Variable,
-                                            format!(
-                                                "Variable: {} (type: {:?})",
-                                                var.name, var.assumed_type
-                                            ),
-                                        ),
-                                    };
-
-                                    items.push(CompletionItem {
-                                        label: var.name.clone(),
-                                        kind: Some(kind),
-                                        detail: Some(detail),
-                                        documentation: None, // Consider adding type-based documentation in the future
-                                        insert_text: Some(var.name.clone()), // For functions, might need to add '()'
-                                        other: HashMap::new(),
-                                    });
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    info!(
-                        "Analyzer did not capture context at break position {byte_offset}"
-                    );
-                }
-            } else {
-                warn!("Could not convert position {position:?} to byte offset");
+        // --- 2. Use modern compilation pipeline for contextual completions ---
+        let ast = match diagnostics::parse_source_to_ast_with_tokens(&document.content, document) {
+            Ok((ast, _)) => ast,
+            Err(_) => {
+                warn!("Failed to parse document for completion: {}", document.uri);
+                return items; // Return static items only if parsing fails
             }
-        } else {
-            warn!("Failed to parse document for completion: {}", document.uri);
-            // Parsing failed, return only keywords and built-in functions
+        };
+
+        let byte_offset = match position_to_byte_offset(&document.content, position.clone()) {
+            Some(offset) => offset,
+            None => {
+                warn!("Could not convert position {:?} to byte offset", position);
+                return items;
+            }
+        };
+
+        // --- 3. Initialize Comptime Environment (best-effort) ---
+        if let Ok(mut solver) = new_solver_for_file(&document.uri) {
+            // --- 4. Run Comptime Solving (best-effort) ---
+            let solved_ast = solver.solve(&ast).unwrap_or(ast);
+
+            // --- 5. Run Final Semantic Analysis to get context ---
+            let (_required_vars, final_ast) = auto_capture_and_rebuild(&solved_ast);
+
+            // Call analyze_ast with the correct, simplified signature
+            let analysis_output = analyzer::analyze_ast(&final_ast, Some(byte_offset));
+
+            // --- 6. Extract variables from captured context ---
+            if let Some(context) = analysis_output.context_at_break {
+                for context_frames in context.all_contexts().iter().rev() {
+                    for frame in context_frames.iter().rev() {
+                        // frame.variables is a Vec<Variable>
+                        for (var_name, var) in &frame.variables {
+                            if unique_vars.insert(var_name.clone()) {
+                                let (kind, detail) = match var.assumed_type {
+                                    AssumedType::Lambda => (
+                                        CompletionItemKind::Function,
+                                        format!("Function: {}", var_name),
+                                    ),
+                                    _ => (
+                                        CompletionItemKind::Variable,
+                                        format!(
+                                            "Variable: {} (type: {:?})",
+                                            var_name, var.assumed_type
+                                        ),
+                                    ),
+                                };
+                                items.push(CompletionItem {
+                                    label: var_name.clone(),
+                                    kind: Some(kind),
+                                    detail: Some(detail),
+                                    documentation: None,
+                                    insert_text: Some(var_name.clone()),
+                                    other: HashMap::new(),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         items

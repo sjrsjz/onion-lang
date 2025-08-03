@@ -19,7 +19,7 @@ fn read_file(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get(&"path".to_string()) else {
+    let Some(path_obj) = argument.get("path") else {
         return Err(RuntimeError::DetailedError(
             "read_file requires a 'path' argument".into(),
         ));
@@ -32,9 +32,7 @@ fn read_file(
                 format!("Failed to read file '{path_str}': {e}").into(),
             )),
         },
-        _ => Err(RuntimeError::InvalidType(
-            "Path must be a string".into(),
-        )),
+        _ => Err(RuntimeError::InvalidType("Path must be a string".into())),
     })
 }
 
@@ -43,12 +41,12 @@ fn write_file(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get(&"path".to_string()) else {
+    let Some(path_obj) = argument.get("path") else {
         return Err(RuntimeError::DetailedError(
             "write_file requires a 'path' argument".into(),
         ));
     };
-    let Some(content_obj) = argument.get(&"content".to_string()) else {
+    let Some(content_obj) = argument.get("content") else {
         return Err(RuntimeError::DetailedError(
             "write_file requires a 'content' argument"
                 .to_string()
@@ -59,9 +57,7 @@ fn write_file(
     let path_str = match path_obj.weak() {
         OnionObject::String(s) => s.clone(),
         _ => {
-            return Err(RuntimeError::InvalidType(
-                "Path must be a string".into(),
-            ));
+            return Err(RuntimeError::InvalidType("Path must be a string".into()));
         }
     };
 
@@ -88,12 +84,12 @@ fn append_file(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get(&"path".to_string()) else {
+    let Some(path_obj) = argument.get("path") else {
         return Err(RuntimeError::DetailedError(
             "append_file requires a 'path' argument".into(),
         ));
     };
-    let Some(content_obj) = argument.get(&"content".to_string()) else {
+    let Some(content_obj) = argument.get("content") else {
         return Err(RuntimeError::DetailedError(
             "append_file requires a 'content' argument"
                 .to_string()
@@ -104,9 +100,7 @@ fn append_file(
     let path_str = match path_obj.weak() {
         OnionObject::String(s) => s.clone(),
         _ => {
-            return Err(RuntimeError::InvalidType(
-                "Path must be a string".into(),
-            ));
+            return Err(RuntimeError::InvalidType("Path must be a string".into()));
         }
     };
 
@@ -142,7 +136,7 @@ fn remove_file(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get(&"path".to_string()) else {
+    let Some(path_obj) = argument.get("path") else {
         return Err(RuntimeError::DetailedError(
             "remove_file requires a 'path' argument".into(),
         ));
@@ -155,9 +149,7 @@ fn remove_file(
                 format!("Failed to remove file '{path_str}': {e}").into(),
             )),
         },
-        _ => Err(RuntimeError::InvalidType(
-            "Path must be a string".into(),
-        )),
+        _ => Err(RuntimeError::InvalidType("Path must be a string".into())),
     }
 }
 
@@ -166,12 +158,12 @@ fn copy_file(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(src_obj) = argument.get(&"src".to_string()) else {
+    let Some(src_obj) = argument.get("src") else {
         return Err(RuntimeError::DetailedError(
             "copy_file requires a 'src' argument".into(),
         ));
     };
-    let Some(dest_obj) = argument.get(&"dest".to_string()) else {
+    let Some(dest_obj) = argument.get("dest") else {
         return Err(RuntimeError::DetailedError(
             "copy_file requires a 'dest' argument".into(),
         ));
@@ -199,12 +191,12 @@ fn rename_file(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(src_obj) = argument.get(&"src".to_string()) else {
+    let Some(src_obj) = argument.get("src") else {
         return Err(RuntimeError::DetailedError(
             "rename_file requires a 'src' argument".into(),
         ));
     };
-    let Some(dest_obj) = argument.get(&"dest".to_string()) else {
+    let Some(dest_obj) = argument.get("dest") else {
         return Err(RuntimeError::DetailedError(
             "rename_file requires a 'dest' argument".into(),
         ));
@@ -232,7 +224,7 @@ fn create_dir(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get(&"path".to_string()) else {
+    let Some(path_obj) = argument.get("path") else {
         return Err(RuntimeError::DetailedError(
             "create_dir requires a 'path' argument".into(),
         ));
@@ -245,9 +237,7 @@ fn create_dir(
                 format!("Failed to create directory '{path_str}': {e}").into(),
             )),
         },
-        _ => Err(RuntimeError::InvalidType(
-            "Path must be a string".into(),
-        )),
+        _ => Err(RuntimeError::InvalidType("Path must be a string".into())),
     }
 }
 
@@ -256,7 +246,7 @@ fn create_dir_all(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get(&"path".to_string()) else {
+    let Some(path_obj) = argument.get("path") else {
         return Err(RuntimeError::DetailedError(
             "create_dir_all requires a 'path' argument"
                 .to_string()
@@ -271,9 +261,7 @@ fn create_dir_all(
                 format!("Failed to create directories '{path_str}': {e}").into(),
             )),
         },
-        _ => Err(RuntimeError::InvalidType(
-            "Path must be a string".into(),
-        )),
+        _ => Err(RuntimeError::InvalidType("Path must be a string".into())),
     }
 }
 
@@ -282,7 +270,7 @@ fn remove_dir(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get(&"path".to_string()) else {
+    let Some(path_obj) = argument.get("path") else {
         return Err(RuntimeError::DetailedError(
             "remove_dir requires a 'path' argument".into(),
         ));
@@ -295,9 +283,7 @@ fn remove_dir(
                 format!("Failed to remove directory '{path_str}': {e}").into(),
             )),
         },
-        _ => Err(RuntimeError::InvalidType(
-            "Path must be a string".into(),
-        )),
+        _ => Err(RuntimeError::InvalidType("Path must be a string".into())),
     }
 }
 
@@ -306,7 +292,7 @@ fn remove_dir_all(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get(&"path".to_string()) else {
+    let Some(path_obj) = argument.get("path") else {
         return Err(RuntimeError::DetailedError(
             "remove_dir_all requires a 'path' argument"
                 .to_string()
@@ -321,9 +307,7 @@ fn remove_dir_all(
                 format!("Failed to remove directory and its contents '{path_str}': {e}").into(),
             )),
         },
-        _ => Err(RuntimeError::InvalidType(
-            "Path must be a string".into(),
-        )),
+        _ => Err(RuntimeError::InvalidType("Path must be a string".into())),
     }
 }
 
@@ -332,7 +316,7 @@ fn read_dir(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get(&"path".to_string()) else {
+    let Some(path_obj) = argument.get("path") else {
         return Err(RuntimeError::DetailedError(
             "read_dir requires a 'path' argument".into(),
         ));
@@ -362,9 +346,7 @@ fn read_dir(
                 format!("Failed to read directory '{path_str}': {e}").into(),
             )),
         },
-        _ => Err(RuntimeError::InvalidType(
-            "Path must be a string".into(),
-        )),
+        _ => Err(RuntimeError::InvalidType("Path must be a string".into())),
     }
 }
 
@@ -373,7 +355,7 @@ fn file_metadata(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get(&"path".to_string()) else {
+    let Some(path_obj) = argument.get("path") else {
         return Err(RuntimeError::DetailedError(
             "file_metadata requires a 'path' argument"
                 .to_string()
@@ -416,9 +398,7 @@ fn file_metadata(
                 format!("Failed to get metadata for '{path_str}': {e}").into(),
             )),
         },
-        _ => Err(RuntimeError::InvalidType(
-            "Path must be a string".into(),
-        )),
+        _ => Err(RuntimeError::InvalidType("Path must be a string".into())),
     }
 }
 
@@ -427,7 +407,7 @@ fn exists(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get(&"path".to_string()) else {
+    let Some(path_obj) = argument.get("path") else {
         return Err(RuntimeError::DetailedError(
             "exists requires a 'path' argument".into(),
         ));
@@ -438,9 +418,7 @@ fn exists(
             let exists = Path::new(path_str.as_ref()).exists();
             Ok(OnionObject::Boolean(exists).stabilize())
         }
-        _ => Err(RuntimeError::InvalidType(
-            "Path must be a string".into(),
-        )),
+        _ => Err(RuntimeError::InvalidType("Path must be a string".into())),
     }
 }
 
@@ -449,7 +427,7 @@ fn read_text(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get(&"path".to_string()) else {
+    let Some(path_obj) = argument.get("path") else {
         return Err(RuntimeError::DetailedError(
             "read_text requires a 'path' argument".into(),
         ));
@@ -458,9 +436,7 @@ fn read_text(
     let path_str = match path_obj.weak() {
         OnionObject::String(s) => s,
         _ => {
-            return Err(RuntimeError::InvalidType(
-                "Path must be a string".into(),
-            ));
+            return Err(RuntimeError::InvalidType("Path must be a string".into()));
         }
     };
 
@@ -482,12 +458,12 @@ fn write_text(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get(&"path".to_string()) else {
+    let Some(path_obj) = argument.get("path") else {
         return Err(RuntimeError::DetailedError(
             "write_text requires a 'path' argument".into(),
         ));
     };
-    let Some(content_obj) = argument.get(&"content".to_string()) else {
+    let Some(content_obj) = argument.get("content") else {
         return Err(RuntimeError::DetailedError(
             "write_text requires a 'content' argument"
                 .to_string()
@@ -517,12 +493,12 @@ fn append_text(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get(&"path".to_string()) else {
+    let Some(path_obj) = argument.get("path") else {
         return Err(RuntimeError::DetailedError(
             "append_text requires a 'path' argument".into(),
         ));
     };
-    let Some(content_obj) = argument.get(&"content".to_string()) else {
+    let Some(content_obj) = argument.get("content") else {
         return Err(RuntimeError::DetailedError(
             "append_text requires a 'content' argument"
                 .to_string()
@@ -566,8 +542,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("path"),
             OnionFastMap::default(),
-            "fs::read_file".to_string(),
-            OnionKeyPool::create(vec!["path".to_string()]),
+            "fs::read_file",
+            OnionKeyPool::create(vec!["path".into()]),
             &read_file,
         ),
     );
@@ -576,8 +552,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("path"),
             OnionFastMap::default(),
-            "fs::read_text".to_string(),
-            OnionKeyPool::create(vec!["path".to_string()]),
+            "fs::read_text",
+            OnionKeyPool::create(vec!["path".into()]),
             &read_text,
         ),
     );
@@ -586,8 +562,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("path"),
             OnionFastMap::default(),
-            "fs::remove_file".to_string(),
-            OnionKeyPool::create(vec!["path".to_string()]),
+            "fs::remove_file",
+            OnionKeyPool::create(vec!["path".into()]),
             &remove_file,
         ),
     );
@@ -596,8 +572,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("path"),
             OnionFastMap::default(),
-            "fs::create_dir".to_string(),
-            OnionKeyPool::create(vec!["path".to_string()]),
+            "fs::create_dir",
+            OnionKeyPool::create(vec!["path".into()]),
             &create_dir,
         ),
     );
@@ -606,8 +582,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("path"),
             OnionFastMap::default(),
-            "fs::create_dir_all".to_string(),
-            OnionKeyPool::create(vec!["path".to_string()]),
+            "fs::create_dir_all",
+            OnionKeyPool::create(vec!["path".into()]),
             &create_dir_all,
         ),
     );
@@ -616,8 +592,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("path"),
             OnionFastMap::default(),
-            "fs::remove_dir".to_string(),
-            OnionKeyPool::create(vec!["path".to_string()]),
+            "fs::remove_dir",
+            OnionKeyPool::create(vec!["path".into()]),
             &remove_dir,
         ),
     );
@@ -626,8 +602,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("path"),
             OnionFastMap::default(),
-            "fs::remove_dir_all".to_string(),
-            OnionKeyPool::create(vec!["path".to_string()]),
+            "fs::remove_dir_all",
+            OnionKeyPool::create(vec!["path".into()]),
             &remove_dir_all,
         ),
     );
@@ -636,8 +612,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("path"),
             OnionFastMap::default(),
-            "fs::read_dir".to_string(),
-            OnionKeyPool::create(vec!["path".to_string()]),
+            "fs::read_dir",
+            OnionKeyPool::create(vec!["path".into()]),
             &read_dir,
         ),
     );
@@ -646,8 +622,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("path"),
             OnionFastMap::default(),
-            "fs::file_metadata".to_string(),
-            OnionKeyPool::create(vec!["path".to_string()]),
+            "fs::file_metadata",
+            OnionKeyPool::create(vec!["path".into()]),
             &file_metadata,
         ),
     );
@@ -656,24 +632,27 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("path"),
             OnionFastMap::default(),
-            "fs::exists".to_string(),
-            OnionKeyPool::create(vec!["path".to_string()]),
+            "fs::exists",
+            OnionKeyPool::create(vec!["path".into()]),
             &exists,
         ),
     );
 
     // --- Two-argument functions: (path, content) ---
-    let path_content_params = LambdaParameter::Multiple(vec![
-        LambdaParameter::top("path"),
-        LambdaParameter::top("content"),
-    ]);
+    let path_content_params = LambdaParameter::Multiple(
+        [
+            LambdaParameter::top("path"),
+            LambdaParameter::top("content"),
+        ]
+        .into(),
+    );
     module.insert(
         "write_file".to_string(),
         wrap_native_function(
             path_content_params.clone(),
             OnionFastMap::default(),
-            "fs::write_file".to_string(),
-            OnionKeyPool::create(vec!["path".to_string(), "content".to_string()]),
+            "fs::write_file",
+            OnionKeyPool::create(vec!["path".into(), "content".into()]),
             &write_file,
         ),
     );
@@ -682,8 +661,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             path_content_params.clone(),
             OnionFastMap::default(),
-            "fs::append_file".to_string(),
-            OnionKeyPool::create(vec!["path".to_string(), "content".to_string()]),
+            "fs::append_file",
+            OnionKeyPool::create(vec!["path".into(), "content".into()]),
             &append_file,
         ),
     );
@@ -692,8 +671,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             path_content_params.clone(),
             OnionFastMap::default(),
-            "fs::write_text".to_string(),
-            OnionKeyPool::create(vec!["path".to_string(), "content".to_string()]),
+            "fs::write_text",
+            OnionKeyPool::create(vec!["path".into(), "content".into()]),
             &write_text,
         ),
     );
@@ -702,24 +681,23 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             path_content_params, // Can move on the last use
             OnionFastMap::default(),
-            "fs::append_text".to_string(),
-            OnionKeyPool::create(vec!["path".to_string(), "content".to_string()]),
+            "fs::append_text",
+            OnionKeyPool::create(vec!["path".into(), "content".into()]),
             &append_text,
         ),
     );
 
     // --- Two-argument functions: (src, dest) ---
-    let src_dest_params = LambdaParameter::Multiple(vec![
-        LambdaParameter::top("src"),
-        LambdaParameter::top("dest"),
-    ]);
+    let src_dest_params = LambdaParameter::Multiple(
+        [LambdaParameter::top("src"), LambdaParameter::top("dest")].into(),
+    );
     module.insert(
         "copy_file".to_string(),
         wrap_native_function(
             src_dest_params.clone(),
             OnionFastMap::default(),
-            "fs::copy_file".to_string(),
-            OnionKeyPool::create(vec!["src".to_string(), "dest".to_string()]),
+            "fs::copy_file",
+            OnionKeyPool::create(vec!["src".into(), "dest".into()]),
             &copy_file,
         ),
     );
@@ -728,8 +706,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             src_dest_params, // Can move on the last use
             OnionFastMap::default(),
-            "fs::rename_file".to_string(),
-            OnionKeyPool::create(vec!["src".to_string(), "dest".to_string()]),
+            "fs::rename_file",
+            OnionKeyPool::create(vec!["src".into(), "dest".into()]),
             &rename_file,
         ),
     );

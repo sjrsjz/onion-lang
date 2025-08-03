@@ -3,20 +3,16 @@ pub mod executor;
 pub use executor::ReplExecutor;
 
 use colored::*;
-use onion_frontend::utils::cycle_detector;
 use rustyline::error::ReadlineError;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, atomic::AtomicBool};
 // Updated imports for Editor, Config, Helper, and other traits
-use rustyline::{Editor, Config, Result, Helper, Completer, Hinter, Validator};
 use rustyline::highlight::{Highlighter, MatchingBracketHighlighter};
+use rustyline::{Completer, Config, Editor, Helper, Hinter, Result, Validator};
 // Imports for the fields in ReplHelper
 use rustyline::completion::FilenameCompleter;
 use rustyline::hint::HistoryHinter;
 use rustyline::validate::MatchingBracketValidator;
-
-
-use crate::create_dir_stack;
 
 // Add this use statement
 
@@ -66,7 +62,10 @@ impl Highlighter for ReplHelper {
 
 pub fn start_repl() -> Result<()> {
     let version = env!("CARGO_PKG_VERSION");
-    println!("{}", format!("Onion Language REPL v{version}").cyan().bold());
+    println!(
+        "{}",
+        format!("Onion Language REPL v{version}").cyan().bold()
+    );
     println!("{}", "Type \'exit\' or press Ctrl+C to quit".dimmed());
     println!();
 
@@ -86,7 +85,6 @@ pub fn start_repl() -> Result<()> {
     let mut rl = Editor::with_config(config)?;
     rl.set_helper(Some(helper));
 
-
     // Load history from file
     let history_file = get_history_file();
     if let Some(ref path) = history_file {
@@ -97,7 +95,10 @@ pub fn start_repl() -> Result<()> {
     // Clone for the Ctrl-C handler
     let handler_interrupted = interrupted.clone();
     ctrlc::set_handler(move || {
-        println!("{}", "Ctrl+C received, attempting to interrupt execution...".yellow());
+        println!(
+            "{}",
+            "Ctrl+C received, attempting to interrupt execution...".yellow()
+        );
         handler_interrupted.store(true, Ordering::SeqCst);
     })
     .expect("Error setting Ctrl-C handler");
@@ -111,10 +112,7 @@ pub fn start_repl() -> Result<()> {
 
         // The prompt passed to readline is now plain text.
         // The Highlighter will color it.
-        let plain_prompt = format!(
-            "Out[{}]:= ",
-            repl_executor.history_count()
-        );
+        let plain_prompt = format!("Out[{}]:= ", repl_executor.history_count());
 
         match rl.readline(&plain_prompt) {
             Ok(line) => {
@@ -154,20 +152,9 @@ pub fn start_repl() -> Result<()> {
 
                 rl.add_history_entry(&line)?;
 
-                // Execute the code using REPL executor
-                let mut dir_stack = match create_dir_stack(None) {
-                    Ok(stack) => stack,
-                    Err(e) => {
-                        eprintln!("{} {}", "Error:".red().bold(), e);
-                        continue;
-                    }
-                };
+                let line = "@required stdlib;\n@required Out;\n".to_string() + &line;
 
-                let mut cycle_detector = cycle_detector::CycleDetector::new();
-
-                let line = "@required stdlib;\n@required Out;\n" .to_string() + &line;
-
-                match repl_executor.execute_code(&line, &mut cycle_detector, &mut dir_stack) {
+                match repl_executor.execute_code(&line) {
                     Ok(_) => {}
                     Err(e) => {
                         eprintln!("{} {}", "Error:".red().bold(), e);
@@ -206,7 +193,10 @@ fn print_repl_help() {
     println!("  {}  \t\t- Clear the screen", "clear".yellow());
     println!("  {}  \t\t- Exit the REPL", "exit/quit".yellow());
     println!("  {}  \t\t- Show history count", "history".yellow());
-    println!("  {}  \t- Clear execution history", "clear_history".yellow());
+    println!(
+        "  {}  \t- Clear execution history",
+        "clear_history".yellow()
+    );
     println!("  - Standard library: {}", "@required stdlib".green());
     println!(
         "  - Output tuple: {} (contains execution results)",
@@ -223,11 +213,10 @@ fn print_repl_help() {
 }
 
 fn get_history_file() -> Option<std::path::PathBuf> {
-    dirs::config_dir()
-        .and_then(|mut path| {
-            path.push("onion-lang");
-            std::fs::create_dir_all(&path).ok()?;
-            path.push("repl_history.txt");
-            Some(path)
-        })
+    dirs::config_dir().and_then(|mut path| {
+        path.push("onion-lang");
+        std::fs::create_dir_all(&path).ok()?;
+        path.push("repl_history.txt");
+        Some(path)
+    })
 }

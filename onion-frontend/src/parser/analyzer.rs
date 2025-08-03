@@ -450,6 +450,15 @@ fn analyze_node(
                 AssumedType::Unknown
             }
         }
+
+        ASTNodeType::Required(var_name) => {
+            context.define_variable(var_name.clone(), Variable {
+                assumed_type: AssumedType::Unknown,
+            });
+            check_postorder_break(source, node, break_at_position, context, context_at_break);
+            AssumedType::Unknown
+        }
+
         ASTNodeType::Frame => {
             // Body 和 Boundary 在当前上下文中创建新的作用域（帧）
             context.push_frame();

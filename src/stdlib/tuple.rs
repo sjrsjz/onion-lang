@@ -17,12 +17,12 @@ fn push(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(container) = argument.get(&"container".to_string()) else {
+    let Some(container) = argument.get("container") else {
         return Err(RuntimeError::DetailedError(
             "push requires a 'container' argument".into(),
         ));
     };
-    let Some(value) = argument.get(&"value".to_string()) else {
+    let Some(value) = argument.get("value") else {
         return Err(RuntimeError::DetailedError(
             "push requires a 'value' argument".into(),
         ));
@@ -30,7 +30,7 @@ fn push(
 
     container.weak().with_data(|data| match data {
         OnionObject::Tuple(tuple) => {
-            let mut new_elements = tuple.get_elements().clone();
+            let mut new_elements = tuple.get_elements().to_vec();
             new_elements.push(value.weak().clone());
             Ok(OnionObject::Tuple(OnionTuple::new(new_elements).into()).stabilize())
         }
@@ -47,7 +47,7 @@ fn pop(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(container) = argument.get(&"container".to_string()) else {
+    let Some(container) = argument.get("container") else {
         return Err(RuntimeError::DetailedError(
             "pop requires a 'container' argument".into(),
         ));
@@ -55,7 +55,7 @@ fn pop(
 
     container.weak().with_data(|data| match data {
         OnionObject::Tuple(tuple) => {
-            let mut new_elements = tuple.get_elements().clone();
+            let mut new_elements = tuple.get_elements().to_vec();
             if new_elements.pop().is_some() {
                 Ok(OnionObject::Tuple(OnionTuple::new(new_elements).into()).stabilize())
             } else {
@@ -77,17 +77,17 @@ fn insert(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(container) = argument.get(&"container".to_string()) else {
+    let Some(container) = argument.get("container") else {
         return Err(RuntimeError::DetailedError(
             "insert requires a 'container' argument".into(),
         ));
     };
-    let Some(index_obj) = argument.get(&"index".to_string()) else {
+    let Some(index_obj) = argument.get("index") else {
         return Err(RuntimeError::DetailedError(
             "insert requires an 'index' argument".into(),
         ));
     };
-    let Some(value) = argument.get(&"value".to_string()) else {
+    let Some(value) = argument.get("value") else {
         return Err(RuntimeError::DetailedError(
             "insert requires a 'value' argument".into(),
         ));
@@ -104,7 +104,7 @@ fn insert(
                 }
             };
 
-            let mut new_elements = tuple.get_elements().clone();
+            let mut new_elements = tuple.get_elements().to_vec();
             if (index as usize) <= new_elements.len() {
                 new_elements.insert(index as usize, value.weak().clone());
                 Ok(OnionObject::Tuple(OnionTuple::new(new_elements).into()).stabilize())
@@ -127,12 +127,12 @@ fn remove(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(container) = argument.get(&"container".to_string()) else {
+    let Some(container) = argument.get("container") else {
         return Err(RuntimeError::DetailedError(
             "remove requires a 'container' argument".into(),
         ));
     };
-    let Some(index_obj) = argument.get(&"index".to_string()) else {
+    let Some(index_obj) = argument.get("index") else {
         return Err(RuntimeError::DetailedError(
             "remove requires an 'index' argument".into(),
         ));
@@ -149,7 +149,7 @@ fn remove(
                 }
             };
 
-            let mut new_elements = tuple.get_elements().clone();
+            let mut new_elements = tuple.get_elements().to_vec();
             if (index as usize) < new_elements.len() {
                 new_elements.remove(index as usize);
                 Ok(OnionObject::Tuple(OnionTuple::new(new_elements).into()).stabilize())
@@ -175,13 +175,16 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "push".to_string(),
         wrap_native_function(
-            LambdaParameter::Multiple(vec![
-                LambdaParameter::top("container"),
-                LambdaParameter::top("value"),
-            ]),
+            LambdaParameter::Multiple(
+                [
+                    LambdaParameter::top("container"),
+                    LambdaParameter::top("value"),
+                ]
+                .into(),
+            ),
             OnionFastMap::default(),
-            "tuple::push".to_string(),
-            OnionKeyPool::create(vec!["container".to_string(), "value".to_string()]),
+            "tuple::push",
+            OnionKeyPool::create(vec!["container".into(), "value".into()]),
             &push,
         ),
     );
@@ -192,8 +195,8 @@ pub fn build_module() -> OnionStaticObject {
         wrap_native_function(
             LambdaParameter::top("container"),
             OnionFastMap::default(),
-            "tuple::pop".to_string(),
-            OnionKeyPool::create(vec!["container".to_string()]),
+            "tuple::pop",
+            OnionKeyPool::create(vec!["container".into()]),
             &pop,
         ),
     );
@@ -202,18 +205,17 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "insert".to_string(),
         wrap_native_function(
-            LambdaParameter::Multiple(vec![
-                LambdaParameter::top("container"),
-                LambdaParameter::top("index"),
-                LambdaParameter::top("value"),
-            ]),
+            LambdaParameter::Multiple(
+                [
+                    LambdaParameter::top("container"),
+                    LambdaParameter::top("index"),
+                    LambdaParameter::top("value"),
+                ]
+                .into(),
+            ),
             OnionFastMap::default(),
-            "tuple::insert".to_string(),
-            OnionKeyPool::create(vec![
-                "container".to_string(),
-                "index".to_string(),
-                "value".to_string(),
-            ]),
+            "tuple::insert",
+            OnionKeyPool::create(vec!["container".into(), "index".into(), "value".into()]),
             &insert,
         ),
     );
@@ -222,13 +224,16 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "remove".to_string(),
         wrap_native_function(
-            LambdaParameter::Multiple(vec![
-                LambdaParameter::top("container"),
-                LambdaParameter::top("index"),
-            ]),
+            LambdaParameter::Multiple(
+                [
+                    LambdaParameter::top("container"),
+                    LambdaParameter::top("index"),
+                ]
+                .into(),
+            ),
             OnionFastMap::default(),
-            "tuple::remove".to_string(),
-            OnionKeyPool::create(vec!["container".to_string(), "index".to_string()]),
+            "tuple::remove",
+            OnionKeyPool::create(vec!["container".into(), "index".into()]),
             &remove,
         ),
     );

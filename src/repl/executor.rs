@@ -21,7 +21,7 @@ use onion_vm::{
     utils::fastmap::OnionFastMap,
 };
 
-use onion_frontend::{compile::build_code, utils::cycle_detector};
+use onion_frontend::compile::build_code;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -59,14 +59,8 @@ impl ReplExecutor {
     }
 
     /// 执行代码并将结果存储到Out参数中
-    pub fn execute_code(
-        &mut self,
-        code: &str,
-        cycle_detector: &mut cycle_detector::CycleDetector<String>,
-        dir_stack: &mut onion_frontend::dir_stack::DirectoryStack,
-    ) -> Result<(), String> {
-        let ir_package = build_code(code, cycle_detector, dir_stack)
-            .map_err(|e| format!("Compilation failed\n{e}"))?;
+    pub fn execute_code(&mut self, code: &str) -> Result<(), String> {
+        let ir_package = build_code(code).map_err(|e| format!("Compilation failed\n{e}"))?;
 
         self.execute_ir_package(&ir_package)
     }
@@ -88,15 +82,15 @@ impl ReplExecutor {
         // 创建标准库对象
         let stdlib = crate::stdlib::build_module();
         let mut capture = OnionFastMap::new(vm_instructions_package.create_key_pool());
-        capture.push(&"stdlib".to_string(), stdlib.weak().clone());
-        capture.push(&"Out".to_string(), self.out_tuple.weak().clone());
+        capture.push("stdlib", stdlib.weak().clone());
+        capture.push("Out", self.out_tuple.weak().clone());
 
         // 创建Lambda定义，包含stdlib和Out两个参数
         let lambda = OnionLambdaDefinition::new_static(
-            LambdaParameter::Multiple(vec![]),
+            LambdaParameter::Multiple(Box::new([])),
             LambdaBody::Instruction(Arc::new(vm_instructions_package.clone())),
             capture,
-            "__main__".to_string(),
+            "__main__".into(),
             LambdaType::Normal,
         );
 
@@ -212,7 +206,7 @@ impl ReplExecutor {
     fn add_result_to_out(&mut self, result: OnionObject) {
         let new_elements = {
             if let OnionObject::Tuple(tuple) = self.out_tuple.weak() {
-                let mut elements = tuple.get_elements().clone();
+                let mut elements = tuple.get_elements().clone().to_vec();
                 elements.push(result);
                 elements
             } else {

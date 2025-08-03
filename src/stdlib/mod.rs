@@ -118,7 +118,7 @@ where
 pub fn wrap_native_function<F>(
     params: LambdaParameter,
     capture: OnionFastMap<Box<str>, OnionObject>,
-    signature: String,
+    signature: &'static str,
     string_pool: OnionKeyPool<Box<str>>,
     function: &'static F,
 ) -> OnionStaticObject
@@ -145,7 +145,7 @@ where
             cloned_pool,
         )),
         capture,
-        signature,
+        signature.into(),
         LambdaType::Normal,
     )
 }

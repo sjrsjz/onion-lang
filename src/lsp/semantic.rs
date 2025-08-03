@@ -34,7 +34,6 @@ pub enum SemanticTokenTypes {
     Namespace,
     Set,
     Map,
-    Annotation,
     Undefined,
     Base64,
 }
@@ -71,7 +70,6 @@ impl From<ASTNodeType> for SemanticTokenTypes {
             ASTNodeType::Namespace(_) => Self::Namespace,
             ASTNodeType::Set => Self::Set,
             ASTNodeType::Map => Self::Map,
-            ASTNodeType::Annotation(_) => Self::Annotation,
             ASTNodeType::Is => Self::Operation,
             _ => Self::Variable, // 默认情况
         }
@@ -82,7 +80,7 @@ impl From<ASTNodeType> for SemanticTokenTypes {
 /// 此版本通过字符到字节的映射来解决多字节字符（如中文）的错位问题。
 pub fn do_semantic(
     code: &str,
-    ast: ASTNode,
+    ast: &ASTNode,
     tokens_with_comment: &Vec<Token>,
 ) -> Result<Vec<SemanticTokenTypes>, String> {
     // 1. 创建字节图：一个与源码字节长度相同的向量，用于标记每个字节的语义类型。
@@ -379,7 +377,6 @@ fn get_token_type_index(token_type: &SemanticTokenTypes) -> Option<u32> {
         SemanticTokenTypes::Set => Some(50),
         SemanticTokenTypes::Map => Some(51),
         SemanticTokenTypes::Comment => Some(17),
-        SemanticTokenTypes::Annotation => Some(14),
     }
 }
 

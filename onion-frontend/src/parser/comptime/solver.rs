@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    fmt::{Display, Formatter},
     path::PathBuf,
     sync::{Arc, RwLock},
 };
@@ -77,9 +78,54 @@ pub enum ComptimeError {
     IRTranslatorError(IRTranslatorError),
 }
 
+impl Display for ComptimeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ComptimeError::RuntimeError(err) => {
+                // 直接委托给 RuntimeError 的 Display 实现
+                write!(f, "Runtime Error during compile-time execution: {}", err)
+            }
+            ComptimeError::AnalysisError(errors) => {
+                // 如果有多个分析错误，将它们都格式化并连接起来
+                writeln!(f, "Analysis failed with {} error(s):", errors.len())?;
+                for (i, err) in errors.iter().enumerate() {
+                    // 我们使用 err.format() 来获得带颜色的、详细的用户友好输出
+                    // 但对于纯文本的 Display，我们可能需要一个不带颜色的版本。
+                    // 这里为了简单，我们假设 err.to_string() 也能提供有用的信息。
+                    writeln!(f, "[{}] {}", i + 1, err)?;
+                }
+                Ok(())
+            }
+            ComptimeError::IRGeneratorError(err) => {
+                // 委托给 IRGeneratorError 的 Display 实现
+                write!(f, "IR Generation Error: {}", err)
+            }
+            ComptimeError::IRTranslatorError(err) => {
+                // 委托给 IRTranslatorError 的 Display 实现
+                write!(f, "IR Translation Error: {}", err)
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum ComptimeWarning {
     AnalysisWarning(Vec<AnalyzeWarn>),
+}
+
+impl Display for ComptimeWarning {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ComptimeWarning::AnalysisWarning(warnings) => {
+                // 格式化并连接所有分析阶段的警告
+                writeln!(f, "Analysis produced {} warning(s):", warnings.len())?;
+                for (i, warn) in warnings.iter().enumerate() {
+                    writeln!(f, "[{}] {}", i + 1, warn)?;
+                }
+                Ok(())
+            }
+        }
+    }
 }
 
 #[derive(Debug)]

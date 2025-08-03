@@ -6,10 +6,7 @@ use std::{
 };
 
 // Import necessary modules
-use onion_frontend::{
-    compile::{build_code, compile_to_bytecode},
-    utils::cycle_detector::{self, CycleDetector},
-};
+use onion_frontend::compile::{build_code, compile_to_bytecode};
 use onion_vm::{
     GC,
     lambda::{
@@ -128,23 +125,9 @@ fn cmd_compile(file: PathBuf, output: Option<PathBuf>, bytecode: bool) -> Result
     let current_dir =
         std::env::current_dir().map_err(|e| format!("Failed to get current directory: {e}"))?;
 
-    let mut dir_stack = create_dir_stack(file.parent())?;
-    let absolute_path = dir_stack
-        .translate(&file)
-        .map_err(|e| format!("Failed to get absolute path: {e}"))?;
-    let mut cycle_detector = CycleDetector::new();
-    let mut visit_result = cycle_detector
-        .visit(
-            absolute_path
-                .to_str()
-                .ok_or("Invalid file path")?
-                .to_string(),
-        )
-        .map_err(|e| format!("Cycle detection failed: {e}"))?;
     if bytecode {
         // Compile to IR first, then to bytecode
-        let ir_package = build_code(&code, visit_result.get_detector_mut(), &mut dir_stack)
-            .map_err(|e| format!("Compilation failed\n{e}"))?;
+        let ir_package = build_code(&code).map_err(|e| format!("Compilation failed\n{e}"))?;
         let bytecode_package = compile_to_bytecode(&ir_package)
             .map_err(|e| format!("Bytecode compilation failed: {e}"))?;
         // Restore working directory before writing output
@@ -177,8 +160,7 @@ fn cmd_compile(file: PathBuf, output: Option<PathBuf>, bytecode: bool) -> Result
         }
     } else {
         // Compile to IR
-        let ir_package = build_code(&code, visit_result.get_detector_mut(), &mut dir_stack)
-            .map_err(|e| format!("Compilation failed\n{e}"))?;
+        let ir_package = build_code(&code).map_err(|e| format!("Compilation failed\n{e}"))?;
 
         // Restore working directory before writing output
         std::env::set_current_dir(&current_dir)
@@ -220,22 +202,7 @@ fn cmd_display_ir(file: PathBuf) -> Result<(), String> {
     let code = std::fs::read_to_string(&file)
         .map_err(|e| format!("Failed to read file '{}': {}", file.display(), e))?;
 
-    let mut dir_stack = create_dir_stack(file.parent())?;
-
-    let absolute_path = dir_stack
-        .translate(&file)
-        .map_err(|e| format!("Failed to get absolute path: {e}"))?;
-    let mut cycle_detector = CycleDetector::new();
-    let mut visit_result = cycle_detector
-        .visit(
-            absolute_path
-                .to_str()
-                .ok_or("Invalid file path")?
-                .to_string(),
-        )
-        .map_err(|e| format!("Cycle detection failed: {e}"))?;
-    let ir_package = build_code(&code, visit_result.get_detector_mut(), &mut dir_stack)
-        .map_err(|e| format!("Compilation failed\n{e}"))?;
+    let ir_package = build_code(&code).map_err(|e| format!("Compilation failed\n{e}"))?;
 
     println!("\n{}", "IR Code:".cyan().bold());
     println!("{}", format!("{ir_package:#?}").dimmed());
@@ -278,20 +245,7 @@ fn cmd_repl() -> Result<(), String> {
 fn run_source_file(file: &Path) -> Result<(), String> {
     let code = std::fs::read_to_string(file)
         .map_err(|e| format!("Failed to read file '{}': {}", file.display(), e))?;
-    let absolute_path = file
-        .canonicalize()
-        .map_err(|e| format!("Failed to get absolute path: {e}"))?;
-    let mut dir_stack = create_dir_stack(absolute_path.parent())?;
-    let mut cycle_detector = CycleDetector::new();
-    let mut visit_result = cycle_detector
-        .visit(
-            absolute_path
-                .to_str()
-                .ok_or("Invalid file path")?
-                .to_string(),
-        )
-        .map_err(|e| format!("Cycle detection failed: {e}"))?;
-    execute_code(&code, visit_result.get_detector_mut(), &mut dir_stack)
+    execute_code(&code)
 }
 
 fn run_ir_file(file: &Path) -> Result<(), String> {
@@ -307,22 +261,8 @@ fn run_bytecode_file(file: &Path) -> Result<(), String> {
 
     execute_bytecode_package(&bytecode_package)
 }
-
-fn create_dir_stack(
-    base_dir: Option<&Path>,
-) -> Result<onion_frontend::dir_stack::DirectoryStack, String> {
-    let dir = base_dir.unwrap_or_else(|| Path::new(".")).to_path_buf();
-    onion_frontend::dir_stack::DirectoryStack::new(Some(&dir))
-        .map_err(|e| format!("Failed to initialize directory stack: {e}"))
-}
-
-fn execute_code(
-    code: &str,
-    cycle_detector: &mut cycle_detector::CycleDetector<String>,
-    dir_stack: &mut onion_frontend::dir_stack::DirectoryStack,
-) -> Result<(), String> {
-    let ir_package = build_code(code, cycle_detector, dir_stack)
-        .map_err(|e| format!("Compilation failed\n{e}"))?;
+fn execute_code(code: &str) -> Result<(), String> {
+    let ir_package = build_code(code).map_err(|e| format!("Compilation failed\n{e}"))?;
 
     execute_ir_package(&ir_package)
 }
@@ -348,13 +288,13 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
     let mut capture = OnionFastMap::new(vm_instructions_package.create_key_pool());
 
     // 尝试将标准库对象添加到捕获变量中（当字符串池没有stdlib时会自动忽略）
-    capture.push(&"stdlib".to_string(), stdlib.weak().clone());
+    capture.push("stdlib", stdlib.weak().clone());
     // Create Lambda definition
     let lambda = OnionLambdaDefinition::new_static(
-        LambdaParameter::Multiple(vec![]),
+        LambdaParameter::Multiple([].into()),
         LambdaBody::Instruction(Arc::new(vm_instructions_package.clone())),
         capture,
-        "__main__".to_string(),
+        "__main__".into(),
         LambdaType::Normal,
     );
 

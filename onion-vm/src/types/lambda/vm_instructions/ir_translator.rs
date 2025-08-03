@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::result::Result;
 
 use super::instruction_set::*;
@@ -12,6 +13,16 @@ use super::opcode::*;
 #[allow(dead_code)]
 pub enum IRTranslatorError {
     InvalidInstruction(IR),
+}
+
+impl Display for IRTranslatorError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IRTranslatorError::InvalidInstruction(ir) => {
+                write!(f, "Invalid IR instruction encountered during translation to bytecode: {:?}", ir)
+            }
+        }
+    }
 }
 
 #[derive(Debug)]

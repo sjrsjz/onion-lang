@@ -123,7 +123,7 @@ impl OnionObjectExt for CTypes {
         f: &mut dyn FnMut(&OnionObject) -> Result<(), RuntimeError>,
     ) -> Result<(), RuntimeError> {
         if let OnionObject::String(attr) = key {
-            match attr.as_ref().as_str() {
+            match attr.as_ref() {
                 "value" => {
                     let v = self.value_of()?;
                     f(v.weak())
@@ -156,9 +156,9 @@ impl OnionObjectExt for CTypes {
 fn get_value_arg(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
 ) -> Result<&OnionStaticObject, RuntimeError> {
-    argument.get(&"value".to_string()).ok_or_else(|| {
-        RuntimeError::DetailedError("Function requires a 'value' argument".into())
-    })
+    argument
+        .get("value")
+        .ok_or_else(|| RuntimeError::DetailedError("Function requires a 'value' argument".into()))
 }
 
 fn get_integer_arg(
@@ -437,8 +437,8 @@ pub fn build_module() -> OnionStaticObject {
                 wrap_native_function(
                     LambdaParameter::top("value"),
                     OnionFastMap::default(),
-                    concat!("ctypes::", $name).to_string(),
-                    OnionKeyPool::create(vec!["value".to_string()]),
+                    concat!("ctypes::", $name),
+                    OnionKeyPool::create(vec!["value".into()]),
                     &$func,
                 ),
             );
@@ -466,9 +466,9 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "void".to_string(),
         wrap_native_function(
-            LambdaParameter::Multiple(vec![]),
+            LambdaParameter::Multiple(Box::new([])),
             OnionFastMap::default(),
-            "ctypes::void".to_string(),
+            "ctypes::void",
             OnionKeyPool::create(vec![]),
             &c_void,
         ),
@@ -476,9 +476,9 @@ pub fn build_module() -> OnionStaticObject {
     module.insert(
         "null".to_string(),
         wrap_native_function(
-            LambdaParameter::Multiple(vec![]),
+            LambdaParameter::Multiple(Box::new([])),
             OnionFastMap::default(),
-            "ctypes::null".to_string(),
+            "ctypes::null",
             OnionKeyPool::create(vec![]),
             &c_null,
         ),
