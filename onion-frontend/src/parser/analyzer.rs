@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    fmt::Display,
-};
+use std::collections::{HashMap, HashSet};
 
 use crate::parser::{
     ast::{ASTNodeType, ParserError},
@@ -74,33 +71,6 @@ pub enum AnalyzeError {
     DetailedError(ASTNode, String),          // 用于其他类型的错误
 }
 
-impl Display for AnalyzeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AnalyzeError::UndefinedVariable(node) => {
-                write!(f, "Undefined variable at node: {:?}", node)
-            }
-            AnalyzeError::InvalidMacroDefinition(node, message) => {
-                write!(
-                    f,
-                    "Invalid macro definition at node: {:?}, message: {}",
-                    node, message
-                )
-            }
-            AnalyzeError::DetailedError(node, message) => {
-                write!(
-                    f,
-                    "Detailed error at node: {:?}, message: {}",
-                    node, message
-                )
-            }
-            AnalyzeError::ParserError(err) => {
-                write!(f, "Parser error: {:?}", err)
-            }
-        }
-    }
-}
-
 impl AnalyzeError {
     /// 将分析错误格式化为用户友好的字符串。
     pub fn format(&self) -> String {
@@ -142,16 +112,6 @@ impl AnalyzeError {
 #[derive(Debug, Clone)]
 pub enum AnalyzeWarn {
     CompileError(ASTNode, String),
-}
-
-impl Display for AnalyzeWarn {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AnalyzeWarn::CompileError(node, message) => {
-                write!(f, "Compile error at node: {:?}, message: {}", node, message)
-            }
-        }
-    }
 }
 
 impl AnalyzeWarn {
@@ -452,9 +412,12 @@ fn analyze_node(
         }
 
         ASTNodeType::Required(var_name) => {
-            context.define_variable(var_name.clone(), Variable {
-                assumed_type: AssumedType::Unknown,
-            });
+            context.define_variable(
+                var_name.clone(),
+                Variable {
+                    assumed_type: AssumedType::Unknown,
+                },
+            );
             check_postorder_break(source, node, break_at_position, context, context_at_break);
             AssumedType::Unknown
         }

@@ -1,0 +1,3 @@
+@include("./" + "sub_module.onion");
+foo();
+stdlib.io.println(@1+1);

@@ -127,7 +127,7 @@ fn cmd_compile(file: PathBuf, output: Option<PathBuf>, bytecode: bool) -> Result
 
     if bytecode {
         // Compile to IR first, then to bytecode
-        let ir_package = build_code(&code).map_err(|e| format!("Compilation failed\n{e}"))?;
+        let ir_package = build_code(&code, file.clone()).map_err(|e| format!("Compilation failed\n{e}"))?;
         let bytecode_package = compile_to_bytecode(&ir_package)
             .map_err(|e| format!("Bytecode compilation failed: {e}"))?;
         // Restore working directory before writing output
@@ -160,7 +160,7 @@ fn cmd_compile(file: PathBuf, output: Option<PathBuf>, bytecode: bool) -> Result
         }
     } else {
         // Compile to IR
-        let ir_package = build_code(&code).map_err(|e| format!("Compilation failed\n{e}"))?;
+        let ir_package = build_code(&code, file.clone()).map_err(|e| format!("Compilation failed\n{e}"))?;
 
         // Restore working directory before writing output
         std::env::set_current_dir(&current_dir)
@@ -202,7 +202,7 @@ fn cmd_display_ir(file: PathBuf) -> Result<(), String> {
     let code = std::fs::read_to_string(&file)
         .map_err(|e| format!("Failed to read file '{}': {}", file.display(), e))?;
 
-    let ir_package = build_code(&code).map_err(|e| format!("Compilation failed\n{e}"))?;
+    let ir_package = build_code(&code, file).map_err(|e| format!("Compilation failed\n{e}"))?;
 
     println!("\n{}", "IR Code:".cyan().bold());
     println!("{}", format!("{ir_package:#?}").dimmed());
@@ -245,7 +245,7 @@ fn cmd_repl() -> Result<(), String> {
 fn run_source_file(file: &Path) -> Result<(), String> {
     let code = std::fs::read_to_string(file)
         .map_err(|e| format!("Failed to read file '{}': {}", file.display(), e))?;
-    execute_code(&code)
+    execute_code(&code, file.to_path_buf())
 }
 
 fn run_ir_file(file: &Path) -> Result<(), String> {
@@ -261,8 +261,8 @@ fn run_bytecode_file(file: &Path) -> Result<(), String> {
 
     execute_bytecode_package(&bytecode_package)
 }
-fn execute_code(code: &str) -> Result<(), String> {
-    let ir_package = build_code(code).map_err(|e| format!("Compilation failed\n{e}"))?;
+fn execute_code(code: &str, source_path: PathBuf) -> Result<(), String> {
+    let ir_package = build_code(code, source_path).map_err(|e| format!("Compilation failed\n{e}"))?;
 
     execute_ir_package(&ir_package)
 }

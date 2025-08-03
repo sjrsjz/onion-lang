@@ -60,7 +60,7 @@ impl ReplExecutor {
 
     /// 执行代码并将结果存储到Out参数中
     pub fn execute_code(&mut self, code: &str) -> Result<(), String> {
-        let ir_package = build_code(code).map_err(|e| format!("Compilation failed\n{e}"))?;
+        let ir_package = build_code(code, ".".into()).map_err(|e| format!("Compilation failed\n{e}"))?;
 
         self.execute_ir_package(&ir_package)
     }

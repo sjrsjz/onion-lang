@@ -1,4 +1,4 @@
-@required stdlib;
+@required "stdlib";
 
 x := 10;
 y := mut 20;

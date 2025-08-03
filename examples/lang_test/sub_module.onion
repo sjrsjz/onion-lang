@@ -1,0 +1,5 @@
+@required "stdlib";
+foo := () -> {
+    stdlib.io.println("This is a test function in the sub-module.");
+    return "Function executed successfully.";
+};

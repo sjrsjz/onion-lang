@@ -43,7 +43,6 @@ use crate::{
 pub struct ComptimeState {
     builtin_definitions: Arc<HashMap<String, OnionStaticObject>>,
     user_definitions: Arc<RwLock<HashMap<String, OnionStaticObject>>>,
-    import_cycle_detector: Arc<CycleDetector<PathBuf>>, // Detect import cycles
 }
 
 impl ComptimeState {
@@ -92,7 +91,7 @@ impl Display for ComptimeError {
                     // 我们使用 err.format() 来获得带颜色的、详细的用户友好输出
                     // 但对于纯文本的 Display，我们可能需要一个不带颜色的版本。
                     // 这里为了简单，我们假设 err.to_string() 也能提供有用的信息。
-                    writeln!(f, "[{}] {}", i + 1, err)?;
+                    writeln!(f, "[{}] {}", i + 1, err.format())?;
                 }
                 Ok(())
             }
@@ -120,7 +119,7 @@ impl Display for ComptimeWarning {
                 // 格式化并连接所有分析阶段的警告
                 writeln!(f, "Analysis produced {} warning(s):", warnings.len())?;
                 for (i, warn) in warnings.iter().enumerate() {
-                    writeln!(f, "[{}] {}", i + 1, warn)?;
+                    writeln!(f, "[{}] {}", i + 1, warn.format())?;
                 }
                 Ok(())
             }
@@ -222,10 +221,10 @@ impl ComptimeSolver {
                     move |argument: &OnionFastMap<Box<str>, OnionStaticObject>,
                           _gc: &mut GC<OnionObjectCell>|
                           -> Result<OnionStaticObject, RuntimeError> {
-                        match argument.get("ifdef") {
+                        match argument.get("name") {
                             Some(v) => v.weak().with_data(|v| match v {
                                 OnionObject::String(name) => {
-                                    let state = cloned_ref.write().map_err(|e| {
+                                    let state = cloned_ref.read().map_err(|e| {
                                         RuntimeError::BorrowError(e.to_string().into())
                                     })?;
                                     Ok(OnionObject::Boolean(state.contains_key(name.as_ref()))
@@ -244,15 +243,48 @@ impl ComptimeSolver {
             ),
         );
 
-        let cloned_ref = user_definitions.clone();
-        let import_cycle_detector = Arc::new(import_cycle_detector);
-        let cloned_detector_ref = import_cycle_detector.clone();
         builtin_definitions.insert(
-            "import".into(),
+            "required".into(),
+            wrap_native_function(
+                LambdaParameter::top("name"),
+                OnionFastMap::default(),
+                "comptime::required",
+                OnionKeyPool::create(vec!["name".into()]),
+                Arc::new(
+                    move |argument: &OnionFastMap<Box<str>, OnionStaticObject>,
+                          _gc: &mut GC<OnionObjectCell>|
+                          -> Result<OnionStaticObject, RuntimeError> {
+                        match argument.get("name") {
+                            Some(v) => v.weak().with_data(|v| match v {
+                                OnionObject::String(name) => Ok(OnionObject::Custom(Arc::new(
+                                    OnionASTObject::new(ASTNode {
+                                        node_type: ASTNodeType::Required(name.to_string()),
+                                        start_token: None,
+                                        end_token: None,
+                                        children: vec![],
+                                    }),
+                                ))
+                                .stabilize()),
+                                _ => Err(RuntimeError::InvalidType(
+                                    "Expect String for `name`".into(),
+                                )),
+                            }),
+                            None => {
+                                Err(RuntimeError::DetailedError("No `name` in arguments".into()))
+                            }
+                        }
+                    },
+                ),
+            ),
+        );
+
+        let cloned_ref = user_definitions.clone();
+        builtin_definitions.insert(
+            "include".into(),
             wrap_native_function(
                 LambdaParameter::top("path"),
                 OnionFastMap::default(),
-                "comptime::import",
+                "comptime::include",
                 OnionKeyPool::create(vec!["path".into()]),
                 Arc::new(
                     move |argument: &OnionFastMap<Box<str>, OnionStaticObject>,
@@ -262,7 +294,7 @@ impl ComptimeSolver {
                             Some(v) => v.weak().with_data(|v| match v {
                                 OnionObject::String(path) => {
                                     let abs_path =
-                                        match cloned_detector_ref.last() {
+                                        match import_cycle_detector.last() {
                                             Some(file) => {
                                                 let dir = file.parent().unwrap_or(file.as_path());
                                                 let mut target_path = PathBuf::from(path.as_ref());
@@ -296,7 +328,6 @@ impl ComptimeSolver {
                                                 })?
                                             }
                                         };
-
                                     // 读取文件内容
                                     let code = std::fs::read_to_string(&abs_path).map_err(|e| {
                                         RuntimeError::DetailedError(
@@ -327,7 +358,7 @@ impl ComptimeSolver {
                                                 RuntimeError::DetailedError(e.to_string().into())
                                             })?
                                             .clone(),
-                                        cloned_detector_ref.enter(abs_path).map_err(|path| {
+                                        import_cycle_detector.enter(abs_path).map_err(|path| {
                                             RuntimeError::DetailedError(
                                                 format!("Cyclic reference detected: {:?}", path)
                                                     .into(),
@@ -363,23 +394,10 @@ impl ComptimeSolver {
             state: ComptimeState {
                 builtin_definitions: Arc::new(builtin_definitions),
                 user_definitions,
-                import_cycle_detector,
             },
             errors: Vec::new(),
             warnings: Vec::new(),
         }
-    }
-
-    /// 派生 ComptimeSolver 的新实例，使用指定的路径作为导入循环检测器的上下文。
-    pub fn derive(&self, path: PathBuf) -> Result<Self, PathBuf> {
-        Ok(Self::new(
-            self.state
-                .user_definitions
-                .read()
-                .expect("Failed to read RwLock")
-                .clone(),
-            self.state.import_cycle_detector.enter(path)?,
-        ))
     }
 
     pub fn errors(&self) -> &[ComptimeError] {
@@ -425,7 +443,49 @@ impl ComptimeSolver {
             return Ok(None);
         };
 
-        let (_required_vars, ast) = auto_capture_and_rebuild(ast);
+        let mut context = vec![];
+        context.extend(
+            self.state
+                .builtin_definitions
+                .iter()
+                .map(|(name, _)| ASTNode {
+                    node_type: ASTNodeType::Required(name.clone()),
+                    start_token: None,
+                    end_token: None,
+                    children: vec![],
+                })
+                .collect::<Vec<_>>(),
+        );
+        context.extend(
+            self.state
+                .user_definitions
+                .read()
+                .map_err(|e| {
+                    self.errors
+                        .push(ComptimeError::RuntimeError(RuntimeError::BorrowError(
+                            e.to_string().into(),
+                        )));
+                    ()
+                })?
+                .iter()
+                .map(|(name, _)| ASTNode {
+                    node_type: ASTNodeType::Required(name.clone()),
+                    start_token: None,
+                    end_token: None,
+                    children: vec![],
+                })
+                .collect::<Vec<_>>(),
+        );
+        context.extend(ast.children.iter().cloned());
+
+        let ast = ASTNode {
+            node_type: ASTNodeType::Expressions,
+            start_token: None,
+            end_token: None,
+            children: context,
+        };
+
+        let (_required_vars, ast) = auto_capture_and_rebuild(&ast);
 
         let analyse_result = analyze_ast(&ast, None);
 
@@ -477,7 +537,6 @@ impl ComptimeSolver {
                 return Err(());
             }
         };
-
         match OnionASTObject::from_onion(result.weak()) {
             Ok(ast_object) => Ok(Some(ast_object)),
             Err(err) => {

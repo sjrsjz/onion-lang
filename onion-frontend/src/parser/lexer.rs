@@ -1,4 +1,4 @@
-use std::{ops::Deref, sync::Arc};
+use std::{fmt::Debug, ops::Deref, sync::Arc};
 
 #[derive(Debug, Clone)]
 pub enum TokenType {
@@ -29,8 +29,14 @@ impl PartialEq for TokenType {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Source(Arc<Vec<char>>);
+impl Debug for Source {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Source({})", self.0.as_ref().iter().collect::<String>())
+    }
+}
+
 impl From<String> for Source {
     fn from(source: String) -> Self {
         Source(Arc::new(source.chars().collect()))

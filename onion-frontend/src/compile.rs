@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
+use std::path::PathBuf;
 
 use crate::ir_generator::ir_generator;
 use crate::parser::analyzer::analyze_ast;
@@ -18,7 +19,7 @@ use onion_vm::types::lambda::vm_instructions::ir::IRPackage;
 use onion_vm::types::lambda::vm_instructions::ir_translator::IRTranslator;
 
 // Compile code and generate intermediate representation
-pub fn build_code(code: &str) -> Result<IRPackage, String> {
+pub fn build_code(code: &str, source_path: PathBuf) -> Result<IRPackage, String> {
     let tokens = lexer::tokenize(code);
     let tokens = lexer::reject_comment(&tokens);
     let gathered = ast_token_stream::from_stream(&tokens);
@@ -31,7 +32,7 @@ pub fn build_code(code: &str) -> Result<IRPackage, String> {
 
     // 使用当前路径进入
     let import_cycle_detector = CycleDetector::new()
-        .enter(fs::canonicalize(".").map_err(|e| e.to_string())?)
+        .enter(fs::canonicalize(source_path).map_err(|e| e.to_string())?)
         .expect("unreachable!");
     let mut comptime_solver = ComptimeSolver::new(HashMap::new(), import_cycle_detector);
     let solve_result = comptime_solver.solve(&ast);
@@ -39,9 +40,19 @@ pub fn build_code(code: &str) -> Result<IRPackage, String> {
         Ok(ast) => ast,
         Err(_) => {
             return Err(format!(
-                "Error: {:?}\n\nWarning: {:?}",
-                comptime_solver.errors(),
-                comptime_solver.warnings()
+                "Error: {}\n\nWarning: {}",
+                comptime_solver
+                    .errors()
+                    .iter()
+                    .map(|e| e.to_string())
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+                comptime_solver
+                    .warnings()
+                    .iter()
+                    .map(|w| w.to_string())
+                    .collect::<Vec<_>>()
+                    .join("\n")
             ));
         }
     };
