@@ -207,7 +207,8 @@ stdlib.io.println("Collected small numbers:", collected);
 
 // Lazy mapping with the stream operator |>
 squared_stream := [1, 2, 3, 4, 5] |> (x?) -> x * x;
-stdlib.io.println("Stream of squared numbers:", squared_stream);```
+stdlib.io.println("Stream of squared numbers:", squared_stream);
+```
 
 ### 6. Interfaces (Prototypes)
 
