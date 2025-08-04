@@ -1,5 +1,5 @@
 // JSON 模块完整测试
-@required stdlib;
+@required 'stdlib';
 
 stdlib.io.println("======== JSON 模块测试开始 ========");
 

@@ -1,4 +1,4 @@
-@required stdlib;
+@required 'stdlib';
 pool := () -> {
     return (0..5).elements() |> (x?) -> {
         stdlib.io.println("处理元素:", x);

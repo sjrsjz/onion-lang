@@ -1,5 +1,5 @@
 // JSON 模块高级示例 - 处理复杂数据结构
-@required stdlib;
+@required 'stdlib';
 
 stdlib.io.println("======== JSON 模块高级示例 ========");
 

@@ -1,5 +1,4 @@
-// Test file for new stdlib modules: sys, os, fs
-@required stdlib;
+@required 'stdlib';
 
 main := () -> {
     // 测试 sys 模块

@@ -1,4 +1,4 @@
-@required stdlib;
+@required 'stdlib';
 
 stdlib.io.println("======== 简单HTTP同步测试 ========");
 

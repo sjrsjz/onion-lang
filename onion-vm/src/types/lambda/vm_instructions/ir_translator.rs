@@ -288,8 +288,8 @@ impl IRTranslator {
                 IR::UnaryOp(op) => {
                     let opcode = match op {
                         IROperation::Not => VMInstruction::UnaryBitNot,
-                        IROperation::Add => VMInstruction::UnaryAbs,
-                        IROperation::Subtract => VMInstruction::UnaryNeg,
+                        IROperation::Abs => VMInstruction::UnaryAbs,
+                        IROperation::Minus => VMInstruction::UnaryNeg,
                         _ => {
                             return Err(IRTranslatorError::InvalidInstruction(IR::UnaryOp(
                                 op.clone(),

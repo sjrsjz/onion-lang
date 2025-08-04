@@ -1,6 +1,6 @@
 // 文本冒险游戏：魔法森林探险
-@required stdlib;
-@import "std/tui_colors.onion";
+@required 'stdlib';
+@include "std/tui_colors.onion";
 
 // 简单的伪随机数生成器
 rand_seed := mut 12345;

@@ -36,6 +36,7 @@ pub enum SemanticTokenTypes {
     Map,
     Undefined,
     Base64,
+    Marco
 }
 
 impl From<ASTNodeType> for SemanticTokenTypes {
@@ -71,6 +72,7 @@ impl From<ASTNodeType> for SemanticTokenTypes {
             ASTNodeType::Set => Self::Set,
             ASTNodeType::Map => Self::Map,
             ASTNodeType::Is => Self::Operation,
+            ASTNodeType::Comptime => Self::Marco,
             _ => Self::Variable, // 默认情况
         }
     }
@@ -377,6 +379,7 @@ fn get_token_type_index(token_type: &SemanticTokenTypes) -> Option<u32> {
         SemanticTokenTypes::Set => Some(50),
         SemanticTokenTypes::Map => Some(51),
         SemanticTokenTypes::Comment => Some(17),
+        SemanticTokenTypes::Marco => Some(14),
     }
 }
 

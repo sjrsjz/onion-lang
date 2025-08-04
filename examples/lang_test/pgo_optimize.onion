@@ -1,4 +1,4 @@
-@required stdlib;
+@required 'stdlib';
 f := mut stdlib.math.floor;
 a := mut 100;
 while (a > 0) {

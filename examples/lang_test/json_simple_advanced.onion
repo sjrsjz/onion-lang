@@ -1,5 +1,5 @@
 // 简化的 JSON 高级示例
-@required stdlib;
+@required 'stdlib';
 
 stdlib.io.println("JSON 高级示例开始");
 

@@ -1,4 +1,4 @@
-@required stdlib;
+@required 'stdlib';
 
 stdlib.io.println("======== HTTP模块完整测试 ========");
 

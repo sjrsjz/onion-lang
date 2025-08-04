@@ -1,0 +1,21 @@
+@required 'stdlib';
+@def(add => (x?, y?) -> x + y);
+const_value := @add(1, 2);
+stdlib.io.println("has add : ", @ifdef "add");
+stdlib.io.println("add(1, 2) = ", const_value);
+@undef "add";
+// const_value := @add(1, 2); // 这行代码会报错，因为 add 已经被取消定义了
+
+@ast.let("x") << (1,); // x := 1
+
+stdlib.io.println("x", x);
+
+lambda := @ast.lambda_def(false, ()) << (
+    ("x", "y"), 
+    ast.operation("+") << (
+        ast.variable("x"), 
+        ast.variable("y")
+    )
+);
+
+stdlib.io.println("lambda(1, 2) = ", lambda(1, 2));

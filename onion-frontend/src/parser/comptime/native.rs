@@ -91,7 +91,7 @@ where
 pub fn wrap_native_function<F>(
     params: LambdaParameter,
     capture: OnionFastMap<Box<str>, OnionObject>,
-    signature: &'static str,
+    signature: &str,
     string_pool: OnionKeyPool<Box<str>>,
     function: Arc<F>,
 ) -> OnionStaticObject

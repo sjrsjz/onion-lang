@@ -1,6 +1,6 @@
 // 数学函数可视化器 - 动态图形绘制
-@required stdlib;
-@import "std/constraint.onion";
+@required 'stdlib';
+@include "std/constraint.onion";
 colors := {
     // 前景色
     'black': "\u001b[30m",

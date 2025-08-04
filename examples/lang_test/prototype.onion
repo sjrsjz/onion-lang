@@ -1,4 +1,4 @@
-@required stdlib;
+@required 'stdlib';
 interface := (interface_definition?) -> {
     pointer := mut interface_definition;
     return (

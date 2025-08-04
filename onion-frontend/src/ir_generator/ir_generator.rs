@@ -1,6 +1,19 @@
 use crate::parser::ast::{ASTNode, ASTNodeModifier, ASTNodeOperation, ASTNodeType};
 use base64::{self, Engine};
 use onion_vm::types::lambda::vm_instructions::ir::{DebugInfo, Functions, IR, IROperation};
+use std::{fmt::Display, rc::Rc};
+
+/// Helper macro to check for an exact number of children.
+/// If the check fails, it returns an `InvalidASTNodeType` error.
+macro_rules! check_children_exact {
+    ($node:expr, $expected:expr) => {
+        if $node.children.len() != $expected {
+            return Err(IRGeneratorError::InvalidASTNodeType(
+                $node.node_type.clone(),
+            ));
+        }
+    };
+}
 
 /// Parse integer literals in various formats: decimal, hex (0x), octal (0o), binary (0b)
 fn parse_integer_literal(number_str: &str) -> Option<i64> {
@@ -116,19 +129,27 @@ impl Display for IRGeneratorError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             IRGeneratorError::InvalidASTNodeType(node_type) => {
-                write!(f, "Invalid AST node type encountered during IR generation: {:?}", node_type)
+                write!(
+                    f,
+                    "Invalid AST node type or structure encountered during IR generation: {:?}",
+                    node_type
+                )
             }
             IRGeneratorError::InvalidScope => {
-                write!(f, "Invalid scope operation during IR generation (e.g., popping global scope)")
+                write!(
+                    f,
+                    "Invalid scope operation during IR generation (e.g., popping global scope)"
+                )
             }
             IRGeneratorError::InvalidLabel => {
-                write!(f, "Invalid label operation during IR generation (e.g., referencing a non-existent label)")
+                write!(
+                    f,
+                    "Invalid label operation during IR generation (e.g., referencing a non-existent label)"
+                )
             }
         }
     }
 }
-
-use std::{fmt::Display, rc::Rc};
 
 impl<'t> IRGenerator<'t> {
     pub fn new(functions: &'t mut Functions, namespace: NameSpace) -> Self {
@@ -167,6 +188,7 @@ impl<'t> IRGenerator<'t> {
     ) -> Result<Vec<(DebugInfo, IR)>, IRGeneratorError> {
         match &ast_node.node_type {
             ASTNodeType::Frame => {
+                // Expects any number of children
                 let mut instructions = Vec::new();
                 instructions.push((self.generate_debug_info(ast_node), IR::NewFrame));
                 self.scope_stack.push(Scope::Frame);
@@ -181,6 +203,8 @@ impl<'t> IRGenerator<'t> {
                 Ok(instructions)
             }
             ASTNodeType::LambdaDef(is_dyn, captured_vars) => {
+                // Expects 2 children: args and body
+                check_children_exact!(ast_node, 2);
                 let mut instructions = Vec::new();
                 let args = &ast_node.children[0];
                 let args_instructions = self.generate_without_redirect(args)?;
@@ -223,30 +247,37 @@ impl<'t> IRGenerator<'t> {
                 Ok(instructions)
             }
             ASTNodeType::Assign => {
+                // Expects 2 children: target and value
+                check_children_exact!(ast_node, 2);
                 let mut instructions = Vec::new();
                 instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                 instructions.extend(self.generate_without_redirect(&ast_node.children[1])?);
                 instructions.push((self.generate_debug_info(ast_node), IR::Set));
                 Ok(instructions)
             }
-            ASTNodeType::Variable(var_name) => {
+            ASTNodeType::Variable(name) => {
+                // Expects 0 children
+                check_children_exact!(ast_node, 0);
                 let mut instructions = Vec::new();
                 instructions.push((
                     self.generate_debug_info(ast_node),
-                    IR::Get(var_name.clone()),
+                    IR::Get(name.clone()),
                 ));
                 Ok(instructions)
             }
-            ASTNodeType::Let(var_name) => {
+            ASTNodeType::Let(name) => {
+                // Expects 1 child: value
+                check_children_exact!(ast_node, 1);
                 let mut instructions = Vec::new();
                 instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                 instructions.push((
                     self.generate_debug_info(ast_node),
-                    IR::Let(var_name.clone()),
+                    IR::Let(name.clone()),
                 ));
                 Ok(instructions)
             }
             ASTNodeType::Apply => {
+                // Expects any number of children
                 let mut instructions = Vec::new();
                 for child in &ast_node.children {
                     instructions.extend(self.generate_without_redirect(child)?);
@@ -254,37 +285,60 @@ impl<'t> IRGenerator<'t> {
                 instructions.push((self.generate_debug_info(ast_node), IR::Apply));
                 Ok(instructions)
             }
-            ASTNodeType::Operation(opeartion) => {
+            ASTNodeType::Operation(operation) => {
+                match operation {
+                    ASTNodeOperation::Add
+                    | ASTNodeOperation::Subtract
+                    | ASTNodeOperation::Multiply
+                    | ASTNodeOperation::Divide
+                    | ASTNodeOperation::Modulus
+                    | ASTNodeOperation::And
+                    | ASTNodeOperation::Or
+                    | ASTNodeOperation::Xor
+                    | ASTNodeOperation::Equal
+                    | ASTNodeOperation::NotEqual
+                    | ASTNodeOperation::Greater
+                    | ASTNodeOperation::Less
+                    | ASTNodeOperation::GreaterEqual
+                    | ASTNodeOperation::LessEqual
+                    | ASTNodeOperation::Power
+                    | ASTNodeOperation::LeftShift
+                    | ASTNodeOperation::RightShift => {
+                        check_children_exact!(ast_node, 2);
+                    }
+                    ASTNodeOperation::Abs | ASTNodeOperation::Minus | ASTNodeOperation::Not => {
+                        check_children_exact!(ast_node, 1);
+                    }
+                }
+
                 let mut instructions = Vec::new();
                 for child in &ast_node.children {
                     instructions.extend(self.generate_without_redirect(child)?);
                 }
-                match opeartion {
+                match operation {
                     ASTNodeOperation::Add => {
-                        if ast_node.children.len() == 1 {
-                            instructions.push((
-                                self.generate_debug_info(ast_node),
-                                IR::UnaryOp(IROperation::Add),
-                            ));
-                        } else {
-                            instructions.push((
-                                self.generate_debug_info(ast_node),
-                                IR::BinaryOp(IROperation::Add),
-                            ));
-                        }
+                        instructions.push((
+                            self.generate_debug_info(ast_node),
+                            IR::BinaryOp(IROperation::Add),
+                        ));
+                    }
+                    ASTNodeOperation::Abs => {
+                        instructions.push((
+                            self.generate_debug_info(ast_node),
+                            IR::UnaryOp(IROperation::Abs),
+                        ));
                     }
                     ASTNodeOperation::Subtract => {
-                        if ast_node.children.len() == 1 {
-                            instructions.push((
-                                self.generate_debug_info(ast_node),
-                                IR::UnaryOp(IROperation::Subtract),
-                            ));
-                        } else {
-                            instructions.push((
-                                self.generate_debug_info(ast_node),
-                                IR::BinaryOp(IROperation::Subtract),
-                            ));
-                        }
+                        instructions.push((
+                            self.generate_debug_info(ast_node),
+                            IR::BinaryOp(IROperation::Subtract),
+                        ));
+                    }
+                    ASTNodeOperation::Minus => {
+                        instructions.push((
+                            self.generate_debug_info(ast_node),
+                            IR::UnaryOp(IROperation::Minus),
+                        ));
                     }
                     ASTNodeOperation::Multiply => {
                         instructions.push((
@@ -386,6 +440,8 @@ impl<'t> IRGenerator<'t> {
                 Ok(instructions)
             }
             ASTNodeType::GetAttr => {
+                // Expects 2 children: object and attribute
+                check_children_exact!(ast_node, 2);
                 let mut instructions = Vec::new();
                 instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                 instructions.extend(self.generate_without_redirect(&ast_node.children[1])?);
@@ -393,29 +449,32 @@ impl<'t> IRGenerator<'t> {
                 Ok(instructions)
             }
             ASTNodeType::Return => {
+                // Expects 1 child: return value
+                check_children_exact!(ast_node, 1);
                 let mut instructions = Vec::new();
                 instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                 instructions.push((self.generate_debug_info(ast_node), IR::Return));
                 Ok(instructions)
             }
             ASTNodeType::Raise => {
+                // Expects 1 child: error value
+                check_children_exact!(ast_node, 1);
                 let mut instructions = Vec::new();
                 instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                 instructions.push((self.generate_debug_info(ast_node), IR::Raise));
                 Ok(instructions)
             }
             ASTNodeType::Number(number_str) => {
-                // check if number_str is float or int, supporting hex, octal, binary, and decimal
+                // Expects 0 children
+                check_children_exact!(ast_node, 0);
                 let mut instructions = Vec::new();
 
-                // First try to parse as various integer formats
                 if let Some(integer_value) = parse_integer_literal(number_str) {
                     instructions.push((
                         self.generate_debug_info(ast_node),
                         IR::LoadInt(integer_value),
                     ));
                 } else if let Ok(number) = number_str.parse::<f64>() {
-                    // Fall back to float parsing for decimal floats and scientific notation
                     instructions.push((self.generate_debug_info(ast_node), IR::LoadFloat(number)));
                 } else {
                     return Err(IRGeneratorError::InvalidASTNodeType(
@@ -425,6 +484,7 @@ impl<'t> IRGenerator<'t> {
                 Ok(instructions)
             }
             ASTNodeType::Tuple => {
+                // Expects any number of children
                 let mut instructions = Vec::new();
                 let mut tuple_size = 0;
                 for child in &ast_node.children {
@@ -438,6 +498,8 @@ impl<'t> IRGenerator<'t> {
                 Ok(instructions)
             }
             ASTNodeType::Pair => {
+                // Expects 2 children: key and value
+                check_children_exact!(ast_node, 2);
                 let mut instructions = Vec::new();
                 instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                 instructions.extend(self.generate_without_redirect(&ast_node.children[1])?);
@@ -445,6 +507,8 @@ impl<'t> IRGenerator<'t> {
                 Ok(instructions)
             }
             ASTNodeType::String(str) => {
+                // Expects 0 children
+                check_children_exact!(ast_node, 0);
                 let mut instructions = Vec::new();
                 instructions.push((
                     self.generate_debug_info(ast_node),
@@ -453,6 +517,7 @@ impl<'t> IRGenerator<'t> {
                 Ok(instructions)
             }
             ASTNodeType::Expressions => {
+                // Expects any number of children
                 let mut instructions = Vec::new();
                 for child in &ast_node.children {
                     instructions.push((self.generate_debug_info(child), IR::ResetStack));
@@ -461,24 +526,30 @@ impl<'t> IRGenerator<'t> {
                 Ok(instructions)
             }
             ASTNodeType::Null => {
+                // Expects 0 children
+                check_children_exact!(ast_node, 0);
                 let mut instructions = Vec::new();
                 instructions.push((self.generate_debug_info(ast_node), IR::LoadNull));
                 Ok(instructions)
             }
             ASTNodeType::Undefined => {
+                // Expects 0 children
+                check_children_exact!(ast_node, 0);
                 let mut instructions = Vec::new();
                 instructions.push((self.generate_debug_info(ast_node), IR::LoadUndefined));
                 Ok(instructions)
             }
-            ASTNodeType::Boolean(bool) => {
+            ASTNodeType::Boolean(value) => {
+                // Expects 0 children
+                check_children_exact!(ast_node, 0);
                 let mut instructions = Vec::new();
-                instructions.push((self.generate_debug_info(ast_node), IR::LoadBool(*bool)));
+                instructions.push((
+                    self.generate_debug_info(ast_node),
+                    IR::LoadBool(*value),
+                ));
                 Ok(instructions)
             }
             ASTNodeType::If => match ast_node.children.len() {
-                0..=1 => Err(IRGeneratorError::InvalidASTNodeType(
-                    ast_node.node_type.clone(),
-                )),
                 2 => {
                     let mut instructions = Vec::new();
                     instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
@@ -540,6 +611,8 @@ impl<'t> IRGenerator<'t> {
                 )),
             },
             ASTNodeType::Break => {
+                // Expects 1 child: break value
+                check_children_exact!(ast_node, 1);
                 let mut instructions = Vec::new();
                 instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                 let mut frames_to_pop = 0;
@@ -572,6 +645,8 @@ impl<'t> IRGenerator<'t> {
                 Ok(instructions)
             }
             ASTNodeType::Continue => {
+                // Expects 1 child: continue value (often undefined)
+                check_children_exact!(ast_node, 1);
                 let mut instructions = Vec::new();
                 instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                 let mut found_loop = false;
@@ -597,6 +672,8 @@ impl<'t> IRGenerator<'t> {
                 Ok(instructions)
             }
             ASTNodeType::While => {
+                // Expects 2 children: condition and body
+                check_children_exact!(ast_node, 2);
                 let mut instructions = Vec::new();
                 let (head_label, _) = self.new_label();
                 let (med_label, _) = self.new_label();
@@ -631,70 +708,62 @@ impl<'t> IRGenerator<'t> {
                 Ok(instructions)
             }
             ASTNodeType::Modifier(modifier) => {
+                // All modifiers expect exactly 1 child
+                check_children_exact!(ast_node, 1);
                 let mut instructions = Vec::new();
+                instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
+
                 match modifier {
                     ASTNodeModifier::KeyOf => {
-                        instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                         instructions.push((self.generate_debug_info(ast_node), IR::KeyOf));
                     }
                     ASTNodeModifier::ValueOf => {
-                        instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                         instructions.push((self.generate_debug_info(ast_node), IR::ValueOf));
                     }
                     ASTNodeModifier::Mut => {
-                        instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                         instructions.push((self.generate_debug_info(ast_node), IR::Mut));
                     }
                     ASTNodeModifier::Const => {
-                        instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                         instructions.push((self.generate_debug_info(ast_node), IR::Const));
                     }
                     ASTNodeModifier::Assert => {
-                        instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                         instructions.push((self.generate_debug_info(ast_node), IR::Assert));
                     }
                     ASTNodeModifier::Import => {
-                        instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                         instructions.push((self.generate_debug_info(ast_node), IR::Import));
                     }
                     ASTNodeModifier::TypeOf => {
-                        instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                         instructions.push((self.generate_debug_info(ast_node), IR::TypeOf));
                     }
                     ASTNodeModifier::Await => {
-                        // TODO: handle await in the future
                         return Err(IRGeneratorError::InvalidASTNodeType(
                             ast_node.node_type.clone(),
                         ));
                     }
                     ASTNodeModifier::LengthOf => {
-                        instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                         instructions.push((self.generate_debug_info(ast_node), IR::LengthOf));
                     }
                     ASTNodeModifier::Launch => {
-                        instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                         instructions.push((self.generate_debug_info(ast_node), IR::Launch));
                     }
                     ASTNodeModifier::Spawn => {
-                        instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                         instructions.push((self.generate_debug_info(ast_node), IR::Spawn));
                     }
                     ASTNodeModifier::Async => {
-                        instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                         instructions.push((self.generate_debug_info(ast_node), IR::MakeAsync));
                     }
                     ASTNodeModifier::Sync => {
-                        instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                         instructions.push((self.generate_debug_info(ast_node), IR::MakeSync));
                     }
                     ASTNodeModifier::Atomic => {
-                        instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                         instructions.push((self.generate_debug_info(ast_node), IR::MakeAtomic));
                     }
                 }
                 Ok(instructions)
             }
             ASTNodeType::Range => {
+                // Expects 2 children: start and end
+                check_children_exact!(ast_node, 2);
                 let mut instructions = Vec::new();
                 instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                 instructions.extend(self.generate_without_redirect(&ast_node.children[1])?);
@@ -702,6 +771,8 @@ impl<'t> IRGenerator<'t> {
                 Ok(instructions)
             }
             ASTNodeType::In => {
+                // Expects 2 children: element and container
+                check_children_exact!(ast_node, 2);
                 let mut instructions = Vec::new();
                 instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                 instructions.extend(self.generate_without_redirect(&ast_node.children[1])?);
@@ -709,24 +780,29 @@ impl<'t> IRGenerator<'t> {
                 Ok(instructions)
             }
             ASTNodeType::Is => {
+                // Expects 2 children: value1 and value2
+                check_children_exact!(ast_node, 2);
                 let mut instructions = Vec::new();
                 instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                 instructions.extend(self.generate_without_redirect(&ast_node.children[1])?);
                 instructions.push((self.generate_debug_info(ast_node), IR::IsSameObject));
                 Ok(instructions)
             }
-            ASTNodeType::Namespace(alias) => {
+            ASTNodeType::Namespace(name) => {
+                // Expects 1 child: expression
+                check_children_exact!(ast_node, 1);
                 let mut instructions = Vec::new();
                 instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                 instructions.push((
                     self.generate_debug_info(ast_node),
-                    IR::Namespace(alias.clone()),
+                    IR::Namespace(name.clone()),
                 ));
                 Ok(instructions)
             }
             ASTNodeType::Base64(base64_str) => {
+                // Expects 0 children
+                check_children_exact!(ast_node, 0);
                 let mut instructions = Vec::new();
-                // decode base64 string to bytes using the recommended Engine approach
                 let decoded_bytes = base64::engine::general_purpose::STANDARD
                     .decode(base64_str)
                     .map_err(|_| {
@@ -739,11 +815,15 @@ impl<'t> IRGenerator<'t> {
                 Ok(instructions)
             }
             ASTNodeType::AssumeTuple => {
+                // Expects 1 child
+                check_children_exact!(ast_node, 1);
                 let mut instructions = Vec::new();
                 instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                 Ok(instructions)
             }
             ASTNodeType::Set => {
+                // Expects 2 children
+                check_children_exact!(ast_node, 2);
                 let mut instructions = Vec::new();
                 instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                 instructions.extend(self.generate_without_redirect(&ast_node.children[1])?);
@@ -751,22 +831,25 @@ impl<'t> IRGenerator<'t> {
                 Ok(instructions)
             }
             ASTNodeType::Map => {
+                // Expects 2 children
+                check_children_exact!(ast_node, 2);
                 let mut instructions = Vec::new();
                 instructions.extend(self.generate_without_redirect(&ast_node.children[0])?);
                 instructions.extend(self.generate_without_redirect(&ast_node.children[1])?);
                 instructions.push((self.generate_debug_info(ast_node), IR::MapTo));
                 Ok(instructions)
             }
-            ASTNodeType::Required(var_name) => {
+            ASTNodeType::Required(name) => {
+                // Expects 0 children
+                check_children_exact!(ast_node, 0);
                 let mut instructions = Vec::new();
                 instructions.push((
                     self.generate_debug_info(ast_node),
-                    IR::Get(var_name.clone()),
+                    IR::Get(name.clone()),
                 ));
                 Ok(instructions)
             }
             _ => {
-                // 如果AST节点类型不被支持，返回错误
                 Err(IRGeneratorError::InvalidASTNodeType(
                     ast_node.node_type.clone(),
                 ))

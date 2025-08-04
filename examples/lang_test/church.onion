@@ -1,4 +1,4 @@
-@required stdlib;
+@required 'stdlib';
 
 // 丘奇数字编码
 // 0 = λf.λx.x

@@ -1,8 +1,8 @@
 // Onion Test Framework
 // Assert 函数
-@required stdlib;
-@required Modules;
-@import "constraint.onion";
+@required 'stdlib';
+@required 'Modules';
+@include "constraint.onion";
 assert := (condition?, message?) -> {
     if (not condition) {
         raise "Assertion failed: " + message;
@@ -23,12 +23,12 @@ assert_ne := (expected?, actual?, message?) -> {
 
 
 Test := (tests => Tuple) -> {
-    @import "result.onion";
-    @import "logging.onion";
+    @include "result.onion";
+    @include "logging.onion";
     stdlib.io.println("Starting tests...");
     writter := (level?, msg?) -> {
         color := {
-            @import "tui_colors.onion";
+            @include "tui_colors.onion";
             DEBUG: colors.blue,
             INFO: colors.green,
             WARN: colors.yellow,

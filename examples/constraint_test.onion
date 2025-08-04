@@ -1,8 +1,8 @@
 Modules := mut ();
-@import "std/constraint.onion";
-@import "std/result.onion";
+@include "std/constraint.onion";
+@include "std/result.onion";
 
-@required stdlib;
+@required 'stdlib';
 print := (a => Union(Float, Integer), b => Union(Float, Integer)) -> {
     stdlib.io.println('a:', a, 'b:', b);
 };

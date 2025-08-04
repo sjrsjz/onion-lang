@@ -1,4 +1,4 @@
-@required stdlib;
+@required 'stdlib';
 request := stdlib.http.get("https://www.baidu.com");
 stdlib.io.println("======== HTTP请求测试 ========");
 

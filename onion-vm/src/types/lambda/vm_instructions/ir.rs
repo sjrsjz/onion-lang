@@ -3,7 +3,9 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum IROperation {
     Add,          // +
+    Abs,         // 一元绝对值
     Subtract,     // -
+    Minus,       // 一元负号
     Multiply,     // *
     Divide,       // /
     Modulus,      // %

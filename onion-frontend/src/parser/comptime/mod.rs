@@ -1,5 +1,6 @@
 pub mod native;
 pub mod solver;
+pub mod ast_bindings;
 use std::sync::Arc;
 
 use onion_vm::{

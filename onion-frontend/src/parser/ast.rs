@@ -374,6 +374,8 @@ pub enum ASTNodeOperation {
     LessEqual,    // <=
     LeftShift,    // << (left shift)
     RightShift,   // >> (right shift)
+    Abs,    // 一元绝对值
+    Minus, // 一元负号
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -1946,8 +1948,8 @@ fn match_unary(
         }
         let node = node.unwrap();
         let operation = match tokens[current].first().unwrap().token().as_str() {
-            "-" => ASTNodeOperation::Subtract,
-            "+" => ASTNodeOperation::Add,
+            "-" => ASTNodeOperation::Minus,
+            "+" => ASTNodeOperation::Abs,
             _ => unreachable!(),
         };
         return Ok((

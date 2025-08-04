@@ -1,4 +1,4 @@
-@required Modules;
+@required 'Modules';
 if (not keyof (sync (() -> Modules.Result))()) {
     // 定义临时的 Result 构造器和辅助函数
     _Result_Temp_Constructor := mut undefined;
@@ -7,7 +7,7 @@ if (not keyof (sync (() -> Modules.Result))()) {
 
     // 配置临时 Result 构造器
     _Result_Temp_Constructor = {
-        @import "prototype.onion";
+        @include "prototype.onion";
         // Result 实例的接口定义
         Result_Interface := interface {
             is_ok => () -> keyof keyof self,

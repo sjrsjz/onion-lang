@@ -1,6 +1,6 @@
 // ASCII 艺术生成器 - 将文本转换为大字体艺术
-@required stdlib;
-@import "std/tui_colors.onion";
+@required 'stdlib';
+@include "std/tui_colors.onion";
 
 // 5x7 字体库 (简化版)
 font_data := {

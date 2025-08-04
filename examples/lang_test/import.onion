@@ -1,5 +1,4 @@
-@required stdlib;
-@compile "./module.onion";
+@required 'stdlib';
 
 module := () -> dyn { // dyn是指定lambda依靠动态生成的字节码进行构建而非编译时确定
     import "./module.onionc" // 导入编译后的模块的字节码

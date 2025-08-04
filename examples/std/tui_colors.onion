@@ -1,4 +1,4 @@
-@import "./constraint.onion";
+@include "./constraint.onion";
 colors := {
     // 前景色
     'black': "\u001b[30m",

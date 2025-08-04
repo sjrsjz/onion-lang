@@ -1,3 +1,3 @@
-@required stdlib;
+@required 'stdlib';
 value := stdlib.io.input("请输入一个值: ");
 stdlib.io.println("您输入的值是:", value);

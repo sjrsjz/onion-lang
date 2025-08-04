@@ -1,4 +1,4 @@
-@required stdlib;
+@required 'stdlib';
 
 obj := [
     mut 0,

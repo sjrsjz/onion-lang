@@ -1,9 +1,9 @@
 // Test file for combinators library using modern test framework
 
 Modules := mut ();
-@required stdlib;
-@import "std/test_framework.onion";
-@import "std/combinators.onion";
+@required 'stdlib';
+@include "std/test_framework.onion";
+@include "std/combinators.onion";
 
 Test {
     // === Identity Combinator Tests ===

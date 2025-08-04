@@ -1,5 +1,5 @@
 // 简单的Hello World示例
-@required stdlib;
+@required 'stdlib';
 
 main := () -> {
     stdlib.io.println("Hello, Onion World!");

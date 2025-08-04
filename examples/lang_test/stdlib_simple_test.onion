@@ -1,5 +1,5 @@
 // Simple test for new stdlib modules
-@required stdlib;
+@required 'stdlib';
 
 // Test sys module
 stdlib.io.println("=== Testing sys module ===");

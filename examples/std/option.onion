@@ -1,4 +1,4 @@
-@required Modules;
+@required 'Modules';
 if (not keyof (sync (() -> Modules.Option))()) {
     // 定义临时的 Option 构造器和辅助函数
     _Option_Temp_Constructor := mut undefined;
@@ -7,8 +7,8 @@ if (not keyof (sync (() -> Modules.Option))()) {
 
     // 配置临时 Option 构造器
     _Option_Temp_Constructor = {
-        @import "result.onion"; // 假设 result.onion 中的 Err 已通过其自身的缓存机制全局可用
-        @import "prototype.onion";
+        @include "result.onion"; // 假设 result.onion 中的 Err 已通过其自身的缓存机制全局可用
+        @include "prototype.onion";
         // Option 实例的接口定义
         Option_Interface := interface {
             is_some => () -> keyof keyof self,

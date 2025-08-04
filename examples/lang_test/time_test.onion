@@ -1,4 +1,4 @@
-@required stdlib;
+@required 'stdlib';
 
 stdlib.io.println("======== 时间模块测试 ========");
 

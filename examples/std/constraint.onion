@@ -1,4 +1,4 @@
-@import "prototype.onion";
+@include "prototype.onion";
 Float := (v?) -> typeof v == 'Float';
 Integer := (v?) -> typeof v == 'Integer';
 String := (v?) -> typeof v == 'String';

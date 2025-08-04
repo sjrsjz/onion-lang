@@ -1,5 +1,5 @@
 // 完整的 FFI 演示
-@required stdlib;
+@required 'stdlib';
 
 // 演示 C 类型系统
 demo_ctypes := () -> {

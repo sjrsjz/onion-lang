@@ -1,6 +1,6 @@
 // 粒子系统模拟器 - 烟花效果
-@required stdlib;
-@import "std/tui_colors.onion";
+@required 'stdlib';
+@include "std/tui_colors.onion";
 
 width := 80;
 height := 30;

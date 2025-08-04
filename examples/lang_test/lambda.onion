@@ -1,4 +1,4 @@
-@required stdlib;
+@required 'stdlib';
 // 传统函数式写法
 
 f := "x" -> x + 1;
@@ -51,3 +51,9 @@ assert f(1, 2) == 3;
 
 // 可以用 keyof 获得函数的形参列表
 stdlib.io.println("Function parameters:", keyof f);
+
+// 我们也可以做更复杂的形参约束
+// 例如，要求形参是一个元组，并且元组的第一个元素是一个正整数，第二个元素是一个二元组，二元组的第一个元素是一个正整数，第二个元素是一个正整数
+f := (x => guard, (y => guard, z => guard)) -> x + y + z;
+
+assert f(1, (2, 3)) == 6;

@@ -77,7 +77,7 @@ pub fn validate_document(
 
     // --- 5. 语义高亮 ---
     info!("Starting semantic highlighting analysis.");
-    let semantic_tokens = match do_semantic(&document.content, &final_ast, &tokens) {
+    let semantic_tokens = match do_semantic(&document.content, &ast, &tokens) {
         Ok(tokens) => {
             info!(
                 "Semantic highlighting successful, {} tokens generated",

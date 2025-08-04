@@ -1,5 +1,5 @@
 // 高级 FFI 演示：调用 Windows API
-@required stdlib;
+@required 'stdlib';
 
 main := () -> {
     stdlib.io.println("==================================================");

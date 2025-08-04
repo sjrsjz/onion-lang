@@ -1,5 +1,5 @@
-@required stdlib;
-@import "std/tui_colors.onion";
+@required 'stdlib';
+@include "std/tui_colors.onion";
 
 w := 176.0;
 h := 88.0;

@@ -1,6 +1,6 @@
 // 康威生命游戏 (Conway's Game of Life)
-@required stdlib;
-@import "std/tui_colors.onion";
+@required 'stdlib';
+@include "std/tui_colors.onion";
 
 width := 60;
 height := 40;

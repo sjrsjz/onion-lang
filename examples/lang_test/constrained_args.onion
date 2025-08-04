@@ -6,8 +6,8 @@ Any := (x?) -> true;
 Lambda := (x?) -> typeof x == 'Lambda';
 CannotAssign := (x?) -> raise "You should just use default value of parameter, not assign it!";
 
-@required stdlib;
-@import "../std/result.onion";
+@required 'stdlib';
+@include "../std/result.onion";
 
 add_positive := (a => Positive, b => Positive) -> {
     return a + b;
@@ -56,7 +56,7 @@ stdlib.io.println(
     )
 );
 
-@import "../std/option.onion";
+@include "../std/option.onion";
 map_to := (x => Option.check, f => Lambda) -> {
     if (x.is_some()) {
         return Some(f(x.unwrap()));

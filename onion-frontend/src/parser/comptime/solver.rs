@@ -34,7 +34,7 @@ use crate::{
     parser::{
         analyzer::{AnalyzeError, AnalyzeWarn, analyze_ast, auto_capture_and_rebuild},
         ast::{ASTNode, ASTNodeType},
-        comptime::{OnionASTObject, native::wrap_native_function},
+        comptime::{OnionASTObject, ast_bindings, native::wrap_native_function},
     },
     utils::cycle_detector::CycleDetector,
 };
@@ -367,9 +367,13 @@ impl ComptimeSolver {
                                     );
                                     let result = sub_solver.solve(&ast);
                                     if result.is_err() {
+                                        let mut error_text = String::new();
+                                        for error in sub_solver.errors() {
+                                            error_text.push_str(&error.to_string());
+                                            error_text.push('\n');
+                                        }
                                         return Err(RuntimeError::DetailedError(
-                                            format!("Sub solver error: {:?}", sub_solver.errors)
-                                                .into(),
+                                            format!("Sub solver error: {error_text}").into(),
                                         ));
                                     }
                                     Ok(OnionObject::Custom(Arc::new(OnionASTObject::new(
@@ -389,6 +393,8 @@ impl ComptimeSolver {
                 ),
             ),
         );
+
+        builtin_definitions.insert("ast".to_string(), ast_bindings::build_module());
 
         ComptimeSolver {
             state: ComptimeState {
@@ -604,9 +610,21 @@ impl ComptimeSolver {
                     let result = unwrap_object!(result_borrowed, OnionObject::Pair)?;
                     let success = *unwrap_object!(result.get_key(), OnionObject::Boolean)?;
                     if !success {
-                        return Err(RuntimeError::CustomValue(
-                            result.get_value().stabilize().into(),
-                        ));
+                        let value_text = result.get_value().with_data(|data| match data {
+                            OnionObject::Undefined(Some(str)) => Ok(str.to_string()),
+                            _ => Ok(data.to_string(&vec![]).unwrap_or_else(|e| {
+                                format!("[Failed to convert value to string: {e}]")
+                            })),
+                        })?;
+
+                        let mut error_text =
+                            format!("{} {}", "Execution returned a failure value:", value_text);
+
+                        // 打印上下文以帮助调试为什么会返回失败
+                        error_text.push_str(&format!("\n{}", "Context at Time of Failure Return:"));
+                        error_text.push_str(&scheduler.format_context());
+
+                        return Err(RuntimeError::DetailedError(error_text.into()));
                     }
                     return Ok(result.get_value().stabilize());
                 }

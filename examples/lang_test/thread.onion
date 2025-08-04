@@ -1,4 +1,4 @@
-@required stdlib;
+@required 'stdlib';
 
 thread1 := () -> {
     stdlib.io.println("线程1开始");

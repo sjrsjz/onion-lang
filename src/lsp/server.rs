@@ -245,6 +245,8 @@ impl LspServer {
             "spawn",
             "self",
             "this",
+            "dynamic",
+            "static",
         ];
         for keyword in keywords {
             items.push(CompletionItem {
@@ -271,7 +273,7 @@ impl LspServer {
         }
 
         let annotations = vec![
-            "dynamic", "static", "compile", "required", "macro", "import",
+            "required", "include", "def", "undef", "ifdef", "ast"
         ];
         for annotation in annotations {
             items.push(CompletionItem {

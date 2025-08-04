@@ -1,4 +1,4 @@
-@required stdlib;
+@required 'stdlib';
 stdlib.io.println("双引号字符串");
 stdlib.io.println('单引号字符串');
 stdlib.io.println("字符串中的双引号: \"Hello, World!\"");

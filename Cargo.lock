@@ -1098,6 +1098,7 @@ dependencies = [
  "base64 0.22.1",
  "colored",
  "criterion",
+ "indexmap",
  "once_cell",
  "onion-vm",
  "regex",
