@@ -19,21 +19,21 @@ use crate::{
 pub struct NativeMethodGenerator<F>
 where
     F: Fn(
-            Option<&OnionStaticObject>,
+            &OnionStaticObject,
             &OnionFastMap<Box<str>, OnionStaticObject>,
             &mut GC<OnionObjectCell>,
         ) -> Result<OnionStaticObject, RuntimeError>
         + 'static,
 {
     captured: OnionFastMap<Box<str>, OnionStaticObject>,
-    self_object: Option<OnionStaticObject>,
+    self_object: OnionStaticObject,
     function: &'static F,
 }
 
 impl<F> Runnable for NativeMethodGenerator<F>
 where
     F: Fn(
-            Option<&OnionStaticObject>,
+            &OnionStaticObject,
             &OnionFastMap<Box<str>, OnionStaticObject>,
             &mut GC<OnionObjectCell>,
         ) -> Result<OnionStaticObject, RuntimeError>
@@ -43,34 +43,10 @@ where
 {
     fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> StepResult {
         unwrap_step_result!(
-            (self.function)(self.self_object.as_ref(), &self.captured, gc)
+            (self.function)(&self.self_object, &self.captured, gc)
                 .map(|result| StepResult::Return(result.into()))
         )
     }
-
-    fn capture(
-        &mut self,
-        argument: &OnionFastMap<Box<str>, OnionStaticObject>,
-        captured_vars: &OnionFastMap<Box<str>, OnionObject>,
-        _gc: &mut GC<OnionObjectCell>,
-    ) -> Result<(), RuntimeError> {
-        self.captured = argument.clone();
-        for (key, value) in captured_vars.pairs() {
-            self.captured
-                .push_with_index(key.clone(), value.stabilize());
-        }
-        Ok(())
-    }
-
-    fn bind_self_object(
-        &mut self,
-        self_object: &OnionObject,
-        _gc: &mut GC<OnionObjectCell>,
-    ) -> Result<(), RuntimeError> {
-        self.self_object = Some(self_object.stabilize());
-        Ok(())
-    }
-
     fn format_context(&self) -> String {
         // Get the type name of the closure/function pointer. This is the best
         // static information we have to identify which native code is running.
@@ -80,11 +56,7 @@ where
         // Let's try to show just the most specific part for readability.
         let short_type_name = full_type_name.split("::").last().unwrap_or(full_type_name);
 
-        // Format the 'self' object, gracefully handling the Option.
-        let self_info = match &self.self_object {
-            Some(obj) => format!("{:?}", obj),
-            None => "(None)".to_string(),
-        };
+        let self_info = format!("{:?}", self.self_object);
 
         // Assemble all the information into a clear, multi-line string.
         format!(
@@ -98,19 +70,11 @@ where
 }
 
 pub(crate) fn native_int_converter(
-    self_object: Option<&OnionStaticObject>,
+    self_object: &OnionStaticObject,
     _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(self_obj) = self_object else {
-        return Err(RuntimeError::DetailedError(
-            "Native int converter requires a self object"
-                .to_string()
-                .into(),
-        ));
-    };
-
-    self_obj.weak().with_data(|obj: &OnionObject| {
+    self_object.weak().with_data(|obj: &OnionObject| {
         match obj {
             OnionObject::Integer(v) => {
                 // 如果已经是整数，直接返回
@@ -161,19 +125,11 @@ pub(crate) fn native_int_converter(
 }
 
 pub(crate) fn native_float_converter(
-    self_object: Option<&OnionStaticObject>,
+    self_object: &OnionStaticObject,
     _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(self_obj) = self_object else {
-        return Err(RuntimeError::DetailedError(
-            "Native float converter requires a self object"
-                .to_string()
-                .into(),
-        ));
-    };
-
-    self_obj.weak().with_data(|obj: &OnionObject| {
+    self_object.weak().with_data(|obj: &OnionObject| {
         match obj {
             OnionObject::Float(v) => {
                 // 如果已经是浮点数，直接返回
@@ -222,19 +178,11 @@ pub(crate) fn native_float_converter(
 }
 
 pub(crate) fn native_string_converter(
-    self_object: Option<&OnionStaticObject>,
+    self_object: &OnionStaticObject,
     _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(self_obj) = self_object else {
-        return Err(RuntimeError::DetailedError(
-            "Native string converter requires a self object"
-                .to_string()
-                .into(),
-        ));
-    };
-
-    self_obj.weak().with_data(|obj: &OnionObject| {
+    self_object.weak().with_data(|obj: &OnionObject| {
         match obj {
             OnionObject::String(s) => {
                 // 如果已经是字符串，直接返回
@@ -286,19 +234,11 @@ pub(crate) fn native_string_converter(
 }
 
 pub(crate) fn native_bool_converter(
-    self_object: Option<&OnionStaticObject>,
+    self_object: &OnionStaticObject,
     _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(self_obj) = self_object else {
-        return Err(RuntimeError::DetailedError(
-            "Native bool converter requires a self object"
-                .to_string()
-                .into(),
-        ));
-    };
-
-    self_obj.weak().with_data(|obj: &OnionObject| {
+    self_object.weak().with_data(|obj: &OnionObject| {
         match obj {
             OnionObject::Boolean(b) => {
                 // 如果已经是布尔值，直接返回
@@ -341,19 +281,11 @@ pub(crate) fn native_bool_converter(
 }
 
 pub(crate) fn native_bytes_converter(
-    self_object: Option<&OnionStaticObject>,
+    self_object: &OnionStaticObject,
     _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(self_obj) = self_object else {
-        return Err(RuntimeError::DetailedError(
-            "Native bytes converter requires a self object"
-                .to_string()
-                .into(),
-        ));
-    };
-
-    self_obj.weak().with_data(|obj: &OnionObject| {
+    self_object.weak().with_data(|obj: &OnionObject| {
         match obj {
             OnionObject::Bytes(bytes) => {
                 // 如果已经是字节数组，直接返回
@@ -406,19 +338,11 @@ pub(crate) fn native_bytes_converter(
 }
 
 pub(crate) fn native_length_method(
-    self_object: Option<&OnionStaticObject>,
+    self_object: &OnionStaticObject,
     _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(self_obj) = self_object else {
-        return Err(RuntimeError::DetailedError(
-            "Native length method requires a self object"
-                .to_string()
-                .into(),
-        ));
-    };
-
-    self_obj.weak().with_data(|obj: &OnionObject| match obj {
+    self_object.weak().with_data(|obj: &OnionObject| match obj {
         OnionObject::String(s) => Ok(OnionObject::Integer(s.len() as i64).stabilize()),
         OnionObject::Bytes(b) => Ok(OnionObject::Integer(b.len() as i64).stabilize()),
         OnionObject::Range(start, end) => {
@@ -438,19 +362,11 @@ pub(crate) fn native_length_method(
 }
 
 pub(crate) fn native_elements_method(
-    self_object: Option<&OnionStaticObject>,
+    self_object: &OnionStaticObject,
     _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(self_obj) = self_object else {
-        return Err(RuntimeError::DetailedError(
-            "Native elements method requires a self object"
-                .to_string()
-                .into(),
-        ));
-    };
-
-    self_obj.weak().with_data(|obj: &OnionObject| {
+    self_object.weak().with_data(|obj: &OnionObject| {
         match obj {
             OnionObject::String(s) => {
                 let elements = OnionTuple::new_static_no_ref(
@@ -480,7 +396,7 @@ pub(crate) fn native_elements_method(
             }
             OnionObject::Tuple(_) => {
                 // 对于元组，直接返回自己
-                Ok(self_obj.clone())
+                Ok(self_object.clone())
             }
             _ => Err(RuntimeError::DetailedError(
                 format!(
@@ -503,7 +419,7 @@ pub(crate) fn wrap_native_function<F>(
 ) -> OnionStaticObject
 where
     F: Fn(
-            Option<&OnionStaticObject>,
+            &OnionStaticObject,
             &OnionFastMap<Box<str>, OnionStaticObject>,
             &mut GC<OnionObjectCell>,
         ) -> Result<OnionStaticObject, RuntimeError>
@@ -515,13 +431,22 @@ where
     OnionLambdaDefinition::new_static_with_self(
         params,
         LambdaBody::NativeFunction((
-            Arc::new(move || {
-                Box::new(NativeMethodGenerator {
-                    captured: OnionFastMap::new(string_pool.clone()),
-                    self_object: None,
-                    function: function,
-                })
-            }),
+            Arc::new(
+                move |self_object: &OnionObject,
+                      argument: &OnionFastMap<Box<str>, OnionStaticObject>,
+                      capture: &OnionFastMap<Box<str>, OnionObject>,
+                      _gc: &mut GC<OnionObjectCell>| {
+                    let mut captured = argument.clone();
+                    for (key, value) in capture.pairs() {
+                        captured.push_with_index(*key, value.stabilize());
+                    }
+                    Box::new(NativeMethodGenerator {
+                        captured,
+                        self_object: self_object.stabilize(),
+                        function: function,
+                    })
+                },
+            ),
             cloned_pool,
         )),
         capture,

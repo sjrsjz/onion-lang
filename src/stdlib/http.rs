@@ -241,22 +241,6 @@ impl Runnable for AsyncHttpRequest {
         Ok(())
     }
 
-    fn bind_self_object(
-        &mut self,
-        _self_object: &OnionObject,
-        _gc: &mut GC<OnionObjectCell>,
-    ) -> Result<(), RuntimeError> {
-        Ok(())
-    }
-
-    fn capture(
-        &mut self,
-        _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
-        _captured_vars: &OnionFastMap<Box<str>, OnionObject>,
-        _gc: &mut GC<OnionObjectCell>,
-    ) -> Result<(), RuntimeError> {
-        Ok(())
-    }
     fn format_context(&self) -> String {
         let state = self.state.lock().unwrap().clone();
         let headers_str = self
@@ -295,7 +279,7 @@ fn http_request(
 
     let request = AsyncHttpRequest::new(url, method, headers, body);
     let lambda_body = LambdaBody::NativeFunction((
-        Arc::new(move || Box::new(request.clone())),
+        Arc::new(move |_, _, _, _| Box::new(request.clone())),
         OnionKeyPool::create(vec![]),
     ));
 
@@ -315,7 +299,7 @@ fn http_get(
     let url = get_string_arg(argument, "url")?;
     let request = AsyncHttpRequest::new(url, "GET".to_string(), IndexMap::new(), None);
     let lambda_body = LambdaBody::NativeFunction((
-        Arc::new(move || Box::new(request.clone())),
+        Arc::new(move |_, _, _, _| Box::new(request.clone())),
         OnionKeyPool::create(vec![]),
     ));
     Ok(OnionLambdaDefinition::new_static(
@@ -335,7 +319,7 @@ fn http_post(
     let body = get_optional_string_arg(argument, "body")?;
     let request = AsyncHttpRequest::new(url, "POST".to_string(), IndexMap::new(), body);
     let lambda_body = LambdaBody::NativeFunction((
-        Arc::new(move || Box::new(request.clone())),
+        Arc::new(move |_, _, _, _| Box::new(request.clone())),
         OnionKeyPool::create(vec![]),
     ));
     Ok(OnionLambdaDefinition::new_static(
@@ -355,7 +339,7 @@ fn http_put(
     let body = get_optional_string_arg(argument, "body")?;
     let request = AsyncHttpRequest::new(url, "PUT".to_string(), IndexMap::new(), body);
     let lambda_body = LambdaBody::NativeFunction((
-        Arc::new(move || Box::new(request.clone())),
+        Arc::new(move |_, _, _, _| Box::new(request.clone())),
         OnionKeyPool::create(vec![]),
     ));
     Ok(OnionLambdaDefinition::new_static(
@@ -374,7 +358,7 @@ fn http_delete(
     let url = get_string_arg(argument, "url")?;
     let request = AsyncHttpRequest::new(url, "DELETE".to_string(), IndexMap::new(), None);
     let lambda_body = LambdaBody::NativeFunction((
-        Arc::new(move || Box::new(request.clone())),
+        Arc::new(move |_, _, _, _| Box::new(request.clone())),
         OnionKeyPool::create(vec![]),
     ));
     Ok(OnionLambdaDefinition::new_static(
@@ -394,7 +378,7 @@ fn http_patch(
     let body = get_optional_string_arg(argument, "body")?;
     let request = AsyncHttpRequest::new(url, "PATCH".to_string(), IndexMap::new(), body);
     let lambda_body = LambdaBody::NativeFunction((
-        Arc::new(move || Box::new(request.clone())),
+        Arc::new(move |_, _, _, _| Box::new(request.clone())),
         OnionKeyPool::create(vec![]),
     ));
     Ok(OnionLambdaDefinition::new_static(

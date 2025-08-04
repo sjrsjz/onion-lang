@@ -22,7 +22,6 @@ where
     ) -> Result<OnionStaticObject, RuntimeError>,
 {
     captured: OnionFastMap<Box<str>, OnionStaticObject>,
-    self_object: Option<OnionStaticObject>,
     function: Arc<F>,
 }
 
@@ -41,29 +40,6 @@ where
             (self.function)(&self.captured, gc).map(|result| StepResult::Return(result.into()))
         )
     }
-
-    fn capture(
-        &mut self,
-        argument: &OnionFastMap<Box<str>, OnionStaticObject>,
-        captured_vars: &OnionFastMap<Box<str>, OnionObject>,
-        _gc: &mut GC<OnionObjectCell>,
-    ) -> Result<(), RuntimeError> {
-        self.captured = argument.clone();
-        for (key, value) in captured_vars.pairs() {
-            self.captured.push_with_index(*key, value.stabilize());
-        }
-        Ok(())
-    }
-
-    fn bind_self_object(
-        &mut self,
-        self_object: &OnionObject,
-        _gc: &mut GC<OnionObjectCell>,
-    ) -> Result<(), RuntimeError> {
-        self.self_object = Some(self_object.stabilize());
-        Ok(())
-    }
-
     fn format_context(&self) -> String {
         // Use the type name of the function/closure to identify the native code.
         let full_type_name = std::any::type_name_of_val(&self.function);
@@ -71,19 +47,12 @@ where
         // Provide a shorter, more readable version of the type name.
         let short_type_name = full_type_name.split("::").last().unwrap_or(full_type_name);
 
-        // Format the 'self' object, which acts as context for this runnable.
-        let self_info = match &self.self_object {
-            Some(obj) => format!("{obj:?}"),
-            None => "(None)".to_string(),
-        };
-
         // Assemble all the information into a clear, structured block.
         format!(
-            "-> Executing Native Function:\n   - Function: {} (Full Type: {})\n   - Argument: {:?}\n   - Context (self): {}",
+            "-> Executing Native Function:\n   - Function: {} (Full Type: {})\n   - Argument: {:?}",
             short_type_name,
             full_type_name, // Include full name for disambiguation
             self.captured,
-            self_info
         )
     }
 }
@@ -108,13 +77,21 @@ where
     OnionLambdaDefinition::new_static(
         params,
         LambdaBody::NativeFunction((
-            Arc::new(move || {
-                Box::new(NativeFunctionGenerator {
-                    captured: OnionFastMap::new(string_pool.clone()),
-                    self_object: None,
-                    function: function.clone(),
-                })
-            }),
+            Arc::new(
+                move |_,
+                      argument: &OnionFastMap<Box<str>, OnionStaticObject>,
+                      capture: &OnionFastMap<Box<str>, OnionObject>,
+                      _| {
+                    let mut captured = argument.clone();
+                    for (key, value) in capture.pairs() {
+                        captured.push_with_index(*key, value.stabilize());
+                    }
+                    Box::new(NativeFunctionGenerator {
+                        captured,
+                        function: function.clone(),
+                    })
+                },
+            ),
             cloned_pool,
         )),
         capture,

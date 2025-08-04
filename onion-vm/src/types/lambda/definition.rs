@@ -27,7 +27,16 @@ pub enum LambdaBody {
     Instruction(Arc<VMInstructionPackage>),
     NativeFunction(
         (
-            Arc<dyn Fn() -> Box<dyn Runnable> + Send + Sync>,
+            Arc<
+                dyn Fn(
+                        &OnionObject,                               // self_object
+                        &OnionFastMap<Box<str>, OnionStaticObject>, // argument
+                        &OnionFastMap<Box<str>, OnionObject>,       // captured_vars
+                        &mut GC<OnionObjectCell>,                   // gc
+                    ) -> Box<dyn Runnable>
+                    + Send
+                    + Sync,
+            >,
             OnionKeyPool<Box<str>>,
         ),
     ),
@@ -192,10 +201,7 @@ impl OnionLambdaDefinition {
                 Ok(Box::new(runnable))
             }
             LambdaBody::NativeFunction((native_function, _)) => {
-                let mut runnable = native_function();
-                runnable.capture(argument, &self.capture, gc)?;
-                runnable.bind_self_object(self_object, gc)?;
-                Ok(runnable)
+                Ok(native_function(self_object, argument, &self.capture, gc))
             }
         }
     }

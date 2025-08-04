@@ -96,7 +96,7 @@ impl OnionLazySet {
                     LambdaBody::NativeFunction((
                         Arc::new({
                             let collector = collector.clone();
-                            move || Box::new(collector.clone())
+                            move |_, _, _, _| Box::new(collector.clone())
                         }),
                         empty_pool.clone(),
                     )),
@@ -166,24 +166,6 @@ impl Runnable for OnionLazySetCollector {
             )),
         }
     }
-
-    fn bind_self_object(
-        &mut self,
-        _self_object: &OnionObject,
-        _gc: &mut GC<OnionObjectCell>,
-    ) -> Result<(), RuntimeError> {
-        Ok(())
-    }
-
-    fn capture(
-        &mut self,
-        _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
-        _captured_vars: &OnionFastMap<Box<str>, OnionObject>,
-        _gc: &mut GC<OnionObjectCell>,
-    ) -> Result<(), RuntimeError> {
-        Ok(())
-    }
-
     fn step(&mut self, _gc: &mut GC<OnionObjectCell>) -> StepResult {
         unwrap_step_result!(
             self.container

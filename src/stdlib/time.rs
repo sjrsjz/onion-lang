@@ -191,22 +191,6 @@ impl Runnable for AsyncSleep {
         }
     }
 
-    fn bind_self_object(
-        &mut self,
-        _self_object: &OnionObject,
-        _gc: &mut GC<OnionObjectCell>,
-    ) -> Result<(), RuntimeError> {
-        Ok(())
-    }
-
-    fn capture(
-        &mut self,
-        _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
-        _captured_vars: &OnionFastMap<Box<str>, OnionObject>,
-        _gc: &mut GC<OnionObjectCell>,
-    ) -> Result<(), RuntimeError> {
-        Ok(())
-    }
     fn receive(
         &mut self,
         _step_result: &StepResult,
@@ -239,7 +223,7 @@ fn async_sleep(
     Ok(OnionLambdaDefinition::new_static(
         LambdaParameter::Multiple([].into()),
         LambdaBody::NativeFunction((
-            Arc::new(move || {
+            Arc::new(move |_, _, _, _| {
                 Box::new(AsyncSleep {
                     millis,
                     start_time: SystemTime::now(),

@@ -4,8 +4,7 @@ use arc_gc::gc::GC;
 
 use crate::{
     lambda::scheduler::async_scheduler::Task,
-    types::object::{OnionObject, OnionObjectCell, OnionStaticObject},
-    utils::fastmap::OnionFastMap,
+    types::object::{OnionObjectCell, OnionStaticObject},
 };
 
 #[derive(Clone, Debug)]
@@ -76,26 +75,6 @@ pub trait Runnable: Send + Sync + 'static {
             "receive not implemented".into(),
         ))
     }
-
-    fn capture(
-        &mut self,
-        argument: &OnionFastMap<Box<str>, OnionStaticObject>,
-        captured_vars: &OnionFastMap<Box<str>, OnionObject>,
-        gc: &mut GC<OnionObjectCell>,
-    ) -> Result<(), RuntimeError> {
-        panic!("capture not implemented for this Runnable");
-    }
-
-    fn bind_self_object(
-        &mut self,
-        self_object: &OnionObject,
-        gc: &mut GC<OnionObjectCell>,
-    ) -> Result<(), RuntimeError> {
-        Err(RuntimeError::DetailedError(
-            "bind_self_object not implemented".into(),
-        ))
-    }
-
     fn format_context(&self) -> String;
 }
 
