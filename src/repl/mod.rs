@@ -152,7 +152,7 @@ pub fn start_repl() -> Result<()> {
 
                 rl.add_history_entry(&line)?;
 
-                let line = "@required stdlib;\n@required Out;\n".to_string() + &line;
+                let line = "@required 'stdlib';\n@required 'Out';\n".to_string() + &line;
 
                 match repl_executor.execute_code(&line) {
                     Ok(_) => {}
