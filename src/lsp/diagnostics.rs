@@ -14,7 +14,6 @@ use url::Url;
 use super::document::TextDocument;
 use super::protocol::*;
 use super::semantic::{SemanticTokenTypes, do_semantic};
-use onion_frontend::dir_stack::DirectoryStack;
 
 // =======================================================================
 //                       主验证函数 (Main Validation Function)
@@ -114,14 +113,6 @@ pub fn new_solver_for_file(uri: &str) -> Result<ComptimeSolver, Diagnostic> {
             message: format!("URI is not a valid file path: {}", uri),
             ..Default::default()
         })?;
-
-    let parent_dir = file_path.parent();
-    let _dir_stack = DirectoryStack::new(parent_dir).map_err(|e| Diagnostic {
-        range: Range::default_range(),
-        severity: Some(DiagnosticSeverity::Error),
-        message: format!("Failed to initialize directory stack: {}", e),
-        ..Default::default()
-    })?;
 
     let import_cycle_detector = CycleDetector::new()
         .enter(file_path)

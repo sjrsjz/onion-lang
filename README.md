@@ -1,36 +1,37 @@
 # 🧅 Onion Programming Language
 
-A modern functional programming language with a minimalist yet powerful type system, asynchronous execution capabilities, and flexible memory management.
+A modern, functional programming language featuring an expressive syntax, a powerful layered concurrency model, and a strong emphasis on safety and developer productivity.
 
-The name `Onion` is inspired by the layered structure of onions, which mirrors the VM's execution model with state isolation and abstraction between layers.
+The name `Onion` is inspired by its core design philosophy: a layered execution model that provides natural state isolation and abstraction, much like the layers of an onion.
 
 ## 🎯 What is Onion?
 
-**Onion** refers to this programming language that embodies the "layered execution" philosophy:
+**Onion** is built on a "layered execution" philosophy, which means:
 
-- **Multi-level Nesting**: Schedulers can be nested arbitrarily deep - `AsyncScheduler` → `Scheduler` → `AsyncScheduler` → `Scheduler`
-- **State Isolation**: Each layer maintains its own execution context, preventing interference between different scheduling levels
-- **Layer Communication**: Layers communicate through well-defined interfaces (`StepResult`, `Runnable` trait) while maintaining isolation
-- **Flexible Composition**: You can compose different execution strategies (sync/async) at any depth
+- **Deeply Nested Schedulers**: Schedulers can be nested to any depth (e.g., `AsyncScheduler` → `SyncScheduler` → `AsyncScheduler`).
+- **State Isolation**: Each execution layer maintains its own isolated context, preventing state interference between different scheduling levels.
+- **Controlled Communication**: Layers communicate through well-defined interfaces, ensuring that isolation is maintained.
+- **Flexible Composition**: Developers can mix and match execution strategies (e.g., synchronous and asynchronous) at any layer to fit their needs.
 
 ## ✨ Features
 
-- 🚀 **Functional Programming Paradigm** - Support for higher-order functions, closures, and function composition
-- ⚡ **Asynchronous Execution Model** - VM based on pure generator design, supporting asynchronous programming
-- 🧵 **Multi-threading Support** - Native thread support with `launch` and `valueof` for concurrent execution, **No GIL**
-- 🔒 **Safe Memory Management** - Mutability control and reference safety checks
-- 🎯 **Minimalist yet Powerful Dynamic Type System** - Powerful functionality through composition of a few built-in types (such as prototype classes)
-- 📦 **Modular Design** - Support for module imports and compilation caching
-- 🌊 **Lazy Evaluation** - Built-in lazy collections and streaming operations
-- ⚠ **Parameter Constraints** - Advanced parameter validation with custom constraint functions
-- 🔧 **LSP Support** - Language Server Protocol support
-- 🚀 **High Performance** - e.g., A 10 million iteration `while` count loop takes 1.17s, approx. 40% faster than RustPython's 1.91s.
+- **Expressive Functional Paradigm**: Embraces higher-order functions, closures, pattern matching, and composition as first-class citizens.
+- **Generator-based Asynchronous Core**: The VM is built on generators, providing native, efficient support for asynchronous operations (`async`, `pool`).
+- **GIL-Free Multi-threading**: True parallel execution with native threads (`launch`, `valueof`), free from a Global Interpreter Lock.
+- **Safe & Explicit Memory Management**: Fine-grained control over mutability (`mut`, `const`) and reference safety to prevent common bugs.
+- **Powerful Metaprogramming**: A compile-time macro system (`@def`, `@ast`) allows for syntax extension and code generation.
+- **Advanced Parameter Constraints**: Define custom validation rules directly in function signatures for robust, self-documenting APIs.
+- **Lazy Collections and Streams**: Built-in support for lazy evaluation and efficient stream processing using the `|` and `|>` operators.
+- **Built-in Interface System**: A flexible, prototype-based system for defining and implementing contracts.
+- **Rich Data Types and Literals**: A comprehensive set of built-in types and an enhanced syntax for strings, tuples, and collections.
+- **High Performance**: The Onion VM is optimized for speed. For example, a 10 million iteration `while` loop completes in approximately 1.17s, about 40% faster than the same loop in RustPython (1.91s).
+- **Excellent Tooling**: Includes a command-line interface, REPL, and Language Server Protocol (LSP) support for a modern development experience.
 
 ## 🚀 Quick Start
 
 ### Installation
 
-Make sure you have Rust toolchain installed, then clone and build the project:
+Ensure you have the Rust toolchain installed, then clone and build the project:
 
 ```bash
 git clone https://github.com/sjrsjz/onion-lang.git
@@ -38,409 +39,382 @@ cd onion-lang
 cargo install --path .
 ```
 
-### Hello World
+### Hello, World!
 
-Create a `hello.onion` file:
+Create a file named `hello.onion`:
 
 ```onion
-@required stdlib;
+@required 'stdlib';
 
 main := () -> {
     stdlib.io.println("Hello, Onion World!");
-    return "Program completed";
 };
 
 main();
 ```
 
-Run the program:
+Run it from your terminal:
 
 ```bash
-./target/release/onion run hello.onion
+onion run hello.onion
 ```
 
-## 📚 Language Features Examples
+## 🚀 Language Tour
 
-### Function Definition and Invocation
+Explore the core features of Onion through these examples.
+
+### 1. Data Types & Literals
+
+Onion supports a rich set of data types with a flexible literal syntax.
 
 ```onion
-@required stdlib;
-// Traditional functional style
+@required 'stdlib';
 
-f := "x" -> x + 1;
+// --- Strings ---
+stdlib.io.println("Standard double-quoted string");
+stdlib.io.println('Standard single-quoted string');
+stdlib.io.println("Escapes for newlines \\n and tabs \\t");
+stdlib.io.println(R"(Raw strings don't process escapes like \n)");
+stdlib.io.println("""Supports multi-line strings with ease""");
+stdlib.io.println("String " + "concatenation is simple.");
+stdlib.io.println("Unicode support: \u6d0b\u8471"); // "洋葱"
 
-// We can call the function in the following ways
-// Onion syntax treats f x, f(x), and f[x] as equivalent, since parentheses and brackets are only used to change operator precedence
+// --- Numbers, Booleans, and Nulls ---
+stdlib.io.println("Integer:", 42);
+stdlib.io.println("Hex:", 0x2A);
+stdlib.io.println("Float:", 3.14);
+stdlib.io.println("Boolean:", true);
+stdlib.io.println("Null:", null);
 
-// Traditional call
-assert f(1) == 2;
-// You can also use brackets
-assert f[1] == 2;
-// Call without parentheses
-assert f 1 == 2;
+// --- Tuples ---
+tuple := (1, "hello", true);
+stdlib.io.println("Tuple:", tuple);
+stdlib.io.println("Tuple length:", tuple.length());
 
-// We can add value constraints to function parameters
-guard := "x" -> x > 0;
-
-f := (x => guard) -> x + 1; // Or f := ("x" : guard) -> x + 1;
-// When calling, it will check whether x is greater than 0. If not, an exception will be thrown
-assert f(1) == 2;
-// f(0) // Throws exception
-
-// Or use logical values to represent constraints, true means always valid, false means never valid
-f := (x => true) -> x + 1; // Or f := ("x" : true) -> x + 1;
-
-// In this case, the value of x will not be checked
-assert f(1) == 2;
-
-// You can use x? to represent x => true
-f := (x?) -> x + 1;
-assert f(1) == 2;
-
-// We can also make the function parameter a tuple
-f := ("x", "y") -> x + y;
-
-assert f(1, 2) == 3;
-
-// Since f x and f(x) are equivalent, we can also call it as follows
-// When calling, the VM will unpack the tuple and pass each element to the corresponding slot
-// Note: (x?,) -> {} and (x?) -> {} are different. The former is a tuple, the latter is a single-value parameter. The latter will not unpack the passed value. This means that if you pass a single value to a function that requires a single-element tuple, the VM will immediately report an error because it cannot unpack the single value. In other words, you must pass a single-value tuple when calling
-packaged := (1, 2);
-assert f(packaged) == 3;
-assert f packaged == 3;
-
-// We can also add value constraints to tuple parameters
-f := (x => guard, y => guard) -> x + y;
-
-assert f(1, 2) == 3;
-
-
-// You can use keyof to get the parameter list of a function
-stdlib.io.println("Function parameters:", keyof f);
+// --- Type Conversion ---
+num_from_string := "42".int();
+stdlib.io.println("Converted to integer:", num_from_string);
 ```
 
-### Mutability Control
+### 2. Functions & Closures
+
+Functions are the cornerstone of Onion. The syntax is minimal, powerful, and supports closures that capture their environment.
 
 ```onion
-// Create object with mutable and immutable elements
+@required 'stdlib';
+
+// --- Basic Definition and Calls ---
+// f(x), f x, and f[x] are equivalent calls
+square := (x?) -> x * x;
+stdlib.io.println("Square of 5 is:", square 5);
+
+// Functions can accept tuples as arguments, which are automatically unpacked
+add := (x?, y?) -> x + y;
+stdlib.io.println("Sum of 3 and 4 is:", add(3, 4));
+
+// --- Closures and Captured Variables ---
+x := 10;
+y := mut 20;
+
+// This function automatically captures `x` and `y` from its environment
+f := () -> {
+    y = 30; // Modifies the captured `y`
+    stdlib.io.println("f executed. y is now:", y);
+};
+
+f();
+stdlib.io.println("After f, global y is:", y); // Prints 30
+
+// You can also explicitly declare captured variables
+g := () -> &[x, y] {
+    y = 40;
+    stdlib.io.println("g executed. y is now:", y);
+};
+
+g();
+stdlib.io.println("After g, global y is:", y); // Prints 40
+```
+
+### 3. Mutability & References
+
+Onion provides explicit control over mutability to enhance program safety.
+
+```onion
+@required 'stdlib';
+
 obj := [
-    mut 0,  // mutable element
-    1,      // immutable element
+    mut 0, // This element is mutable
+    1,     // This element is immutable
 ];
 
-// Modify mutable element - success
-obj[0] = 42;
+// Modification is wrapped in a sync block to manage concurrent access safely
+(sync () -> { obj[0] = 42; })(); // Success
+stdlib.io.println("obj[0] has been changed to:", obj[0]);
 
-// Try to modify immutable element - fails
-// obj[1] = 100; // runtime error
+// Attempting to modify an immutable element will fail at runtime
+(sync () -> { obj[1] = 100; })(); // Fails!
+stdlib.io.println("obj[1] remains:", obj[1]);
 
-// References and const references
-ref := obj[0];        // mutable reference
-const_value := const obj[0];  // const
+// A reference to a mutable value can change it
+ref := obj[0];
+ref = 99;
+stdlib.io.println("obj[0] is now:", obj[0]); // Prints 99
+
+// A const reference cannot be modified
+const_data := const obj[0];
+// (sync () -> { const_data = 100; })(); // Fails!
 ```
 
-### Asynchronous Programming
+### 4. Parameter Constraints (Guards)
+
+Enforce contracts at the function boundary with parameter constraints, making code more robust and self-documenting.
 
 ```onion
-// Asynchronous task with spawn
-task := () -> {
-    return (0..10).elements() |> (x?) -> {
-        stdlib.io.println("Processing element:", x);
-        return spawn () -> {
-            stdlib.io.println("Async processing element:", x);
-            n := mut 0;
-            while (n < 5) {
-                stdlib.io.println("Async element:", x, "count:", n);
-                n = n + 1;
-                stdlib.time.sleep_seconds(0.01);
-            };
-            return x * 2;
+@required 'stdlib';
+
+// Define constraint functions (guards)
+Positive := (x?) -> x > 0;
+NonEmpty := (s?) -> stdlib.string.length(s) > 0;
+
+// Apply guards to function parameters
+add_positives := (a => Positive, b => Positive) -> a + b;
+greet := (name => NonEmpty) -> "Hello, " + name + "!";
+
+// Valid calls
+stdlib.io.println(add_positives(5, 3)); // 8
+stdlib.io.println(greet("Onion"));      // "Hello, Onion!"
+
+// Invalid calls will raise a runtime error
+// add_positives(-1, 5); // Throws an error
+// greet("");            // Throws an error
+```
+
+### 5. Lazy Collections & Streams
+
+Process collections of data efficiently with lazy filters and maps. The `|` operator creates a lazy filtered set, while `|>` creates a lazy mapped stream.
+
+```onion
+@required 'stdlib';
+
+// Lazy filtering: the predicate is evaluated only when an element is accessed
+small_numbers := [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] | (x?) -> x < 5;
+stdlib.io.println("Is 3 in the set?", 3 in small_numbers); // true
+stdlib.io.println("Is 7 in the set?", 7 in small_numbers); // false
+
+// To get a concrete list, use .collect()
+collected := small_numbers.collect();
+stdlib.io.println("Collected small numbers:", collected);
+
+// Lazy mapping with the stream operator |>
+squared_stream := [1, 2, 3, 4, 5] |> (x?) -> x * x;
+stdlib.io.println("Stream of squared numbers:", squared_stream);```
+
+### 6. Interfaces (Prototypes)
+
+Onion uses a prototype-based interface system to define and check object capabilities.
+
+```onion
+@required 'stdlib';
+
+// Factory for creating new interface types
+interface := (interface_definition?) -> (
+    new => (structure?) -> structure : mut interface_definition,
+    check => (instance?) -> (valueof instance) is (valueof interface_definition),
+);
+
+// Define an interface contract
+Printable := interface {
+    print => () -> stdlib.io.println(self.data),
+};
+
+// Create an instance that fulfills the contract
+my_instance := Printable.new {
+    data => "This is my data!",
+};
+
+my_instance.print(); // "This is my data!"
+
+// Check if an instance conforms to an interface
+stdlib.io.println("Is instance of Printable?", Printable.check(my_instance)); // true
+
+// This check can be used as a function parameter constraint
+print_if_printable := (p => Printable.check) -> {
+    p.print();
+};
+
+print_if_printable(my_instance); // Works
+```
+
+### 7. Asynchronous Programming
+
+The `async` and `pool` keywords provide a powerful way to manage concurrent tasks.
+
+```onion
+@required 'stdlib';
+
+// A pool defines a generator of tasks
+pool := () -> {
+    return (0..5).elements() |> (x?) -> {
+        stdlib.io.println("Scheduling task for:", x);
+        stdlib.time.sleep_seconds(0.1);
+        return spawn () -> { // `spawn` creates an asynchronous computation
+            stdlib.io.println("Started async processing for:", x);
+            stdlib.time.sleep_seconds(1);
+            stdlib.io.println("Finished async processing for:", x);
+            return x * x;
         };
     };
 };
 
-// Execute asynchronously and get results
-tasks := (async task)();
-stdlib.io.println("Processing results:", valueof tasks);
+// `async` executes the pool, creating a handle to the group of running tasks
+tasks_handle := (async pool)();
+stdlib.io.println("All tasks have been scheduled.");
+
+// `valueof` blocks until all tasks in the handle complete and returns their results
+results := valueof tasks_handle;
+stdlib.io.println("All tasks completed. Results:", results);
 ```
 
-### Multi-threading Support
+### 8. Multi-threading
+
+For CPU-bound work, `launch` starts a new OS thread, enabling true parallelism.
 
 ```onion
-// Create concurrent threads
+@required 'stdlib';
+
+// Define two functions to be run in parallel
 thread1 := () -> {
-    stdlib.io.println("Thread 1 starting");
+    stdlib.io.println("Thread 1: Starting to compute...");
     stdlib.time.sleep_seconds(2);
-    stdlib.io.println("Thread 1 completed");
-    return "Result from thread 1";
+    return "Result from Thread 1";
 };
 
 thread2 := () -> {
-    stdlib.io.println("Thread 2 starting");
+    stdlib.io.println("Thread 2: Starting to compute...");
     stdlib.time.sleep_seconds(1);
-    stdlib.io.println("Thread 2 completed");
-    return "Result from thread 2";
+    return "Result from Thread 2";
 };
 
-// Launch threads
+// `launch` starts each function in a new thread and returns a handle
 handle1 := launch thread1;
 handle2 := launch thread2;
 
-// Wait for results
+stdlib.io.println("Threads launched. Waiting for results...");
+
+// `valueof` blocks on a handle and retrieves the return value
 result1 := valueof handle1;
 result2 := valueof handle2;
-stdlib.io.println("Results:", result1, result2);
+
+stdlib.io.println("Thread 1 Result:", result1);
+stdlib.io.println("Thread 2 Result:", result2);
 ```
 
-### Parameter Constraints
+### 9. Advanced Data Handling (JSON)
+
+The standard library includes a robust JSON module for real-world data manipulation.
 
 ```onion
-// Define constraint functions
-Positive := (x?) -> x > 0;
-NonEmpty := (s?) -> stdlib.string.length(s) > 0;
+@required 'stdlib';
 
-// Functions with parameter constraints
-add_positive := (a => Positive, b => Positive) -> {
-    return a + b;
-};
+config_text := '{
+    "database": {
+        "host": "localhost",
+        "port": 5432,
+        "users": ["admin", "guest"]
+    },
+    "logging": {
+        "level": "info"
+    }
+}';
 
-greet := (name => NonEmpty) -> {
-    return "Hello, " + name + "!";
-};
+// Parse a JSON string into an Onion object
+parsed_config := stdlib.json.parse(config_text);
 
-// Usage with automatic validation
-result := add_positive(5, 3);  // ✓ Valid
-// add_positive(-1, 5);        // ✗ Runtime error: constraint violation
+stdlib.io.println("Database host:", parsed_config.database.host); // localhost
+stdlib.io.println("Log level:", parsed_config.logging.level);   // info
+
+// Modify the object and stringify it back to JSON with pretty printing
+parsed_config.logging.level = "debug";
+pretty_json := stdlib.json.stringify_pretty(parsed_config);
+
+stdlib.io.println("Updated Config JSON:\n", pretty_json);
 ```
 
-### Lazy Collections and Stream Processing
+### 10. Metaprogramming
+
+Onion's macro system operates at compile-time, allowing you to define new keywords and transform code before execution.
 
 ```onion
-// Lazy filtering with in-place filtering
-filtered_set := [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] | (x?) -> x < 5;
-stdlib.io.println("Filtered set:", filtered_set);
+@required 'stdlib';
 
-// Check membership in lazy sets
-stdlib.io.println("Is 3 in set?", 3 in filtered_set);  // true
-stdlib.io.println("Is 7 in set?", 7 in filtered_set);  // false
+// @def defines a simple constant expression macro
+@def(add => (x?, y?) -> x + y);
+const_value := @add(1, 2); // This is replaced with 3 at compile time
+stdlib.io.println("has add macro defined:", @ifdef "add");
+stdlib.io.println("const_value:", const_value);
+@undef "add";
 
-// Lazy mapping
-mapped_set := [1, 2, 3, 4, 5] | (x?) -> x * 2;
-stdlib.io.println("Mapped set:", mapped_set);
-
-// Collect lazy results
-collected := filtered_set.collect();
-stdlib.io.println("Collected results:", collected);
-
-// Stream processing with ranges
-range_result := (0..100).elements() |> (x?) -> {
-    return x * x;
-};
-```
-
-### Prototype Inheritance
-
-```onion
-@required stdlib;
-interface := (interface_definition?) -> {
-    pointer := mut interface_definition;
-    return (
-        new => (structure?) -> structure : pointer,
-        check => (instance?) -> {
-            (valueof instance) is pointer
-        },
+// @ast lets you build Abstract Syntax Trees programmatically
+lambda := @ast.lambda_def(false, ()) << (
+    ("x", "y"),
+    ast.operation("+") << (
+        ast.variable("x"),
+        ast.variable("y")
     )
-};
+);
 
-my_interface := interface {
-    method1 => () -> stdlib.io.println("Method 1 called"),
-    method2 => (arg?) -> stdlib.io.println("Method 2 called with argument:", arg),
-    method3 => () -> stdlib.io.println(self.data),
-};
-
-my_interface_2 := interface {
-    method1 => () -> stdlib.io.println("Method 1 called"),
-    method2 => (arg?) -> stdlib.io.println("Method 2 called with argument:", arg),
-    method3 => () -> stdlib.io.println(self.data),
-};
-
-my_instance := my_interface.new {
-    data => "This is some data",
-};
-
-my_instance_2 := my_interface_2.new {
-    data => "This is some data",
-};
-
-
-stdlib.io.println("Is my_instance an instance of my_interface? ", my_interface.check(my_instance));
-stdlib.io.println("Is my_instance an instance of my_interface_2? ", my_interface_2.check(my_instance));
-my_instance.method1();
-stdlib.io.println("Calling method2 with 'Hello':");
-my_instance.method2("Hello");
-stdlib.io.println("Calling method3:");
-my_instance.method3();
-
-instance_guard_test := (x => my_interface.check) -> {
-    stdlib.io.println("Instance guard test passed with:", x.data);
-};
-
-instance_guard_test(my_instance); // This should work
-
-// instance_guard_test(my_instance_2); // This should fail, as my_instance_2 is not an instance of my_interface
+// The `lambda` variable is now a function equivalent to `(x?, y?) -> x + y`
+stdlib.io.println("AST-generated lambda(10, 20) =", lambda(10, 20));
 ```
 
-### Enhanced String Literals
+<details>
+<summary><b>🔬 Advanced Example: Functional Purity with Church Numerals</b></summary>
+
+Onion's functional capabilities are expressive enough to implement theoretical computer science concepts like the Lambda Calculus directly. This example encodes numbers and arithmetic using only functions.
 
 ```onion
-// Multiple string literal formats
-stdlib.io.println("Double quoted string");
-stdlib.io.println('Single quoted string');
-stdlib.io.println("Escaped characters: \"Hello\", \n newline, \t tab");
-stdlib.io.println("""Multi-line string
-with line breaks""");
-stdlib.io.println(R"(Raw string: \n no escaping needed)");
+@required 'stdlib';
 
-// String interpolation and concatenation
-name := "World";
-stdlib.io.println("Hello, " + name + "!");
+// --- Church Numeral Encoding (Numbers as functions) ---
+zero := (f?) -> (x?) -> x;
+one := (f?) -> (x?) -> f(x);
+two := (f?) -> (x?) -> f(f(x));
 
-// Unicode support
-stdlib.io.println("Unicode: \u6b63\u5e38\u5b57\u7b26\u4e32");
+// --- Operations (Functions that operate on other functions) ---
+// Successor: succ(n) = n + 1
+succ := (n?) -> (f?) -> (x?) -> f(n(f)(x));
+
+// Addition: add(m, n) = m + n
+add := (m?) -> (n?) -> (f?) -> (x?) -> m(f)(n(f)(x));
+
+// Multiplication: mult(m, n) = m * n
+mult := (m?) -> (n?) -> (f?) -> m(n(f));
+
+// --- Helper to convert a Church numeral to a regular number ---
+to_number := (church_num?) -> church_num((x?) -> x + 1)(0);
+
+// --- Tests ---
+four := succ(add(one)(two));
+stdlib.io.println("one + two =", to_number(add(one)(two))); // 3
+stdlib.io.println("two * (one + two) =", to_number(mult(two)(add(one)(two)))); // 6
 ```
-
-### Advanced Type System
-
-```onion
-// Built-in type conversions
-number := "42".int();
-stdlib.io.println("Converted number:", number);
-
-// Custom type conversion chains
-int := (x?) -> x.int();
-result := int "-42";
-stdlib.io.println("Chained conversion:", result);
-
-// Tuple operations
-tuple := (1, 2, 3);
-stdlib.io.println("Tuple:", tuple);
-stdlib.io.println("Tuple length:", tuple.length());
-
-// Tuples with methods
-enhanced_tuple := (1, 2, 3, length => () -> "custom method");
-stdlib.io.println("Custom method result:", enhanced_tuple.length());
-```
-
-### Modular Programming
-
-```onion
-// Module definition (module.onion)
-return {
-    get_version => () -> "1.0.0",
-    utils => {
-        add => (a?, b?) -> a + b,
-        multiply => (a?, b?) -> a * b
-    }
-};
-
-// Module import
-@compile "./module.onion";
-module := () -> dyn {
-    import "./module.onionc"
-};
-module := module();
-stdlib.io.println("Module version:", module.get_version());
-```
-
-```onion
-@import "./ast.onion"; // Importing AST of onion source code
-```
-
-### Result and Option Types
-
-```onion
-Modules := mut ();
-@import "../std/result.onion";
-@import "../std/option.onion";
-
-// Result type for error handling
-safe_divide := (a?, b?) -> {
-    if (b == 0) {
-        return Err("Division by zero");
-    } else {
-        return Ok(a / b);
-    }
-};
-
-result := safe_divide(10, 2);
-if (result.is_ok()) {
-    stdlib.io.println("Division result:", result.unwrap());
-} else {
-    stdlib.io.println("Error:", result.unwrap_err());
-}
-
-// Option type for nullable values
-find_user := (id?) -> {
-    if (id == 1) {
-        return Some("Alice");
-    } else {
-        return None();
-    }
-};
-
-user := find_user(1);
-name := user.unwrap_or("Unknown");
-stdlib.io.println("User name:", name);
-```
-
-### Macro System
-
-```onion
-@required stdlib;
-
-@macro A := (
-    add(_A, _B)
-) : _A + _B;
-
-@A stdlib.io.println(add(1, 2) + add(3, add(1,2)));
-
-@macro combine := (
-    _A, _B
-) : _A(_B);
-
-@combine stdlib.io.println, "Hello, World!";
-
-@macro if := (
-    _condition, _then, _else
-) : if (_condition) { _then } else { _else };
-
-@if false, stdlib.io.println("Condition is true"), stdlib.io.println("Condition is false", (@if true, "This is true", "This is false"));
-
-@macro Pair := (
-    pair(_A, _B)
-): _A : _B;
-@macro Named := (
-    named(_A, _B)
-): {_A} => _B;
-
-@Named @Pair pair(1, named("A", "B"))
-```
+</details>
 
 ## 🛠️ Command Line Tools
 
-Onion provides a complete set of command line tools:
+Onion ships with a complete toolchain:
 
 ```bash
-# Run source code file
+# Run a source code file
 onion run file.onion
 
-# Compile to bytecode
+# Compile a file to bytecode
 onion compile file.onion -o file.onionc
 
-# Start interactive REPL
+# Start the interactive Read-Eval-Print Loop (REPL)
 onion repl
 
-# Start language server
+# Start the Language Server for IDE integration
 onion lsp
 ```
 
@@ -450,47 +424,48 @@ onion lsp
 onion-lang/
 ├── src/                    # Main program source code
 │   ├── main.rs            # CLI entry point
-│   ├── repl/            # Interactive interpreter (not yet complete)
+│   ├── repl/              # Interactive interpreter
 │   ├── lsp/               # Language Server Protocol
-│   └── stdlib/            # Standard library
-├── onion-frontend/        # Compilation frontend
+│   └── stdlib/            # Standard library source
+├── onion-frontend/         # Compilation frontend
 │   └── src/
 │       ├── parser/        # Lexer and parser
-│       └── ir_generator/  # Intermediate code generator
-├── onion-vm/             # Virtual machine runtime
+│       │   └── comptime/  # Compile-time solver
+│       ├── utils/         # Utility functions
+│       └── ir_generator/  # Intermediate Representation generator
+├── onion-vm/               # Virtual Machine runtime
 │   └── src/
 │       ├── lambda/        # Lambda computation and scheduler
+│       ├── utils/         # VM utilities
 │       └── types/         # Type system implementation
-└── examples/             # Example code
+└── examples/               # Example Onion code
 ```
 
 ## 🎯 Design Philosophy
 
-Onion programming language is designed around the following core principles:
-
-1. **Safety First** - Prevent common errors through type system and mutability control
-2. **Expressiveness** - Functional programming paradigm provides concise and elegant syntax, supporting asynchronous execution and lazy evaluation
-3. **Developer Friendly** - Provides LSP support
+1.  **Safety First**: Prevent common errors through explicit mutability, reference controls, and a strong interface system.
+2.  **Maximum Expressiveness**: Provide developers with the tools (functional, asynchronous, metaprogramming) to write concise, powerful, and elegant code.
+3.  **Developer-Friendly**: A modern toolchain, including LSP for IDEs and a simple command-line interface, is a core part of the project.
 
 ## 🔧 Development Status
 
-This is an experimental programming language project, currently including:
+Onion is an experimental but rapidly developing project.
 
-- ✅ Basic syntax and type system
-- ✅ Functional programming features
-- ✅ Asynchronous execution model
-- ✅ Multi-threading support with `launch` and `valueof`
-- ✅ Parameter constraints and validation
-- ✅ Enhanced string literals and Unicode support
+- ✅ Core syntax and dynamic type system
+- ✅ Functional programming features (closures, HOFs)
+- ✅ Layered asynchronous execution model (`async`, `pool`, `spawn`)
+- ✅ GIL-free multi-threading (`launch`, `valueof`)
+- ✅ Advanced parameter constraints (guards)
+- ✅ Rich data types and enhanced string literals
 - ✅ Lazy collections and stream processing
-- ✅ Result and Option types for error handling
-- ✅ Module system (static and dynamic imports)
-- ✅ Simple macro system
-- ✅ Language Server Protocol support
-- ✅ Performance optimization
-- ✅ REPL and command line tools
-- 🚧 Standard library extensions
-- 🚧 Documentation and toolchain refinement
+- ✅ Prototype-based interface system
+- ✅ Metaprogramming and macro system (`@def`, `@ast`)
+- ✅ Robust standard library (JSON, time, io)
+- ✅ Language Server Protocol (LSP) for IDE support
+- ✅ Performance optimizations
+- ✅ CLI tools (run, compile, repl)
+- 🚧 Expanded standard library
+- 🚧 Refined documentation and toolchain
 
 ## 📄 License
 
@@ -499,4 +474,4 @@ This project is licensed under the [MIT License](LICENSE).
 ## 🔗 Related Links
 
 - [Language Specification](docs/language-spec.typ)
-- [Example Code](examples/)
+- [Examples Folder](examples/)

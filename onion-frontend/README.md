@@ -9,7 +9,7 @@ The `onion-frontend` package is responsible for transforming Onion source code i
 ## 🏗️ Architecture
 
 ```
-Source Code → Lexer → Parser → AST → Analyzer → IR Generator → IR/Bytecode
+Source Code → Lexer → Parser → AST -> Comptime → Analyzer → IR Generator → IR/Bytecode
 ```
 
 ### Components
@@ -38,7 +38,6 @@ use onion_frontend::compile::{build_code, compile_to_bytecode};
 use onion_frontend::dir_stack::DirectoryStack;
 
 // Compile to IR
-let mut dir_stack = DirectoryStack::new();
 let source = r#"
     @required stdlib;
     main := () -> {
@@ -47,10 +46,10 @@ let source = r#"
     main();
 "#;
 
-let ir_package = build_code(source, &mut dir_stack)?;
+let ir_package = build_code(source, PathBuf::from("hello.onion"))?;
 
 // Compile to bytecode
-let bytecode = compile_to_bytecode(source, &mut dir_stack)?;
+let bytecode = compile_to_bytecode(source, PathBuf::from("hello.onion"))?;
 ```
 
 ### Advanced Usage
@@ -72,10 +71,10 @@ let analysis = analyze_ast(&ast, None, &mut dir_stack);
 
 ### Main Functions
 
-- `build_code(code: &str, dir_stack: &mut DirectoryStack) -> Result<IRPackage, String>`
+- `build_code(code: &str, source_path: PathBuf) -> Result<IRPackage, String>`
   - Compiles source code to intermediate representation
-  
-- `compile_to_bytecode(code: &str, dir_stack: &mut DirectoryStack) -> Result<VMInstructionPackage, String>`
+
+- `compile_to_bytecode(code: &str, source_path: PathBuf) -> Result<VMInstructionPackage, String>`
   - Compiles source code directly to bytecode
 
 ### Key Types
@@ -99,8 +98,8 @@ onion-frontend/
 ├── src/
 │   ├── lib.rs              # Public API exports
 │   ├── compile.rs          # Main compilation orchestration
-│   ├── dir_stack.rs        # Directory and path management
 │   ├── parser/             # Lexical and syntactic analysis
+│   │   ├── comptime/       # Compile-time evaluation and solving
 │   │   ├── mod.rs
 │   │   ├── lexer.rs        # Tokenization
 │   │   ├── ast.rs          # AST construction
