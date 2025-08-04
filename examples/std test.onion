@@ -1,9 +1,9 @@
 Modules := mut ();
-@required stdlib;
-@import "std/test_framework.onion";
-@import "std/prototype.onion";
-@import "std/result.onion";
-@import "std/option.onion";
+@required 'stdlib';
+@include "std/test_framework.onion";
+@include "std/prototype.onion";
+@include "std/result.onion";
+@include "std/option.onion";
 #Test {
     // Result 测试
     TestResultOk => () -> {

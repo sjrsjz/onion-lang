@@ -8,6 +8,8 @@ use crate::parser::analyzer::auto_capture_and_rebuild;
 use crate::parser::ast::ast_token_stream;
 use crate::parser::ast::build_ast;
 use crate::parser::comptime::solver::ComptimeSolver;
+use crate::parser::diagnostics::ReportSeverity;
+use crate::parser::diagnostics::format_node_based_report;
 use crate::parser::lexer::lexer;
 use crate::utils::cycle_detector::CycleDetector;
 use colored::Colorize;
@@ -39,21 +41,35 @@ pub fn build_code(code: &str, source_path: PathBuf) -> Result<IRPackage, String>
     let ast = match solve_result {
         Ok(ast) => ast,
         Err(_) => {
-            return Err(format!(
-                "Error: {}\n\nWarning: {}",
-                comptime_solver
-                    .errors()
-                    .iter()
-                    .map(|e| e.to_string())
-                    .collect::<Vec<_>>()
-                    .join("\n"),
-                comptime_solver
-                    .warnings()
-                    .iter()
-                    .map(|w| w.to_string())
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            ));
+            let mut warning_text = String::new();
+            for (warning, ast_node) in comptime_solver.warnings() {
+                warning_text.push_str(&format_node_based_report(
+                    ReportSeverity::Warning,
+                    "Comptime solver warning",
+                    &warning.to_string(),
+                    ast_node,
+                    "This is a warning from the comptime solver.",
+                ));
+                warning_text.push_str("\n");
+            }
+            let mut error_text = String::new();
+            for (error, ast_node) in comptime_solver.errors() {
+                error_text.push_str(&format_node_based_report(
+                    ReportSeverity::Error,
+                    "Comptime solver error",
+                    &error.to_string(),
+                    ast_node,
+                    "Check your comptime expressions and imports.",
+                ));
+                error_text.push_str("\n");
+            }
+            if !warning_text.is_empty() {
+                return Err(format!(
+                    "Comptime solver failed\n{}\n\n{}",
+                    warning_text, error_text
+                ));
+            }
+            return Err(format!("Comptime solver failed\n{}", error_text));
         }
     };
 

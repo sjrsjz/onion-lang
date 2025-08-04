@@ -147,30 +147,30 @@ fn process_comptime_results(solver: &ComptimeSolver, document: &TextDocument) ->
 
 /// 将 ComptimeError 转换为 LSP Diagnostics。
 fn comptime_error_to_diagnostics(
-    error: &ComptimeError,
+    error: &(ComptimeError, ASTNode),
     document: &TextDocument,
 ) -> Vec<Diagnostic> {
-    match error {
+    match &error.0 {
         ComptimeError::AnalysisError(errors) => errors
             .iter()
             .map(|e| diagnostic_from_analyze_error(e, document))
             .collect(),
         ComptimeError::RuntimeError(err) => vec![Diagnostic {
-            range: Range::default_range(), // 运行时错误通常没有精确位置
+            range: get_node_range(&error.1, &document.content),
             severity: Some(DiagnosticSeverity::Error),
             message: format!("Compile-time runtime error: {}", err),
             source: Some("onion-lsp (comptime)".to_string()),
             ..Default::default()
         }],
         ComptimeError::IRGeneratorError(err) => vec![Diagnostic {
-            range: Range::default_range(),
+            range: get_node_range(&error.1, &document.content),
             severity: Some(DiagnosticSeverity::Error),
             message: format!("Internal compiler error (IR generation): {}", err),
             source: Some("onion-lsp (internal)".to_string()),
             ..Default::default()
         }],
         ComptimeError::IRTranslatorError(err) => vec![Diagnostic {
-            range: Range::default_range(),
+            range: get_node_range(&error.1, &document.content),
             severity: Some(DiagnosticSeverity::Error),
             message: format!("Internal compiler error (IR translation): {}", err),
             source: Some("onion-lsp (internal)".to_string()),
@@ -181,10 +181,10 @@ fn comptime_error_to_diagnostics(
 
 /// 将 ComptimeWarning 转换为 LSP Diagnostics。
 fn comptime_warning_to_diagnostics(
-    warning: &ComptimeWarning,
+    warning: &(ComptimeWarning, ASTNode),
     document: &TextDocument,
 ) -> Vec<Diagnostic> {
-    match warning {
+    match &warning.0 {
         ComptimeWarning::AnalysisWarning(warnings) => warnings
             .iter()
             .map(|w| diagnostic_from_analyze_warn(w, document))

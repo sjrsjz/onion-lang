@@ -1164,7 +1164,7 @@ pub fn import(
     let package = unwrap_step_result!(path.weak().with_data(|path_ref| {
         let OnionObject::String(path) = path_ref else {
             return Err(RuntimeError::DetailedError(
-                format!("Invalid path type for `import`: {}", path).into(),
+                format!("Invalid path type for 'import': {}", path).into(),
             ));
         };
         VMInstructionPackage::read_from_file(&path).map_err(|e| {

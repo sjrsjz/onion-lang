@@ -26,7 +26,7 @@ impl Display for RuntimeError {
         match self {
             RuntimeError::Pending => write!(f, "Pending: The operation is not yet complete"),
             RuntimeError::StepError(msg) => write!(f, "Step Error: {}", msg),
-            RuntimeError::DetailedError(msg) => write!(f, "Detailed Error: {}", msg),
+            RuntimeError::DetailedError(msg) => write!(f, "{}", msg),
             RuntimeError::InvalidType(msg) => write!(f, "Invalid type: {}", msg),
             RuntimeError::InvalidOperation(msg) => write!(f, "Invalid operation: {}", msg),
             RuntimeError::BrokenReference => write!(f, "Broken reference encountered"),

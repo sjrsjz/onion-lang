@@ -35,6 +35,7 @@ use crate::{
         analyzer::{AnalyzeError, AnalyzeWarn, analyze_ast, auto_capture_and_rebuild},
         ast::{ASTNode, ASTNodeType},
         comptime::{OnionASTObject, ast_bindings, native::wrap_native_function},
+        diagnostics::{ReportSeverity, format_node_based_report},
     },
     utils::cycle_detector::CycleDetector,
 };
@@ -130,8 +131,8 @@ impl Display for ComptimeWarning {
 #[derive(Debug)]
 pub struct ComptimeSolver {
     state: ComptimeState,
-    errors: Vec<ComptimeError>,
-    warnings: Vec<ComptimeWarning>,
+    errors: Vec<(ComptimeError, ASTNode)>,
+    warnings: Vec<(ComptimeWarning, ASTNode)>,
 }
 
 impl ComptimeSolver {
@@ -164,10 +165,10 @@ impl ComptimeSolver {
                                     state.insert(k, v);
                                     Ok(OnionObject::Undefined(None).stabilize())
                                 }
-                                _ => Err(RuntimeError::InvalidType("Expect Pair for `def`".into())),
+                                _ => Err(RuntimeError::InvalidType("Expect Pair for 'def'".into())),
                             }),
                             None => {
-                                Err(RuntimeError::DetailedError("No `def` in arguments".into()))
+                                Err(RuntimeError::DetailedError("No 'def' in arguments".into()))
                             }
                         }
                     },
@@ -197,11 +198,11 @@ impl ComptimeSolver {
                                     Ok(OnionObject::Undefined(None).stabilize())
                                 }
                                 _ => Err(RuntimeError::InvalidType(
-                                    "Expect String for `name`".into(),
+                                    "Expect String for 'name'".into(),
                                 )),
                             }),
                             None => {
-                                Err(RuntimeError::DetailedError("No `name` in arguments".into()))
+                                Err(RuntimeError::DetailedError("No 'name' in arguments".into()))
                             }
                         }
                     },
@@ -231,11 +232,11 @@ impl ComptimeSolver {
                                         .stabilize())
                                 }
                                 _ => Err(RuntimeError::InvalidType(
-                                    "Expect String for `name`".into(),
+                                    "Expect String for 'name'".into(),
                                 )),
                             }),
                             None => {
-                                Err(RuntimeError::DetailedError("No `name` in arguments".into()))
+                                Err(RuntimeError::DetailedError("No 'name' in arguments".into()))
                             }
                         }
                     },
@@ -266,11 +267,11 @@ impl ComptimeSolver {
                                 ))
                                 .stabilize()),
                                 _ => Err(RuntimeError::InvalidType(
-                                    "Expect String for `name`".into(),
+                                    "Expect String for 'name'".into(),
                                 )),
                             }),
                             None => {
-                                Err(RuntimeError::DetailedError("No `name` in arguments".into()))
+                                Err(RuntimeError::DetailedError("No 'name' in arguments".into()))
                             }
                         }
                     },
@@ -368,12 +369,18 @@ impl ComptimeSolver {
                                     let result = sub_solver.solve(&ast);
                                     if result.is_err() {
                                         let mut error_text = String::new();
-                                        for error in sub_solver.errors() {
-                                            error_text.push_str(&error.to_string());
+                                        for (error, ast) in sub_solver.errors() {
+                                            error_text.push_str(&format_node_based_report(
+                                                ReportSeverity::Error,
+                                                "Sub solver error",
+                                                &error.to_string(),
+                                                ast,
+                                                "You may need to fix the error in the included file.",
+                                            ));
                                             error_text.push('\n');
                                         }
                                         return Err(RuntimeError::DetailedError(
-                                            format!("Sub solver error: {error_text}").into(),
+                                            error_text.into(),
                                         ));
                                     }
                                     Ok(OnionObject::Custom(Arc::new(OnionASTObject::new(
@@ -382,11 +389,11 @@ impl ComptimeSolver {
                                     .consume_and_stabilize())
                                 }
                                 _ => Err(RuntimeError::InvalidType(
-                                    "Expect String for `path`".into(),
+                                    "Expect String for 'path'".into(),
                                 )),
                             }),
                             None => {
-                                Err(RuntimeError::DetailedError("No `path` in arguments".into()))
+                                Err(RuntimeError::DetailedError("No 'path' in arguments".into()))
                             }
                         }
                     },
@@ -406,11 +413,11 @@ impl ComptimeSolver {
         }
     }
 
-    pub fn errors(&self) -> &[ComptimeError] {
+    pub fn errors(&self) -> &[(ComptimeError, ASTNode)] {
         &self.errors
     }
 
-    pub fn warnings(&self) -> &[ComptimeWarning] {
+    pub fn warnings(&self) -> &[(ComptimeWarning, ASTNode)] {
         &self.warnings
     }
 
@@ -467,10 +474,12 @@ impl ComptimeSolver {
                 .user_definitions
                 .read()
                 .map_err(|e| {
-                    self.errors
-                        .push(ComptimeError::RuntimeError(RuntimeError::BorrowError(
+                    self.errors.push((
+                        ComptimeError::RuntimeError(RuntimeError::BorrowError(
                             e.to_string().into(),
-                        )));
+                        )),
+                        ast.clone(),
+                    ));
                     ()
                 })?
                 .iter()
@@ -484,16 +493,16 @@ impl ComptimeSolver {
         );
         context.extend(ast.children.iter().cloned());
 
-        let ast = ASTNode {
+        let ast_with_context = ASTNode {
             node_type: ASTNodeType::Expressions,
             start_token: None,
             end_token: None,
             children: context,
         };
 
-        let (_required_vars, ast) = auto_capture_and_rebuild(&ast);
+        let (_required_vars, rebuilt_ast) = auto_capture_and_rebuild(&ast_with_context);
 
-        let analyse_result = analyze_ast(&ast, None);
+        let analyse_result = analyze_ast(&rebuilt_ast, None);
 
         let mut errors = "".to_string();
         for error in &analyse_result.errors {
@@ -502,21 +511,28 @@ impl ComptimeSolver {
             errors.push_str("\n");
         }
         if !analyse_result.errors.is_empty() {
-            self.errors
-                .push(ComptimeError::AnalysisError(analyse_result.errors));
+            self.errors.push((
+                ComptimeError::AnalysisError(analyse_result.errors),
+                ast.clone(),
+            ));
             return Err(());
         }
-        self.warnings
-            .push(ComptimeWarning::AnalysisWarning(analyse_result.warnings));
+        if !analyse_result.warnings.is_empty() {
+            self.warnings.push((
+                ComptimeWarning::AnalysisWarning(analyse_result.warnings),
+                ast.clone(),
+            ));
+        }
 
         let namespace = NameSpace::new("Main".to_string(), None);
         let mut functions = Functions::new();
         let mut ir_generator = IRGenerator::new(&mut functions, namespace);
 
-        let ir = match ir_generator.generate(&ast) {
+        let ir = match ir_generator.generate(&rebuilt_ast) {
             Ok(ir) => ir,
             Err(err) => {
-                self.errors.push(ComptimeError::IRGeneratorError(err));
+                self.errors
+                    .push((ComptimeError::IRGeneratorError(err), ast.clone()));
                 return Err(());
             }
         };
@@ -531,7 +547,8 @@ impl ComptimeSolver {
         let byte_code = match translator.translate() {
             Ok(_) => translator.get_result(),
             Err(e) => {
-                self.errors.push(ComptimeError::IRTranslatorError(e));
+                self.errors
+                    .push((ComptimeError::IRTranslatorError(e), ast.clone()));
                 return Err(());
             }
         };
@@ -539,21 +556,23 @@ impl ComptimeSolver {
         let result = match self.execute(&byte_code) {
             Ok(result) => result,
             Err(e) => {
-                self.errors.push(ComptimeError::RuntimeError(e));
+                self.errors
+                    .push((ComptimeError::RuntimeError(e), ast.clone()));
                 return Err(());
             }
         };
         match OnionASTObject::from_onion(result.weak()) {
             Ok(ast_object) => Ok(Some(ast_object)),
             Err(err) => {
-                self.errors.push(ComptimeError::RuntimeError(err));
+                self.errors
+                    .push((ComptimeError::RuntimeError(err), ast.clone()));
                 Err(())
             }
         }
     }
 
     fn execute(
-        &mut self, // 我们声明 `&mut self` 是因为我们需要修改 `ComptimeSolver` 的状态，而直接写成 `&self` 虽然可以工作，但与函数会引发的副作用不符
+        &mut self, // 我们声明 '&mut self' 是因为我们需要修改 'ComptimeSolver' 的状态，而直接写成 '&self' 虽然可以工作，但与函数会引发的副作用不符
         vm_instructions_package: &VMInstructionPackage,
     ) -> Result<OnionStaticObject, RuntimeError> {
         let mut gc = GC::new_with_memory_threshold(1024 * 1024); // 1 MB threshold

@@ -54,7 +54,7 @@ impl OnionObjectCell {
                 obj => f(obj),
             },
             Err(_) => Err(RuntimeError::BorrowError(
-                "Failed to borrow OnionObjectCell at `with_data`"
+                "Failed to borrow OnionObjectCell at 'with_data'"
                     .to_string()
                     .into(),
             )),
@@ -77,7 +77,7 @@ impl OnionObjectCell {
                 obj => f(obj),
             },
             Err(_) => Err(RuntimeError::BorrowError(
-                "Failed to borrow OnionObjectCell at `with_data_mut`"
+                "Failed to borrow OnionObjectCell at 'with_data_mut'"
                     .to_string()
                     .into(),
             )),
@@ -93,7 +93,7 @@ impl OnionObjectCell {
             .read()
             .map_err(|_| {
                 RuntimeError::BorrowError(
-                    "Failed to borrow OnionObjectCell at `with_attribute`"
+                    "Failed to borrow OnionObjectCell at 'with_attribute'"
                         .to_string()
                         .into(),
                 )
@@ -131,7 +131,7 @@ impl OnionObjectCell {
     pub fn try_borrow(&self) -> Result<RwLockReadGuard<OnionObject>, RuntimeError> {
         self.0.read().map_err(|_| {
             RuntimeError::BorrowError(
-                "Failed to borrow OnionObjectCell at `try_borrow`"
+                "Failed to borrow OnionObjectCell at 'try_borrow'"
                     .to_string()
                     .into(),
             )
@@ -141,7 +141,7 @@ impl OnionObjectCell {
     pub fn try_borrow_mut(&self) -> Result<RwLockWriteGuard<OnionObject>, RuntimeError> {
         self.0.write().map_err(|_| {
             RuntimeError::BorrowError(
-                "Failed to borrow OnionObjectCell at `try_borrow_mut`"
+                "Failed to borrow OnionObjectCell at 'try_borrow_mut'"
                     .to_string()
                     .into(),
             )
@@ -198,8 +198,8 @@ impl Display for OnionObjectCell {
 #[derive(Clone)]
 /// OnionObject is the main type for all objects in the Onion VM.
 /// The VM's types are all immutable(Mut is a immutable pointer to a VM object)
-/// If we need to `mutate` an object, it is IMPOSSIBLE to mutate the object itself, we can only let the Mut object point to a new object.
-/// So all types defined in OnionObject do not implement `Clone`, because deep cloning an object is volition of the immutability principle.
+/// If we need to 'mutate' an object, it is IMPOSSIBLE to mutate the object itself, we can only let the Mut object point to a new object.
+/// So all types defined in OnionObject do not implement 'Clone', because deep cloning an object is volition of the immutability principle.
 pub enum OnionObject {
     // immutable basic types
     Integer(i64),
@@ -219,8 +219,8 @@ pub enum OnionObject {
     Lambda((Arc<OnionLambdaDefinition>, Arc<OnionObject>)), // (definition, self_object)
     Custom(Arc<dyn OnionObjectExt>),
 
-    // mutable? types, DO NOT USE THIS TYPE DIRECTLY, use `mutablize` instead
-    // `Mut` is just a container for a weak reference to an OnionObjectCell,
+    // mutable? types, DO NOT USE THIS TYPE DIRECTLY, use 'mutablize' instead
+    // 'Mut' is just a container for a weak reference to an OnionObjectCell,
     Mut(GCArcWeak<OnionObjectCell>),
 }
 
@@ -745,7 +745,7 @@ impl OnionObject {
                             .try_borrow()
                             .map_err(|_| {
                                 RuntimeError::BorrowError(
-                                    "Failed to borrow Mut object at `repr`".into(),
+                                    "Failed to borrow Mut object at 'repr'".into(),
                                 )
                             })?
                             .repr(&new_ptrs)?;

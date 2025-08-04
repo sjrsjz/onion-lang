@@ -261,7 +261,7 @@ impl Runnable for OnionLambdaRunnable {
             Ok(())
         } else {
             Err(RuntimeError::DetailedError(
-                "receive not implemented for cases except `Return`"
+                "receive not implemented for cases except 'Return'"
                     .to_string()
                     .into(),
             ))
@@ -364,7 +364,7 @@ pub fn disassemble_instruction(package: &VMInstructionPackage, ip: usize) -> Str
     // --- 3. 格式化每个操作数 ---
     // 这是一个辅助闭包，用于将单个操作数格式化为字符串
     let format_operand = |flag: u8, raw_value: u64| -> Option<String> {
-        // 使用你的 `build_operand_argument` 来获取结构化的操作数类型
+        // 使用你的 'build_operand_argument' 来获取结构化的操作数类型
         let arg = build_operand_argument(flag, raw_value);
 
         match arg {

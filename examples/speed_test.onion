@@ -1,4 +1,4 @@
-@required stdlib;
+@required 'stdlib';
 start := stdlib.time.timestamp_millis();
 n := 10000000;
 while (n > 0) (
