@@ -1,4 +1,5 @@
 @required "stdlib";
+@def(bar => () -> "This is a macro from the sub-module.");
 foo := () -> {
     stdlib.io.println("This is a test function in the sub-module.");
     return "Function executed successfully.";

@@ -377,6 +377,20 @@ impl ComptimeSolver {
                                             "Sub-solver failed".into(),
                                         ));
                                     }
+
+                                    if sub_solver
+                                        .diagnostics
+                                        .read()
+                                        .map_err(|e| {
+                                            RuntimeError::BorrowError(e.to_string().into())
+                                        })?
+                                        .has_errors()
+                                    {
+                                        return Err(RuntimeError::DetailedError(
+                                            "Sub-solver produced errors".into(),
+                                        ));
+                                    }
+
                                     Ok(OnionObject::Custom(Arc::new(OnionASTObject::new(
                                         result.unwrap(),
                                     )))

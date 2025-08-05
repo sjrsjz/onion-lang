@@ -347,6 +347,49 @@ pub struct DidCloseTextDocumentParams {
     pub text_document: TextDocumentIdentifier,
 }
 
+/// Parameters for the document save notification
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DidSaveTextDocumentParams {
+    /// The document that was saved.
+    #[serde(rename = "textDocument")]
+    pub text_document: TextDocumentIdentifier,
+    /// Optional the content when saved. Depends on the includeText value
+    /// when the save notification was requested.
+    pub text: Option<String>,
+}
+
+/// Parameters for workspace file changes notification
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DidChangeWatchedFilesParams {
+    /// The actual file events.
+    pub changes: Vec<FileEvent>,
+}
+
+/// An event describing a file change.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileEvent {
+    /// The file's URI.
+    pub uri: String,
+    /// The change type.
+    #[serde(rename = "type")]
+    pub change_type: FileChangeType,
+}
+
+/// The file event type.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FileChangeType {
+    /// The file got created.
+    #[serde(rename = "1")]
+    Created = 1,
+    /// The file got changed.
+    #[serde(rename = "2")]
+    Changed = 2,
+    /// The file got deleted.
+    #[serde(rename = "3")]
+    Deleted = 3,
+}
+
+
 /// LSP 文档标识符
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]

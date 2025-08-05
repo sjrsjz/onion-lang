@@ -23,3 +23,4 @@ stdlib.io.println("lambda(1, 2) = ", lambda(1, 2));
 @include "./sub_module.onion";
 
 stdlib.io.println(foo());
+stdlib.io.println(@bar());

@@ -747,6 +747,7 @@ fn handle_notification<W: Write>(
                         drop(server_locked); // Release lock
 
                         // Send diagnostics
+                        clear_diagnostics(writer, &uri)?;
                         send_diagnostics(writer, diagnostics)?;
 
                         // If semantic highlighting information exists, send semantic highlighting notification
@@ -759,6 +760,40 @@ fn handle_notification<W: Write>(
                 }
                 Err(e) => {
                     error!("Invalid didOpen params: {e}");
+                }
+            }
+        }
+        "textDocument/didSave" => {
+            match serde_json::from_value::<DidSaveTextDocumentParams>(notification.params) {
+                Ok(params) => {
+                    let uri = params.text_document.uri.clone();
+                    let server_locked = server.lock().unwrap();
+
+                    // 重新验证保存的文档
+                    if let Some((diagnostics, semantic_tokens)) =
+                        server_locked.validate_document(&uri)
+                    {
+                        let content = if let Some(doc) = server_locked.documents.get(&uri) {
+                            doc.content.clone()
+                        } else {
+                            String::new()
+                        };
+
+                        drop(server_locked);
+
+                        // 发送诊断信息
+                        clear_diagnostics(writer, &uri)?;
+                        send_diagnostics(writer, diagnostics)?;
+
+                        // 发送语义高亮
+                        if let Some(tokens) = semantic_tokens {
+                            let encoded_tokens = encode_semantic_tokens(&tokens, &content);
+                            send_semantic_tokens_encoded(writer, &uri, encoded_tokens)?;
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("Invalid didSave params: {e}");
                 }
             }
         }
@@ -776,6 +811,7 @@ fn handle_notification<W: Write>(
                         drop(server); // Release lock
 
                         // Send diagnostics
+                        clear_diagnostics(writer, &uri)?;
                         send_diagnostics(writer, diagnostics)?;
                     }
                 }
@@ -792,6 +828,55 @@ fn handle_notification<W: Write>(
                 }
                 Err(e) => {
                     error!("Invalid didClose params: {e}");
+                }
+            }
+        }
+
+        "workspace/didChangeWatchedFiles" => {
+            match serde_json::from_value::<DidChangeWatchedFilesParams>(notification.params) {
+                Ok(params) => {
+                    debug!("Watched files changed: {} files", params.changes.len());
+
+                    let server_locked = server.lock().unwrap();
+                    let mut files_to_revalidate = Vec::new();
+
+                    // 检查变化的文件是否是我们正在跟踪的文档
+                    for change in params.changes {
+                        let uri = change.uri;
+                        if server_locked.documents.contains_key(&uri) {
+                            files_to_revalidate.push(uri.clone());
+                            info!("File change detected for tracked document: {}", uri);
+                        }
+                    }
+
+                    drop(server_locked);
+
+                    // 重新验证相关文档
+                    for uri in files_to_revalidate {
+                        let server_locked = server.lock().unwrap();
+                        if let Some((diagnostics, semantic_tokens)) =
+                            server_locked.validate_document(&uri)
+                        {
+                            let content = if let Some(doc) = server_locked.documents.get(&uri) {
+                                doc.content.clone()
+                            } else {
+                                String::new()
+                            };
+
+                            drop(server_locked);
+
+                            clear_diagnostics(writer, &uri)?;
+                            send_diagnostics(writer, diagnostics)?;
+
+                            if let Some(tokens) = semantic_tokens {
+                                let encoded_tokens = encode_semantic_tokens(&tokens, &content);
+                                send_semantic_tokens_encoded(writer, &uri, encoded_tokens)?;
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("Invalid didChangeWatchedFiles params: {e}");
                 }
             }
         }
@@ -821,10 +906,6 @@ fn handle_notification<W: Write>(
         "workspace/didChangeConfiguration" => {
             debug!("Configuration changed: {}", notification.params);
         }
-        // Add handling for workspace/didChangeWatchedFiles notification
-        "workspace/didChangeWatchedFiles" => {
-            debug!("Watched files changed: {}", notification.params);
-        }
         _ => {
             // Change to info level to reduce error logs
             info!("Unhandled notification: {}", notification.method);
@@ -834,6 +915,20 @@ fn handle_notification<W: Write>(
     Ok(())
 }
 
+fn clear_diagnostics<W: Write>(writer: &mut W, uri: &str) -> Result<(), String> {
+    let params = serde_json::json!({
+        "uri": uri,
+        "diagnostics": []
+    });
+
+    let notification = NotificationMessage {
+        jsonrpc: "2.0".to_string(),
+        method: "textDocument/publishDiagnostics".to_string(),
+        params,
+    };
+
+    send_message(writer, &notification)
+}
 /// Sends diagnostic notification
 fn send_diagnostics<W: Write>(
     writer: &mut W,
