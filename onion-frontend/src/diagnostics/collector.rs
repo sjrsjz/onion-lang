@@ -78,4 +78,8 @@ impl DiagnosticCollector {
             println!("{}\n", diag.format_report());
         }
     }
+
+    pub fn has_errors(&self) -> bool {
+        self.diagnostics.iter().any(|d| d.severity() == ReportSeverity::Error)
+    }
 }

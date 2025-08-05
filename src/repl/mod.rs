@@ -14,7 +14,9 @@ use rustyline::completion::FilenameCompleter;
 use rustyline::hint::HistoryHinter;
 use rustyline::validate::MatchingBracketValidator;
 
-// Add this use statement
+// Add imports for DiagnosticCollector and Source
+use onion_frontend::diagnostics::collector::DiagnosticCollector;
+use onion_frontend::parser::lexer::Source;
 
 #[derive(Helper, Completer, Hinter, Validator)]
 struct ReplHelper {
@@ -153,10 +155,19 @@ pub fn start_repl() -> Result<()> {
                 rl.add_history_entry(&line)?;
 
                 let line = "@required 'stdlib';\n@required 'Out';\n".to_string() + &line;
+                let source = Source::from_string(line);
+                let mut collector = DiagnosticCollector::new();
 
-                match repl_executor.execute_code(&line) {
-                    Ok(_) => {}
+                match repl_executor.execute_code(&source, &mut collector) {
+                    Ok(_) => {
+                        // 如果有警告信息，显示它们
+                        for diag in collector.diagnostics() {
+                            println!("{}", diag.format_report());
+                        }
+                    }
                     Err(e) => {
+                        // 先显示收集到的诊断信息
+                        collector.report_all();
                         eprintln!("{} {}", "Error:".red().bold(), e);
                     }
                 }

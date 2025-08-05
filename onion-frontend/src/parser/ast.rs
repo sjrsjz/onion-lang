@@ -90,17 +90,17 @@ fn get_next_tokens<'a, 'b>(
     tokens: GatheredTokens<'b>,
     offset: usize,
 ) -> Result<GatheredTokens<'b>, ()> {
-    let mut stack = Vec::<(Token, usize)>::new();
+    let mut stack = Vec::<&Token>::new();
     let mut next_tokens_end = 0usize;
     let mut index = offset;
-    if index >= (*tokens).len() {
+    if index >= tokens.len() {
         return Ok(&[]);
     }
     loop {
         if ["{", "[", "("].contains(&tokens[index].token().as_str())
             && tokens[index] == TokenType::SYMBOL
         {
-            stack.push((tokens[index].clone(), index));
+            stack.push(&tokens[index]);
             next_tokens_end += 1;
         } else if ["}", "]", ")"].contains(&tokens[index].token().as_str())
             && tokens[index] == TokenType::SYMBOL
@@ -108,13 +108,13 @@ fn get_next_tokens<'a, 'b>(
             if stack.is_empty() {
                 break;
             }
-            let (last, last_position) = stack.pop().unwrap();
+            let last = stack.pop().unwrap();
             if (last == "{" && tokens[index] != "}")
                 || (last == "[" && tokens[index] != "]")
                 || (last == "(" && tokens[index] != ")")
             {
                 return collector.fatal(ASTParseDiagnostic::UnmatchedParenthesis(
-                    span_from_two_token(&tokens[last_position], &tokens[index]),
+                    span_from_two_token(&last, &tokens[index]),
                 ));
             }
 
@@ -123,17 +123,17 @@ fn get_next_tokens<'a, 'b>(
             next_tokens_end += 1;
         }
         index += 1;
-        if index >= (tokens).len() || stack.is_empty() {
+        if index >= tokens.len() || stack.is_empty() {
             break;
         }
     }
     if !stack.is_empty() {
-        let (_, last_position) = stack.pop().unwrap();
+        let last = stack.pop().unwrap();
         return collector.fatal(ASTParseDiagnostic::UnmatchedParenthesis(
-            span_from_two_token(&tokens[last_position], &tokens[index - 1]),
+            span_from_two_token(&last, &tokens[offset + next_tokens_end - 1]),
         ));
     }
-    Ok(&tokens[..next_tokens_end])
+    Ok(&tokens[offset..offset + next_tokens_end])
 }
 
 fn gather<'a, 'b>(
@@ -385,10 +385,9 @@ impl NodeMatcher {
         match best_match {
             Some(node) => Ok(Some(node)),
             None => {
-                collector.fatal(ASTParseDiagnostic::UnsupportedStructure(span_from_tokens(
+                return collector.fatal(ASTParseDiagnostic::UnsupportedStructure(span_from_tokens(
                     tokens,
-                )))?;
-                Err(())
+                )));
             }
         }
     }
@@ -1012,6 +1011,9 @@ fn match_operation_add_sub(
     if operator.is_none() {
         return Ok(None);
     }
+    if operator_pos == 0 {
+        return Ok(None);
+    }
     let left = try_match_node!(collector, &tokens[..operator_pos]);
     let right = try_match_node!(collector, &tokens[operator_pos + 1..]);
     let op = operator.unwrap();
@@ -1600,7 +1602,6 @@ fn match_variable(
     if tokens.is_empty() {
         return Ok(None);
     }
-
     // 匹配括号内容（元组）
     if is_bracket(&tokens[0]) || is_square_bracket(&tokens[0]) {
         let inner_tokens = unwrap_brace(collector, &tokens[0])?;

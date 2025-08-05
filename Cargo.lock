@@ -1099,11 +1099,9 @@ dependencies = [
  "colored",
  "criterion",
  "indexmap",
- "once_cell",
  "onion-vm",
  "regex",
  "stacksafe",
- "unicode-segmentation",
  "unicode-width 0.2.1",
 ]
 
@@ -1124,10 +1122,8 @@ dependencies = [
  "log",
  "onion-frontend",
  "onion-vm",
- "regex",
  "reqwest",
  "rust-arc-gc",
- "rustc-hash",
  "rustyline",
  "serde",
  "serde_json",

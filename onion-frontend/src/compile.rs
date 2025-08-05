@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::RwLock;
 
 use crate::diagnostics::Diagnostic;
 use crate::diagnostics::collector::DiagnosticCollector;
@@ -73,7 +75,8 @@ pub fn build_code(collector: &mut DiagnosticCollector, source: &Source) -> Resul
                 .map_err(|e| collector.report(CompileDiagnostic::IOError(e.to_string())))?,
         )
         .expect("unreachable!");
-    let mut comptime_solver = ComptimeSolver::new(HashMap::new(), import_cycle_detector);
+    let mut comptime_solver =
+        ComptimeSolver::new(Arc::new(RwLock::new(HashMap::new())), import_cycle_detector);
     let solve_result = comptime_solver.solve(&ast);
     match comptime_solver.diagnostics().read() {
         Ok(diagnostics) => {

@@ -4,7 +4,7 @@ Modules := mut ();
 @include "std/prototype.onion";
 @include "std/result.onion";
 @include "std/option.onion";
-#Test {
+Test {
     // Result 测试
     TestResultOk => () -> {
         stdlib.io.println("Testing Result Ok...");

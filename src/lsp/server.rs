@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex}; // Add panic module
 
 use log::{debug, error, info, warn};
 use onion_frontend::diagnostics::collector::DiagnosticCollector;
+use onion_frontend::parser::lexer::Source;
 use serde_json::Value;
 
 use crate::lsp::diagnostics::{self, new_solver_for_file};
@@ -147,7 +148,10 @@ impl LspServer {
     fn validate_document(
         &self,
         uri: &str,
-    ) -> Option<(Vec<Diagnostic>, Option<Vec<SemanticTokenTypes>>)> {
+    ) -> Option<(
+        Vec<(Option<String>, Diagnostic)>,
+        Option<Vec<SemanticTokenTypes>>,
+    )> {
         info!("Validating document: {uri} started");
         if let Some(document) = self.documents.get(uri) {
             info!(
@@ -176,7 +180,7 @@ impl LspServer {
                         message: "Validation process failed unexpectedly (panic). This is a bug in the LSP.".to_string(),
                         ..Default::default()
                     };
-                    Some((vec![diag], None))
+                    Some((vec![(Some(uri.to_string()), diag)], None))
                 }
             }
         } else {
@@ -213,6 +217,7 @@ impl LspServer {
         // Provide completion items for keywords, operators, etc., based on Onion syntax
         let mut items = Vec::new();
         let mut unique_vars = HashSet::new(); // Used to store unique variable names
+        let source = Source::from_string_with_file_path(document.content.clone(), &document.uri);
 
         // Add Onion keywords
         let keywords = vec![
@@ -285,7 +290,7 @@ impl LspServer {
         }
 
         // --- 2. Use modern compilation pipeline for contextual completions ---
-        let ast = match diagnostics::parse_source_to_ast_with_tokens(&document.content, document) {
+        let ast = match diagnostics::parse_source_to_ast_with_tokens(&source, document) {
             Ok((ast, _)) => ast,
             Err(_) => {
                 warn!("Failed to parse document for completion: {}", document.uri);
@@ -311,11 +316,14 @@ impl LspServer {
 
             // Call analyze_ast with the correct, simplified signature
             let mut diagnostics_collector = DiagnosticCollector::new();
-            let analysis_output =
-                analyzer::analyze_ast(&final_ast, &mut diagnostics_collector, Some(byte_offset));
+            let analysis_output = analyzer::analyze_ast(
+                &final_ast,
+                &mut diagnostics_collector,
+                &Some((source, byte_offset)),
+            );
 
             // --- 6. Extract variables from captured context ---
-            if let Some(context) = analysis_output.context_at_break {
+            if let Ok(Some(context)) = analysis_output {
                 for context_frames in context.all_contexts().iter().rev() {
                     for frame in context_frames.iter().rev() {
                         // frame.variables is a Vec<Variable>
@@ -739,7 +747,7 @@ fn handle_notification<W: Write>(
                         drop(server_locked); // Release lock
 
                         // Send diagnostics
-                        send_diagnostics(writer, &uri, diagnostics)?;
+                        send_diagnostics(writer, diagnostics)?;
 
                         // If semantic highlighting information exists, send semantic highlighting notification
                         if let Some(tokens) = semantic_tokens {
@@ -768,7 +776,7 @@ fn handle_notification<W: Write>(
                         drop(server); // Release lock
 
                         // Send diagnostics
-                        send_diagnostics(writer, &uri, diagnostics)?;
+                        send_diagnostics(writer, diagnostics)?;
                     }
                 }
                 Err(e) => {
@@ -829,21 +837,30 @@ fn handle_notification<W: Write>(
 /// Sends diagnostic notification
 fn send_diagnostics<W: Write>(
     writer: &mut W,
-    uri: &str,
-    diagnostics: Vec<Diagnostic>,
+    diagnostics: Vec<(Option<String>, Diagnostic)>,
 ) -> Result<(), String> {
-    let params = PublishDiagnosticsParams {
-        uri: uri.to_string(),
-        diagnostics,
-    };
+    let mut diagnostics_map: HashMap<String, Vec<Diagnostic>> = HashMap::new();
+    for (uri, diagnostic) in diagnostics {
+        if let Some(uri) = uri {
+            diagnostics_map.entry(uri).or_default().push(diagnostic);
+        }
+    }
+    // Create PublishDiagnosticsParams for each URI
+    for (uri, diagnostics) in diagnostics_map {
+        let params = serde_json::json!({
+            "uri": uri,
+            "diagnostics": diagnostics
+        });
 
-    let notification = NotificationMessage {
-        jsonrpc: "2.0".to_string(),
-        method: "textDocument/publishDiagnostics".to_string(),
-        params: serde_json::to_value(params).unwrap(),
-    };
+        let notification = NotificationMessage {
+            jsonrpc: "2.0".to_string(),
+            method: "textDocument/publishDiagnostics".to_string(),
+            params,
+        };
 
-    send_message(writer, &notification)
+        send_message(writer, &notification)?;
+    }
+    Ok(())
 }
 
 /// Sends semantic highlighting notification (encoded)

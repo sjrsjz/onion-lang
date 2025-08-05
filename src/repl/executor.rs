@@ -22,6 +22,8 @@ use onion_vm::{
 };
 
 use onion_frontend::compile::build_code;
+use onion_frontend::diagnostics::collector::DiagnosticCollector;
+use onion_frontend::parser::lexer::Source;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -59,8 +61,16 @@ impl ReplExecutor {
     }
 
     /// 执行代码并将结果存储到Out参数中
-    pub fn execute_code(&mut self, code: &str) -> Result<(), String> {
-        let ir_package = build_code(code, ".".into()).map_err(|e| format!("Compilation failed\n{e}"))?;
+    pub fn execute_code(&mut self, source: &Source, collector: &mut DiagnosticCollector) -> Result<(), String> {
+        let ir_package = match build_code(collector, source) {
+            Ok(package) => {
+                if collector.has_errors() {
+                    return Err("Compilation failed".to_string());
+                }
+                package
+            },
+            Err(_) => return Err("Compilation failed".to_string()),
+        };
 
         self.execute_ir_package(&ir_package)
     }

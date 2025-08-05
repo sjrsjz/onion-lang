@@ -1,16 +1,15 @@
 use std::collections::HashMap;
-use std::panic::catch_unwind;
+use std::sync::{Arc, RwLock};
 
 use log::{error, info};
 use onion_frontend::diagnostics::collector::DiagnosticCollector;
-use onion_frontend::parser::analyzer::{
-    ASTAnalysisDiagnostic, analyze_ast, auto_capture_and_rebuild,
+use onion_frontend::diagnostics::{
+    Diagnostic as FrontendDiagnostic, ReportSeverity, SourceLocation,
 };
-use onion_frontend::parser::ast::{
-    ASTNode, ASTNodeType, ASTParseDiagnostic, ast_token_stream, build_ast,
-};
-use onion_frontend::parser::comptime::solver::{ComptimeDiagnositic, ComptimeSolver};
-use onion_frontend::parser::lexer::{Token, tokenizer};
+use onion_frontend::parser::analyzer::{analyze_ast, auto_capture_and_rebuild};
+use onion_frontend::parser::ast::{ASTNode, ASTNodeType, ast_token_stream, build_ast};
+use onion_frontend::parser::comptime::solver::ComptimeSolver;
+use onion_frontend::parser::lexer::{Source, Token, tokenizer};
 use onion_frontend::utils::cycle_detector::CycleDetector;
 use url::Url;
 
@@ -19,13 +18,89 @@ use super::protocol::*;
 use super::semantic::{SemanticTokenTypes, do_semantic};
 
 // =======================================================================
+//                       诊断转换辅助函数
+// =======================================================================
+
+/// 将 frontend 的 Diagnostic trait 对象转换为 LSP Diagnostic
+fn frontend_diagnostic_to_lsp(
+    diag: &dyn FrontendDiagnostic,
+    document: &TextDocument,
+) -> (Option<String>, Diagnostic) {
+    let severity = match diag.severity() {
+        ReportSeverity::Error => DiagnosticSeverity::Error,
+        ReportSeverity::Warning => DiagnosticSeverity::Warning,
+    };
+
+    let range = if let Some(location) = diag.location() {
+        source_location_to_lsp_range(&location, &document.content)
+    } else {
+        Range::default_range()
+    };
+
+    let uri = diag
+        .location()
+        .and_then(|loc| loc.source.file_path().map(|path| path.to_owned()))
+        .map(|path| {
+            Url::from_file_path(path)
+                .map(|url| url.to_string())
+                .unwrap_or_else(|_| document.uri.clone())
+        })
+        .unwrap_or_else(|| document.uri.clone());
+
+    (
+        Some(uri),
+        Diagnostic {
+            range,
+            severity: Some(severity),
+            message: format!("{}: {}", diag.title(), diag.message()),
+            source: Some("onion-lsp".to_string()),
+            code: None,
+            related_information: None,
+        },
+    )
+}
+
+/// 将 SourceLocation 转换为 LSP Range
+fn source_location_to_lsp_range(location: &SourceLocation, document_content: &str) -> Range {
+    let (start_char, end_char) = location.span;
+    let start_pos = get_line_col_from_char_pos(document_content, start_char);
+    let end_pos = get_line_col_from_char_pos(document_content, end_char);
+
+    Range {
+        start: Position {
+            line: start_pos.0 as u32,
+            character: start_pos.1 as u32,
+        },
+        end: Position {
+            line: end_pos.0 as u32,
+            character: end_pos.1 as u32,
+        },
+    }
+}
+
+/// 将 DiagnosticCollector 中的所有诊断转换为 LSP 诊断
+fn collector_to_lsp_diagnostics(
+    collector: &DiagnosticCollector,
+    document: &TextDocument,
+) -> Vec<(Option<String>, Diagnostic)> {
+    collector
+        .diagnostics()
+        .iter()
+        .map(|diag| frontend_diagnostic_to_lsp(diag.as_ref(), document))
+        .collect()
+}
+
+// =======================================================================
 //                       主验证函数 (Main Validation Function)
 // =======================================================================
 
 /// 使用现代化的、感知编译时计算的编译管线来验证文档。
 pub fn validate_document(
     document: &TextDocument,
-) -> (Vec<Diagnostic>, Option<Vec<SemanticTokenTypes>>) {
+) -> (
+    Vec<(Option<String>, Diagnostic)>,
+    Option<Vec<SemanticTokenTypes>>,
+) {
     // 返回 SemanticToken
     if document.content.is_empty() {
         info!(
@@ -40,9 +115,10 @@ pub fn validate_document(
         "Performing lexical and syntax analysis for: {}",
         document.uri
     );
-    let (ast, tokens) = match parse_source_to_ast_with_tokens(&document.content, document) {
+    let source = Source::from_string_with_file_path(document.content.clone(), &document.uri);
+    let (ast, tokens) = match parse_source_to_ast_with_tokens(&source, document) {
         Ok(res) => res,
-        Err(diag) => return (vec![diag], None),
+        Err(diag) => return (diag, None),
     };
     info!("Syntax analysis successful.");
 
@@ -60,22 +136,28 @@ pub fn validate_document(
         Ok(solved_ast) => solved_ast,
         Err(_) => {
             error!("Comptime solving failed for: {}", document.uri);
-            diagnostics.extend(process_comptime_results(&comptime_solver, document));
+            // 收集编译时错误
+            let diagnostics_guard = comptime_solver.diagnostics().read().unwrap();
+            let comptime_diags = collector_to_lsp_diagnostics(&*diagnostics_guard, document);
+            diagnostics.extend(comptime_diags);
             // 尽力而为：即使编译时求解失败，也尝试对原始 AST 进行语义高亮。
             let semantic_tokens = do_semantic(&document.content, &ast, &tokens).ok();
             return (diagnostics, semantic_tokens);
         }
     };
     // 收集 comptime 阶段成功后的所有诊断信息（主要是警告）
-    diagnostics.extend(process_comptime_results(&comptime_solver, document));
+    let diagnostics_guard = comptime_solver.diagnostics().read().unwrap();
+    let comptime_diags = collector_to_lsp_diagnostics(&*diagnostics_guard, document);
+    diagnostics.extend(comptime_diags);
     info!("Compile-time solving successful.");
 
     // --- 4. 最终语义分析 ---
     info!("Starting final semantic analysis for: {}", document.uri);
     let (_required_vars, final_ast) = auto_capture_and_rebuild(&solved_ast);
     let mut diagnostics_collector = DiagnosticCollector::new();
-    let analysis_result = analyze_ast(&final_ast, &mut diagnostics_collector, None);
-    diagnostics.extend(process_analysis_results(&analysis_result, document));
+    let _analysis_result = analyze_ast(&final_ast, &mut diagnostics_collector, &None);
+    let analysis_diags = collector_to_lsp_diagnostics(&diagnostics_collector, document);
+    diagnostics.extend(analysis_diags);
     info!("Final semantic analysis complete.");
 
     // --- 5. 语义高亮 ---
@@ -102,20 +184,30 @@ pub fn validate_document(
 // =======================================================================
 
 // 为 ComptimeSolver 实现一个专门用于 LSP 的构造函数
-pub fn new_solver_for_file(uri: &str) -> Result<ComptimeSolver, Diagnostic> {
+pub fn new_solver_for_file(uri: &str) -> Result<ComptimeSolver, (Option<String>, Diagnostic)> {
     let file_path = Url::parse(uri)
-        .map_err(|_| Diagnostic {
-            range: Range::default_range(),
-            severity: Some(DiagnosticSeverity::Error),
-            message: format!("Invalid URI: {}", uri),
-            ..Default::default()
+        .map_err(|_| {
+            (
+                None,
+                Diagnostic {
+                    range: Range::default_range(),
+                    severity: Some(DiagnosticSeverity::Error),
+                    message: format!("Invalid URI: {}", uri),
+                    ..Default::default()
+                },
+            )
         })?
         .to_file_path()
-        .map_err(|_| Diagnostic {
-            range: Range::default_range(),
-            severity: Some(DiagnosticSeverity::Error),
-            message: format!("URI is not a valid file path: {}", uri),
-            ..Default::default()
+        .map_err(|_| {
+            (
+                None,
+                Diagnostic {
+                    range: Range::default_range(),
+                    severity: Some(DiagnosticSeverity::Error),
+                    message: format!("URI is not a valid file path: {}", uri),
+                    ..Default::default()
+                },
+            )
         })?;
 
     let import_cycle_detector = CycleDetector::new()
@@ -123,256 +215,31 @@ pub fn new_solver_for_file(uri: &str) -> Result<ComptimeSolver, Diagnostic> {
         .expect("Cycle detector should not fail on the first entry");
 
     // 假设 ComptimeSolver::new 的最终签名是这样
-    Ok(ComptimeSolver::new(HashMap::new(), import_cycle_detector))
-}
-
-/// 将 ComptimeSolver 的结果转换为 LSP Diagnostics 的统一入口。
-fn process_comptime_results(solver: &ComptimeSolver, document: &TextDocument) -> Vec<Diagnostic> {
-    let mut diagnostics = Vec::new();
-
-    for error in solver.diagnostics() {
-        diagnostics.extend(comptime_error_to_diagnostics(error, document));
-    }
-    for warning in solver.warnings() {
-        diagnostics.extend(comptime_warning_to_diagnostics(warning, document));
-    }
-
-    diagnostics
-}
-
-/// 将 ComptimeError 转换为 LSP Diagnostics。
-fn comptime_error_to_diagnostics(
-    error: &(ComptimeDiagnositic, ASTNode),
-    document: &TextDocument,
-) -> Vec<Diagnostic> {
-    match &error.0 {
-        ComptimeDiagnositic::AnalysisError(errors) => errors
-            .iter()
-            .map(|e| diagnostic_from_analyze_error(e, document))
-            .collect(),
-        ComptimeDiagnositic::RuntimeError(err) => vec![Diagnostic {
-            range: get_node_range(&error.1, &document.content),
-            severity: Some(DiagnosticSeverity::Error),
-            message: format!("Compile-time runtime error: {}", err),
-            source: Some("onion-lsp (comptime)".to_string()),
-            ..Default::default()
-        }],
-        ComptimeDiagnositic::IRGeneratorError(err) => vec![Diagnostic {
-            range: get_node_range(&error.1, &document.content),
-            severity: Some(DiagnosticSeverity::Error),
-            message: format!("Internal compiler error (IR generation): {}", err),
-            source: Some("onion-lsp (internal)".to_string()),
-            ..Default::default()
-        }],
-        ComptimeDiagnositic::IRTranslatorError(err) => vec![Diagnostic {
-            range: get_node_range(&error.1, &document.content),
-            severity: Some(DiagnosticSeverity::Error),
-            message: format!("Internal compiler error (IR translation): {}", err),
-            source: Some("onion-lsp (internal)".to_string()),
-            ..Default::default()
-        }],
-    }
-}
-
-/// 将 ComptimeWarning 转换为 LSP Diagnostics。
-fn comptime_warning_to_diagnostics(
-    warning: &(ComptimeWarning, ASTNode),
-    document: &TextDocument,
-) -> Vec<Diagnostic> {
-    match &warning.0 {
-        ComptimeWarning::AnalysisWarning(warnings) => warnings
-            .iter()
-            .map(|w| diagnostic_from_analyze_warn(w, document))
-            .collect(),
-    }
-}
-
-// =======================================================================
-//                已有的、重构后的错误处理与位置计算辅助函数
-// =======================================================================
-
-/// **(新)** 将单个 AnalyzeError 转换为 Diagnostic。
-fn diagnostic_from_analyze_error(
-    error: &ASTAnalysisDiagnostic,
-    document: &TextDocument,
-) -> Diagnostic {
-    match error {
-        ASTAnalysisDiagnostic::UndefinedVariable(node) => Diagnostic {
-            range: get_node_range(node, &document.content),
-            severity: Some(DiagnosticSeverity::Error),
-            message: format!(
-                "Undefined variable: '{}'",
-                node.start_token
-                    .as_ref()
-                    .map_or("".to_string(), |t| t.origin_token())
-            ),
-            ..Default::default()
-        },
-        ASTAnalysisDiagnostic::InvalidMacroDefinition(node, msg) => Diagnostic {
-            range: get_node_range(node, &document.content),
-            severity: Some(DiagnosticSeverity::Error),
-            message: format!("Invalid macro definition: {}", msg),
-            ..Default::default()
-        },
-        ASTAnalysisDiagnostic::ASTParseDignostic(p_err) => {
-            create_diagnostic_from_parser_error(p_err, document)
-        }
-        ASTAnalysisDiagnostic::DetailedError(node, msg) => Diagnostic {
-            range: get_node_range(node, &document.content),
-            severity: Some(DiagnosticSeverity::Error),
-            message: msg.clone(),
-            ..Default::default()
-        },
-    }
-}
-
-/// **(新)** 将单个 AnalyzeWarn 转换为 Diagnostic。
-fn diagnostic_from_analyze_warn(warn: &AnalyzeWarning, document: &TextDocument) -> Diagnostic {
-    match warn {
-        AnalyzeWarning::CompileError(node, msg) => Diagnostic {
-            range: get_node_range(node, &document.content),
-            severity: Some(DiagnosticSeverity::Warning),
-            message: format!("@compile warning: {}", msg),
-            ..Default::default()
-        },
-    }
-}
-
-/// 将 `AnalysisResult` trait 对象的结果转换为 Diagnostics。
-fn process_analysis_results<T: AnalysisResult>(
-    output: &T,
-    document: &TextDocument,
-) -> Vec<Diagnostic> {
-    let mut diagnostics = Vec::new();
-    for error in output.errors() {
-        diagnostics.push(diagnostic_from_analyze_error(error, document));
-    }
-    for warn in output.warnings() {
-        diagnostics.push(diagnostic_from_analyze_warn(warn, document));
-    }
-    diagnostics
+    Ok(ComptimeSolver::new(
+        Arc::new(RwLock::new(HashMap::new())),
+        import_cycle_detector,
+    ))
 }
 
 /// 解析源码文本为 AST，并同时返回原始 Tokens。
 pub fn parse_source_to_ast_with_tokens(
-    source: &str,
+    source: &Source,
     document: &TextDocument,
-) -> Result<(ASTNode, Vec<Token>), Diagnostic> {
-    let tokens = match catch_unwind(|| tokenizer::tokenize(source)) {
-        Ok(tokens) => tokens,
-        Err(e) => {
-            error!("Panic during lexical analysis: {:?}", e);
-            return Err(Diagnostic {
-                range: Range::default_range(),
-                severity: Some(DiagnosticSeverity::Error),
-                source: Some("onion-lsp".to_string()),
-                message: "Lexical analysis failed unexpectedly (panic). This is a bug.".to_string(),
-                ..Default::default()
-            });
-        }
-    };
+) -> Result<(ASTNode, Vec<Token>), Vec<(Option<String>, Diagnostic)>> {
+    let tokens = tokenizer::tokenize(source);
 
     let filtered_tokens = tokenizer::reject_comment(&tokens);
     if filtered_tokens.is_empty() {
-        return Ok((
-            ASTNode::new(ASTNodeType::Expressions, None, None, Some(vec![])),
-            tokens,
-        ));
+        return Ok((ASTNode::new(ASTNodeType::Expressions, None, vec![]), tokens));
     }
 
     let gathered = ast_token_stream::from_stream(&filtered_tokens);
-    build_ast(gathered)
+    let mut collector = DiagnosticCollector::new();
+
+    build_ast(&mut collector, gathered)
         .map(|ast| (ast, tokens))
-        .map_err(|parse_error| create_diagnostic_from_parser_error(&parse_error, document))
+        .map_err(|_| collector_to_lsp_diagnostics(&collector, document))
 }
-/// **(Rewritten Helper)** Creates an LSP Diagnostic from a ParserError.
-fn create_diagnostic_from_parser_error(
-    parse_error: &ASTParseDiagnostic,
-    document: &TextDocument,
-) -> Diagnostic {
-    match parse_error {
-        ASTParseDiagnostic::UnexpectedToken(token)
-        | ASTParseDiagnostic::InvalidSyntax(token)
-        | ASTParseDiagnostic::InvalidVariableName(token)
-        | ASTParseDiagnostic::UnsupportedStructure(token) => Diagnostic {
-            range: get_token_range(token, &document.content),
-            severity: Some(DiagnosticSeverity::Error),
-            message: parse_error.format(), // Use the Display impl for a concise message
-            ..Default::default()
-        },
-        ASTParseDiagnostic::MissingStructure(token, expected) => Diagnostic {
-            range: get_token_range(token, &document.content),
-            severity: Some(DiagnosticSeverity::Error),
-            message: format!("Missing structure: Expected '{expected}' here"),
-            ..Default::default()
-        },
-        ASTParseDiagnostic::ErrorStructure(token, err) => Diagnostic {
-            range: get_token_range(token, &document.content),
-            severity: Some(DiagnosticSeverity::Error),
-            message: format!("Erroneous structure: {err}"),
-            ..Default::default()
-        },
-        ASTParseDiagnostic::NotFullyMatched(start, end) => Diagnostic {
-            range: get_range_between_tokens(start, end, &document.content),
-            severity: Some(DiagnosticSeverity::Error),
-            message: "Expression not fully matched".to_string(),
-            ..Default::default()
-        },
-        ASTParseDiagnostic::UnmatchedParenthesis(opening, closing) => {
-            let opening_range = get_token_range(opening, &document.content);
-            let closing_range = get_token_range(closing, &document.content);
-
-            Diagnostic {
-                range: closing_range.clone(),
-                severity: Some(DiagnosticSeverity::Error),
-                message: "Unmatched parenthesis".to_string(),
-                related_information: Some(vec![DiagnosticRelatedInformation {
-                    location: Location {
-                        uri: document.uri.clone(),
-                        range: opening_range,
-                    },
-                    message: "This is the corresponding opening parenthesis.".to_string(),
-                }]),
-                ..Default::default()
-            }
-        }
-    }
-}
-
-/// **(Rewritten Helper)** Gets the LSP Range for a single Token.
-fn get_token_range(token: &Token, source_code: &str) -> Range {
-    get_range_between_tokens(token, token, source_code)
-}
-
-/// **(New Helper)** Gets the LSP Range for an entire ASTNode.
-fn get_node_range(node: &ASTNode, source_code: &str) -> Range {
-    match (&node.start_token, &node.end_token) {
-        (Some(start), Some(end)) => get_range_between_tokens(start, end, source_code),
-        (Some(token), None) | (None, Some(token)) => get_token_range(token, source_code),
-        (None, None) => Range::default_range(), // No token, default to start of file
-    }
-}
-
-/// **(New Helper)** Gets the LSP Range between a start and end Token.
-fn get_range_between_tokens(start: &Token, end: &Token, source_code: &str) -> Range {
-    let (start_char, _) = start.origin_token_span();
-    let (_, end_char) = end.origin_token_span();
-
-    let start_pos = get_line_col_from_char_pos(source_code, start_char);
-    let end_pos = get_line_col_from_char_pos(source_code, end_char);
-
-    Range {
-        start: Position {
-            line: start_pos.0 as u32,
-            character: start_pos.1 as u32,
-        },
-        end: Position {
-            line: end_pos.0 as u32,
-            character: end_pos.1 as u32,
-        },
-    }
-}
-
 /// **(Rewritten Helper)** Gets (line, column) from a character position in the text.
 fn get_line_col_from_char_pos(text: &str, char_pos: usize) -> (usize, usize) {
     let mut line = 0;

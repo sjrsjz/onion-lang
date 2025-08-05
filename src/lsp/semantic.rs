@@ -36,7 +36,7 @@ pub enum SemanticTokenTypes {
     Map,
     Undefined,
     Base64,
-    Marco
+    Marco,
 }
 
 impl From<ASTNodeType> for SemanticTokenTypes {
@@ -95,19 +95,8 @@ pub fn do_semantic(
     // 添加一个额外的元素，指向字符串的末尾，使得获取最后一个字符的范围成为可能。
     char_to_byte_map.push(code.len());
 
-    // 3. 获取根节点的 Source 对象用于比较
-    let root_source = if let Some(token) = &ast.start_token {
-        Some(token.source_code().clone().into())
-    } else { ast.end_token.as_ref().map(|token| token.source_code().clone().into()) };
-
     // 4. 严格遵循先序遍历，在字节图上标记类型。
-    process_node(
-        &ast,
-        &mut semantic_tokens,
-        code,
-        &char_to_byte_map,
-        root_source.as_ref(),
-    )?;
+    process_node(&ast, &mut semantic_tokens, code, &char_to_byte_map)?;
 
     // 5. 最后覆盖注释，确保最高优先级。
     for token in tokens_with_comment {
@@ -137,48 +126,22 @@ fn process_node(
     tokens: &mut Vec<SemanticTokenTypes>,
     code: &str,
     char_map: &Vec<usize>,
-    root_source: Option<&std::sync::Arc<Vec<char>>>,
 ) -> Result<(), String> {
-    // 1. 检查节点是否属于当前文件
-    if let Some(root_src) = root_source {
-        if !is_node_from_current_file(node, root_src) {
-            // 如果节点不属于当前文件（来自@macro或@import），跳过着色但继续处理子节点
-            for child in &node.children {
-                process_node(child, tokens, code, char_map, root_source)?;
-            }
-            return Ok(());
-        }
-    }
-
-    // 2. 计算当前节点管辖的字节范围
+    // 1. 计算当前节点管辖的字节范围
     if let Some((start_byte, end_byte)) = calculate_node_byte_range(node, char_map) {
         let semantic_type = SemanticTokenTypes::from(node.node_type.clone());
 
-        // 3. 先序处理：首先标记父节点范围 (并跳过空白)
+        // 2. 先序处理：首先标记父节点范围 (并跳过空白)
         mark_byte_range_as(start_byte, end_byte, semantic_type, tokens, true, code);
     }
 
-    // 4. 递归处理子节点
+    // 3. 递归处理子节点
     for child in &node.children {
-        process_node(child, tokens, code, char_map, root_source)?;
+        process_node(child, tokens, code, char_map)?;
     }
 
-    // 5. 特殊覆盖逻辑：对特定节点类型进行更精确的着色
+    // 4. 特殊覆盖逻辑：对特定节点类型进行更精确的着色
     match &node.node_type {
-        ASTNodeType::Let(_) => {
-            if let Some(token) = &node.start_token {
-                if let Some((start, end)) = get_byte_span(token.origin_token_span(), char_map) {
-                    mark_byte_range_as(
-                        start,
-                        end,
-                        SemanticTokenTypes::Variable,
-                        tokens,
-                        true,
-                        code,
-                    );
-                }
-            }
-        }
         ASTNodeType::Apply => {
             if let Some(child) = node.children.first() {
                 if let ASTNodeType::Variable(_) = child.node_type {
@@ -219,15 +182,10 @@ fn process_node(
 
 /// 计算节点管辖的字节范围 (start_byte, end_byte)。
 fn calculate_node_byte_range(node: &ASTNode, char_map: &Vec<usize>) -> Option<(usize, usize)> {
-    let start_token = node.start_token.as_ref()?;
-    let end_token = node.end_token.as_ref()?;
-
-    // token span 是基于字符的
-    let (start_char, _) = start_token.origin_token_span();
-    let (_, end_char) = end_token.origin_token_span();
+    let location = node.source_location.as_ref()?;
 
     // 将字符 span 转换为字节 span
-    get_byte_span((start_char, end_char), char_map)
+    get_byte_span(location.span, char_map)
 }
 
 /// 将字符索引范围转换为字节索引范围。
@@ -298,28 +256,6 @@ fn mark_byte_range_as(
             }
         }
     }
-}
-
-/// 检查节点是否来自当前文件
-/// 通过比较节点的token的Source对象与根节点的Source对象来判断
-fn is_node_from_current_file(node: &ASTNode, root_source: &std::sync::Arc<Vec<char>>) -> bool {
-    // 检查start_token
-    if let Some(start_token) = &node.start_token {
-        let node_source: std::sync::Arc<Vec<char>> = start_token.source_code().clone().into();
-        if !std::sync::Arc::ptr_eq(&node_source, root_source) {
-            return false;
-        }
-    }
-
-    // 检查end_token
-    if let Some(end_token) = &node.end_token {
-        let node_source: std::sync::Arc<Vec<char>> = end_token.source_code().clone().into();
-        if !std::sync::Arc::ptr_eq(&node_source, root_source) {
-            return false;
-        }
-    }
-
-    true
 }
 
 // --- LSP 编码函数（无需修改，保持完整）---

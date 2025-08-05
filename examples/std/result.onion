@@ -1,7 +1,7 @@
 @required 'Modules';
 if (not keyof (sync (() -> Modules.Result))()) {
     // 定义临时的 Result 构造器和辅助函数
-    _Result_Temp_Constructor := mut undefined;
+    _Result_Temp_Consructor := mut undefined;
     _Ok_Temp_Helper := (v?) -> _Result_Temp_Constructor.new(true : v);
     _Err_Temp_Helper := (v?) -> _Result_Temp_Constructor.new(false : v);
 

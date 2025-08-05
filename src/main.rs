@@ -1,12 +1,13 @@
 use clap::{Parser, Subcommand};
 use colored::*;
 use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
+    fs, path::{Path, PathBuf}, sync::Arc
 };
 
 // Import necessary modules
 use onion_frontend::compile::{build_code, compile_to_bytecode};
+use onion_frontend::diagnostics::collector::DiagnosticCollector;
+use onion_frontend::parser::lexer::Source;
 use onion_vm::{
     GC,
     lambda::{
@@ -118,16 +119,26 @@ fn cmd_compile(file: PathBuf, output: Option<PathBuf>, bytecode: bool) -> Result
     if !file.exists() {
         return Err(format!("File '{}' not found", file.display()));
     }
-    let code = std::fs::read_to_string(&file)
+    
+    let source = Source::from_file(&file)
         .map_err(|e| format!("Failed to read file '{}': {}", file.display(), e))?;
 
     // Store current working directory BEFORE dir_stack changes it
     let current_dir =
         std::env::current_dir().map_err(|e| format!("Failed to get current directory: {e}"))?;
 
+    let mut collector = DiagnosticCollector::new();
+
     if bytecode {
         // Compile to IR first, then to bytecode
-        let ir_package = build_code(&code, file.clone()).map_err(|e| format!("Compilation failed\n{e}"))?;
+        let ir_package = match build_code(&mut collector, &source) {
+            Ok(package) => package,
+            Err(_) => {
+                collector.report_all();
+                return Err("Compilation failed".to_string());
+            }
+        };
+        
         let bytecode_package = compile_to_bytecode(&ir_package)
             .map_err(|e| format!("Bytecode compilation failed: {e}"))?;
         // Restore working directory before writing output
@@ -160,7 +171,13 @@ fn cmd_compile(file: PathBuf, output: Option<PathBuf>, bytecode: bool) -> Result
         }
     } else {
         // Compile to IR
-        let ir_package = build_code(&code, file.clone()).map_err(|e| format!("Compilation failed\n{e}"))?;
+        let ir_package = match build_code(&mut collector, &source) {
+            Ok(package) => package,
+            Err(_) => {
+                collector.report_all();
+                return Err("Compilation failed".to_string());
+            }
+        };
 
         // Restore working directory before writing output
         std::env::set_current_dir(&current_dir)
@@ -199,10 +216,17 @@ fn cmd_display_ir(file: PathBuf) -> Result<(), String> {
         return Err(format!("File '{}' not found", file.display()));
     }
 
-    let code = std::fs::read_to_string(&file)
+    let source = Source::from_file(&file)
         .map_err(|e| format!("Failed to read file '{}': {}", file.display(), e))?;
 
-    let ir_package = build_code(&code, file).map_err(|e| format!("Compilation failed\n{e}"))?;
+    let mut collector = DiagnosticCollector::new();
+    let ir_package = match build_code(&mut collector, &source) {
+        Ok(package) => package,
+        Err(_) => {
+            collector.report_all();
+            return Err("Compilation failed".to_string());
+        }
+    };
 
     println!("\n{}", "IR Code:".cyan().bold());
     println!("{}", format!("{ir_package:#?}").dimmed());
@@ -243,12 +267,16 @@ fn cmd_repl() -> Result<(), String> {
 // Helper functions
 
 fn run_source_file(file: &Path) -> Result<(), String> {
-    let code = std::fs::read_to_string(file)
+     let file: PathBuf = fs::canonicalize(file)
+        .map_err(|e| format!("Failed to canonicalize file path: {e:?}"))?;
+    let source = Source::from_file(&file)
         .map_err(|e| format!("Failed to read file '{}': {}", file.display(), e))?;
-    execute_code(&code, file.to_path_buf())
+    execute_code(&source)
 }
 
 fn run_ir_file(file: &Path) -> Result<(), String> {
+    let file: PathBuf = fs::canonicalize(file)
+        .map_err(|e| format!("Failed to canonicalize file path: {e:?}"))?;
     let ir_package = IRPackage::read_from_file(file.to_str().unwrap())
         .map_err(|e| format!("Failed to read IR file: {e:?}"))?;
 
@@ -256,13 +284,28 @@ fn run_ir_file(file: &Path) -> Result<(), String> {
 }
 
 fn run_bytecode_file(file: &Path) -> Result<(), String> {
+    let file: PathBuf = fs::canonicalize(file)
+        .map_err(|e| format!("Failed to canonicalize file path: {e:?}"))?;
     let bytecode_package = VMInstructionPackage::read_from_file(file.to_str().unwrap())
         .map_err(|e| format!("Failed to read bytecode file: {e:?}"))?;
 
     execute_bytecode_package(&bytecode_package)
 }
-fn execute_code(code: &str, source_path: PathBuf) -> Result<(), String> {
-    let ir_package = build_code(code, source_path).map_err(|e| format!("Compilation failed\n{e}"))?;
+fn execute_code(source: &Source) -> Result<(), String> {
+    let mut collector = DiagnosticCollector::new();
+    let ir_package = match build_code(&mut collector, source) {
+        Ok(package) => {
+            if collector.has_errors() {
+                collector.report_all();
+                return Err("Compilation failed".to_string());
+            }
+            package
+        },
+        Err(_) => {
+            collector.report_all();
+            return Err("Compilation failed".to_string());
+        }
+    };
 
     execute_ir_package(&ir_package)
 }

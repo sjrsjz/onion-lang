@@ -66,14 +66,14 @@ impl VariableContext {
 
 #[derive(Debug, Clone)]
 pub enum ASTAnalysisDiagnostic {
-    UndefinedVariable(Option<SourceLocation>),
+    UndefinedVariable(Option<SourceLocation>, String),
     DetailedError(Option<SourceLocation>, String),
 }
 
 impl Diagnostic for ASTAnalysisDiagnostic {
     fn severity(&self) -> crate::diagnostics::ReportSeverity {
         match self {
-            ASTAnalysisDiagnostic::UndefinedVariable(_) => {
+            ASTAnalysisDiagnostic::UndefinedVariable(_, _) => {
                 crate::diagnostics::ReportSeverity::Error
             }
             ASTAnalysisDiagnostic::DetailedError(_, _) => crate::diagnostics::ReportSeverity::Error,
@@ -86,8 +86,8 @@ impl Diagnostic for ASTAnalysisDiagnostic {
 
     fn message(&self) -> String {
         match self {
-            ASTAnalysisDiagnostic::UndefinedVariable(_) => {
-                "A variable was used before it was defined.".into()
+            ASTAnalysisDiagnostic::UndefinedVariable(_, var_name) => {
+                format!("Variable '{}' was used before it was defined.", var_name)
             }
             ASTAnalysisDiagnostic::DetailedError(_, msg) => msg.clone(),
         }
@@ -95,16 +95,18 @@ impl Diagnostic for ASTAnalysisDiagnostic {
 
     fn location(&self) -> Option<SourceLocation> {
         match self {
-            ASTAnalysisDiagnostic::UndefinedVariable(loc) => loc.clone(),
+            ASTAnalysisDiagnostic::UndefinedVariable(loc, _) => loc.clone(),
             ASTAnalysisDiagnostic::DetailedError(loc, _) => loc.clone(),
         }
     }
 
     fn help(&self) -> Option<String> {
         match self {
-            ASTAnalysisDiagnostic::UndefinedVariable(_) => {
-                Some("Define the variable before using it.".into())
-            }
+            ASTAnalysisDiagnostic::UndefinedVariable(_, var_name) => Some(format!(
+                "Define the variable '{}' before using it. If the variable is dynamic, use \"@required '{}'\" to ensure it is defined at runtime.",
+                var_name,
+                var_name
+            )),
             ASTAnalysisDiagnostic::DetailedError(_, _) => None,
         }
     }
@@ -337,6 +339,7 @@ fn analyze_node(
             if !dynamic && context.get_variable_current_context(var_name).is_none() {
                 diagnostics.report(ASTAnalysisDiagnostic::UndefinedVariable(
                     node.source_location.clone(),
+                    var_name.clone(),
                 ));
             }
             check_postorder_break(node, break_at_position, context, context_at_break);
@@ -378,7 +381,14 @@ fn analyze_node(
             let body = &node.children[1];
             let mut captured_vars = captured_vars.clone();
             if !dynamic {
-                // 可以选择在这里报告未定义的捕获变量，但是为了避免过多错误，不做处理而是交给 Lambda 体分析
+                // for var_name in captured_vars.iter() {
+                //     if context.get_variable_current_context(var_name).is_none() {
+                //         diagnostics.report(ASTAnalysisDiagnostic::UndefinedVariable(
+                //             node.source_location.clone(),
+                //             var_name.clone(),
+                //         ));
+                //     }
+                // }
                 captured_vars.retain(|v| context.get_variable_current_context(v).is_some());
             }
             let params_def = analyze_tuple_params(
@@ -438,7 +448,6 @@ fn analyze_node(
             check_postorder_break(node, break_at_position, context, context_at_break);
             AssumedType::Lambda
         }
-        // ... (The rest of the cases with checks as implemented in the previous response) ...
         ASTNodeType::Assign => {
             check_children_exact!(diagnostics, node, 2, "Assign");
             let assumed_type = analyze_node(

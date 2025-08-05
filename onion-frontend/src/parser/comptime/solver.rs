@@ -5,27 +5,31 @@ use std::{
 };
 
 use onion_vm::{
+    GC,
     lambda::{
         runnable::{Runnable, RuntimeError, StepResult},
         scheduler::scheduler::Scheduler,
-    }, types::{
+    },
+    types::{
         lambda::{
             definition::{LambdaBody, LambdaType, OnionLambdaDefinition},
             launcher::OnionLambdaRunnableLauncher,
             parameter::LambdaParameter,
             vm_instructions::{
                 instruction_set::VMInstructionPackage,
-                ir::{ DebugInfo, Functions, IR},
+                ir::{DebugInfo, Functions, IR},
                 ir_translator::{IRTranslator, IRTranslatorError},
             },
         },
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         tuple::OnionTuple,
-    }, unwrap_object, utils::fastmap::{OnionFastMap, OnionKeyPool}, GC
+    },
+    unwrap_object,
+    utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
 
 use crate::{
-    diagnostics::{Diagnostic, collector::DiagnosticCollector},
+    diagnostics::{Diagnostic, SourceLocation, collector::DiagnosticCollector},
     ir_generator::ir_generator::{IRGenerator, NameSpace},
     parser::{
         analyzer::{analyze_ast, auto_capture_and_rebuild},
@@ -68,30 +72,46 @@ impl ComptimeState {
 
 #[derive(Debug, Clone)]
 pub enum ComptimeDiagnositic {
-    RuntimeError(RuntimeError),
-    BorrowError(String),
-    IRTranslatorError(IRTranslatorError),
+    RuntimeError(Option<SourceLocation>, RuntimeError),
+    BorrowError(Option<SourceLocation>, String),
+    IRTranslatorError(Option<SourceLocation>, IRTranslatorError),
 }
 
 impl Diagnostic for ComptimeDiagnositic {
     fn severity(&self) -> crate::diagnostics::ReportSeverity {
-        todo!()
+        match self {
+            ComptimeDiagnositic::RuntimeError(_, _) => crate::diagnostics::ReportSeverity::Error,
+            ComptimeDiagnositic::BorrowError(_, _) => crate::diagnostics::ReportSeverity::Error,
+            ComptimeDiagnositic::IRTranslatorError(_, _) => {
+                crate::diagnostics::ReportSeverity::Error
+            }
+        }
     }
 
     fn title(&self) -> String {
-        todo!()
+        "Comptime Error".to_string()
     }
 
     fn message(&self) -> String {
-        todo!()
+        match self {
+            ComptimeDiagnositic::RuntimeError(_, err) => format!("Runtime Error: {}", err),
+            ComptimeDiagnositic::BorrowError(_, msg) => format!("Borrow Error: {}", msg),
+            ComptimeDiagnositic::IRTranslatorError(_, err) => {
+                format!("IR Translator Error: {}", err)
+            }
+        }
     }
 
     fn location(&self) -> Option<crate::diagnostics::SourceLocation> {
-        todo!()
+        match self {
+            ComptimeDiagnositic::RuntimeError(loc, _) => loc.clone(),
+            ComptimeDiagnositic::BorrowError(loc, _) => loc.clone(),
+            ComptimeDiagnositic::IRTranslatorError(loc, _) => loc.clone(),
+        }
     }
 
     fn help(&self) -> Option<String> {
-        todo!()
+        None
     }
 
     fn copy(&self) -> Box<dyn Diagnostic> {
@@ -107,10 +127,9 @@ pub struct ComptimeSolver {
 
 impl ComptimeSolver {
     pub fn new(
-        user_definitions: HashMap<String, OnionStaticObject>,
+        user_definitions: Arc<RwLock<HashMap<String, OnionStaticObject>>>,
         import_cycle_detector: CycleDetector<PathBuf>,
     ) -> Self {
-        let user_definitions = Arc::new(RwLock::new(user_definitions));
         let user_definitions_ref = user_definitions.clone();
 
         let diagnostics = Arc::new(RwLock::new(DiagnosticCollector::new()));
@@ -150,7 +169,7 @@ impl ComptimeSolver {
             ),
         );
 
-        let cloned_ref = user_definitions.clone();
+        let user_definitions_ref = user_definitions.clone();
         builtin_definitions.insert(
             "undef".into(),
             wrap_native_function(
@@ -165,7 +184,7 @@ impl ComptimeSolver {
                         match argument.get("name") {
                             Some(v) => v.weak().with_data(|v| match v {
                                 OnionObject::String(name) => {
-                                    let mut state = cloned_ref.write().map_err(|e| {
+                                    let mut state = user_definitions_ref.write().map_err(|e| {
                                         RuntimeError::BorrowError(e.to_string().into())
                                     })?;
                                     state.remove(name.as_ref());
@@ -184,7 +203,7 @@ impl ComptimeSolver {
             ),
         );
 
-        let cloned_ref = user_definitions.clone();
+        let user_definitions_ref = user_definitions.clone();
         builtin_definitions.insert(
             "ifdef".into(),
             wrap_native_function(
@@ -199,7 +218,7 @@ impl ComptimeSolver {
                         match argument.get("name") {
                             Some(v) => v.weak().with_data(|v| match v {
                                 OnionObject::String(name) => {
-                                    let state = cloned_ref.read().map_err(|e| {
+                                    let state = user_definitions_ref.read().map_err(|e| {
                                         RuntimeError::BorrowError(e.to_string().into())
                                     })?;
                                     Ok(OnionObject::Boolean(state.contains_key(name.as_ref()))
@@ -332,12 +351,7 @@ impl ComptimeSolver {
                                         })?;
 
                                     let mut sub_solver = ComptimeSolver::new(
-                                        cloned_ref
-                                            .read()
-                                            .map_err(|e| {
-                                                RuntimeError::DetailedError(e.to_string().into())
-                                            })?
-                                            .clone(),
+                                        cloned_ref.clone(),
                                         import_cycle_detector.enter(abs_path).map_err(|path| {
                                             RuntimeError::DetailedError(
                                                 format!("Cyclic reference detected: {:?}", path)
@@ -451,7 +465,10 @@ impl ComptimeSolver {
                 .user_definitions
                 .read()
                 .map_err(|e| {
-                    collector.report(ComptimeDiagnositic::BorrowError(e.to_string()));
+                    collector.report(ComptimeDiagnositic::BorrowError(
+                        ast.source_location.clone(),
+                        e.to_string(),
+                    ));
                     ()
                 })?
                 .iter()
@@ -489,7 +506,10 @@ impl ComptimeSolver {
         let byte_code = match translator.translate() {
             Ok(_) => translator.get_result(),
             Err(e) => {
-                collector.report(ComptimeDiagnositic::IRTranslatorError(e));
+                collector.report(ComptimeDiagnositic::IRTranslatorError(
+                    ast.source_location.clone(),
+                    e,
+                ));
                 return Err(());
             }
         };
@@ -497,12 +517,15 @@ impl ComptimeSolver {
         drop(collector); // 释放锁，允许其他线程访问 diagnostics
         let result = match self.execute(&byte_code) {
             Ok(result) => result,
-            Err(e) => {
+            Err(err) => {
                 let mut collector = self
                     .diagnostics
                     .write()
                     .expect("Failed to lock diagnostics collector");
-                collector.report(ComptimeDiagnositic::RuntimeError(e));
+                collector.report(ComptimeDiagnositic::RuntimeError(
+                    ast.source_location.clone(),
+                    err,
+                ));
                 return Err(());
             }
         };
@@ -513,7 +536,10 @@ impl ComptimeSolver {
                     .diagnostics
                     .write()
                     .expect("Failed to lock diagnostics collector");
-                collector.report(ComptimeDiagnositic::RuntimeError(err));
+                collector.report(ComptimeDiagnositic::RuntimeError(
+                    ast.source_location.clone(),
+                    err,
+                ));
                 Err(())
             }
         }
