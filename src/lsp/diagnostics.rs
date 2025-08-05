@@ -2,12 +2,15 @@ use std::collections::HashMap;
 use std::panic::catch_unwind;
 
 use log::{error, info};
+use onion_frontend::diagnostics::collector::DiagnosticCollector;
 use onion_frontend::parser::analyzer::{
-    AnalysisResult, AnalyzeError, AnalyzeWarn, analyze_ast, auto_capture_and_rebuild,
+    ASTAnalysisDiagnostic, analyze_ast, auto_capture_and_rebuild,
 };
-use onion_frontend::parser::ast::{ASTNode, ASTNodeType, ParserError, ast_token_stream, build_ast};
-use onion_frontend::parser::comptime::solver::{ComptimeError, ComptimeSolver, ComptimeWarning};
-use onion_frontend::parser::lexer::{Token, lexer};
+use onion_frontend::parser::ast::{
+    ASTNode, ASTNodeType, ASTParseDiagnostic, ast_token_stream, build_ast,
+};
+use onion_frontend::parser::comptime::solver::{ComptimeDiagnositic, ComptimeSolver};
+use onion_frontend::parser::lexer::{Token, tokenizer};
 use onion_frontend::utils::cycle_detector::CycleDetector;
 use url::Url;
 
@@ -70,7 +73,8 @@ pub fn validate_document(
     // --- 4. 最终语义分析 ---
     info!("Starting final semantic analysis for: {}", document.uri);
     let (_required_vars, final_ast) = auto_capture_and_rebuild(&solved_ast);
-    let analysis_result = analyze_ast(&final_ast, None); // 假设 analyze_ast 仍然需要
+    let mut diagnostics_collector = DiagnosticCollector::new();
+    let analysis_result = analyze_ast(&final_ast, &mut diagnostics_collector, None);
     diagnostics.extend(process_analysis_results(&analysis_result, document));
     info!("Final semantic analysis complete.");
 
@@ -126,7 +130,7 @@ pub fn new_solver_for_file(uri: &str) -> Result<ComptimeSolver, Diagnostic> {
 fn process_comptime_results(solver: &ComptimeSolver, document: &TextDocument) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
 
-    for error in solver.errors() {
+    for error in solver.diagnostics() {
         diagnostics.extend(comptime_error_to_diagnostics(error, document));
     }
     for warning in solver.warnings() {
@@ -138,29 +142,29 @@ fn process_comptime_results(solver: &ComptimeSolver, document: &TextDocument) ->
 
 /// 将 ComptimeError 转换为 LSP Diagnostics。
 fn comptime_error_to_diagnostics(
-    error: &(ComptimeError, ASTNode),
+    error: &(ComptimeDiagnositic, ASTNode),
     document: &TextDocument,
 ) -> Vec<Diagnostic> {
     match &error.0 {
-        ComptimeError::AnalysisError(errors) => errors
+        ComptimeDiagnositic::AnalysisError(errors) => errors
             .iter()
             .map(|e| diagnostic_from_analyze_error(e, document))
             .collect(),
-        ComptimeError::RuntimeError(err) => vec![Diagnostic {
+        ComptimeDiagnositic::RuntimeError(err) => vec![Diagnostic {
             range: get_node_range(&error.1, &document.content),
             severity: Some(DiagnosticSeverity::Error),
             message: format!("Compile-time runtime error: {}", err),
             source: Some("onion-lsp (comptime)".to_string()),
             ..Default::default()
         }],
-        ComptimeError::IRGeneratorError(err) => vec![Diagnostic {
+        ComptimeDiagnositic::IRGeneratorError(err) => vec![Diagnostic {
             range: get_node_range(&error.1, &document.content),
             severity: Some(DiagnosticSeverity::Error),
             message: format!("Internal compiler error (IR generation): {}", err),
             source: Some("onion-lsp (internal)".to_string()),
             ..Default::default()
         }],
-        ComptimeError::IRTranslatorError(err) => vec![Diagnostic {
+        ComptimeDiagnositic::IRTranslatorError(err) => vec![Diagnostic {
             range: get_node_range(&error.1, &document.content),
             severity: Some(DiagnosticSeverity::Error),
             message: format!("Internal compiler error (IR translation): {}", err),
@@ -188,9 +192,12 @@ fn comptime_warning_to_diagnostics(
 // =======================================================================
 
 /// **(新)** 将单个 AnalyzeError 转换为 Diagnostic。
-fn diagnostic_from_analyze_error(error: &AnalyzeError, document: &TextDocument) -> Diagnostic {
+fn diagnostic_from_analyze_error(
+    error: &ASTAnalysisDiagnostic,
+    document: &TextDocument,
+) -> Diagnostic {
     match error {
-        AnalyzeError::UndefinedVariable(node) => Diagnostic {
+        ASTAnalysisDiagnostic::UndefinedVariable(node) => Diagnostic {
             range: get_node_range(node, &document.content),
             severity: Some(DiagnosticSeverity::Error),
             message: format!(
@@ -201,14 +208,16 @@ fn diagnostic_from_analyze_error(error: &AnalyzeError, document: &TextDocument) 
             ),
             ..Default::default()
         },
-        AnalyzeError::InvalidMacroDefinition(node, msg) => Diagnostic {
+        ASTAnalysisDiagnostic::InvalidMacroDefinition(node, msg) => Diagnostic {
             range: get_node_range(node, &document.content),
             severity: Some(DiagnosticSeverity::Error),
             message: format!("Invalid macro definition: {}", msg),
             ..Default::default()
         },
-        AnalyzeError::ParserError(p_err) => create_diagnostic_from_parser_error(p_err, document),
-        AnalyzeError::DetailedError(node, msg) => Diagnostic {
+        ASTAnalysisDiagnostic::ASTParseDignostic(p_err) => {
+            create_diagnostic_from_parser_error(p_err, document)
+        }
+        ASTAnalysisDiagnostic::DetailedError(node, msg) => Diagnostic {
             range: get_node_range(node, &document.content),
             severity: Some(DiagnosticSeverity::Error),
             message: msg.clone(),
@@ -218,9 +227,9 @@ fn diagnostic_from_analyze_error(error: &AnalyzeError, document: &TextDocument) 
 }
 
 /// **(新)** 将单个 AnalyzeWarn 转换为 Diagnostic。
-fn diagnostic_from_analyze_warn(warn: &AnalyzeWarn, document: &TextDocument) -> Diagnostic {
+fn diagnostic_from_analyze_warn(warn: &AnalyzeWarning, document: &TextDocument) -> Diagnostic {
     match warn {
-        AnalyzeWarn::CompileError(node, msg) => Diagnostic {
+        AnalyzeWarning::CompileError(node, msg) => Diagnostic {
             range: get_node_range(node, &document.content),
             severity: Some(DiagnosticSeverity::Warning),
             message: format!("@compile warning: {}", msg),
@@ -249,7 +258,7 @@ pub fn parse_source_to_ast_with_tokens(
     source: &str,
     document: &TextDocument,
 ) -> Result<(ASTNode, Vec<Token>), Diagnostic> {
-    let tokens = match catch_unwind(|| lexer::tokenize(source)) {
+    let tokens = match catch_unwind(|| tokenizer::tokenize(source)) {
         Ok(tokens) => tokens,
         Err(e) => {
             error!("Panic during lexical analysis: {:?}", e);
@@ -263,7 +272,7 @@ pub fn parse_source_to_ast_with_tokens(
         }
     };
 
-    let filtered_tokens = lexer::reject_comment(&tokens);
+    let filtered_tokens = tokenizer::reject_comment(&tokens);
     if filtered_tokens.is_empty() {
         return Ok((
             ASTNode::new(ASTNodeType::Expressions, None, None, Some(vec![])),
@@ -278,38 +287,38 @@ pub fn parse_source_to_ast_with_tokens(
 }
 /// **(Rewritten Helper)** Creates an LSP Diagnostic from a ParserError.
 fn create_diagnostic_from_parser_error(
-    parse_error: &ParserError,
+    parse_error: &ASTParseDiagnostic,
     document: &TextDocument,
 ) -> Diagnostic {
     match parse_error {
-        ParserError::UnexpectedToken(token)
-        | ParserError::InvalidSyntax(token)
-        | ParserError::InvalidVariableName(token)
-        | ParserError::UnsupportedStructure(token) => Diagnostic {
+        ASTParseDiagnostic::UnexpectedToken(token)
+        | ASTParseDiagnostic::InvalidSyntax(token)
+        | ASTParseDiagnostic::InvalidVariableName(token)
+        | ASTParseDiagnostic::UnsupportedStructure(token) => Diagnostic {
             range: get_token_range(token, &document.content),
             severity: Some(DiagnosticSeverity::Error),
             message: parse_error.format(), // Use the Display impl for a concise message
             ..Default::default()
         },
-        ParserError::MissingStructure(token, expected) => Diagnostic {
+        ASTParseDiagnostic::MissingStructure(token, expected) => Diagnostic {
             range: get_token_range(token, &document.content),
             severity: Some(DiagnosticSeverity::Error),
             message: format!("Missing structure: Expected '{expected}' here"),
             ..Default::default()
         },
-        ParserError::ErrorStructure(token, err) => Diagnostic {
+        ASTParseDiagnostic::ErrorStructure(token, err) => Diagnostic {
             range: get_token_range(token, &document.content),
             severity: Some(DiagnosticSeverity::Error),
             message: format!("Erroneous structure: {err}"),
             ..Default::default()
         },
-        ParserError::NotFullyMatched(start, end) => Diagnostic {
+        ASTParseDiagnostic::NotFullyMatched(start, end) => Diagnostic {
             range: get_range_between_tokens(start, end, &document.content),
             severity: Some(DiagnosticSeverity::Error),
             message: "Expression not fully matched".to_string(),
             ..Default::default()
         },
-        ParserError::UnmatchedParenthesis(opening, closing) => {
+        ASTParseDiagnostic::UnmatchedParenthesis(opening, closing) => {
             let opening_range = get_token_range(opening, &document.content);
             let closing_range = get_token_range(closing, &document.content);
 

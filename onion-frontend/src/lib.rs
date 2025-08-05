@@ -1,4 +1,5 @@
 pub mod ir_generator;
 pub mod parser;
+pub mod diagnostics;
 pub mod compile;
 pub mod utils;

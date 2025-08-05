@@ -4,6 +4,7 @@ use std::panic::{self, AssertUnwindSafe, catch_unwind};
 use std::sync::{Arc, Mutex}; // Add panic module
 
 use log::{debug, error, info, warn};
+use onion_frontend::diagnostics::collector::DiagnosticCollector;
 use serde_json::Value;
 
 use crate::lsp::diagnostics::{self, new_solver_for_file};
@@ -226,7 +227,6 @@ impl LspServer {
             "not",
             "in",
             "async",
-            "await",
             "import",
             "keyof",
             "valueof",
@@ -272,9 +272,7 @@ impl LspServer {
             });
         }
 
-        let annotations = vec![
-            "required", "include", "def", "undef", "ifdef", "ast"
-        ];
+        let annotations = vec!["required", "include", "def", "undef", "ifdef", "ast"];
         for annotation in annotations {
             items.push(CompletionItem {
                 label: annotation.to_string(),
@@ -312,7 +310,9 @@ impl LspServer {
             let (_required_vars, final_ast) = auto_capture_and_rebuild(&solved_ast);
 
             // Call analyze_ast with the correct, simplified signature
-            let analysis_output = analyzer::analyze_ast(&final_ast, Some(byte_offset));
+            let mut diagnostics_collector = DiagnosticCollector::new();
+            let analysis_output =
+                analyzer::analyze_ast(&final_ast, &mut diagnostics_collector, Some(byte_offset));
 
             // --- 6. Extract variables from captured context ---
             if let Some(context) = analysis_output.context_at_break {

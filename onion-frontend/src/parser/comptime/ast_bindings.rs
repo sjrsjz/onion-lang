@@ -47,8 +47,7 @@ fn string(
         OnionObject::String(s) => Ok(ast_wrapper(ASTNode {
             node_type: ASTNodeType::String(s.to_string()),
             children: vec![],
-            start_token: None,
-            end_token: None,
+            source_location: None,
         })),
         _ => Err(RuntimeError::InvalidType(
             "Argument 'value' for string() must be a string".into(),
@@ -67,8 +66,7 @@ fn boolean(
         OnionObject::Boolean(b) => Ok(ast_wrapper(ASTNode {
             node_type: ASTNodeType::Boolean(*b),
             children: vec![],
-            start_token: None,
-            end_token: None,
+            source_location: None,
         })),
         _ => Err(RuntimeError::InvalidType(
             "Argument 'value' for boolean() must be a boolean".into(),
@@ -87,14 +85,12 @@ fn number(
         OnionObject::Integer(n) => Ok(ast_wrapper(ASTNode {
             node_type: ASTNodeType::Number(n.to_string()),
             children: vec![],
-            start_token: None,
-            end_token: None,
+            source_location: None,
         })),
         OnionObject::Float(f) => Ok(ast_wrapper(ASTNode {
             node_type: ASTNodeType::Number(f.to_string()),
             children: vec![],
-            start_token: None,
-            end_token: None,
+            source_location: None,
         })),
         _ => Err(RuntimeError::InvalidType(
             "Argument 'value' for number() must be a number".into(),
@@ -113,8 +109,7 @@ fn variable(
         OnionObject::String(s) => Ok(ast_wrapper(ASTNode {
             node_type: ASTNodeType::Variable(s.to_string()),
             children: vec![],
-            start_token: None,
-            end_token: None,
+            source_location: None,
         })),
         _ => Err(RuntimeError::InvalidType(
             "Argument 'name' for variable() must be a string".into(),
@@ -133,8 +128,7 @@ fn let_(
         OnionObject::String(s) => Ok(ast_wrapper(ASTNode {
             node_type: ASTNodeType::Let(s.to_string()),
             children: vec![],
-            start_token: None,
-            end_token: None,
+            source_location: None,
         })),
         _ => Err(RuntimeError::InvalidType(
             "Argument 'name' for let_() must be a string".into(),
@@ -181,8 +175,7 @@ fn operation(
             Ok(ast_wrapper(ASTNode {
                 node_type: ASTNodeType::Operation(op_type),
                 children: vec![],
-                start_token: None,
-                end_token: None,
+                source_location: None,
             }))
         }
         _ => Err(RuntimeError::InvalidType(
@@ -208,7 +201,6 @@ fn modifier(
                 "assert" => ASTNodeModifier::Assert,
                 "import" => ASTNodeModifier::Import,
                 "typeof" => ASTNodeModifier::TypeOf,
-                "await" => ASTNodeModifier::Await,
                 "lengthof" => ASTNodeModifier::LengthOf,
                 "launch" => ASTNodeModifier::Launch,
                 "spawn" => ASTNodeModifier::Spawn,
@@ -224,8 +216,7 @@ fn modifier(
             Ok(ast_wrapper(ASTNode {
                 node_type: ASTNodeType::Modifier(mod_type),
                 children: vec![],
-                start_token: None,
-                end_token: None,
+                source_location: None,
             }))
         }
         _ => Err(RuntimeError::InvalidType(
@@ -263,8 +254,7 @@ fn lambda_def(
                         Ok(ast_wrapper(ASTNode {
                             node_type: ASTNodeType::LambdaDef(*is_dyn, captures),
                             children: vec![],
-                            start_token: None,
-                            end_token: None,
+                            source_location: None,
                         }))
                     }
                     _ => Err(RuntimeError::InvalidType(
@@ -316,8 +306,7 @@ pub fn build_module() -> OnionStaticObject {
             ast_wrapper(ASTNode {
                 node_type,
                 children: vec![],
-                start_token: None,
-                end_token: None,
+                source_location: None,
             }),
         );
     }

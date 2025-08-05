@@ -1,12 +1,13 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::parser::{
-    ast::{ASTNodeOperation, ASTNodeType, ParserError},
-    diagnostics,
-    lexer::Source,
+use crate::{
+    diagnostics::{Diagnostic, SourceLocation, collector::DiagnosticCollector},
+    parser::{
+        ast::{ASTNodeOperation, ASTNodeType},
+        lexer::Source,
+    },
 };
 
-use colored::*;
 use onion_vm::types::lambda::vm_instructions::ir_translator::PRE_ALLOCATED_VARIABLE_STRINGS;
 
 use super::ast::ASTNode;
@@ -64,102 +65,58 @@ impl VariableContext {
 }
 
 #[derive(Debug, Clone)]
-pub enum AnalyzeError {
-    UndefinedVariable(ASTNode),
-    InvalidMacroDefinition(ASTNode, String),
-    ParserError(ParserError),
-    DetailedError(ASTNode, String),
+pub enum ASTAnalysisDiagnostic {
+    UndefinedVariable(Option<SourceLocation>),
+    DetailedError(Option<SourceLocation>, String),
 }
 
-impl AnalyzeError {
-    pub fn format(&self) -> String {
+impl Diagnostic for ASTAnalysisDiagnostic {
+    fn severity(&self) -> crate::diagnostics::ReportSeverity {
         match self {
-            Self::ParserError(parser_err) => parser_err.format(),
-            Self::UndefinedVariable(node) => {
-                let var_name = node
-                    .start_token
-                    .as_ref()
-                    .map_or("".to_string(), |t| t.origin_token());
-                diagnostics::format_node_based_report(
-                    diagnostics::ReportSeverity::Error,
-                    "Semantic Error",
-                    &format!("Undefined variable '{}'", var_name.yellow()),
-                    node,
-                    "Ensure the variable is defined in the current scope before use.",
-                )
+            ASTAnalysisDiagnostic::UndefinedVariable(_) => {
+                crate::diagnostics::ReportSeverity::Error
             }
-            Self::InvalidMacroDefinition(node, msg) => diagnostics::format_node_based_report(
-                diagnostics::ReportSeverity::Error,
-                "Macro Error",
-                &format!("Invalid macro definition: {}", msg.yellow()),
-                node,
-                "Please check the macro's syntax and structure.",
-            ),
-            Self::DetailedError(node, msg) => diagnostics::format_node_based_report(
-                diagnostics::ReportSeverity::Error,
-                "Analysis Error",
-                msg,
-                node,
-                "",
-            ),
+            ASTAnalysisDiagnostic::DetailedError(_, _) => crate::diagnostics::ReportSeverity::Error,
         }
     }
-}
 
-#[derive(Debug, Clone)]
-pub enum AnalyzeWarn {
-    CompileError(ASTNode, String),
-}
+    fn title(&self) -> String {
+        "AST Analysis Error".into()
+    }
 
-impl AnalyzeWarn {
-    pub fn format(&self) -> String {
+    fn message(&self) -> String {
         match self {
-            Self::CompileError(node, msg) => diagnostics::format_node_based_report(
-                diagnostics::ReportSeverity::Warning,
-                "Warning",
-                msg,
-                node,
-                "",
-            ),
+            ASTAnalysisDiagnostic::UndefinedVariable(_) => {
+                "A variable was used before it was defined.".into()
+            }
+            ASTAnalysisDiagnostic::DetailedError(_, msg) => msg.clone(),
         }
     }
-}
 
-pub trait AnalysisResult {
-    fn errors(&self) -> &[AnalyzeError];
-    fn warnings(&self) -> &[AnalyzeWarn];
+    fn location(&self) -> Option<SourceLocation> {
+        match self {
+            ASTAnalysisDiagnostic::UndefinedVariable(loc) => loc.clone(),
+            ASTAnalysisDiagnostic::DetailedError(loc, _) => loc.clone(),
+        }
+    }
+
+    fn help(&self) -> Option<String> {
+        match self {
+            ASTAnalysisDiagnostic::UndefinedVariable(_) => {
+                Some("Define the variable before using it.".into())
+            }
+            ASTAnalysisDiagnostic::DetailedError(_, _) => None,
+        }
+    }
+
+    fn copy(&self) -> Box<dyn Diagnostic> {
+        Box::new(self.clone())
+    }
 }
 
 #[derive(Debug)]
 pub struct AnalysisOutput {
-    pub errors: Vec<AnalyzeError>,
-    pub warnings: Vec<AnalyzeWarn>,
     pub context_at_break: Option<VariableContext>,
-}
-
-#[derive(Debug)]
-pub struct MacroAnalysisOutput {
-    pub errors: Vec<AnalyzeError>,
-    pub warnings: Vec<AnalyzeWarn>,
-    pub result_node: ASTNode,
-}
-
-impl AnalysisResult for AnalysisOutput {
-    fn errors(&self) -> &[AnalyzeError] {
-        &self.errors
-    }
-    fn warnings(&self) -> &[AnalyzeWarn] {
-        &self.warnings
-    }
-}
-
-impl AnalysisResult for MacroAnalysisOutput {
-    fn errors(&self) -> &[AnalyzeError] {
-        &self.errors
-    }
-    fn warnings(&self) -> &[AnalyzeWarn] {
-        &self.warnings
-    }
 }
 
 impl VariableContext {
@@ -240,10 +197,10 @@ impl VariableContext {
 
 // Helper macro to check for an exact number of children.
 macro_rules! check_children_exact {
-    ($errors:expr, $node:expr, $expected:expr, $name:expr) => {
+    ($diagnostics:expr, $node:expr, $expected:expr, $name:expr) => {
         if $node.children.len() != $expected {
-            $errors.push(AnalyzeError::DetailedError(
-                $node.clone(),
+            $diagnostics.report(ASTAnalysisDiagnostic::DetailedError(
+                $node.source_location.clone(),
                 format!(
                     "'{}' node expects exactly {} child(ren), but found {}",
                     $name,
@@ -258,11 +215,11 @@ macro_rules! check_children_exact {
 
 // Helper macro to check for a range of children.
 macro_rules! check_children_range {
-    ($errors:expr, $node:expr, $range:expr, $name:expr) => {
+    ($diagnostics:expr, $node:expr, $range:expr, $name:expr) => {
         let range_clone = $range.clone();
         if !range_clone.contains(&$node.children.len()) {
-            $errors.push(AnalyzeError::DetailedError(
-                $node.clone(),
+            $diagnostics.report(ASTAnalysisDiagnostic::DetailedError(
+                $node.source_location.clone(),
                 format!(
                     "'{}' node expects between {} and {} children, but found {}",
                     $name,
@@ -276,7 +233,11 @@ macro_rules! check_children_range {
     };
 }
 
-pub fn analyze_ast(ast: &ASTNode, break_at_position: Option<usize>) -> AnalysisOutput {
+pub fn analyze_ast(
+    ast: &ASTNode,
+    diagnostics_collector: &mut DiagnosticCollector,
+    break_at_position: &Option<(Source, usize)>,
+) -> Result<Option<VariableContext>, ()> {
     let mut context = VariableContext::new();
     context.push_context();
     for builtin in PRE_ALLOCATED_VARIABLE_STRINGS {
@@ -288,46 +249,36 @@ pub fn analyze_ast(ast: &ASTNode, break_at_position: Option<usize>) -> AnalysisO
         );
     }
 
-    let mut errors = Vec::new();
-    let mut warnings = Vec::new();
     let mut context_at_break: Option<VariableContext> = None;
 
     analyze_node(
-        &ast.start_token.as_ref().map(|t| t.source_code().clone()),
         ast,
         &mut context,
-        &mut errors,
-        &mut warnings,
+        diagnostics_collector,
         false,
         break_at_position,
         &mut context_at_break,
     );
 
-    AnalysisOutput {
-        errors,
-        warnings,
-        context_at_break,
-    }
+    Ok(context_at_break)
 }
 
 fn check_postorder_break(
-    source: &Option<Source>,
     node: &ASTNode,
-    break_at_position: Option<usize>,
+    break_at_position: &Option<(Source, usize)>,
     context: &VariableContext,
     context_at_break: &mut Option<VariableContext>,
 ) {
-    if source.is_none() || context_at_break.is_some() {
+    if break_at_position.is_none() || context_at_break.is_some() {
         return;
     }
-    let source = source.as_ref().unwrap();
-    if let Some(break_pos) = break_at_position {
-        if let Some(ref token) = node.start_token {
-            if token.source_code().ne(source) {
+    if let Some((source, break_pos)) = break_at_position {
+        if let Some(location) = &node.source_location {
+            if location.source.ne(source) {
                 return;
             }
-            let (start_char, end_char) = token.origin_token_span();
-            let source_code = token.source_code_str();
+            let (start_char, end_char) = location.span;
+            let source_code = location.source.content_str();
             let start_byte = source_code
                 .char_indices()
                 .nth(start_char)
@@ -338,7 +289,7 @@ fn check_postorder_break(
                 .nth(end_char)
                 .map(|(b, _)| b)
                 .unwrap_or(source_code.len());
-            if break_pos >= start_byte && break_pos <= end_byte {
+            if *break_pos >= start_byte && *break_pos <= end_byte {
                 *context_at_break = Some(context.clone());
             }
         }
@@ -347,13 +298,11 @@ fn check_postorder_break(
 
 #[stacksafe::stacksafe]
 fn analyze_node(
-    source: &Option<Source>,
     node: &ASTNode,
     context: &mut VariableContext,
-    errors: &mut Vec<AnalyzeError>,
-    warnings: &mut Vec<AnalyzeWarn>,
+    diagnostics: &mut DiagnosticCollector,
     dynamic: bool,
-    break_at_position: Option<usize>,
+    break_at_position: &Option<(Source, usize)>,
     context_at_break: &mut Option<VariableContext>,
 ) -> AssumedType {
     if context_at_break.is_some() {
@@ -362,13 +311,11 @@ fn analyze_node(
 
     match &node.node_type {
         ASTNodeType::Let(var_name) => {
-            check_children_exact!(errors, node, 1, "Let");
+            check_children_exact!(diagnostics, node, 1, "Let");
             let assumed_type = analyze_node(
-                source,
                 &node.children[0],
                 context,
-                errors,
-                warnings,
+                diagnostics,
                 dynamic,
                 break_at_position,
                 context_at_break,
@@ -382,39 +329,39 @@ fn analyze_node(
                     assumed_type: assumed_type.clone(),
                 },
             );
-            check_postorder_break(source, node, break_at_position, context, context_at_break);
+            check_postorder_break(node, break_at_position, context, context_at_break);
             assumed_type
         }
         ASTNodeType::Variable(var_name) => {
-            check_children_exact!(errors, node, 0, "Variable");
+            check_children_exact!(diagnostics, node, 0, "Variable");
             if !dynamic && context.get_variable_current_context(var_name).is_none() {
-                errors.push(AnalyzeError::UndefinedVariable(node.clone()));
+                diagnostics.report(ASTAnalysisDiagnostic::UndefinedVariable(
+                    node.source_location.clone(),
+                ));
             }
-            check_postorder_break(source, node, break_at_position, context, context_at_break);
+            check_postorder_break(node, break_at_position, context, context_at_break);
             context
                 .get_variable(var_name)
                 .map_or(AssumedType::Unknown, |v| v.assumed_type.clone())
         }
         ASTNodeType::Required(var_name) => {
-            check_children_exact!(errors, node, 0, "Required");
+            check_children_exact!(diagnostics, node, 0, "Required");
             context.define_variable(
                 var_name.clone(),
                 Variable {
                     assumed_type: AssumedType::Unknown,
                 },
             );
-            check_postorder_break(source, node, break_at_position, context, context_at_break);
+            check_postorder_break(node, break_at_position, context, context_at_break);
             AssumedType::Unknown
         }
         ASTNodeType::Frame => {
-            check_children_exact!(errors, node, 1, "Frame");
+            check_children_exact!(diagnostics, node, 1, "Frame");
             context.push_frame();
             let assumed_type = analyze_node(
-                source,
                 &node.children[0],
                 context,
-                errors,
-                warnings,
+                diagnostics,
                 dynamic,
                 break_at_position,
                 context_at_break,
@@ -422,11 +369,11 @@ fn analyze_node(
             if context_at_break.is_none() {
                 let _ = context.pop_frame();
             }
-            check_postorder_break(source, node, break_at_position, context, context_at_break);
+            check_postorder_break(node, break_at_position, context, context_at_break);
             assumed_type
         }
         ASTNodeType::LambdaDef(is_dynamic_gen, captured_vars) => {
-            check_children_exact!(errors, node, 2, "LambdaDef");
+            check_children_exact!(diagnostics, node, 2, "LambdaDef");
             let params = &node.children[0];
             let body = &node.children[1];
             let mut captured_vars = captured_vars.clone();
@@ -435,11 +382,9 @@ fn analyze_node(
                 captured_vars.retain(|v| context.get_variable_current_context(v).is_some());
             }
             let params_def = analyze_tuple_params(
-                source,
                 params,
                 context,
-                errors,
-                warnings,
+                diagnostics,
                 dynamic,
                 break_at_position,
                 context_at_break,
@@ -450,11 +395,9 @@ fn analyze_node(
 
             if *is_dynamic_gen {
                 analyze_node(
-                    source,
                     body,
                     context,
-                    errors,
-                    warnings,
+                    diagnostics,
                     true,
                     break_at_position,
                     context_at_break,
@@ -481,11 +424,9 @@ fn analyze_node(
                     );
                 }
                 analyze_node(
-                    source,
                     body,
                     context,
-                    errors,
-                    warnings,
+                    diagnostics,
                     false,
                     break_at_position,
                     context_at_break,
@@ -494,18 +435,16 @@ fn analyze_node(
                     let _ = context.pop_context();
                 }
             }
-            check_postorder_break(source, node, break_at_position, context, context_at_break);
+            check_postorder_break(node, break_at_position, context, context_at_break);
             AssumedType::Lambda
         }
         // ... (The rest of the cases with checks as implemented in the previous response) ...
         ASTNodeType::Assign => {
-            check_children_exact!(errors, node, 2, "Assign");
+            check_children_exact!(diagnostics, node, 2, "Assign");
             let assumed_type = analyze_node(
-                source,
                 &node.children[1],
                 context,
-                errors,
-                warnings,
+                diagnostics,
                 dynamic,
                 break_at_position,
                 context_at_break,
@@ -514,26 +453,22 @@ fn analyze_node(
                 return AssumedType::Unknown;
             }
             analyze_node(
-                source,
                 &node.children[0],
                 context,
-                errors,
-                warnings,
+                diagnostics,
                 dynamic,
                 break_at_position,
                 context_at_break,
             );
-            check_postorder_break(source, node, break_at_position, context, context_at_break);
+            check_postorder_break(node, break_at_position, context, context_at_break);
             assumed_type
         }
         ASTNodeType::Pair => {
-            check_children_exact!(errors, node, 2, "Pair");
+            check_children_exact!(diagnostics, node, 2, "Pair");
             analyze_node(
-                source,
                 &node.children[0],
                 context,
-                errors,
-                warnings,
+                diagnostics,
                 dynamic,
                 break_at_position,
                 context_at_break,
@@ -542,16 +477,14 @@ fn analyze_node(
                 return AssumedType::KeyVal;
             }
             analyze_node(
-                source,
                 &node.children[1],
                 context,
-                errors,
-                warnings,
+                diagnostics,
                 dynamic,
                 break_at_position,
                 context_at_break,
             );
-            check_postorder_break(source, node, break_at_position, context, context_at_break);
+            check_postorder_break(node, break_at_position, context, context_at_break);
             AssumedType::KeyVal
         }
         ASTNodeType::Operation(_) => {
@@ -559,19 +492,17 @@ fn analyze_node(
             if let ASTNodeType::Operation(op) = &node.node_type {
                 match op {
                     ASTNodeOperation::Not | ASTNodeOperation::Abs | ASTNodeOperation::Minus => {
-                        check_children_exact!(errors, node, 1, "Unary Operation 'not'")
+                        check_children_exact!(diagnostics, node, 1, "Unary Operation 'not'")
                     }
-                    _ => check_children_exact!(errors, node, 2, "Binary Operation"),
+                    _ => check_children_exact!(diagnostics, node, 2, "Binary Operation"),
                 }
             }
             let mut last_type = AssumedType::Unknown;
             for child in &node.children {
                 last_type = analyze_node(
-                    source,
                     child,
                     context,
-                    errors,
-                    warnings,
+                    diagnostics,
                     dynamic,
                     break_at_position,
                     context_at_break,
@@ -580,31 +511,27 @@ fn analyze_node(
                     return AssumedType::Unknown;
                 }
             }
-            check_postorder_break(source, node, break_at_position, context, context_at_break);
+            check_postorder_break(node, break_at_position, context, context_at_break);
             last_type
         }
         ASTNodeType::Modifier(_) => {
-            check_children_exact!(errors, node, 1, "Modifier");
+            check_children_exact!(diagnostics, node, 1, "Modifier");
             analyze_node(
-                source,
                 &node.children[0],
                 context,
-                errors,
-                warnings,
+                diagnostics,
                 dynamic,
                 break_at_position,
                 context_at_break,
             )
         }
         ASTNodeType::Return => {
-            check_children_range!(errors, node, 0..=1, "Return");
+            check_children_range!(diagnostics, node, 0..=1, "Return");
             if let Some(child) = node.children.first() {
                 analyze_node(
-                    source,
                     child,
                     context,
-                    errors,
-                    warnings,
+                    diagnostics,
                     dynamic,
                     break_at_position,
                     context_at_break,
@@ -614,13 +541,11 @@ fn analyze_node(
             }
         }
         ASTNodeType::If => {
-            check_children_range!(errors, node, 2..=3, "If");
+            check_children_range!(diagnostics, node, 2..=3, "If");
             analyze_node(
-                source,
                 &node.children[0],
                 context,
-                errors,
-                warnings,
+                diagnostics,
                 dynamic,
                 break_at_position,
                 context_at_break,
@@ -629,11 +554,9 @@ fn analyze_node(
                 return AssumedType::Unknown;
             }
             let then_type = analyze_node(
-                source,
                 &node.children[1],
                 context,
-                errors,
-                warnings,
+                diagnostics,
                 dynamic,
                 break_at_position,
                 context_at_break,
@@ -643,11 +566,9 @@ fn analyze_node(
             }
             if node.children.len() == 3 {
                 let _else_type = analyze_node(
-                    source,
                     &node.children[2],
                     context,
-                    errors,
-                    warnings,
+                    diagnostics,
                     dynamic,
                     break_at_position,
                     context_at_break,
@@ -656,13 +577,11 @@ fn analyze_node(
             then_type
         }
         ASTNodeType::While => {
-            check_children_exact!(errors, node, 2, "While");
+            check_children_exact!(diagnostics, node, 2, "While");
             analyze_node(
-                source,
                 &node.children[0],
                 context,
-                errors,
-                warnings,
+                diagnostics,
                 dynamic,
                 break_at_position,
                 context_at_break,
@@ -671,11 +590,9 @@ fn analyze_node(
                 return AssumedType::Unknown;
             }
             analyze_node(
-                source,
                 &node.children[1],
                 context,
-                errors,
-                warnings,
+                diagnostics,
                 dynamic,
                 break_at_position,
                 context_at_break,
@@ -683,35 +600,35 @@ fn analyze_node(
             AssumedType::Unknown
         }
         ASTNodeType::String(_) => {
-            check_children_exact!(errors, node, 0, "String Literal");
+            check_children_exact!(diagnostics, node, 0, "String Literal");
             AssumedType::String
         }
         ASTNodeType::Boolean(_) => {
-            check_children_exact!(errors, node, 0, "Boolean Literal");
+            check_children_exact!(diagnostics, node, 0, "Boolean Literal");
             AssumedType::Boolean
         }
         ASTNodeType::Number(_) => {
-            check_children_exact!(errors, node, 0, "Number Literal");
+            check_children_exact!(diagnostics, node, 0, "Number Literal");
             AssumedType::Number
         }
         ASTNodeType::Base64(_) => {
-            check_children_exact!(errors, node, 0, "Base64 Literal");
+            check_children_exact!(diagnostics, node, 0, "Base64 Literal");
             AssumedType::Base64
         }
         ASTNodeType::Null => {
-            check_children_exact!(errors, node, 0, "Null");
+            check_children_exact!(diagnostics, node, 0, "Null");
             AssumedType::Null
         }
         ASTNodeType::Undefined => {
-            check_children_exact!(errors, node, 0, "Undefined");
+            check_children_exact!(diagnostics, node, 0, "Undefined");
             AssumedType::Undefined
         }
         ASTNodeType::Break => {
-            check_children_exact!(errors, node, 1, "Break");
+            check_children_exact!(diagnostics, node, 1, "Break");
             AssumedType::Unknown
         }
         ASTNodeType::Continue => {
-            check_children_exact!(errors, node, 1, "Continue");
+            check_children_exact!(diagnostics, node, 1, "Continue");
             AssumedType::Unknown
         }
         _ => {
@@ -719,11 +636,9 @@ fn analyze_node(
             let mut last_type = AssumedType::Unknown;
             for child in &node.children {
                 last_type = analyze_node(
-                    source,
                     child,
                     context,
-                    errors,
-                    warnings,
+                    diagnostics,
                     dynamic,
                     break_at_position,
                     context_at_break,
@@ -739,24 +654,20 @@ fn analyze_node(
 
 #[stacksafe::stacksafe]
 fn analyze_tuple_params(
-    source: &Option<Source>,
     params: &ASTNode,
     context: &mut VariableContext,
-    errors: &mut Vec<AnalyzeError>,
-    warnings: &mut Vec<AnalyzeWarn>,
+    diagnostics: &mut DiagnosticCollector,
     dynamic: bool,
-    break_at_position: Option<usize>,
+    break_at_position: &Option<(Source, usize)>,
     context_at_break: &mut Option<VariableContext>,
 ) -> Option<HashSet<String>> {
     if context_at_break.is_some() {
         return None;
     }
     analyze_node(
-        source,
         params,
         context,
-        errors,
-        warnings,
+        diagnostics,
         dynamic,
         break_at_position,
         context_at_break,
@@ -950,8 +861,7 @@ pub fn auto_capture(
 
             let rebuilt_ast_node = ASTNode {
                 node_type: ASTNodeType::LambdaDef(*is_dynamic_gen, final_captured),
-                start_token: node.start_token.clone(),
-                end_token: node.end_token.clone(),
+                source_location: node.source_location.clone(),
                 children: vec![new_params_node, new_body_node],
             };
             (required_vars, rebuilt_ast_node)

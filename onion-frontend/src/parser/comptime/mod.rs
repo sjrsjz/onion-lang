@@ -1,6 +1,6 @@
+pub mod ast_bindings;
 pub mod native;
 pub mod solver;
-pub mod ast_bindings;
 use std::sync::Arc;
 
 use onion_vm::{
@@ -80,8 +80,7 @@ impl OnionObjectExt for OnionASTObject {
                 }
                 let new_ast = ASTNode {
                     node_type: self.ast.node_type.clone(),
-                    start_token: self.ast.start_token.clone(),
-                    end_token: self.ast.end_token.clone(),
+                    source_location: self.ast.source_location.clone(),
                     children,
                 };
                 Ok(OnionObject::Custom(Arc::new(OnionASTObject { ast: new_ast })).stabilize())
@@ -119,47 +118,40 @@ impl OnionASTObject {
             )),
             OnionObject::Boolean(v) => Ok(ASTNode {
                 node_type: ASTNodeType::Boolean(*v),
-                start_token: None,
-                end_token: None,
+                source_location: None,
                 children: vec![],
             }),
             OnionObject::String(s) => Ok(ASTNode {
                 node_type: ASTNodeType::String(s.as_ref().into()),
-                start_token: None,
-                end_token: None,
+                source_location: None,
                 children: vec![],
             }),
             OnionObject::Bytes(b) => {
                 let b64 = base64::engine::general_purpose::STANDARD.encode(b);
                 Ok(ASTNode {
                     node_type: ASTNodeType::Base64(b64),
-                    start_token: None,
-                    end_token: None,
+                    source_location: None,
                     children: vec![],
                 })
             }
             OnionObject::Float(f) => Ok(ASTNode {
                 node_type: ASTNodeType::Number(f.to_string()),
-                start_token: None,
-                end_token: None,
+                source_location: None,
                 children: vec![],
             }),
             OnionObject::Integer(i) => Ok(ASTNode {
                 node_type: ASTNodeType::Number(i.to_string()),
-                start_token: None,
-                end_token: None,
+                source_location: None,
                 children: vec![],
             }),
             OnionObject::Null => Ok(ASTNode {
                 node_type: ASTNodeType::Null,
-                start_token: None,
-                end_token: None,
+                source_location: None,
                 children: vec![],
             }),
             OnionObject::Undefined(_) => Ok(ASTNode {
                 node_type: ASTNodeType::Undefined,
-                start_token: None,
-                end_token: None,
+                source_location: None,
                 children: vec![],
             }),
             OnionObject::Tuple(tuple) => {
@@ -170,26 +162,22 @@ impl OnionASTObject {
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(ASTNode {
                     node_type: ASTNodeType::Tuple,
-                    start_token: None,
-                    end_token: None,
+                    source_location: None,
                     children,
                 })
             }
             OnionObject::Range(start, end) => Ok(ASTNode {
                 node_type: ASTNodeType::Range,
-                start_token: None,
-                end_token: None,
+                source_location: None,
                 children: vec![
                     ASTNode {
                         node_type: ASTNodeType::Number(start.to_string()),
-                        start_token: None,
-                        end_token: None,
+                        source_location: None,
                         children: vec![],
                     },
                     ASTNode {
                         node_type: ASTNodeType::Number(end.to_string()),
-                        start_token: None,
-                        end_token: None,
+                        source_location: None,
                         children: vec![],
                     },
                 ],
@@ -199,8 +187,7 @@ impl OnionASTObject {
                 let right = OnionASTObject::from_onion(pair.get_value())?;
                 Ok(ASTNode {
                     node_type: ASTNodeType::Pair,
-                    start_token: None,
-                    end_token: None,
+                    source_location: None,
                     children: vec![left, right],
                 })
             }

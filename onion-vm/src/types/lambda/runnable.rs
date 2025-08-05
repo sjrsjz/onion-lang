@@ -416,7 +416,7 @@ pub fn disassemble_instruction(package: &VMInstructionPackage, ip: usize) -> Str
     }
 }
 #[derive(Debug)]
-pub struct SourceLocation {
+pub(crate) struct SourceLocation {
     pub line: usize,
     pub column: usize,
     // 包含高亮的代码片段，例如：
@@ -425,7 +425,7 @@ pub struct SourceLocation {
     pub code_snippet: String,
 }
 
-pub fn get_source_location_for_ip(
+pub(crate) fn get_source_location_for_ip(
     package: &VMInstructionPackage,
     ip: usize,
 ) -> Option<SourceLocation> {
