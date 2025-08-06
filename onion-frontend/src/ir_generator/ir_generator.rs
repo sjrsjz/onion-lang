@@ -1,3 +1,26 @@
+//! IR 生成器模块：将 Onion 语言的 AST 转换为虚拟机可执行的中间表示（IR）指令。
+//!
+//! 本模块负责遍历 AST，生成带有调试信息的 IR 指令序列，并处理作用域、标签、跳转等控制流结构。
+//! 主要类型包括 `IRGenerator`（IR 生成主结构）、`NameSpace`（命名空间管理）、`LabelGenerator`（标签生成器）等。
+//! 支持多种 AST 节点类型、表达式、控制流、作用域、闭包、字面量等。
+//!
+//! # 主要结构
+//! - `IRGenerator`：IR 生成主结构，负责递归遍历 AST 并生成 IR 指令。
+//! - `NameSpace`：命名空间路径管理，便于唯一标识函数、标签等。
+//! - `LabelGenerator`：标签生成器，确保跳转标签唯一。
+//! - `IRGeneratorError`：IR 生成过程中的错误类型。
+//!
+//! # 主要方法
+//! - `generate_without_redirect`：递归生成带有逻辑跳转标签的 IR 指令。
+//! - `redirect_jump`：将逻辑跳转标签重定向为实际的偏移量跳转。
+//! - `generate`：完整生成 IR 指令（含跳转重定向）。
+//!
+//! # 用法示例
+//! ```ignore
+//! let mut functions = Functions::new();
+//! let mut generator = IRGenerator::new(&mut functions, NameSpace::new("main".to_string(), None));
+//! let irs = generator.generate(&mut collector, &ast_node)?;
+//! ```
 use crate::{
     diagnostics::{Diagnostic, collector::DiagnosticCollector},
     parser::ast::{ASTNode, ASTNodeModifier, ASTNodeOperation, ASTNodeType},
@@ -54,12 +77,19 @@ fn parse_integer_literal(number_str: &str) -> Option<i64> {
     trimmed.parse::<i64>().ok()
 }
 
+/// 作用域类型。
+///
+/// - `Frame`：普通作用域帧。
+/// - `Loop`：循环作用域，包含循环头和结束标签。
 #[derive(Debug)]
 enum Scope {
     Frame,
     Loop(String, String), // loop head label, loop end label
 }
 
+/// 命名空间路径管理。
+///
+/// 用于唯一标识函数、标签等，支持多级嵌套。
 #[derive(Debug, Clone)]
 pub struct NameSpace {
     path: Vec<String>,
@@ -80,6 +110,9 @@ impl NameSpace {
     }
 }
 
+/// 标签生成器。
+///
+/// 用于生成唯一的跳转标签，结合命名空间和类型名。
 #[derive(Debug)]
 pub struct LabelGenerator {
     label_counter: usize,
@@ -109,6 +142,9 @@ impl LabelGenerator {
     }
 }
 
+/// IR 生成器主结构。
+///
+/// 负责递归遍历 AST，生成带有调试信息的 IR 指令序列，并处理作用域、标签、跳转等。
 #[derive(Debug)]
 pub struct IRGenerator<'t> {
     namespace: Rc<NameSpace>,
@@ -118,12 +154,17 @@ pub struct IRGenerator<'t> {
     function_signature_generator: LabelGenerator,
 }
 
+/// IR 生成过程中的错误类型。
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub enum IRGeneratorError {
+    /// AST 节点类型无效。
     InvalidASTNode(ASTNode),
+    /// 作用域操作无效。
     InvalidScope,
+    /// 跳转标签无效。
     InvalidLabel(String),
+    /// Base64 数据无效。
     InvalidBase64(String),
 }
 

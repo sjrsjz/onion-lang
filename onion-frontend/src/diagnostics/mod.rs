@@ -1,3 +1,22 @@
+
+//! 诊断信息与错误报告核心模块。
+//!
+//! 提供统一的诊断对象接口、错误定位、分级报告与彩色格式化输出，
+//! 支持编译器前端、分析器等场景下的高质量错误与警告展示。
+//!
+//! # 主要功能
+//! - 诊断对象的统一 trait（Diagnostic）
+//! - 错误/警告分级（ReportSeverity）
+//! - 源码精确定位（SourceLocation）
+//! - 彩色人类可读报告格式化
+//! - 诊断信息的批量收集与报告（见 collector 子模块）
+//!
+//! # 典型用法
+//! ```ignore
+//! let diag: Box<dyn Diagnostic> = ...;
+//! println!("{}", diag.format_report());
+//! ```
+
 use std::fmt::Debug;
 
 use colored::*;
@@ -7,21 +26,37 @@ use unicode_width::UnicodeWidthStr;
 use crate::parser::Source;
 pub mod collector;
 
-/// 定义诊断信息的严重级别
+/// 诊断信息的严重级别。
+///
+/// 用于区分错误（Error）与警告（Warning），影响报告格式与处理逻辑。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ReportSeverity {
     Error,
     Warning,
 }
 
-/// 表示错误在源代码中的精确位置
+/// 源码错误的精确定位信息。
+///
+/// 包含字符偏移、源码内容与文件路径等信息，支持多文件、多行定位。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SourceLocation {
     pub span: (usize, usize), // (start, end) character offset
     pub source: Source,       // The source object containing content and file path
 }
 
-/// 一个统一的接口，用于表示任何可以报告给用户的诊断信息。
+/// 诊断对象统一 trait。
+///
+/// 任何可报告给用户的诊断信息都应实现该 trait，
+/// 支持分级、标题、消息、定位、帮助与深拷贝。
+///
+/// # 关键方法
+/// - `severity()`: 严重级别
+/// - `title()`: 简要标题
+/// - `message()`: 详细消息
+/// - `location()`: 源码定位
+/// - `help()`: 可选帮助信息
+/// - `copy()`: 深拷贝
+/// - `format_report()`: 彩色格式化输出
 pub trait Diagnostic: Debug + Send + Sync {
     fn severity(&self) -> ReportSeverity;
     fn title(&self) -> String;
@@ -31,6 +66,9 @@ pub trait Diagnostic: Debug + Send + Sync {
     fn copy(&self) -> Box<dyn Diagnostic>;
 
     /// 默认的格式化方法，将诊断信息转换为彩色的、人类可读的字符串。
+    ///
+    /// 支持多行源码高亮、文件路径、行号、下划线标记与帮助信息。
+    /// 适用于终端输出与日志记录。
     fn format_report(&self) -> String {
         let (title_color, primary_color) = match self.severity() {
             ReportSeverity::Error => (Color::BrightRed, Color::BrightRed),
@@ -120,7 +158,7 @@ pub trait Diagnostic: Debug + Send + Sync {
     }
 }
 
-/// 辅助函数：构建单行的下划线字符串
+/// 辅助函数：构建单行的下划线字符串。
 fn build_underline(
     current_line_idx: usize,
     start_line_idx: usize,
@@ -178,8 +216,9 @@ fn build_underline(
     }
 }
 
-/// 从源码字符串中根据字符偏移查找行号和列号 (0-indexed)
-/// 这是更准确的版本，直接使用原始源码而不是重构的文本
+/// 从源码字符串中根据字符偏移查找行号和列号 (0-indexed)。
+///
+/// 直接使用原始源码，支持多平台换行符。
 fn find_line_and_col(source: &str, char_pos: usize) -> (usize, usize) {
     let chars: Vec<char> = source.chars().collect();
 

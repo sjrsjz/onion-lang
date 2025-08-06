@@ -1,3 +1,21 @@
+//! 编译时求解器模块：提供 Onion 语言编译期表达式求值、AST 扩展和状态管理。
+//!
+//! 本模块实现了编译时代码执行机制，支持在编译期运行 Onion 代码、管理编译时状态、
+//! 处理模块导入、以及 AST 的动态扩展。主要用于实现宏、编译时计算、条件编译等功能。
+//!
+//! # 核心功能
+//! - 编译时表达式求值（`solve` 方法）
+//! - AST 节点扩展（`expand` 方法）
+//! - 状态管理和变量定义（def/undef/ifdef）
+//! - 模块导入和循环检测（include）
+//! - 内置函数和 AST 构造绑定
+//!
+//! # 用法示例
+//! ```ignore
+//! let mut solver = ComptimeSolver::new(user_defs, cycle_detector);
+//! let expanded_ast = solver.solve(&original_ast)?;
+//! ```
+
 use std::{
     collections::HashMap,
     path::PathBuf,
@@ -39,6 +57,9 @@ use crate::{
     utils::cycle_detector::CycleDetector,
 };
 
+/// 编译时状态管理器。
+///
+/// 维护编译时的内置定义和用户定义，支持状态注入到 VM 执行环境。
 #[derive(Debug)]
 pub struct ComptimeState {
     builtin_definitions: Arc<HashMap<String, OnionStaticObject>>,
@@ -46,6 +67,13 @@ pub struct ComptimeState {
 }
 
 impl ComptimeState {
+    /// 将编译时状态注入到 VM 捕获环境中。
+    ///
+    /// # 参数
+    /// - `capture`：VM 捕获环境映射。
+    ///
+    /// # 返回
+    /// 成功时返回 `Ok(())`，失败时返回 `RuntimeError`。
     pub fn inject_state(
         &self,
         capture: &mut OnionFastMap<Box<str>, OnionObject>,
@@ -69,19 +97,25 @@ impl ComptimeState {
     }
 }
 
+/// 编译时诊断信息类型。
+///
+/// 封装编译时过程中可能出现的各种错误，包括运行时错误、借用错误、IR 翻译错误等。
 #[derive(Debug, Clone)]
-pub enum ComptimeDiagnositic {
+pub enum ComptimeDiagnostic {
+    /// 运行时错误。
     RuntimeError(Option<SourceLocation>, RuntimeError),
+    /// 借用检查错误。
     BorrowError(Option<SourceLocation>, String),
+    /// IR 翻译错误。
     IRTranslatorError(Option<SourceLocation>, IRTranslatorError),
 }
 
-impl Diagnostic for ComptimeDiagnositic {
+impl Diagnostic for ComptimeDiagnostic {
     fn severity(&self) -> crate::diagnostics::ReportSeverity {
         match self {
-            ComptimeDiagnositic::RuntimeError(_, _) => crate::diagnostics::ReportSeverity::Error,
-            ComptimeDiagnositic::BorrowError(_, _) => crate::diagnostics::ReportSeverity::Error,
-            ComptimeDiagnositic::IRTranslatorError(_, _) => {
+            ComptimeDiagnostic::RuntimeError(_, _) => crate::diagnostics::ReportSeverity::Error,
+            ComptimeDiagnostic::BorrowError(_, _) => crate::diagnostics::ReportSeverity::Error,
+            ComptimeDiagnostic::IRTranslatorError(_, _) => {
                 crate::diagnostics::ReportSeverity::Error
             }
         }
@@ -93,9 +127,9 @@ impl Diagnostic for ComptimeDiagnositic {
 
     fn message(&self) -> String {
         match self {
-            ComptimeDiagnositic::RuntimeError(_, err) => format!("Runtime Error: {}", err),
-            ComptimeDiagnositic::BorrowError(_, msg) => format!("Borrow Error: {}", msg),
-            ComptimeDiagnositic::IRTranslatorError(_, err) => {
+            ComptimeDiagnostic::RuntimeError(_, err) => format!("Runtime Error: {}", err),
+            ComptimeDiagnostic::BorrowError(_, msg) => format!("Borrow Error: {}", msg),
+            ComptimeDiagnostic::IRTranslatorError(_, err) => {
                 format!("IR Translator Error: {}", err)
             }
         }
@@ -103,9 +137,9 @@ impl Diagnostic for ComptimeDiagnositic {
 
     fn location(&self) -> Option<crate::diagnostics::SourceLocation> {
         match self {
-            ComptimeDiagnositic::RuntimeError(loc, _) => loc.clone(),
-            ComptimeDiagnositic::BorrowError(loc, _) => loc.clone(),
-            ComptimeDiagnositic::IRTranslatorError(loc, _) => loc.clone(),
+            ComptimeDiagnostic::RuntimeError(loc, _) => loc.clone(),
+            ComptimeDiagnostic::BorrowError(loc, _) => loc.clone(),
+            ComptimeDiagnostic::IRTranslatorError(loc, _) => loc.clone(),
         }
     }
 
@@ -118,6 +152,10 @@ impl Diagnostic for ComptimeDiagnositic {
     }
 }
 
+/// 编译时求解器主结构。
+///
+/// 负责编译时 AST 的求解、扩展、以及编译时代码的执行。
+/// 集成了状态管理、诊断收集、VM 执行等功能。
 #[derive(Debug)]
 pub struct ComptimeSolver {
     state: ComptimeState,
@@ -125,6 +163,14 @@ pub struct ComptimeSolver {
 }
 
 impl ComptimeSolver {
+    /// 创建新的编译时求解器。
+    ///
+    /// # 参数
+    /// - `user_definitions`：用户定义的变量映射。
+    /// - `import_cycle_detector`：导入循环检测器。
+    ///
+    /// # 返回
+    /// 新的 `ComptimeSolver` 实例。
     pub fn new(
         user_definitions: Arc<RwLock<HashMap<String, OnionStaticObject>>>,
         import_cycle_detector: CycleDetector<PathBuf>,
@@ -426,10 +472,18 @@ impl ComptimeSolver {
         }
     }
 
+    /// 获取诊断收集器的引用。
     pub fn diagnostics(&self) -> &Arc<RwLock<DiagnosticCollector>> {
         &self.diagnostics
     }
 
+    /// 递归求解 AST 节点，处理编译时表达式。
+    ///
+    /// # 参数
+    /// - `ast`：要求解的 AST 节点。
+    ///
+    /// # 返回
+    /// 求解后的 AST 节点，或错误。
     #[stacksafe::stacksafe]
     pub fn solve(&mut self, ast: &ASTNode) -> Result<ASTNode, ()> {
         let mut iteration_result = ast.clone();
@@ -458,7 +512,15 @@ impl ComptimeSolver {
         }
     }
 
-    /// Expand the given AST node using the current state.
+    /// 扩展给定的 AST 节点（如果是编译时节点）。
+    ///
+    /// # 参数
+    /// - `ast`：要扩展的 AST 节点。
+    ///
+    /// # 返回
+    /// - `Ok(Some(expanded))`：节点已扩展
+    /// - `Ok(None)`：节点无需扩展
+    /// - `Err(())`：扩展失败
     pub fn expand(&mut self, ast: &ASTNode) -> Result<Option<ASTNode>, ()> {
         let ASTNodeType::Comptime = ast.node_type else {
             return Ok(None);
@@ -485,7 +547,7 @@ impl ComptimeSolver {
                 .user_definitions
                 .read()
                 .map_err(|e| {
-                    collector.report(ComptimeDiagnositic::BorrowError(
+                    collector.report(ComptimeDiagnostic::BorrowError(
                         ast.source_location.clone(),
                         e.to_string(),
                     ));
@@ -526,7 +588,7 @@ impl ComptimeSolver {
         let byte_code = match translator.translate() {
             Ok(_) => translator.get_result(),
             Err(e) => {
-                collector.report(ComptimeDiagnositic::IRTranslatorError(
+                collector.report(ComptimeDiagnostic::IRTranslatorError(
                     ast.source_location.clone(),
                     e,
                 ));
@@ -542,7 +604,7 @@ impl ComptimeSolver {
                     .diagnostics
                     .write()
                     .expect("Failed to lock diagnostics collector");
-                collector.report(ComptimeDiagnositic::RuntimeError(
+                collector.report(ComptimeDiagnostic::RuntimeError(
                     ast.source_location.clone(),
                     err,
                 ));
@@ -556,7 +618,7 @@ impl ComptimeSolver {
                     .diagnostics
                     .write()
                     .expect("Failed to lock diagnostics collector");
-                collector.report(ComptimeDiagnositic::RuntimeError(
+                collector.report(ComptimeDiagnostic::RuntimeError(
                     ast.source_location.clone(),
                     err,
                 ));
@@ -565,6 +627,13 @@ impl ComptimeSolver {
         }
     }
 
+    /// 执行编译时代码并返回结果。
+    ///
+    /// # 参数
+    /// - `vm_instructions_package`：要执行的 VM 指令包。
+    ///
+    /// # 返回
+    /// 执行结果的静态对象，或运行时错误。
     fn execute(
         &mut self,
         vm_instructions_package: &VMInstructionPackage,

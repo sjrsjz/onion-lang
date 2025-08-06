@@ -704,60 +704,12 @@ impl OnionObject {
         OnionStaticObject::new(self)
     }
 
-    /// 获取对象的长度。
+    /// 对象的不可变数据访问。
     ///
-    /// 支持多种容器类型的长度计算：
-    /// - Tuple: 元素数量
-    /// - String: 字符串长度
-    /// - Bytes: 字节数组长度
-    /// - Range: 范围大小
+    /// 如果是 `Mut` 对象，则访问其指向的对象；否则直接访问当前对象。
     ///
-    /// # 返回
-    /// 包含长度值的静态整数对象
-    pub fn len(&self) -> Result<OnionStaticObject, RuntimeError> {
-        self.with_data(|obj| match obj {
-            OnionObject::Tuple(tuple) => tuple.len(),
-            OnionObject::String(s) => {
-                Ok(OnionStaticObject::new(OnionObject::Integer(s.len() as i64)))
-            }
-            OnionObject::Bytes(b) => {
-                Ok(OnionStaticObject::new(OnionObject::Integer(b.len() as i64)))
-            }
-            OnionObject::Range(start, end) => Ok(OnionStaticObject::new(OnionObject::Integer(
-                (end - start) as i64,
-            ))),
-            OnionObject::Custom(custom) => custom.len(),
-            _ => Err(RuntimeError::InvalidOperation(
-                format!("len() not supported for {:?}", self).into(),
-            )),
-        })
-    }
-
-    pub fn contains(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
-        self.with_data(|obj| {
-            other.with_data(|other_obj| match (obj, other_obj) {
-                (OnionObject::Tuple(tuple), _) => tuple.contains(other_obj),
-                (OnionObject::String(s), OnionObject::String(other_s)) => {
-                    Ok(s.contains(other_s.as_ref()))
-                }
-                (OnionObject::Bytes(b), OnionObject::Bytes(other_b)) => Ok(b
-                    .windows(other_b.len())
-                    .any(|window| window.eq(other_b.as_ref()))),
-                (OnionObject::Range(l, r), OnionObject::Integer(i)) => Ok(*i >= *l && *i < *r),
-                (OnionObject::Range(start, end), OnionObject::Float(f)) => {
-                    Ok(*f >= *start as f64 && *f < *end as f64)
-                }
-                (OnionObject::Range(start, end), OnionObject::Range(other_start, other_end)) => {
-                    Ok(*other_start >= *start && *other_end <= *end)
-                }
-                (OnionObject::Custom(custom), _) => custom.contains(other_obj),
-                _ => Err(RuntimeError::InvalidOperation(
-                    format!("contains() not supported for {:?}", obj).into(),
-                )),
-            })
-        })
-    }
-
+    /// # 参数
+    /// - `f`: 处理对象数据的闭包
     #[inline(always)]
     pub fn with_data<T, F>(&self, f: F) -> Result<T, RuntimeError>
     where
@@ -835,6 +787,148 @@ impl OnionObject {
             }
             None => Err(RuntimeError::BrokenReference),
         }
+    }
+
+    /// 将对象转换为可变对象。
+    ///
+    /// 在 GC 中创建一个新的 `OnionObjectCell`，并返回指向它的 `Mut` 对象。
+    /// 这是创建可变引用的正确方式，遵循幂等性原则。
+    ///
+    /// # 参数
+    /// - `gc`: GC 管理器，用于分配新的对象单元格
+    ///
+    /// # 返回
+    /// 包含 `Mut` 对象的静态对象
+    ///
+    /// # 幂等性
+    /// 多次调用 `mutablize` 会创建指向相同值的不同可变对象，
+    /// 这符合 Onion VM 的不可变性设计。
+    #[inline(always)]
+    fn mutablize(self, gc: &mut GC<OnionObjectCell>) -> OnionStaticObject {
+        let arc = gc.create(OnionObjectCell::from(self));
+        OnionStaticObject {
+            obj: OnionObject::Mut(arc.as_weak()),
+            _arcs: GCArcStorage::Single(arc),
+        }
+    }
+}
+
+/// OnionObject 的核心方法实现。
+///
+/// 包含对象的相等性比较、类型转换、运算操作等核心功能。
+/// 所有方法都遵循 Onion VM 的不可变性和幂等性原则。
+impl OnionObject {
+    /// 对象相等性比较。
+    ///
+    /// 实现了类型兼容的相等性检查，支持：
+    /// - 基础类型的直接比较
+    /// - 数值类型的隐式转换比较（Integer ↔ Float）
+    /// - 容器类型的递归比较
+    /// - 自定义类型的扩展比较
+    ///
+    /// # 参数
+    /// - `other`: 要比较的另一个对象
+    ///
+    /// # 返回
+    /// - `Ok(true)`: 对象相等
+    /// - `Ok(false)`: 对象不相等
+    /// - `Err(RuntimeError)`: 比较过程中发生错误
+    pub fn equals(&self, other: &Self) -> Result<bool, RuntimeError> {
+        self.with_data(|left| {
+            other.with_data(|right| {
+                match (left, right) {
+                    (OnionObject::Integer(i1), OnionObject::Integer(i2)) => Ok(i1 == i2),
+                    (OnionObject::Float(f1), OnionObject::Float(f2)) => Ok(f1 == f2),
+                    (OnionObject::Integer(i1), OnionObject::Float(f2)) => Ok(*i1 as f64 == *f2),
+                    (OnionObject::Float(f1), OnionObject::Integer(i2)) => Ok(*f1 == *i2 as f64),
+                    (OnionObject::String(s1), OnionObject::String(s2)) => Ok(s1 == s2),
+                    (OnionObject::Bytes(b1), OnionObject::Bytes(b2)) => Ok(b1 == b2),
+                    (OnionObject::Boolean(b1), OnionObject::Boolean(b2)) => Ok(b1 == b2),
+                    (OnionObject::Range(start1, end1), OnionObject::Range(start2, end2)) => {
+                        Ok(start1 == start2 && end1 == end2)
+                    }
+                    (OnionObject::Null, OnionObject::Null) => Ok(true),
+                    (OnionObject::Undefined(_), OnionObject::Undefined(_)) => Ok(true),
+                    (OnionObject::Tuple(t1), _) => t1.equals(other),
+                    (OnionObject::Pair(p1), _) => p1.equals(other),
+                    (OnionObject::Custom(c1), _) => c1.equals(other),
+
+                    // 理论上Mut类型不应该出现在这里
+                    _ => Ok(false),
+                }
+            })
+        })
+    }
+
+    /// 检查两个对象是否是同一个引用。
+    /// 如果是 `Mut` 类型，则比较其指向的强引用对象地址。
+    /// 对于其他类型，使用 `equals` 方法进行值比较。
+    pub fn is_same(&self, other: &Self) -> Result<bool, RuntimeError> {
+        match (self, other) {
+            (OnionObject::Mut(weak1), OnionObject::Mut(weak2)) => {
+                if let (Some(strong1), Some(strong2)) = (weak1.upgrade(), weak2.upgrade()) {
+                    Ok(addr_eq(strong1.as_ref(), strong2.as_ref()))
+                } else {
+                    Ok(false)
+                }
+            }
+            (OnionObject::Custom(c1), _) => c1.is_same(other),
+            _ => self.equals(other),
+        }
+    }
+
+    /// 获取对象的长度。
+    ///
+    /// 支持多种容器类型的长度计算：
+    /// - Tuple: 元素数量
+    /// - String: 字符串长度
+    /// - Bytes: 字节数组长度
+    /// - Range: 范围大小
+    ///
+    /// # 返回
+    /// 包含长度值的静态整数对象
+    pub fn len(&self) -> Result<OnionStaticObject, RuntimeError> {
+        self.with_data(|obj| match obj {
+            OnionObject::Tuple(tuple) => tuple.len(),
+            OnionObject::String(s) => {
+                Ok(OnionStaticObject::new(OnionObject::Integer(s.len() as i64)))
+            }
+            OnionObject::Bytes(b) => {
+                Ok(OnionStaticObject::new(OnionObject::Integer(b.len() as i64)))
+            }
+            OnionObject::Range(start, end) => Ok(OnionStaticObject::new(OnionObject::Integer(
+                (end - start) as i64,
+            ))),
+            OnionObject::Custom(custom) => custom.len(),
+            _ => Err(RuntimeError::InvalidOperation(
+                format!("len() not supported for {:?}", self).into(),
+            )),
+        })
+    }
+
+    pub fn contains(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
+        self.with_data(|obj| {
+            other.with_data(|other_obj| match (obj, other_obj) {
+                (OnionObject::Tuple(tuple), _) => tuple.contains(other_obj),
+                (OnionObject::String(s), OnionObject::String(other_s)) => {
+                    Ok(s.contains(other_s.as_ref()))
+                }
+                (OnionObject::Bytes(b), OnionObject::Bytes(other_b)) => Ok(b
+                    .windows(other_b.len())
+                    .any(|window| window.eq(other_b.as_ref()))),
+                (OnionObject::Range(l, r), OnionObject::Integer(i)) => Ok(*i >= *l && *i < *r),
+                (OnionObject::Range(start, end), OnionObject::Float(f)) => {
+                    Ok(*f >= *start as f64 && *f < *end as f64)
+                }
+                (OnionObject::Range(start, end), OnionObject::Range(other_start, other_end)) => {
+                    Ok(*other_start >= *start && *other_end <= *end)
+                }
+                (OnionObject::Custom(custom), _) => custom.contains(other_obj),
+                _ => Err(RuntimeError::InvalidOperation(
+                    format!("contains() not supported for {:?}", obj).into(),
+                )),
+            })
+        })
     }
 
     /// 将对象转换为整数。
@@ -1063,90 +1157,6 @@ impl OnionObject {
                 format!("Cannot convert {:?} to Boolean", obj).into(),
             )),
         })
-    }
-
-    /// 将对象转换为可变对象。
-    ///
-    /// 在 GC 中创建一个新的 `OnionObjectCell`，并返回指向它的 `Mut` 对象。
-    /// 这是创建可变引用的正确方式，遵循幂等性原则。
-    ///
-    /// # 参数
-    /// - `gc`: GC 管理器，用于分配新的对象单元格
-    ///
-    /// # 返回
-    /// 包含 `Mut` 对象的静态对象
-    ///
-    /// # 幂等性
-    /// 多次调用 `mutablize` 会创建指向相同值的不同可变对象，
-    /// 这符合 Onion VM 的不可变性设计。
-    #[inline(always)]
-    fn mutablize(self, gc: &mut GC<OnionObjectCell>) -> OnionStaticObject {
-        let arc = gc.create(OnionObjectCell::from(self));
-        OnionStaticObject {
-            obj: OnionObject::Mut(arc.as_weak()),
-            _arcs: GCArcStorage::Single(arc),
-        }
-    }
-}
-
-/// OnionObject 的核心方法实现。
-///
-/// 包含对象的相等性比较、类型转换、运算操作等核心功能。
-/// 所有方法都遵循 Onion VM 的不可变性和幂等性原则。
-impl OnionObject {
-    /// 对象相等性比较。
-    ///
-    /// 实现了类型兼容的相等性检查，支持：
-    /// - 基础类型的直接比较
-    /// - 数值类型的隐式转换比较（Integer ↔ Float）
-    /// - 容器类型的递归比较
-    /// - 自定义类型的扩展比较
-    ///
-    /// # 参数
-    /// - `other`: 要比较的另一个对象
-    ///
-    /// # 返回
-    /// - `Ok(true)`: 对象相等
-    /// - `Ok(false)`: 对象不相等
-    /// - `Err(RuntimeError)`: 比较过程中发生错误
-    pub fn equals(&self, other: &Self) -> Result<bool, RuntimeError> {
-        self.with_data(|left| {
-            other.with_data(|right| {
-                match (left, right) {
-                    (OnionObject::Integer(i1), OnionObject::Integer(i2)) => Ok(i1 == i2),
-                    (OnionObject::Float(f1), OnionObject::Float(f2)) => Ok(f1 == f2),
-                    (OnionObject::Integer(i1), OnionObject::Float(f2)) => Ok(*i1 as f64 == *f2),
-                    (OnionObject::Float(f1), OnionObject::Integer(i2)) => Ok(*f1 == *i2 as f64),
-                    (OnionObject::String(s1), OnionObject::String(s2)) => Ok(s1 == s2),
-                    (OnionObject::Bytes(b1), OnionObject::Bytes(b2)) => Ok(b1 == b2),
-                    (OnionObject::Boolean(b1), OnionObject::Boolean(b2)) => Ok(b1 == b2),
-                    (OnionObject::Range(start1, end1), OnionObject::Range(start2, end2)) => {
-                        Ok(start1 == start2 && end1 == end2)
-                    }
-                    (OnionObject::Null, OnionObject::Null) => Ok(true),
-                    (OnionObject::Undefined(_), OnionObject::Undefined(_)) => Ok(true),
-                    (OnionObject::Tuple(t1), _) => t1.equals(other),
-                    (OnionObject::Pair(p1), _) => p1.equals(other),
-                    (OnionObject::Custom(c1), _) => c1.equals(other),
-
-                    // 理论上Mut类型不应该出现在这里
-                    _ => Ok(false),
-                }
-            })
-        })
-    }
-    pub fn is_same(&self, other: &Self) -> Result<bool, RuntimeError> {
-        match (self, other) {
-            (OnionObject::Mut(weak1), OnionObject::Mut(weak2)) => {
-                if let (Some(strong1), Some(strong2)) = (weak1.upgrade(), weak2.upgrade()) {
-                    Ok(addr_eq(strong1.as_ref(), strong2.as_ref()))
-                } else {
-                    Ok(false)
-                }
-            }
-            (OnionObject::Custom(c1), _) => c1.is_same(other),
-            _ => self.equals(other),
-        }
     }
 
     pub fn binary_add(&self, other: &Self) -> Result<OnionStaticObject, RuntimeError> {
@@ -2388,6 +2398,7 @@ impl OnionStaticObject {
     }
 }
 
+/// 解包对象的宏，简化错误处理。
 #[macro_export]
 macro_rules! unwrap_object {
     ($obj:expr, $variant:path) => {

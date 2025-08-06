@@ -1,3 +1,14 @@
+//! AST 构造与绑定模块。
+//!
+//! 本模块为 Onion 语言的编译期/运行期 AST 构造与序列化提供原生绑定，
+//! 允许通过 VM 层以对象方式动态构建、序列化、反序列化、操作 AST。
+//! 提供所有 AST 节点类型的构造函数、常量节点、以及 AST <-> 字节流的互转能力。
+//!
+//! # 主要内容
+//! - AST 各节点类型的构造函数（如 string/number/boolean/variable/let/operation/lambda_def 等）
+//! - AST 常量节点（如 null/undefined/assign/tuple/if/while 等）
+//! - AST 的序列化与反序列化
+//! - 构建完整 AST 模块导出给 VM
 use std::{collections::HashSet, sync::Arc};
 
 use base64::Engine;
@@ -20,6 +31,7 @@ use crate::parser::{
     comptime::{OnionASTObject, native::wrap_native_function},
 };
 
+/// 将 Rust 层的字典转为 Onion VM 静态对象（Tuple of Pair）。
 fn build_dict(dict: IndexMap<String, OnionStaticObject>) -> OnionStaticObject {
     let mut pairs = vec![];
     for (key, value) in dict {
@@ -31,12 +43,15 @@ fn build_dict(dict: IndexMap<String, OnionStaticObject>) -> OnionStaticObject {
     OnionTuple::new_static_no_ref(&pairs)
 }
 // Helper to wrap a new ASTNode into the required Onion object format.
+/// 将 ASTNode 包装为 Onion VM 可识别的自定义对象。
 fn ast_wrapper(ast: ASTNode) -> OnionStaticObject {
     OnionObject::Custom(Arc::new(OnionASTObject { ast })).stabilize()
 }
 
-// --- Builder functions for ASTNodeTypes that CARRY DATA ---
 
+// --- 各类带数据 AST 节点的构造函数 ---
+
+/// 构造 String 类型 AST 节点。
 fn string(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
@@ -56,6 +71,7 @@ fn string(
     })
 }
 
+/// 构造 Base64/Bytes 类型 AST 节点。
 fn bytes(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
@@ -75,6 +91,7 @@ fn bytes(
     })
 }
 
+/// 反序列化 AST 节点（从字节流转 ASTNode）。
 fn deserialize_ast(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
@@ -100,6 +117,7 @@ fn deserialize_ast(
     })
 }
 
+/// 序列化 AST 节点（ASTNode -> 字节流）。
 fn serialize_ast(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
@@ -128,6 +146,7 @@ fn serialize_ast(
     })
 }
 
+/// 构造 Boolean 类型 AST 节点。
 fn boolean(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
@@ -147,6 +166,7 @@ fn boolean(
     })
 }
 
+/// 构造 Number 类型 AST 节点。
 fn number(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
@@ -171,6 +191,7 @@ fn number(
     })
 }
 
+/// 构造 Variable 类型 AST 节点。
 fn variable(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
@@ -190,6 +211,7 @@ fn variable(
     })
 }
 
+/// 构造 Let 类型 AST 节点。
 fn let_var(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
@@ -209,6 +231,7 @@ fn let_var(
     })
 }
 
+/// 构造 Operation 类型 AST 节点。
 fn operation(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
@@ -257,6 +280,7 @@ fn operation(
     })
 }
 
+/// 构造 Modifier 类型 AST 节点。
 fn modifier(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
@@ -298,6 +322,7 @@ fn modifier(
     })
 }
 
+/// 构造 LambdaDef 类型 AST 节点。
 fn lambda_def(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
@@ -341,7 +366,9 @@ fn lambda_def(
     })
 }
 
-/// Build the main AST construction module, providing functions and constants.
+/// 构建 AST 构造模块，导出所有节点构造函数和常量。
+///
+/// 返回值为 VM 可用的静态对象（Tuple of Pair）。
 pub fn build_module() -> OnionStaticObject {
     let mut module = IndexMap::new();
 

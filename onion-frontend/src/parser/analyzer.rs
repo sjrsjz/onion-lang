@@ -1,3 +1,28 @@
+//! AST 语义分析模块：提供变量定义检查、类型推断、作用域管理等功能。
+//!
+//! 本模块实现了 Onion 语言 AST 的语义分析，包括变量定义检查、类型推断、
+//! 作用域管理、以及自动捕获变量分析。主要用于编译期的静态检查和优化。
+//!
+//! # 主要类型
+//! - `AssumedType`：推断的变量类型枚举
+//! - `Variable`：变量信息，包含类型推断
+//! - `VariableFrame` 和 `VariableContext`：作用域和变量上下文管理
+//! - `ASTAnalysisDiagnostic`：分析过程中的诊断信息
+//!
+//! # 核心功能
+//! - 变量定义和使用检查
+//! - 作用域管理（Frame 和 Context）
+//! - 类型推断（基于 AST 节点类型）
+//! - 自动捕获变量分析和重构
+//! - 断点词法上下文分析
+//!
+//! # 用法示例
+//! ```ignore
+//! let mut diagnostics = DiagnosticCollector::new();
+//! let context = analyze_ast(&ast, &mut diagnostics, &None)?;
+//! let (captured_vars, rebuilt_ast) = auto_capture_and_rebuild(&ast);
+//! ```
+
 use std::collections::{HashMap, HashSet};
 
 use crate::{
@@ -12,37 +37,63 @@ use onion_vm::types::lambda::vm_instructions::ir_translator::PRE_ALLOCATED_VARIA
 
 use super::ast::ASTNode;
 
-// --- The structs and enums you provided ---
-// AssumedType, Variable, VariableFrame, VariableContext, AnalyzeError, AnalyzeWarn, etc.
-// These are included here verbatim as they are correct.
+/// 推断的变量类型枚举。
+///
+/// 用于在语义分析过程中推断变量的可能类型，帮助进行类型检查和优化。
 #[derive(Debug, Clone, PartialEq)]
 pub enum AssumedType {
+    /// 未知类型。
     Unknown,
+    /// Lambda 函数类型。
     Lambda,
+    /// 字符串类型。
     String,
+    /// 数值类型。
     Number,
+    /// 布尔类型。
     Boolean,
+    /// Base64 编码的字节类型。
     Base64,
+    /// 空值类型。
     Null,
+    /// 未定义类型。
     Undefined,
+    /// 范围类型。
     Range,
+    /// 元组类型。
     Tuple,
+    /// 集合类型。
     Set,
+    /// 键值对类型。
     KeyVal,
 }
 
+/// 变量信息结构。
+///
+/// 存储变量的推断类型信息，用于语义分析和类型检查。
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct Variable {
     pub assumed_type: AssumedType,
 }
 
+/// 变量作用域帧。
+///
+/// 表示单个作用域内的变量定义，支持变量的定义和查找。
 #[derive(Debug, Clone)]
 pub struct VariableFrame {
     pub variables: HashMap<String, Variable>,
 }
 
 impl VariableFrame {
+    /// 定义或更新变量。
+    ///
+    /// # 参数
+    /// - `name`：变量名。
+    /// - `var`：变量信息。
+    ///
+    /// # 返回
+    /// 成功时返回 `Ok(())`，失败时返回错误信息。
     pub fn define_variable(&mut self, name: String, var: Variable) -> Result<(), String> {
         if let Some(existing_var) = self.variables.get_mut(&name) {
             existing_var.assumed_type = var.assumed_type;
@@ -53,20 +104,30 @@ impl VariableFrame {
     }
 }
 
+/// 变量上下文管理器。
+///
+/// 管理多层嵌套的作用域，支持上下文和帧的推入/弹出操作。
+/// 用于跟踪不同作用域中的变量定义和可见性。
 #[derive(Debug, Clone)]
 pub struct VariableContext {
     contexts: Vec<Vec<VariableFrame>>,
 }
 
 impl VariableContext {
+    /// 获取所有上下文的引用。
     pub fn all_contexts(&self) -> &Vec<Vec<VariableFrame>> {
         &self.contexts
     }
 }
 
+/// AST 分析诊断信息类型。
+///
+/// 封装语义分析过程中可能出现的错误和警告信息。
 #[derive(Debug, Clone)]
 pub enum ASTAnalysisDiagnostic {
+    /// 未定义变量错误。
     UndefinedVariable(Option<SourceLocation>, String),
+    /// 详细错误信息。
     DetailedError(Option<SourceLocation>, String),
 }
 
@@ -115,12 +176,16 @@ impl Diagnostic for ASTAnalysisDiagnostic {
     }
 }
 
+/// 分析输出结果。
+///
+/// 包含断点处的变量上下文信息，用于调试支持。
 #[derive(Debug)]
 pub struct AnalysisOutput {
     pub context_at_break: Option<VariableContext>,
 }
 
 impl VariableContext {
+    /// 创建新的变量上下文。
     pub fn new() -> Self {
         VariableContext {
             contexts: vec![vec![VariableFrame {
@@ -128,16 +193,22 @@ impl VariableContext {
             }]],
         }
     }
+
+    /// 获取当前上下文的可变引用。
     fn current_context_mut(&mut self) -> &mut Vec<VariableFrame> {
         self.contexts
             .last_mut()
             .expect("Context stack should never be empty")
     }
+
+    /// 获取当前上下文的引用。
     fn current_context(&self) -> &Vec<VariableFrame> {
         self.contexts
             .last()
             .expect("Context stack should never be empty")
     }
+
+    /// 在当前作用域定义变量。
     pub fn define_variable(&mut self, name: String, var: Variable) {
         self.current_context_mut()
             .last_mut()
@@ -147,6 +218,8 @@ impl VariableContext {
                 panic!("Failed to define variable: {}", e);
             });
     }
+
+    /// 查找变量（搜索所有上下文和帧）。
     pub fn get_variable(&self, name: &str) -> Option<&Variable> {
         for frames in self.contexts.iter().rev() {
             for frame in frames.iter().rev() {
@@ -157,6 +230,8 @@ impl VariableContext {
         }
         None
     }
+
+    /// 在当前上下文中查找变量。
     pub fn get_variable_current_context(&self, name: &str) -> Option<&Variable> {
         for frame in self.current_context().iter().rev() {
             if let Some(var) = frame.variables.get(name) {
@@ -165,11 +240,15 @@ impl VariableContext {
         }
         None
     }
+
+    /// 推入新的作用域帧。
     pub fn push_frame(&mut self) {
         self.current_context_mut().push(VariableFrame {
             variables: HashMap::new(),
         });
     }
+
+    /// 弹出作用域帧。
     pub fn pop_frame(&mut self) -> Result<(), String> {
         let current_context = self.current_context_mut();
         if current_context.len() > 1 {
@@ -179,11 +258,15 @@ impl VariableContext {
             Err("Cannot pop the initial frame of a context".to_string())
         }
     }
+
+    /// 推入新的上下文。
     pub fn push_context(&mut self) {
         self.contexts.push(vec![VariableFrame {
             variables: HashMap::new(),
         }]);
     }
+
+    /// 弹出上下文。
     pub fn pop_context(&mut self) -> Result<(), String> {
         if self.contexts.len() > 1 {
             self.contexts.pop();
@@ -194,9 +277,9 @@ impl VariableContext {
     }
 }
 
-// --- Main Analysis Logic ---
+// --- 主要分析逻辑 ---
 
-// Helper macro to check for an exact number of children.
+/// 检查子节点数量是否精确匹配的辅助宏。
 macro_rules! check_children_exact {
     ($diagnostics:expr, $node:expr, $expected:expr, $name:expr) => {
         if $node.children.len() != $expected {
@@ -214,7 +297,7 @@ macro_rules! check_children_exact {
     };
 }
 
-// Helper macro to check for a range of children.
+/// 检查子节点数量是否在范围内的辅助宏。
 macro_rules! check_children_range {
     ($diagnostics:expr, $node:expr, $range:expr, $name:expr) => {
         let range_clone = $range.clone();
@@ -234,6 +317,15 @@ macro_rules! check_children_range {
     };
 }
 
+/// 分析 AST 的主入口函数。
+///
+/// # 参数
+/// - `ast`：要分析的 AST 根节点。
+/// - `diagnostics_collector`：诊断信息收集器。
+/// - `break_at_position`：可选的断点位置，用于调试支持。
+///
+/// # 返回
+/// 成功时返回断点处的变量上下文，失败时返回 `Err(())`。
 pub fn analyze_ast(
     ast: &ASTNode,
     diagnostics_collector: &mut DiagnosticCollector,
@@ -264,6 +356,7 @@ pub fn analyze_ast(
     Ok(context_at_break)
 }
 
+/// 检查是否在断点位置，并保存上下文。
 fn check_postorder_break(
     node: &ASTNode,
     break_at_position: &Option<(Source, usize)>,
@@ -297,6 +390,18 @@ fn check_postorder_break(
     }
 }
 
+/// 递归分析单个 AST 节点。
+///
+/// # 参数
+/// - `node`：要分析的 AST 节点。
+/// - `context`：当前变量上下文。
+/// - `diagnostics`：诊断信息收集器。
+/// - `dynamic`：是否在动态模式下分析。
+/// - `break_at_position`：断点位置。
+/// - `context_at_break`：断点处的上下文输出。
+///
+/// # 返回
+/// 节点的推断类型。
 #[stacksafe::stacksafe]
 fn analyze_node(
     node: &ASTNode,
@@ -660,6 +765,18 @@ fn analyze_node(
     }
 }
 
+/// 分析元组参数定义，提取参数名称。
+///
+/// # 参数
+/// - `params`：参数定义节点。
+/// - `context`：变量上下文。
+/// - `diagnostics`：诊断收集器。
+/// - `dynamic`：是否动态模式。
+/// - `break_at_position`：断点位置。
+/// - `context_at_break`：断点上下文输出。
+///
+/// # 返回
+/// 参数名称集合。
 #[stacksafe::stacksafe]
 fn analyze_tuple_params(
     params: &ASTNode,
@@ -712,6 +829,13 @@ fn analyze_tuple_params(
     Some(param_names)
 }
 
+/// 自动捕获变量并重构 AST。
+///
+/// # 参数
+/// - `node`：要分析的 AST 节点。
+///
+/// # 返回
+/// (需要捕获的变量集合, 重构后的 AST)
 pub fn auto_capture_and_rebuild(node: &ASTNode) -> (HashSet<String>, ASTNode) {
     let mut context = VariableContext::new();
     context.push_context();
@@ -726,6 +850,15 @@ pub fn auto_capture_and_rebuild(node: &ASTNode) -> (HashSet<String>, ASTNode) {
     auto_capture(&mut context, node, false)
 }
 
+/// 自动捕获变量分析的递归实现。
+///
+/// # 参数
+/// - `context`：变量上下文。
+/// - `node`：当前 AST 节点。
+/// - `dynamic`：是否动态模式。
+///
+/// # 返回
+/// (需要捕获的变量集合, 重构后的 AST 节点)
 #[stacksafe::stacksafe]
 pub fn auto_capture(
     context: &mut VariableContext,

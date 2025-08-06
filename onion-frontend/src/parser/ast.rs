@@ -1,3 +1,70 @@
+//! AST 解析模块：将 Token 流转换为抽象语法树（AST）。
+//!
+//! 本模块实现了 Onion 语言的语法分析器，将词法分析产生的 Token 流转换为
+//! 结构化的抽象语法树。支持丰富的语法结构，包括表达式、控制流、函数定义、
+//! 类型系统、模式匹配等。
+//!
+//! # Onion 语言语法结构
+//!
+//! ## 基础语法
+//! - **字面量**：`42`, `"hello"`, `true`, `false`, `null`, `undefined`
+//! - **变量**：`variable_name`
+//! - **元组**：`x, y, z` 或 `(x, y, z)`
+//! - **对象**：`{...}` 块作用域
+//!
+//! ## 表达式
+//! - **算术运算**：`+`, `-`, `*`, `/`, `%`, `**` (幂运算)
+//! - **比较运算**：`==`, `!=`, `>`, `<`, `>=`, `<=`
+//! - **逻辑运算**：`and`, `or`, `xor`, `not`
+//! - **位运算**：`<<`, `>>` (位移)
+//! - **一元运算**：`-x` (负号), `+x` (绝对值)
+//!
+//! ## 变量与赋值
+//! - **变量定义**：`x := value` (let binding)
+//! - **变量赋值**：`x = value` (assignment)
+//! - **模式匹配**：`key: value` (pair), `key => value` (named pair)
+//!
+//! ## 函数与 Lambda
+//! - **函数定义**：`params -> body` (静态函数)
+//! - **动态函数**：`params -> dyn body` (动态函数)
+//! - **捕获变量**：`params -> & captured_vars body`
+//! - **函数调用**：`func args`
+//!
+//! ## 控制流
+//! - **条件判断**：`if condition body` 或 `if condition body else else_body`
+//! - **循环**：`while condition body`
+//! - **跳转**：`break value`, `continue value`, `return value`, `raise error`
+//!
+//! ## 高级特性
+//! - **范围**：`start..end`
+//! - **成员访问**：`object.member`
+//! - **包含检查**：`element in container`
+//! - **同一性检查**：`x is y`
+//! - **类型转换**：`value as type`
+//! - **集合操作**：`collection | filter` (set), `collection |> map` (map)
+//!
+//! ## 修饰符
+//! - **可变性**：`mut`, `const`
+//! - **类型查询**：`typeof`, `keyof`, `valueof`, `lengthof`
+//! - **断言**：`assert condition`
+//! - **导入**：`import module`
+//! - **并发**：`launch`, `spawn`, `async`, `sync`, `atomic`
+//!
+//! ## 编译时特性
+//! - **编译时求值**：`@ expression`
+//! - **AST 序列化**：`$ expression`
+//! - **动态/静态模式**：`dynamic expression`, `static expression`
+//! - **命名空间**：`Type::value`
+//! - **假设元组**：`...value`
+//! - **快速命名**：`expression ?`
+//!
+//! # 用法示例
+//! ```ignore
+//! let tokens = tokenize(source);
+//! let gathered = ast_token_stream::from_stream(&tokens);
+//! let ast = build_ast(&mut diagnostics, gathered)?;
+//! ```
+
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 
@@ -7,13 +74,22 @@ use crate::{
 };
 use std::{collections::HashSet, fmt::Debug, vec};
 
+/// AST 解析诊断信息类型。
+///
+/// 封装语法分析过程中可能出现的各种错误类型。
 #[derive(Debug, Clone)]
 pub enum ASTParseDiagnostic {
+    /// 意外的 Token。
     UnexpectedToken(Option<SourceLocation>),
+    /// 括号不匹配。
     UnmatchedParenthesis(Option<SourceLocation>),
+    /// 无效的变量名。
     InvalidVariableName(Option<SourceLocation>),
+    /// 不支持的语法结构。
     UnsupportedStructure(Option<SourceLocation>),
+    /// 缺少必要的语法结构。
     MissingStructure(Option<SourceLocation>, String),
+    /// 无效的语法。
     InvalidSyntax(Option<SourceLocation>, String),
 }
 
@@ -79,15 +155,22 @@ impl Diagnostic for ASTParseDiagnostic {
     }
 }
 
+/// Token 流类型别名。
 pub type TokenStream = Vec<Token>;
+/// 收集的 Token 片段类型别名。
 pub type GatheredTokens<'t> = &'t [Token];
 
+/// AST Token 流处理模块。
 pub mod ast_token_stream {
+    /// 从 Token 流创建收集的 Token 片段。
     pub fn from_stream<'t>(stream: &'t super::TokenStream) -> super::GatheredTokens<'t> {
         stream.as_slice()
     }
 }
 
+/// 获取下一个平衡的 Token 组。
+///
+/// 处理括号、方括号、花括号的匹配，确保返回的 Token 组语法完整。
 fn get_next_tokens<'a, 'b>(
     collector: &'a mut DiagnosticCollector,
     tokens: GatheredTokens<'b>,
@@ -139,6 +222,9 @@ fn get_next_tokens<'a, 'b>(
     Ok(&tokens[offset..offset + next_tokens_end])
 }
 
+/// 将 Token 流分割为语法单元组。
+///
+/// 根据括号匹配将 Token 流分割为独立的语法单元，每个单元是一个完整的表达式。
 fn gather<'a, 'b>(
     collector: &'a mut DiagnosticCollector,
     tokens: GatheredTokens<'b>,
@@ -158,6 +244,68 @@ fn gather<'a, 'b>(
     Ok(result)
 }
 
+/// AST 节点类型枚举。
+///
+/// 定义了 Onion 语言中所有可能的 AST 节点类型，对应不同的语法结构。
+///
+/// # 语法结构说明
+///
+/// ## 字面量类型
+/// - `Null`：空值 `null`
+/// - `Undefined`：未定义值 `undefined`
+/// - `String(String)`：字符串字面量 `"text"`
+/// - `Boolean(bool)`：布尔值 `true`/`false`
+/// - `Number(String)`：数值字面量 `42`, `3.14`, `0xFF`
+/// - `Base64(String)`：Base64 编码数据
+///
+/// ## 变量与标识符
+/// - `Variable(String)`：变量引用 `variable_name`
+/// - `Required(String)`：必需变量占位符 `@required "var"`
+///
+/// ## 变量操作
+/// - `Let(String)`：变量绑定 `x := value`
+/// - `Assign`：变量赋值 `x = value`
+///
+/// ## 函数与应用
+/// - `LambdaDef(bool, HashSet<String>)`：Lambda 定义 `params -> body`
+///   - 第一个参数：是否为动态函数 (`dyn`)
+///   - 第二个参数：捕获的变量集合 (`& captured_vars`)
+/// - `Apply`：函数应用 `func args`
+///
+/// ## 数据结构
+/// - `Tuple`：元组 `x, y, z`
+/// - `Pair`：键值对 `key: value`
+/// - `AssumeTuple`：假设元组 `...value`
+///
+/// ## 控制流
+/// - `If`：条件分支 `if condition body [else else_body]`
+/// - `While`：循环 `while condition body`
+/// - `Break`：跳出循环 `break value`
+/// - `Continue`：继续循环 `continue value`
+/// - `Return`：函数返回 `return value`
+/// - `Raise`：抛出异常 `raise error`
+///
+/// ## 运算符
+/// - `Operation(ASTNodeOperation)`：各种运算 `+`, `-`, `*`, `/`, `==`, 等
+///
+/// ## 高级特性
+/// - `Range`：范围 `start..end`
+/// - `In`：包含检查 `element in container`
+/// - `Is`：同一性检查 `x is y`
+/// - `GetAttr`：成员访问 `object.member`
+/// - `Set`：集合过滤 `collection | filter`
+/// - `Map`：集合映射 `collection |> map`
+/// - `Namespace(String)`：命名空间 `Type::value`
+///
+/// ## 修饰符与元操作
+/// - `Modifier(ASTNodeModifier)`：修饰符 `mut`, `const`, `typeof`, 等
+/// - `Frame`：作用域块 `{...}`
+/// - `Expressions`：表达式序列 `expr1; expr2; ...`
+///
+/// ## 编译时特性
+/// - `Dynamic`：动态模式 `dynamic expression`
+/// - `Static`：静态模式 `static expression`
+/// - `Comptime`：编译时求值 `@ expression`
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub enum ASTNodeType {
     Null, // Null
@@ -201,6 +349,39 @@ pub enum ASTNodeType {
     Comptime, // 编译时计算的表达式
 }
 
+/// AST 运算符枚举。
+///
+/// 定义了 Onion 语言中所有支持的运算符及其操作类型。
+///
+/// # 运算符类型
+///
+/// ## 算术运算符 (二元)
+/// - `Add`：加法 `+`
+/// - `Subtract`：减法 `-`
+/// - `Multiply`：乘法 `*`
+/// - `Divide`：除法 `/`
+/// - `Modulus`：取模 `%`
+/// - `Power`：幂运算 `**`
+///
+/// ## 位运算符 (二元)
+/// - `And`：按位与 `and`
+/// - `Or`：按位或 `or`
+/// - `Xor`：按位异或 `xor`
+/// - `LeftShift`：左移 `<<`
+/// - `RightShift`：右移 `>>`
+///
+/// ## 比较运算符 (二元)
+/// - `Equal`：等于 `==`
+/// - `NotEqual`：不等于 `!=`
+/// - `Less`：小于 `<`
+/// - `LessEqual`：小于等于 `<=`
+/// - `Greater`：大于 `>`
+/// - `GreaterEqual`：大于等于 `>=`
+///
+/// ## 一元运算符
+/// - `Not`：逻辑非 `not`
+/// - `Minus`：数值取负 `-`
+/// - `Abs`：绝对值 `abs`
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum ASTNodeOperation {
     Add,          // +
@@ -225,6 +406,32 @@ pub enum ASTNodeOperation {
     Minus,        // 一元负号
 }
 
+/// AST 修饰符枚举。
+///
+/// 定义了 Onion 语言中所有可用的修饰符，用于修改表达式的语义。
+///
+/// # 修饰符类型
+///
+/// ## 变量修饰符
+/// - `Mut`：可变修饰符 `mut variable`，声明变量可以被修改
+/// - `Const`：常量修饰符 `const variable`，声明变量为常量
+///
+/// ## 类型操作修饰符
+/// - `KeyOf`：键类型提取 `keyof object`，获取对象的键类型
+/// - `ValueOf`：值类型提取 `valueof object`，获取对象的值类型
+/// - `TypeOf`：类型提取 `typeof expression`，获取表达式的类型
+/// - `LengthOf`：长度提取 `lengthof collection`，获取集合的长度
+///
+/// ## 函数调度修饰符
+/// - `Launch`：并行启动 `launch expression`，在新线程中执行表达式
+/// - `Spawn`：异步启动 `spawn expression`，在异步上下文中执行表达式
+/// - `Async`：异步修饰符 `async function`，声明函数为异步调度入口
+/// - `Sync`：同步修饰符 `sync function`，声明函数为同步调度入口
+/// - `Atomic`：原子操作修饰符 `atomic expression`，移除表达式的调度修饰作为标准函数调用
+///
+/// ## 其他修饰符
+/// - `Assert`：断言 `assert condition`，在运行时检查条件
+/// - `Import`：导入模块 `import module`，引入外部字节码
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum ASTNodeModifier {
     Mut,      // Mut
@@ -237,11 +444,30 @@ pub enum ASTNodeModifier {
     LengthOf, // LengthOf
     Launch,   // Launch
     Spawn,    // Spawn
-    Async,
-    Sync,
-    Atomic,
+    Async,    // Async
+    Sync,     // Sync
+    Atomic,   // Atomic
 }
 
+/// AST 节点结构体。
+///
+/// 表示 Onion 语言的抽象语法树节点，是构成整个语法树的基本单元。
+///
+/// # 字段说明
+/// - `node_type`：节点类型，定义了该节点的语法角色和语义
+/// - `source_location`：源码位置信息，用于错误报告和调试
+/// - `children`：子节点列表，构成树形结构
+///
+/// # 设计原则
+///
+/// ## 递归结构
+/// AST 节点通过 `children` 字段形成递归的树形结构，每个节点可以包含任意数量的子节点。
+///
+/// ## 位置信息
+/// 每个节点都可以携带源码位置信息，便于在编译时提供准确的错误定位。
+///
+/// ## 类型安全
+/// 通过 `ASTNodeType` 枚举确保节点类型的类型安全，避免无效的语法树结构。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ASTNode {
     pub node_type: ASTNodeType,                  // Type of the node
@@ -256,6 +482,15 @@ impl PartialEq for ASTNode {
 }
 
 impl ASTNode {
+    /// 创建新的 AST 节点。
+    ///
+    /// # 参数
+    /// - `node_type`：节点类型
+    /// - `source_location`：源码位置信息（可选）
+    /// - `children`：子节点列表
+    ///
+    /// # 返回
+    /// 新创建的 AST 节点实例
     pub fn new(
         node_type: ASTNodeType,
         source_location: Option<SourceLocation>,
@@ -268,10 +503,12 @@ impl ASTNode {
         }
     }
 
-    pub fn undefined() -> ASTNode {
-        ASTNode::new(ASTNodeType::Undefined, None, vec![])
-    }
-
+    /// 格式化打印 AST 节点树。
+    ///
+    /// 以缩进的形式递归打印整个 AST 结构，用于调试和可视化。
+    ///
+    /// # 参数
+    /// - `indent`：当前缩进级别
     #[allow(unused)]
     pub fn formatted_print(&self, indent: usize) {
         let indent_str = " ".repeat(indent);
@@ -297,12 +534,36 @@ impl ASTNode {
     }
 }
 
+/// 匹配器函数类型。
+///
+/// 定义了语法解析匹配器的函数签名。
+///
+/// # 参数
+/// - `&mut DiagnosticCollector`：诊断信息收集器
+/// - `&[GatheredTokens]`：待解析的 Token 组
+///
+/// # 返回
+/// - `Ok(Some(ASTNode))`：成功匹配并生成 AST 节点
+/// - `Ok(None)`：无法匹配当前模式
+/// - `Err(())`：解析出现致命错误
 type MatcherFn = fn(&mut DiagnosticCollector, &[GatheredTokens]) -> Result<Option<ASTNode>, ()>;
 
+/// 节点匹配器结构体。
+///
+/// 包含多个匹配器函数，用于按优先级尝试解析不同的语法模式。
 struct NodeMatcher {
     matchers: Vec<MatcherFn>,
 }
 
+/// 从 Token 组生成源码位置信息。
+///
+/// 计算一组 Token 片段覆盖的源码范围，用于错误报告。
+///
+/// # 参数
+/// - `tokens`：Token 组数组
+///
+/// # 返回
+/// 包含起始和结束位置的源码位置信息
 fn span_from_tokens(tokens: &[GatheredTokens]) -> Option<SourceLocation> {
     if tokens.is_empty() {
         return None;
@@ -323,6 +584,16 @@ fn span_from_tokens(tokens: &[GatheredTokens]) -> Option<SourceLocation> {
     None
 }
 
+/// 从两个 Token 生成源码位置信息。
+///
+/// 计算从起始 Token 到结束 Token 的源码范围。
+///
+/// # 参数
+/// - `start`：起始 Token
+/// - `end`：结束 Token
+///
+/// # 返回
+/// 包含两个 Token 之间范围的源码位置信息
 fn span_from_two_token(start: &Token, end: &Token) -> Option<SourceLocation> {
     if start.source_code().eq(end.source_code()) {
         return Some(SourceLocation {
@@ -333,6 +604,15 @@ fn span_from_two_token(start: &Token, end: &Token) -> Option<SourceLocation> {
     None
 }
 
+/// 从单个 Token 生成源码位置信息。
+///
+/// 获取单个 Token 的源码位置信息。
+///
+/// # 参数
+/// - `token`：目标 Token
+///
+/// # 返回
+/// Token 的源码位置信息
 fn span_from_single_token(token: &Token) -> Option<SourceLocation> {
     Some(SourceLocation {
         span: token.origin_token_span(),
@@ -341,12 +621,22 @@ fn span_from_single_token(token: &Token) -> Option<SourceLocation> {
 }
 
 impl NodeMatcher {
+    /// 创建新的节点匹配器。
+    ///
+    /// # 返回
+    /// 空的节点匹配器实例
     fn new() -> NodeMatcher {
         NodeMatcher {
             matchers: Vec::new(),
         }
     }
 
+    /// 添加匹配器函数。
+    ///
+    /// 将新的匹配器函数添加到匹配器列表中。匹配器按添加顺序进行尝试。
+    ///
+    /// # 参数
+    /// - `matcher`：匹配器函数
     fn add_matcher(
         &mut self,
         matcher: fn(&mut DiagnosticCollector, &[GatheredTokens]) -> Result<Option<ASTNode>, ()>,
@@ -354,6 +644,17 @@ impl NodeMatcher {
         self.matchers.push(matcher);
     }
 
+    /// 尝试匹配 Token 组生成 AST 节点。
+    ///
+    /// 按优先级顺序尝试所有匹配器，直到找到可以处理当前 Token 组的匹配器。
+    ///
+    /// # 参数
+    /// - `collector`：诊断信息收集器
+    /// - `tokens`：待解析的 Token 组
+    ///
+    /// # 返回
+    /// - `Ok(ASTNode)`：成功生成的 AST 节点
+    /// - `Err(())`：所有匹配器都无法处理或出现错误
     #[stacksafe::stacksafe]
     fn match_node(
         &self,
@@ -396,6 +697,16 @@ impl NodeMatcher {
     }
 }
 
+/// 检查 Token 组是否为指定符号。
+///
+/// 验证 Token 组是否包含单个符号 Token 且匹配指定的符号字符串。
+///
+/// # 参数
+/// - `token`：Token 组
+/// - `symbol`：要匹配的符号字符串
+///
+/// # 返回
+/// 如果匹配则返回 `true`，否则返回 `false`
 fn is_symbol(token: &GatheredTokens, symbol: &str) -> bool {
     if token.len() != 1 {
         return false;
@@ -403,6 +714,17 @@ fn is_symbol(token: &GatheredTokens, symbol: &str) -> bool {
     let token = &token[0];
     token == TokenType::SYMBOL && token == symbol
 }
+
+/// 检查 Token 组是否为指定标识符。
+///
+/// 验证 Token 组是否包含单个标识符 Token 且匹配指定的标识符字符串。
+///
+/// # 参数
+/// - `token`：Token 组
+/// - `identifier`：要匹配的标识符字符串
+///
+/// # 返回
+/// 如果匹配则返回 `true`，否则返回 `false`
 fn is_identifier(token: &GatheredTokens, identifier: &str) -> bool {
     if token.len() != 1 {
         return false;
@@ -411,6 +733,7 @@ fn is_identifier(token: &GatheredTokens, identifier: &str) -> bool {
     token == TokenType::IDENTIFIER && token == identifier
 }
 
+/// 解包括号包围的 Token 组。
 fn unwrap_brace<'t, 'a>(
     collector: &'a mut DiagnosticCollector,
     token: &GatheredTokens<'t>,
@@ -446,6 +769,15 @@ fn unwrap_brace<'t, 'a>(
     )))
 }
 
+/// 检查 Token 组是否为括号包围的内容。
+///
+/// 验证 Token 组是否以 `(` 开始并以 `)` 结束。
+///
+/// # 参数
+/// - `token`：Token 组
+///
+/// # 返回
+/// 如果是括号包围则返回 `true`，否则返回 `false`
 fn is_bracket(token: &GatheredTokens) -> bool {
     if token.len() < 2 {
         return false;
@@ -456,6 +788,15 @@ fn is_bracket(token: &GatheredTokens) -> bool {
         && token.last().unwrap() == ")"
 }
 
+/// 检查 Token 组是否为花括号包围的内容。
+///
+/// 验证 Token 组是否以 `{` 开始并以 `}` 结束。
+///
+/// # 参数
+/// - `token`：Token 组
+///
+/// # 返回
+/// 如果是花括号包围则返回 `true`，否则返回 `false`
 fn is_brace(token: &GatheredTokens) -> bool {
     if token.len() < 2 {
         return false;
@@ -466,6 +807,15 @@ fn is_brace(token: &GatheredTokens) -> bool {
         && token.last().unwrap() == "}"
 }
 
+/// 检查 Token 组是否为方括号包围的内容。
+///
+/// 验证 Token 组是否以 `[` 开始并以 `]` 结束。
+///
+/// # 参数
+/// - `token`：Token 组
+///
+/// # 返回
+/// 如果是方括号包围则返回 `true`，否则返回 `false`
 fn is_square_bracket(token: &GatheredTokens) -> bool {
     if token.len() < 2 {
         return false;
@@ -476,6 +826,23 @@ fn is_square_bracket(token: &GatheredTokens) -> bool {
         && token.last().unwrap() == "]"
 }
 
+/// 构建抽象语法树。
+///
+/// 这是 AST 构建的主入口函数，将词法分析后的 Token 流转换为 AST。
+///
+/// # 参数
+/// - `collector`：诊断信息收集器，用于收集解析过程中的错误和警告
+/// - `tokens`：词法分析后的 Token 流
+///
+/// # 返回
+/// - `Ok(ASTNode)`：成功构建的 AST 根节点
+/// - `Err(())`：解析失败，错误信息已添加到收集器中
+///
+/// # 解析流程
+/// 1. 使用 `gather` 函数将 Token 流分组为语法单元
+/// 2. 使用 `match_all` 函数尝试匹配各种语法模式
+/// 3. 如果没有匹配到任何模式，返回空元组节点
+/// 4. 否则返回匹配成功的 AST 节点
 pub fn build_ast(
     collector: &mut DiagnosticCollector,
     tokens: GatheredTokens<'_>,
@@ -488,6 +855,42 @@ pub fn build_ast(
     Ok(matched.unwrap())
 }
 
+/// 尝试匹配所有可能的语法模式。
+///
+/// 创建并配置节点匹配器，按优先级尝试所有支持的语法模式。
+///
+/// # 参数
+/// - `collector`：诊断信息收集器
+/// - `tokens`：分组后的 Token 组数组
+///
+/// # 返回
+/// - `Ok(Some(ASTNode))`：成功匹配的 AST 节点
+/// - `Ok(None)`：没有找到匹配的模式
+/// - `Err(())`：解析出现错误
+///
+/// # 支持的语法模式（按优先级）
+/// - 表达式序列：`expr1; expr2; ...`
+/// - 动态/静态模式：`dynamic expr`, `static expr`
+/// - 控制流：`return`, `break`, `continue`, `raise`
+/// - 元组：`a, b, c`
+/// - 编译时求值：`@ expr`
+/// - Base64 序列化
+/// - 变量绑定：`x := expr`
+/// - 变量赋值：`x = expr`
+/// - 集合操作：`collection |> map`, `collection | filter`
+/// - Lambda 函数：`args -> body`
+/// - 命名空间：`Type::value`
+/// - 键值对：`key: value`
+/// - 循环：`while condition body`
+/// - 条件：`if condition body [else else_body]`
+/// - 范围：`start..end`
+/// - 包含检查：`elem in collection`
+/// - 同一性检查：`x is y`
+/// - 成员访问：`obj.member`
+/// - 修饰符：`mut expr`, `const expr`, 等
+/// - 运算符：`+`, `-`, `*`, `/`, `==`, 等
+/// - 函数应用：`func args`
+/// - 变量、字面量等原子表达式
 fn match_all<'t>(
     collector: &mut DiagnosticCollector,
     tokens: &[GatheredTokens<'t>],
@@ -532,6 +935,8 @@ fn match_all<'t>(
     node_matcher.match_node(collector, tokens)
 }
 
+/// 尝试匹配子节点，如果失败则返回 None 或错误。
+/// 这是一个简化的宏，用于在匹配子节点时处理结果。
 macro_rules! try_match_node {
     ($collector:expr, $tokens:expr) => {
         match match_all($collector, $tokens) {
