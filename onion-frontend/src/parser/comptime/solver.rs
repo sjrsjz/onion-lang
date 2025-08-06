@@ -29,13 +29,12 @@ use onion_vm::{
 };
 
 use crate::{
-    diagnostics::{Diagnostic, SourceLocation, collector::DiagnosticCollector},
+    diagnostics::{collector::DiagnosticCollector, Diagnostic, SourceLocation},
     ir_generator::ir_generator::{IRGenerator, NameSpace},
     parser::{
         analyzer::{analyze_ast, auto_capture_and_rebuild},
         ast::{ASTNode, ASTNodeType},
-        comptime::{OnionASTObject, ast_bindings, native::wrap_native_function},
-        lexer::Source,
+        comptime::{ast_bindings, native::wrap_native_function, OnionASTObject}, Source,
     },
     utils::cycle_detector::CycleDetector,
 };
@@ -350,6 +349,12 @@ impl ComptimeSolver {
                                             )
                                         })?;
 
+                                    if collector.has_errors() {
+                                        return Err(RuntimeError::DetailedError(
+                                            "Solver produced errors while building AST".into(),
+                                        ));
+                                    }
+
                                     let mut sub_solver = ComptimeSolver::new(
                                         cloned_ref.clone(),
                                         import_cycle_detector.enter(abs_path).map_err(|path| {
@@ -387,7 +392,8 @@ impl ComptimeSolver {
                                         .has_errors()
                                     {
                                         return Err(RuntimeError::DetailedError(
-                                            "Sub-solver produced errors".into(),
+                                            "Sub-solver produced errors while executing expression"
+                                                .into(),
                                         ));
                                     }
 

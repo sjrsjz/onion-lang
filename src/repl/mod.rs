@@ -14,9 +14,8 @@ use rustyline::completion::FilenameCompleter;
 use rustyline::hint::HistoryHinter;
 use rustyline::validate::MatchingBracketValidator;
 
-// Add imports for DiagnosticCollector and Source
 use onion_frontend::diagnostics::collector::DiagnosticCollector;
-use onion_frontend::parser::lexer::Source;
+use onion_frontend::parser::Source;
 
 #[derive(Helper, Completer, Hinter, Validator)]
 struct ReplHelper {

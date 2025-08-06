@@ -9,7 +9,8 @@ use onion_frontend::diagnostics::{
 use onion_frontend::parser::analyzer::{analyze_ast, auto_capture_and_rebuild};
 use onion_frontend::parser::ast::{ASTNode, ASTNodeType, ast_token_stream, build_ast};
 use onion_frontend::parser::comptime::solver::ComptimeSolver;
-use onion_frontend::parser::lexer::{Source, Token, tokenizer};
+use onion_frontend::parser::lexer::{Token, tokenizer};
+use onion_frontend::parser::Source;
 use onion_frontend::utils::cycle_detector::CycleDetector;
 use url::Url;
 

@@ -21,9 +21,8 @@ use onion_vm::{
     utils::fastmap::OnionFastMap,
 };
 
-use onion_frontend::compile::build_code;
+use onion_frontend::{compile::build_code, parser::Source};
 use onion_frontend::diagnostics::collector::DiagnosticCollector;
-use onion_frontend::parser::lexer::Source;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 

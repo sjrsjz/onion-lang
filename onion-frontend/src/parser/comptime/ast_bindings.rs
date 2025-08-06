@@ -1,5 +1,6 @@
 use std::{collections::HashSet, sync::Arc};
 
+use base64::Engine;
 use indexmap::IndexMap;
 use onion_vm::{
     GC,
@@ -51,6 +52,78 @@ fn string(
         })),
         _ => Err(RuntimeError::InvalidType(
             "Argument 'value' for string() must be a string".into(),
+        )),
+    })
+}
+
+fn bytes(
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
+    _gc: &mut GC<OnionObjectCell>,
+) -> Result<OnionStaticObject, RuntimeError> {
+    let value = argument.get("value").ok_or_else(|| {
+        RuntimeError::InvalidOperation("bytes() requires a 'value' argument".into())
+    })?;
+    value.weak().with_data(|data| match data {
+        OnionObject::Bytes(s) => Ok(ast_wrapper(ASTNode {
+            node_type: ASTNodeType::Base64(base64::engine::general_purpose::STANDARD.encode(s)),
+            children: vec![],
+            source_location: None,
+        })),
+        _ => Err(RuntimeError::InvalidType(
+            "Argument 'value' for bytes() must be a string".into(),
+        )),
+    })
+}
+
+fn deserialize_ast(
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
+    _gc: &mut GC<OnionObjectCell>,
+) -> Result<OnionStaticObject, RuntimeError> {
+    let value = argument.get("value").ok_or_else(|| {
+        RuntimeError::InvalidOperation("deserialize() requires a 'value' argument".into())
+    })?;
+    value.weak().with_data(|data| match data {
+        OnionObject::Bytes(data) => {
+            let deserialized: Result<ASTNode, _> =
+                bincode::serde::decode_from_slice(data.as_ref(), bincode::config::standard())
+                    .map(|(result, _)| result);
+            match deserialized {
+                Ok(node) => Ok(ast_wrapper(node)),
+                Err(err) => Err(RuntimeError::InvalidType(
+                    format!("Failed to deserialize AST: {}", err).into(),
+                )),
+            }
+        }
+        _ => Err(RuntimeError::InvalidType(
+            "Argument 'value' for deserialize() must be a bytes".into(),
+        )),
+    })
+}
+
+fn serialize_ast(
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
+    _gc: &mut GC<OnionObjectCell>,
+) -> Result<OnionStaticObject, RuntimeError> {
+    let value = argument.get("value").ok_or_else(|| {
+        RuntimeError::InvalidOperation("serialize() requires a 'value' argument".into())
+    })?;
+    value.weak().with_data(|data| match data {
+        OnionObject::Custom(ast_obj) => {
+            let ast_obj: &OnionASTObject = ast_obj
+                .as_any()
+                .downcast_ref()
+                .ok_or_else(|| RuntimeError::InvalidType("Expected OnionASTObject".into()))?;
+            let serialized = bincode::serde::encode_to_vec(
+                &ast_obj.ast,
+                bincode::config::standard(),
+            )
+            .map_err(|err| {
+                RuntimeError::InvalidType(format!("Failed to serialize AST: {}", err).into())
+            })?;
+            Ok(OnionObject::Bytes(serialized.into()).stabilize())
+        }
+        _ => Err(RuntimeError::InvalidType(
+            "Argument 'value' for serialize() must be an ASTNode".into(),
         )),
     })
 }
@@ -117,12 +190,12 @@ fn variable(
     })
 }
 
-fn let_(
+fn let_var(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let name = argument.get("name").ok_or_else(|| {
-        RuntimeError::InvalidOperation("let_() requires a 'name' argument".into())
+        RuntimeError::InvalidOperation("let_var() requires a 'name' argument".into())
     })?;
     name.weak().with_data(|data| match data {
         OnionObject::String(s) => Ok(ast_wrapper(ASTNode {
@@ -131,7 +204,7 @@ fn let_(
             source_location: None,
         })),
         _ => Err(RuntimeError::InvalidType(
-            "Argument 'name' for let_() must be a string".into(),
+            "Argument 'name' for let_var() must be a string".into(),
         )),
     })
 }
@@ -323,11 +396,14 @@ pub fn build_module() -> OnionStaticObject {
         ("string", string, vec!["value"]),
         ("boolean", boolean, vec!["value"]),
         ("number", number, vec!["value"]),
+        ("bytes", bytes, vec!["value"]),
         ("variable", variable, vec!["name"]),
-        ("let", let_, vec!["name"]),
+        ("let", let_var, vec!["name"]),
         ("operation", operation, vec!["op"]),
         ("modifier", modifier, vec!["name"]),
         ("lambda_def", lambda_def, vec!["dyn", "captures"]),
+        ("serialize", serialize_ast, vec!["value"]),
+        ("deserialize", deserialize_ast, vec!["value"]),
     ];
 
     for (name, func, params) in builders {

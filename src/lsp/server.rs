@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex}; // Add panic module
 
 use log::{debug, error, info, warn};
 use onion_frontend::diagnostics::collector::DiagnosticCollector;
-use onion_frontend::parser::lexer::Source;
+use onion_frontend::parser::Source;
 use serde_json::Value;
 
 use crate::lsp::diagnostics::{self, new_solver_for_file};

@@ -3,8 +3,8 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     diagnostics::{Diagnostic, SourceLocation, collector::DiagnosticCollector},
     parser::{
+        Source,
         ast::{ASTNodeOperation, ASTNodeType},
-        lexer::Source,
     },
 };
 
@@ -104,8 +104,7 @@ impl Diagnostic for ASTAnalysisDiagnostic {
         match self {
             ASTAnalysisDiagnostic::UndefinedVariable(_, var_name) => Some(format!(
                 "Define the variable '{}' before using it. If the variable is dynamic, use \"@required '{}'\" to ensure it is defined at runtime.",
-                var_name,
-                var_name
+                var_name, var_name
             )),
             ASTAnalysisDiagnostic::DetailedError(_, _) => None,
         }

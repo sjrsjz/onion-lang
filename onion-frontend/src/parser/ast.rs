@@ -1,3 +1,6 @@
+use base64::Engine;
+use serde::{Deserialize, Serialize};
+
 use crate::{
     diagnostics::{Diagnostic, SourceLocation, collector::DiagnosticCollector},
     parser::lexer::{Token, TokenType},
@@ -155,7 +158,7 @@ fn gather<'a, 'b>(
     Ok(result)
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub enum ASTNodeType {
     Null, // Null
     Undefined,
@@ -185,12 +188,12 @@ pub enum ASTNodeType {
     Break, // break
     Continue, // continue
     Range, // x..y
-    In,
+    In,    // x in y
     Namespace(String), // Type::Value
-    Set,               // collection | filter
-    Map,               // collection |> map
-    Is,                // x is y
-    Raise,
+    Set,   // collection | filter
+    Map,   // collection |> map
+    Is,    // x is y
+    Raise, // raise expression
 
     Dynamic, // 假设子表达式的所有变量都存在
     Static,  // 假设子表达式的所有变量都在当前上下文中定义
@@ -198,7 +201,7 @@ pub enum ASTNodeType {
     Comptime, // 编译时计算的表达式
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum ASTNodeOperation {
     Add,          // +
     Subtract,     // -
@@ -222,7 +225,7 @@ pub enum ASTNodeOperation {
     Minus,        // 一元负号
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum ASTNodeModifier {
     Mut,      // Mut
     Const,    // Const
@@ -239,7 +242,7 @@ pub enum ASTNodeModifier {
     Atomic,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ASTNode {
     pub node_type: ASTNodeType,                  // Type of the node
     pub source_location: Option<SourceLocation>, // Source location for error reporting
@@ -385,9 +388,9 @@ impl NodeMatcher {
         match best_match {
             Some(node) => Ok(Some(node)),
             None => {
-                return collector.fatal(ASTParseDiagnostic::UnsupportedStructure(span_from_tokens(
-                    tokens,
-                )));
+                return collector.fatal(ASTParseDiagnostic::UnsupportedStructure(
+                    span_from_tokens(tokens),
+                ));
             }
         }
     }
@@ -495,6 +498,7 @@ fn match_all<'t>(
     node_matcher.add_matcher(match_return_emit_raise);
     node_matcher.add_matcher(match_tuple);
     node_matcher.add_matcher(match_comptime);
+    node_matcher.add_matcher(match_serialize_to_base64);
     node_matcher.add_matcher(match_let);
     node_matcher.add_matcher(match_assign);
     node_matcher.add_matcher(match_map);
@@ -576,6 +580,34 @@ fn match_comptime(
         ASTNodeType::Comptime,
         span_from_tokens(&tokens),
         vec![right],
+    );
+    Ok(Some(node))
+}
+
+fn match_serialize_to_base64(
+    collector: &mut DiagnosticCollector,
+    tokens: &[GatheredTokens],
+) -> Result<Option<ASTNode>, ()> {
+    if tokens.is_empty() || !is_symbol(&tokens[0], "$") {
+        return Ok(None);
+    }
+    let ast = try_match_node!(collector, &tokens[1..]);
+
+    let serialized = match bincode::serde::encode_to_vec(&ast, bincode::config::standard()) {
+        Ok(data) => data,
+        Err(err) => {
+            return collector.fatal(ASTParseDiagnostic::InvalidSyntax(
+                span_from_tokens(&tokens),
+                format!("Failed to serialize AST: {}", err),
+            ));
+        }
+    };
+    let base64_encoded = base64::engine::general_purpose::STANDARD.encode(serialized);
+
+    let node = ASTNode::new(
+        ASTNodeType::Base64(base64_encoded),
+        span_from_tokens(&tokens),
+        vec![], // 我们不保留原始 AST，因为我们的静态分析器会拒绝Base64的子节点
     );
     Ok(Some(node))
 }
@@ -1323,8 +1355,8 @@ fn match_modifier(
     }
     if tokens[0].len() == 1
         && vec![
-            "mut", "const", "keyof", "valueof", "assert", "import", "typeof", "lengthof",
-            "launch", "spawn", "async", "sync", "atomic",
+            "mut", "const", "keyof", "valueof", "assert", "import", "typeof", "lengthof", "launch",
+            "spawn", "async", "sync", "atomic",
         ]
         .contains(&tokens[0].first().unwrap().token().as_str())
     {

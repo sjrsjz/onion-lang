@@ -20,7 +20,32 @@ lambda := @ast.lambda_def(false, ()) << (
 
 stdlib.io.println("lambda(1, 2) = ", lambda(1, 2));
 
+lambda2 := @ast.deserialize(
+    $(x?, y?) -> x * y // `$` 用来序列化后续表达式为bytes
+);
+
+stdlib.io.println("lambda2(3, 4) = ", lambda2(3, 4));
+
 @include "./sub_module.onion";
 
 stdlib.io.println(foo());
 stdlib.io.println(@bar());
+
+@def(
+    curry => "T_body_pair" -> ast.deserialize(
+        $()->()
+    ) << (
+        keyof T_body_pair,
+        ast.deserialize(
+            valueof T_body_pair
+        )
+    )
+);
+
+curry_test := @curry(
+    U => $@curry(
+        V => $U / V
+    )
+); // 等效 "U" -> "V" -> U / V
+
+stdlib.io.println("curry_test(10)(2) = ", curry_test(10)(2));

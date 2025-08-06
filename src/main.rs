@@ -1,13 +1,16 @@
 use clap::{Parser, Subcommand};
 use colored::*;
 use std::{
-    fs, path::{Path, PathBuf}, sync::Arc
+    fs,
+    path::{Path, PathBuf},
+    sync::Arc,
 };
 
-// Import necessary modules
-use onion_frontend::compile::{build_code, compile_to_bytecode};
 use onion_frontend::diagnostics::collector::DiagnosticCollector;
-use onion_frontend::parser::lexer::Source;
+use onion_frontend::{
+    compile::{build_code, compile_to_bytecode},
+    parser::Source,
+};
 use onion_vm::{
     GC,
     lambda::{
@@ -119,7 +122,7 @@ fn cmd_compile(file: PathBuf, output: Option<PathBuf>, bytecode: bool) -> Result
     if !file.exists() {
         return Err(format!("File '{}' not found", file.display()));
     }
-    
+
     let source = Source::from_file(&file)
         .map_err(|e| format!("Failed to read file '{}': {}", file.display(), e))?;
 
@@ -138,7 +141,7 @@ fn cmd_compile(file: PathBuf, output: Option<PathBuf>, bytecode: bool) -> Result
                 return Err("Compilation failed".to_string());
             }
         };
-        
+
         let bytecode_package = compile_to_bytecode(&ir_package)
             .map_err(|e| format!("Bytecode compilation failed: {e}"))?;
         // Restore working directory before writing output
@@ -267,16 +270,16 @@ fn cmd_repl() -> Result<(), String> {
 // Helper functions
 
 fn run_source_file(file: &Path) -> Result<(), String> {
-     let file: PathBuf = fs::canonicalize(file)
-        .map_err(|e| format!("Failed to canonicalize file path: {e:?}"))?;
+    let file: PathBuf =
+        fs::canonicalize(file).map_err(|e| format!("Failed to canonicalize file path: {e:?}"))?;
     let source = Source::from_file(&file)
         .map_err(|e| format!("Failed to read file '{}': {}", file.display(), e))?;
     execute_code(&source)
 }
 
 fn run_ir_file(file: &Path) -> Result<(), String> {
-    let file: PathBuf = fs::canonicalize(file)
-        .map_err(|e| format!("Failed to canonicalize file path: {e:?}"))?;
+    let file: PathBuf =
+        fs::canonicalize(file).map_err(|e| format!("Failed to canonicalize file path: {e:?}"))?;
     let ir_package = IRPackage::read_from_file(file.to_str().unwrap())
         .map_err(|e| format!("Failed to read IR file: {e:?}"))?;
 
@@ -284,8 +287,8 @@ fn run_ir_file(file: &Path) -> Result<(), String> {
 }
 
 fn run_bytecode_file(file: &Path) -> Result<(), String> {
-    let file: PathBuf = fs::canonicalize(file)
-        .map_err(|e| format!("Failed to canonicalize file path: {e:?}"))?;
+    let file: PathBuf =
+        fs::canonicalize(file).map_err(|e| format!("Failed to canonicalize file path: {e:?}"))?;
     let bytecode_package = VMInstructionPackage::read_from_file(file.to_str().unwrap())
         .map_err(|e| format!("Failed to read bytecode file: {e:?}"))?;
 
@@ -300,7 +303,7 @@ fn execute_code(source: &Source) -> Result<(), String> {
                 return Err("Compilation failed".to_string());
             }
             package
-        },
+        }
         Err(_) => {
             collector.report_all();
             return Err("Compilation failed".to_string());

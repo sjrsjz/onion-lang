@@ -1,8 +1,10 @@
 use std::fmt::Debug;
 
-use crate::parser::lexer::Source;
 use colored::*;
+use serde::{Deserialize, Serialize};
 use unicode_width::UnicodeWidthStr;
+
+use crate::parser::Source;
 pub mod collector;
 
 /// 定义诊断信息的严重级别
@@ -13,7 +15,7 @@ pub enum ReportSeverity {
 }
 
 /// 表示错误在源代码中的精确位置
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SourceLocation {
     pub span: (usize, usize), // (start, end) character offset
     pub source: Source,       // The source object containing content and file path
@@ -26,7 +28,7 @@ pub trait Diagnostic: Debug + Send + Sync {
     fn message(&self) -> String;
     fn location(&self) -> Option<SourceLocation>;
     fn help(&self) -> Option<String>;
-    fn  copy(&self) -> Box<dyn Diagnostic>;
+    fn copy(&self) -> Box<dyn Diagnostic>;
 
     /// 默认的格式化方法，将诊断信息转换为彩色的、人类可读的字符串。
     fn format_report(&self) -> String {
