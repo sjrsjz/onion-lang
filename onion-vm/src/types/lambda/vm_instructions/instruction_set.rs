@@ -1,11 +1,17 @@
+//! Onion 虚拟机指令集定义与指令包结构。
+//!
+//! - `VMInstruction`：枚举所有虚拟机支持的指令及其操作码。
+//! - `VMInstructionPackage`：封装指令流、常量池、调试信息等，支持序列化与反序列化。
+//! - 提供指令查找、常量池索引、包验证等辅助方法。
+
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
-
 use crate::utils::fastmap::{OnionFastMap, OnionKeyPool};
-
 use super::ir::DebugInfo;
 
-/// 虚拟机指令集
+/// Onion 虚拟机指令集枚举。
+///
+/// 枚举所有支持的虚拟机指令及其操作码，分为栈操作、数据结构、运算符、控制流等类别。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum VMInstruction {
@@ -98,7 +104,14 @@ pub enum VMInstruction {
 }
 
 impl VMInstruction {
-    /// 根据操作码获取指令
+    /// 根据操作码获取对应的指令枚举。
+    ///
+    /// # 参数
+    /// * `opcode` - 指令操作码（u8）
+    ///
+    /// # 返回值
+    /// * Some(VMInstruction) - 匹配的指令
+    /// * None - 未知操作码
     pub fn from_opcode(opcode: u8) -> Option<Self> {
         match opcode {
             // ===== 栈操作 (0-9) =====
@@ -194,9 +207,21 @@ impl VMInstruction {
 }
 
 use std::{collections::HashMap, fs, sync::Arc};
+
+/// Onion 虚拟机指令包结构。
+///
+/// 封装一组可执行指令流、常量池、调试信息等，支持序列化与反序列化。
+/// - `function_ips`：函数签名到入口点的映射
+/// - `code`：指令流（u32）
+/// - `string_pool`：字符串常量池
+/// - `string_to_index`：字符串到索引的映射
+/// - `index_pool`：索引常量池
+/// - `bytes_pool`：字节常量池
+/// - `debug_infos`：调试信息
+/// - `source`：源代码（可选）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VMInstructionPackage {
-    function_ips: FxHashMap<String, usize>, // 签名定位表
+    function_ips: FxHashMap<String, usize>,
     code: Vec<u32>,
     string_pool: Arc<[Box<str>]>,
     string_to_index: Arc<FxHashMap<Box<str>, usize>>,
@@ -207,6 +232,19 @@ pub struct VMInstructionPackage {
 }
 
 impl VMInstructionPackage {
+    /// 构造新的指令包。
+    ///
+    /// # 参数
+    /// * `function_ips` - 函数签名到入口点的映射
+    /// * `code` - 指令流
+    /// * `string_pool` - 字符串常量池
+    /// * `index_pool` - 索引常量池
+    /// * `bytes_pool` - 字节常量池
+    /// * `debug_infos` - 调试信息
+    /// * `source` - 源代码（可选）
+    ///
+    /// # 返回值
+    /// 返回新构造的 VMInstructionPackage
     pub fn new(
         function_ips: HashMap<String, usize>,
         code: Vec<u32>,
@@ -237,38 +275,47 @@ impl VMInstructionPackage {
             source,
         }
     }
+    /// 获取函数签名到入口点的映射表。
     #[inline(always)]
     pub fn get_table(&self) -> &FxHashMap<String, usize> {
         &self.function_ips
     }
+    /// 获取指令流。
     #[inline(always)]
     pub fn get_code(&self) -> &Vec<u32> {
         &self.code
     }
+    /// 获取字符串常量池。
     #[inline(always)]
     pub fn get_string_pool(&self) -> &[Box<str>] {
         &self.string_pool
     }
+    /// 查询字符串在常量池中的索引。
     #[inline(always)]
     pub fn get_string_index(&self, string: &str) -> Option<usize> {
         self.string_to_index.get(string).copied()
     }
+    /// 获取索引常量池。
     #[inline(always)]
     pub fn get_index_pool(&self) -> &Vec<Vec<usize>> {
         &self.index_pool
     }
+    /// 获取字节常量池。
     #[inline(always)]
     pub fn get_bytes_pool(&self) -> &Vec<Vec<u8>> {
         &self.bytes_pool
     }
+    /// 获取源代码（可选）。
     #[inline(always)]
     pub fn get_source(&self) -> &Option<String> {
         &self.source
     }
+    /// 获取调试信息表。
     #[inline(always)]
     pub fn get_debug_info(&self) -> &HashMap<usize, DebugInfo> {
         &self.debug_infos
     }
+    /// 创建高效字符串映射表。
     #[inline(always)]
     pub fn create_fast_map<V>(&self) -> OnionFastMap<Box<str>, V> {
         OnionFastMap::new(OnionKeyPool::new(
@@ -277,11 +324,13 @@ impl VMInstructionPackage {
         ))
     }
 
+    /// 创建字符串常量池的 key pool。
     #[inline(always)]
     pub fn create_key_pool(&self) -> OnionKeyPool<Box<str>> {
         OnionKeyPool::new(self.string_pool.clone(), self.string_to_index.clone())
     }
 
+    /// 将指令包序列化并写入文件。
     pub fn write_to_file(&self, path: &str) -> Result<(), std::io::Error> {
         let serialized = bincode::serialize(self)
             .map_err(|e| std::io::Error::other(format!("Serialization error: {}", e)))?;
@@ -289,12 +338,14 @@ impl VMInstructionPackage {
         fs::write(path, serialized)
     }
 
+    /// 从文件读取并反序列化指令包。
     pub fn read_from_file(path: &str) -> Result<Self, std::io::Error> {
         let bytes = fs::read(path)?;
         bincode::deserialize(&bytes)
             .map_err(|e| std::io::Error::other(format!("Deserialization error: {}", e)))
     }
 
+    /// 验证常量池唯一性，防止重复。
     pub fn validate(&self) -> Result<(), String> {
         // 验证字符串池是否不重复
         let mut seen_strings = std::collections::HashSet::new();

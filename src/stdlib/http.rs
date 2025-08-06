@@ -288,7 +288,7 @@ fn http_request(
         lambda_body,
         OnionFastMap::default(),
         "http::async_request".into(),
-        LambdaType::Normal,
+        LambdaType::Atomic,
     ))
 }
 
@@ -307,7 +307,7 @@ fn http_get(
         lambda_body,
         OnionFastMap::default(),
         "http::async_get".into(),
-        LambdaType::Normal,
+        LambdaType::Atomic,
     ))
 }
 
@@ -327,7 +327,7 @@ fn http_post(
         lambda_body,
         OnionFastMap::default(),
         "http::async_post".into(),
-        LambdaType::Normal,
+        LambdaType::Atomic,
     ))
 }
 
@@ -347,7 +347,7 @@ fn http_put(
         lambda_body,
         OnionFastMap::default(),
         "http::async_put".into(),
-        LambdaType::Normal,
+        LambdaType::Atomic,
     ))
 }
 
@@ -366,7 +366,7 @@ fn http_delete(
         lambda_body,
         OnionFastMap::default(),
         "http::async_delete".into(),
-        LambdaType::Normal,
+        LambdaType::Atomic,
     ))
 }
 
@@ -386,7 +386,7 @@ fn http_patch(
         lambda_body,
         OnionFastMap::default(),
         "http::async_patch".into(),
-        LambdaType::Normal,
+        LambdaType::Atomic,
     ))
 }
 

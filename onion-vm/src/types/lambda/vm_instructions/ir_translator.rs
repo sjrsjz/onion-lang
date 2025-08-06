@@ -1,3 +1,9 @@
+//! Onion 虚拟机 IR 到字节码翻译器。
+//!
+//! - `IRTranslator`：将中间表示（IR）翻译为 VMInstructionPackage 字节码包。
+//! - 支持常量池去重、跳转重定向、调试信息收集等。
+//! - 提供字符串、索引、字节常量池分配与唯一性保证。
+
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::result::Result;
@@ -9,9 +15,13 @@ use super::ir::IROperation;
 use super::ir::IRPackage;
 use super::opcode::*;
 
+/// IR 翻译错误类型。
+///
+/// 用于描述 IR 到字节码翻译过程中遇到的错误。
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub enum IRTranslatorError {
+    /// 遇到无法识别或非法的 IR 指令
     InvalidInstruction(IR),
 }
 
@@ -19,30 +29,56 @@ impl Display for IRTranslatorError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             IRTranslatorError::InvalidInstruction(ir) => {
-                write!(f, "Invalid IR instruction encountered during translation to bytecode: {:?}", ir)
+                write!(
+                    f,
+                    "Invalid IR instruction encountered during translation to bytecode: {:?}",
+                    ir
+                )
             }
         }
     }
 }
 
+/// Onion 虚拟机 IR 到字节码的翻译器。
+///
+/// 负责将 IRPackage 中的中间表示指令翻译为 VMInstructionPackage 字节码包，
+/// 并自动管理常量池、跳转重定向、调试信息等。
 #[derive(Debug)]
 pub struct IRTranslator {
+    /// IR 包（中间表示）
     ir_package: IRPackage,
+    /// 函数签名到入口点的映射
     function_ips: HashMap<String, usize>,
+    /// IR 指令到字节码偏移的映射
     ir_to_ip: Vec<usize>,
+    /// 生成的字节码流
     code: Vec<u32>,
+    /// 字符串常量池
     string_pool: Vec<String>,
-    string_to_index: HashMap<String, usize>, // 新增：字符串到索引的映射
-    index_pool: Vec<Vec<usize>>,             // 新增：索引池
-    index_to_index: HashMap<Vec<usize>, usize>, // 新增：索引数组到索引的映射
+    /// 字符串到索引的映射
+    string_to_index: HashMap<String, usize>,
+    /// 索引常量池
+    index_pool: Vec<Vec<usize>>,
+    /// 索引数组到索引的映射
+    index_to_index: HashMap<Vec<usize>, usize>,
+    /// 字节常量池
     bytes_pool: Vec<Vec<u8>>,
-    bytes_to_index: HashMap<Vec<u8>, usize>, // 新增：字节数组去重
+    /// 字节数组到索引的映射
+    bytes_to_index: HashMap<Vec<u8>, usize>,
+    /// 调试信息表
     debug_infos: HashMap<usize, DebugInfo>,
 }
 
 pub const PRE_ALLOCATED_VARIABLE_STRINGS: [&str; 2] = ["this", /*"arguments",*/ "self"];
 
 impl IRTranslator {
+    /// 构造新的 IRTranslator。
+    ///
+    /// # 参数
+    /// * `ir_package` - 要翻译的 IR 包
+    ///
+    /// # 返回值
+    /// 返回新构造的 IRTranslator
     pub fn new(ir_package: &IRPackage) -> Self {
         let mut translator = IRTranslator {
             ir_package: ir_package.clone(),
@@ -50,54 +86,65 @@ impl IRTranslator {
             ir_to_ip: vec![],
             code: vec![],
             string_pool: vec![],
-            string_to_index: HashMap::default(), // 初始化映射表
-            index_pool: vec![],                  // 初始化索引池
-            index_to_index: HashMap::default(),  // 初始化索引数组映射表
+            string_to_index: HashMap::default(),
+            index_pool: vec![],
+            index_to_index: HashMap::default(),
             bytes_pool: vec![],
-            bytes_to_index: HashMap::default(), // 初始化字节数组映射表
+            bytes_to_index: HashMap::default(),
             debug_infos: HashMap::default(),
         };
+        // 预分配常用变量名
         for &s in &PRE_ALLOCATED_VARIABLE_STRINGS {
-            translator.alloc_string(s.to_string()); // 预分配
+            translator.alloc_string(s.to_string());
         }
-        return translator;
+        translator
     }
 
-    // 优化后的字符串分配方法 - 确保相同字符串索引唯一
+    /// 分配字符串常量，保证唯一性。
+    ///
+    /// # 参数
+    /// * `value` - 要分配的字符串
+    ///
+    /// # 返回值
+    /// 返回字符串在常量池中的索引
     pub fn alloc_string(&mut self, value: String) -> usize {
-        // 先检查是否已经存在
         if let Some(&existing_index) = self.string_to_index.get(&value) {
             return existing_index;
         }
-
-        // 不存在则创建新的
         let index = self.string_pool.len();
         self.string_to_index.insert(value.clone(), index);
         self.string_pool.push(value);
         index
     }
 
+    /// 分配索引常量，保证唯一性。
+    ///
+    /// # 参数
+    /// * `value` - 要分配的索引数组
+    ///
+    /// # 返回值
+    /// 返回索引数组在常量池中的索引
     pub fn alloc_index(&mut self, value: Vec<usize>) -> usize {
-        // 先检查是否已经存在
         if let Some(&existing_index) = self.index_to_index.get(&value) {
             return existing_index;
         }
-
-        // 不存在则创建新的
         let index = self.index_pool.len();
         self.index_to_index.insert(value.clone(), index);
         self.index_pool.push(value);
         index
     }
 
-    // 同样优化字节数组分配
+    /// 分配字节常量，保证唯一性。
+    ///
+    /// # 参数
+    /// * `value` - 要分配的字节数组
+    ///
+    /// # 返回值
+    /// 返回字节数组在常量池中的索引
     pub fn alloc_bytes(&mut self, value: Vec<u8>) -> usize {
-        // 先检查是否已经存在
         if let Some(&existing_index) = self.bytes_to_index.get(&value) {
             return existing_index;
         }
-
-        // 不存在则创建新的
         let index = self.bytes_pool.len();
         self.bytes_to_index.insert(value.clone(), index);
         self.bytes_pool.push(value);
@@ -106,6 +153,14 @@ impl IRTranslator {
 }
 
 impl IRTranslator {
+    /// 将 IR 包翻译为字节码流。
+    ///
+    /// 处理所有 IR 指令，生成对应的字节码、常量池和调试信息。
+    /// 支持跳转重定向、常量池分配、错误处理等。
+    ///
+    /// # 返回值
+    /// * Ok(()) - 翻译成功
+    /// * Err(IRTranslatorError) - 遇到非法 IR 指令
     pub fn translate(&mut self) -> Result<(), IRTranslatorError> {
         let mut redirect_table = Vec::<(
             usize, /*偏移计算位置*/
@@ -480,7 +535,7 @@ impl IRTranslator {
                         Opcode32::build_opcode(VMInstruction::Raise as u8, 0, 0, 0).get_opcode(),
                     );
                 }
-                IR::BuildSet => {
+                IR::BuildLazySet => {
                     self.code.push(
                         Opcode32::build_opcode(VMInstruction::BuildSet as u8, 0, 0, 0).get_opcode(),
                     );
@@ -536,7 +591,7 @@ impl IRTranslator {
         // 处理跳转指令
         // 偏移是相对于操作数而言的，而非相对于指令起始地址
         for (ip, write_ip, ir_ip, is_i64) in redirect_table {
-            let calced_offset =
+            let computed_jump_offset =
                 *self
                     .ir_to_ip
                     .get(ir_ip)
@@ -545,10 +600,10 @@ impl IRTranslator {
                     )))? as isize
                     - ip as isize;
             if is_i64 {
-                self.code[write_ip] = Opcode32::lower32(calced_offset as u64);
-                self.code[write_ip + 1] = Opcode32::upper32(calced_offset as u64);
+                self.code[write_ip] = Opcode32::lower32(computed_jump_offset as u64);
+                self.code[write_ip + 1] = Opcode32::upper32(computed_jump_offset as u64);
             } else {
-                self.code[write_ip] = calced_offset as u32;
+                self.code[write_ip] = computed_jump_offset as u32;
             }
         }
 
@@ -560,6 +615,7 @@ impl IRTranslator {
         Ok(())
     }
 
+    /// 获取翻译结果，生成最终的 VMInstructionPackage。
     pub fn get_result(&self) -> VMInstructionPackage {
         VMInstructionPackage::new(
             self.function_ips.clone(),

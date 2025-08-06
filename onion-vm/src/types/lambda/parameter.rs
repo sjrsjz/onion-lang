@@ -1,3 +1,8 @@
+//! Lambda 参数定义与处理模块。
+//!
+//! 支持单参数和多参数的递归定义，提供参数约束、解包、扁平化等功能。
+//! 参数可以是简单的键值对，也可以是嵌套的参数结构。
+
 use std::fmt::Display;
 
 use arc_gc::{arc::GCArc, traceable::GCTraceable};
@@ -11,9 +16,28 @@ use crate::{
     },
 };
 
+/// Lambda 参数定义。
+///
+/// 支持单参数和多参数的递归结构：
+/// - `Single`: 单个参数，包含参数名和约束对象
+/// - `Multiple`: 多个参数，支持嵌套结构
+///
+/// # 示例
+/// ```ignore
+/// // 单参数: x : Int
+/// LambdaParameter::Single(("x".into(), OnionObject::Integer(0)))
+///
+/// // 多参数: (a : String, (b : Int, c : Bool))
+/// LambdaParameter::Multiple(box [
+///     LambdaParameter::Single(("a".into(), OnionObject::String(...))),
+///     LambdaParameter::Multiple(box [...])
+/// ])
+/// ```
 #[derive(Debug, Clone)]
 pub enum LambdaParameter {
+    /// 单个参数：(参数名, 约束对象)
     Single((Box<str>, OnionObject)),
+    /// 多个参数：递归参数列表
     Multiple(Box<[LambdaParameter]>),
 }
 
@@ -57,16 +81,21 @@ impl Display for LambdaParameter {
 }
 
 impl LambdaParameter {
+    /// 创建 top 参数（约束为 true，顶类型）。
     pub fn top(key: &str) -> Self {
         Self::Single((key.into(), OnionObject::Boolean(true)))
     }
 
+    /// 创建 bottom 参数（约束为 false，底类型）。
     pub fn bottom(key: &str) -> Self {
         Self::Single((key.into(), OnionObject::Boolean(false)))
     }
 }
 
 impl LambdaParameter {
+    /// 获取参数的总数量（扁平化后）。
+    ///
+    /// 递归计算所有嵌套参数的数量总和。
     pub fn len(&self) -> usize {
         match self {
             LambdaParameter::Single(_) => 1,
@@ -74,7 +103,14 @@ impl LambdaParameter {
         }
     }
 
-    /// 按照扁平化的方式依照顺序获取参数的约束定义
+    /// 按扁平化顺序获取指定索引的参数约束定义。
+    ///
+    /// # 参数
+    /// - `index`: 扁平化后的参数索引
+    ///
+    /// # 返回
+    /// - `Some(&OnionObject)`: 对应位置的约束对象
+    /// - `None`: 索引超出范围
     pub fn constraint_at(&self, index: usize) -> Option<&OnionObject> {
         match self {
             LambdaParameter::Single((_, obj)) => {
@@ -99,6 +135,7 @@ impl LambdaParameter {
         }
     }
 
+    /// 按扁平化顺序获取指定索引的参数名。
     #[allow(dead_code)]
     pub fn key_at(&self, index: usize) -> Option<&str> {
         match self {
@@ -124,6 +161,7 @@ impl LambdaParameter {
         }
     }
 
+    /// 按扁平化顺序获取指定索引的参数名和约束。
     #[allow(dead_code)]
     pub fn at(&self, index: usize) -> Option<(&str, &OnionObject)> {
         match self {
@@ -149,7 +187,13 @@ impl LambdaParameter {
         }
     }
 
-    /// 打包成一个对象
+    /// 将参数结构打包为 Onion 对象。
+    ///
+    /// - 单参数打包为 Pair 对象
+    /// - 多参数打包为 Tuple 对象，递归处理嵌套结构
+    ///
+    /// # 返回
+    /// 稳定化的 Onion 对象，可用于序列化或传输
     pub fn to_onion(&self) -> OnionStaticObject {
         fn inner(param: &LambdaParameter) -> OnionObject {
             match param {
@@ -168,6 +212,15 @@ impl LambdaParameter {
         inner(self).consume_and_stabilize()
     }
 
+    /// 从 Onion 对象解析参数结构。
+    ///
+    /// 支持从 Pair、Tuple、String 等对象解析参数：
+    /// - Pair: 解析为单参数
+    /// - Tuple: 解析为多参数，递归处理
+    /// - String: 解析为简单参数（约束为 true）
+    ///
+    /// # 错误
+    /// 当对象格式不符合预期时返回 `RuntimeError::InvalidType`
     pub fn from_onion(obj: &OnionObject) -> Result<LambdaParameter, RuntimeError> {
         fn inner(obj: &OnionObject) -> Result<LambdaParameter, RuntimeError> {
             match obj {
@@ -207,6 +260,10 @@ impl LambdaParameter {
 }
 
 impl LambdaParameter {
+    /// 升级参数中的弱引用为强引用。
+    ///
+    /// 遍历参数结构，将所有对象的弱引用升级为强引用，
+    /// 防止在垃圾回收过程中被意外回收。
     pub fn upgrade(&self, collected: &mut Vec<GCArc<OnionObjectCell>>) {
         match self {
             Self::Single((_, v)) => v.upgrade(collected),
@@ -216,6 +273,21 @@ impl LambdaParameter {
 }
 
 impl LambdaParameter {
+    /// 根据参数结构解包实际参数。
+    ///
+    /// 将传入的参数对象按照当前参数结构进行解包：
+    /// - 单参数：直接接受任意对象
+    /// - 多参数：要求传入 Tuple，且元素数量匹配
+    ///
+    /// # 参数
+    /// - `argument`: 待解包的参数对象
+    ///
+    /// # 返回
+    /// 解包后的参数列表，按扁平化顺序排列
+    ///
+    /// # 错误
+    /// - `Arity Mismatch`: 参数数量不匹配
+    /// - `InvalidType`: 期望 Tuple 但传入其他类型
     pub fn unpack_arguments(
         &self,
         argument: &OnionObject,
@@ -261,9 +333,13 @@ impl LambdaParameter {
 }
 
 impl LambdaParameter {
-    /// Recursively flattens the parameter structure to produce a flat list of parameter names.
+    /// 递归扁平化参数结构，生成参数名列表。
     ///
-    /// For a parameter structure like `(a, (b, c))`, this will return `["a", "b", "c"]`.
+    /// 将嵌套的参数结构展开为一维的参数名列表。
+    /// 例如：`(a, (b, c))` 会返回 `["a", "b", "c"]`。
+    ///
+    /// # 返回
+    /// 按深度优先顺序排列的参数名列表
     pub fn flatten_keys(&self) -> Box<[Box<str>]> {
         let mut keys = Vec::with_capacity(self.len());
         fn inner(param: &LambdaParameter, collected_keys: &mut Vec<Box<str>>) {
@@ -282,10 +358,13 @@ impl LambdaParameter {
         keys.into_boxed_slice()
     }
 
-    /// Recursively flattens the parameter structure to produce a flat list of constraint objects.
+    /// 递归扁平化参数结构，生成约束对象列表。
     ///
-    /// For a parameter structure like `(a: Int, (b: String, c: Bool))`,
-    /// this will return a Vec containing the OnionObject for `Int`, `String`, and `Bool`.
+    /// 将嵌套的参数结构展开为一维的约束对象列表。
+    /// 例如：`(a: Int, (b: String, c: Bool))` 会返回 `[Int, String, Bool]`。
+    ///
+    /// # 返回
+    /// 按深度优先顺序排列的约束对象列表
     pub fn flatten_constraints(&self) -> Box<[OnionObject]> {
         let mut constraints = Vec::with_capacity(self.len());
 

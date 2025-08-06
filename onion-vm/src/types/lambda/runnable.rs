@@ -1,3 +1,8 @@
+//! Onion Lambda 可执行模块。
+//!
+//! 提供 Onion 语言中 Lambda 函数的虚拟机执行环境，包括指令执行、调用栈管理、
+//! 错误处理和调试信息输出等核心功能。支持高性能的字节码执行和完整的运行时环境。
+
 use std::{ptr::addr_eq, sync::Arc};
 
 use arc_gc::gc::GC;
@@ -24,10 +29,27 @@ use super::{
     },
 };
 
+/// 指令处理函数类型定义。
+///
+/// 每个虚拟机指令对应一个处理函数，用于执行具体的操作逻辑。
+///
+/// # 参数
+/// - `&mut OnionLambdaRunnable`: 可执行对象的可变引用，用于访问执行上下文和状态
+/// - `&ProcessedOpcode`: 已解码的操作码，包含指令类型和操作数
+/// - `&mut GC<OnionObjectCell>`: 垃圾收集器的可变引用，用于内存管理
+///
+/// # 返回
+/// 执行步骤的结果，包括继续执行、返回值、错误等状态
 type InstructionHandler =
     fn(&mut OnionLambdaRunnable, &ProcessedOpcode, &mut GC<OnionObjectCell>) -> StepResult;
 
-// 静态指令表，在程序启动时初始化一次
+/// 静态指令表，在程序启动时初始化一次。
+///
+/// 使用指令枚举值作为索引，直接映射到对应的处理函数，
+/// 实现 O(1) 时间复杂度的指令分发，提升虚拟机执行性能。
+///
+/// 表大小固定为 256，覆盖所有可能的 8 位操作码值。
+/// 未定义的操作码将映射到默认错误处理函数。
 static INSTRUCTION_TABLE: std::sync::LazyLock<Vec<InstructionHandler>> =
     std::sync::LazyLock::new(|| {
         let mut instruction_table: Vec<InstructionHandler> = vec![
@@ -50,7 +72,7 @@ static INSTRUCTION_TABLE: std::sync::LazyLock<Vec<InstructionHandler>> =
 
         // 数据结构构建
         instruction_table[VMInstruction::BuildTuple as usize] = vm_instructions::build_tuple;
-        instruction_table[VMInstruction::BuildKeyValue as usize] = vm_instructions::build_keyval;
+        instruction_table[VMInstruction::BuildKeyValue as usize] = vm_instructions::build_pair;
         instruction_table[VMInstruction::BuildRange as usize] = vm_instructions::build_range;
         instruction_table[VMInstruction::BuildSet as usize] = vm_instructions::build_set;
         // 二元操作符
@@ -124,14 +146,67 @@ static INSTRUCTION_TABLE: std::sync::LazyLock<Vec<InstructionHandler>> =
         instruction_table
     });
 
+/// Onion Lambda 可执行对象。
+///
+/// 表示一个可执行的 Lambda 函数实例，包含完整的执行上下文、
+/// 指令指针和字节码指令包。每个 Lambda 调用都会创建一个新的
+/// 可执行对象实例，提供独立的执行环境。
+///
+/// # 执行模型
+/// - 基于栈的虚拟机架构
+/// - 支持增量执行和暂停/恢复
+/// - 提供完整的调试信息和错误处理
+/// - 支持垃圾回收和内存管理
+///
+/// # 示例
+/// ```ignore
+/// let runnable = OnionLambdaRunnable::new(
+///     &arguments,     // 函数参数
+///     &captures,      // 闭包捕获的变量
+///     &self_object,   // self 引用
+///     &this_lambda,   // this 引用
+///     instruction,    // 字节码指令包
+///     0,              // 起始指令指针
+/// )?;
+/// ```
 pub struct OnionLambdaRunnable {
-    pub(crate) context: Context,
-    pub(crate) ip: isize,             // Instruction pointer
-    pub(crate) ip_before_step: isize, // previous instruction pointer
-    pub(crate) instruction: Arc<VMInstructionPackage>,
+    /// 执行上下文，包含变量作用域、操作数栈等运行时状态
+    pub(super) context: Context,
+    /// 当前指令指针，指向下一条要执行的指令
+    pub(super) ip: isize,
+    /// 执行步骤前的指令指针，用于错误报告和调试
+    pub(super) ip_before_step: isize,
+    /// 字节码指令包，包含指令序列、常量池等数据
+    pub(super) instruction: Arc<VMInstructionPackage>,
 }
 
 impl OnionLambdaRunnable {
+    /// 创建新的 Lambda 可执行对象。
+    ///
+    /// 初始化完整的执行环境，包括变量绑定、作用域设置和内置变量配置。
+    /// 会验证参数池和捕获池与指令包的字符串池一致性，确保执行安全。
+    ///
+    /// # 参数
+    /// - `argument`: 函数参数映射，键为参数名索引，值为参数值
+    /// - `capture`: 闭包捕获的变量映射，键为变量名索引，值为变量值
+    /// - `self_object`: self 引用对象，用于方法调用
+    /// - `this_lambda`: this 引用对象，指向当前 Lambda 函数
+    /// - `instruction`: 字节码指令包，包含可执行代码和元数据
+    /// - `ip`: 起始指令指针位置
+    ///
+    /// # 返回
+    /// - `Ok(OnionLambdaRunnable)`: 成功创建的可执行对象
+    /// - `Err(RuntimeError)`: 初始化失败，如缺少必要变量或池不匹配
+    ///
+    /// # 错误
+    /// - `InvalidOperation`: 字符串池不匹配或缺少必要的内置变量
+    ///
+    /// # 内置变量
+    /// 自动设置以下内置变量：
+    /// - `this`: 当前 Lambda 函数引用
+    /// - `self`: 方法调用的对象引用
+    /// - 函数参数：按名称绑定到对应值
+    /// - 捕获变量：闭包捕获的外部作用域变量
     pub fn new(
         argument: &OnionFastMap<Box<str>, OnionStaticObject>,
         capture: &OnionFastMap<Box<str>, OnionObject>,
@@ -156,13 +231,7 @@ impl OnionLambdaRunnable {
         }
 
         let mut new_context = Context::new();
-        Context::push_frame(
-            &mut new_context,
-            Frame {
-                variables: rustc_hash::FxHashMap::default(),
-                stack: Vec::new(),
-            },
-        );
+        Context::push_frame(&mut new_context, Frame::new());
 
         let index_this = instruction.get_string_index("this").ok_or_else(|| {
             RuntimeError::InvalidOperation(
@@ -251,6 +320,21 @@ impl OnionLambdaRunnable {
 }
 
 impl Runnable for OnionLambdaRunnable {
+    /// 接收其他可执行对象的执行结果。
+    ///
+    /// 当前仅支持接收返回值结果，将其推入操作数栈中。
+    /// 这主要用于处理子函数调用的返回值或异步操作的结果。
+    ///
+    /// # 参数
+    /// - `step_result`: 要接收的执行步骤结果
+    /// - `_gc`: 垃圾收集器引用（当前未使用）
+    ///
+    /// # 返回
+    /// - `Ok(())`: 成功接收结果
+    /// - `Err(RuntimeError)`: 接收失败或不支持的结果类型
+    ///
+    /// # 错误
+    /// - `DetailedError`: 当接收非返回值类型的结果时
     fn receive(
         &mut self,
         step_result: &StepResult,
@@ -267,6 +351,30 @@ impl Runnable for OnionLambdaRunnable {
             ))
         }
     }
+
+    /// 执行一个或多个指令步骤。
+    ///
+    /// 实现高性能的指令执行循环，支持批量执行以减少函数调用开销。
+    /// 通过静态指令表实现 O(1) 指令分发，提供优异的执行性能。
+    ///
+    /// # 执行策略
+    /// - 批量执行最多 1024 条指令以优化性能
+    /// - 使用 unsafe 代码避免重复边界检查
+    /// - 通过静态函数表实现快速指令分发
+    /// - 保存错误时的指令指针用于调试
+    ///
+    /// # 参数
+    /// - `gc`: 垃圾收集器的可变引用，用于内存管理
+    ///
+    /// # 返回
+    /// - `StepResult::Continue`: 需要继续执行更多指令
+    /// - `StepResult::Return(value)`: 函数执行完成，返回结果值
+    /// - `StepResult::Error(error)`: 执行过程中发生错误
+    /// - `StepResult::Call(runnable)`: 需要调用其他可执行对象
+    ///
+    /// # 安全性
+    /// 使用 unsafe 代码进行性能优化，但通过边界检查确保内存安全。
+    /// 指令指针越界会立即返回错误而不是导致未定义行为。
     fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> StepResult {
         const MAX_INLINE_STEPS: usize = 1024;
 
@@ -313,6 +421,37 @@ impl Runnable for OnionLambdaRunnable {
         StepResult::Continue
     }
 
+    /// 格式化当前执行上下文为可读字符串。
+    ///
+    /// 生成详细的调试信息，包括源码位置、当前指令和执行状态。
+    /// 优先显示源码级别的调试信息，如果不可用则回退到字节码级别。
+    ///
+    /// # 输出格式
+    /// 1. **源码位置**（如果可用）：
+    ///    - 行号和列号
+    ///    - 带有错误高亮的源码片段
+    /// 2. **字节码信息**（回退选项）：
+    ///    - 当前指令指针位置
+    ///    - 反汇编的指令内容
+    /// 3. **执行状态**：
+    ///    - 调用栈信息
+    ///    - 操作数栈状态
+    ///    - 变量作用域内容
+    ///
+    /// # 返回
+    /// 格式化的多行字符串，包含完整的调试上下文信息
+    ///
+    /// # 示例输出
+    /// ```text
+    /// -> at 15:8
+    ///     15 | let x = 10 / 0;
+    ///        |         ^^^^^^
+    ///
+    /// --- Lambda Execution State ---
+    /// Frame 0:
+    ///   Variables: x=10, y="hello"
+    ///   Stack: [Integer(10), Integer(0)]
+    /// ```
     fn format_context(&self) -> String {
         let ip = self.ip_before_step as usize;
         let mut parts = Vec::new();
@@ -339,6 +478,31 @@ impl Runnable for OnionLambdaRunnable {
 }
 
 /// 反汇编函数：将给定 IP 位置的指令转换为人类可读的字符串。
+///
+/// 解析变长指令格式，提取操作码和操作数，并格式化为易读的汇编代码形式。
+/// 支持所有虚拟机指令类型，包括立即数、字符串引用、字节数组引用等。
+///
+/// # 指令格式
+/// - 第一个 u32 word：元数据，包含操作码和操作数类型标志
+/// - 后续 words：操作数的实际值，根据类型标志解释
+///
+/// # 参数
+/// - `package`: 字节码指令包，包含指令序列和常量池
+/// - `ip`: 要反汇编的指令指针位置
+///
+/// # 返回
+/// 人类可读的指令字符串，包含指令名称和格式化的操作数
+///
+/// # 示例输出
+/// ```text
+/// LoadInt32 42
+/// LoadString Str(5) -> "hello"
+/// BinaryAdd
+/// Jump 15
+/// ```
+///
+/// # 错误处理
+/// 如果指令指针越界，返回包含错误信息的字符串而不是 panic
 ///
 /// 此版本适配了变长指令集，其中第一个 u32 word 是元数据，
 /// 后续的 words 是操作数的实际值。
@@ -415,20 +579,61 @@ pub fn disassemble_instruction(package: &VMInstructionPackage, ip: usize) -> Str
         format!("{} {}", instruction_name, operands_str)
     }
 }
+
+/// 源码位置信息。
+///
+/// 包含与特定指令指针位置对应的源码行列信息和代码片段，
+/// 用于生成高质量的错误消息和调试输出。
+///
+/// # 字段
+/// - `line`: 源码行号（从 1 开始）
+/// - `column`: 源码列号（从 1 开始）
+/// - `code_snippet`: 格式化的代码片段，包含行号和错误高亮
+///
+/// # 代码片段格式
+/// ```text
+///    15 | let x = 10 / 0;
+///       |         ^^^^^^
+/// ```
+/// 其中 `^^^^^^` 标记了错误发生的具体位置。
 #[derive(Debug)]
-pub(crate) struct SourceLocation {
+struct SourceLocation {
+    /// 源码行号（从 1 开始计数）
     pub line: usize,
+    /// 源码列号（从 1 开始计数）
     pub column: usize,
-    // 包含高亮的代码片段，例如：
-    //   "  12 | let x = 10 / 0;\n"
-    //   "     |         ^^^^^^"
+    /// 包含高亮的代码片段，格式化为多行字符串
+    ///
+    /// 示例格式：
+    /// ```text
+    ///   "  12 | let x = 10 / 0;\n"
+    ///   "     |         ^^^^^^"
+    /// ```
     pub code_snippet: String,
 }
 
-pub(crate) fn get_source_location_for_ip(
-    package: &VMInstructionPackage,
-    ip: usize,
-) -> Option<SourceLocation> {
+/// 根据指令指针获取对应的源码位置信息。
+///
+/// 通过调试信息将虚拟机指令指针映射回原始源码位置，
+/// 生成包含行列号和高亮代码片段的详细位置信息。
+///
+/// # 参数
+/// - `package`: 字节码指令包，包含调试信息和源码
+/// - `ip`: 指令指针位置
+///
+/// # 返回
+/// - `Some(SourceLocation)`: 成功映射到源码位置
+/// - `None`: 无法映射（缺少源码或调试信息）
+///
+/// # 功能特性
+/// - 支持 Unicode 字符的正确宽度计算
+/// - 生成美观的错误高亮显示
+/// - 处理多字节字符的对齐问题
+/// - 提供上下文行信息
+///
+/// # 错误处理
+/// 当源码或调试信息不可用时返回 None，调用方应提供回退方案。
+fn get_source_location_for_ip(package: &VMInstructionPackage, ip: usize) -> Option<SourceLocation> {
     let source = package.get_source().as_ref()?;
     let debug_info = package.get_debug_info().get(&ip)?;
 
@@ -474,10 +679,18 @@ pub(crate) fn get_source_location_for_ip(
         code_snippet,
     })
 }
+
 #[cfg(test)]
 mod size_tests {
     use super::*;
 
+    /// 打印关键数据结构的内存大小。
+    ///
+    /// 输出 `StepResult` 和 `RuntimeError` 等核心类型的字节大小，
+    /// 用于性能分析和内存优化决策。
+    ///
+    /// # 注意
+    /// 这些大小可能因编译器版本、目标平台和编译选项而有所不同。
     #[test]
     fn print_sizes() {
         println!("StepResult size: {}", std::mem::size_of::<StepResult>());

@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use instruction_set::VMInstructionPackage;
-use rustc_hash::FxHashMap as HashMap;
 
 use arc_gc::gc::GC;
 use opcode::{OpcodeArgument, ProcessedOpcode};
@@ -225,7 +224,7 @@ pub fn build_tuple(
     }
 }
 
-pub fn build_keyval(
+pub fn build_pair(
     runnable: &mut LambdaRunnable,
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObjectCell>,
@@ -234,9 +233,9 @@ pub fn build_keyval(
     let stack = unwrap_step_result!(runnable.context.get_current_stack_mut());
     let key = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
     let value = unwrap_step_result!(Context::get_object_from_stack(stack, 0));
-    let keyval = OnionPair::new_static(key, value);
+    let pair = OnionPair::new_static(key, value);
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
-    Context::push_to_stack(stack, keyval);
+    Context::push_to_stack(stack, pair);
     StepResult::Continue
 }
 
@@ -416,7 +415,7 @@ pub fn load_lambda(
         LambdaBody::Instruction(package.clone()),
         captured_value,
         signature,
-        LambdaType::Normal,
+        LambdaType::Atomic,
     );
 
     unwrap_step_result!(runnable.context.discard_objects(2));
@@ -960,10 +959,7 @@ pub fn new_frame(
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObjectCell>,
 ) -> StepResult {
-    runnable.context.push_frame(Frame {
-        variables: HashMap::default(),
-        stack: vec![],
-    });
+    runnable.context.push_frame(Frame::new());
     StepResult::Continue
 }
 
@@ -1079,9 +1075,9 @@ pub fn apply(
         match obj_ref {
             OnionObject::Lambda((lambda_def, _)) => {
                 let launcher =
-                    OnionLambdaRunnableLauncher::new_static(obj_ref, argument.clone(), |r| Ok(r))?;
+                    OnionLambdaRunnableLauncher::new(obj_ref, argument.clone(), |r| Ok(r))?;
                 let new_runnable: Box<dyn Runnable> = match lambda_def.lambda_type() {
-                    LambdaType::Normal => Box::new(launcher),
+                    LambdaType::Atomic => Box::new(launcher),
                     LambdaType::AsyncLauncher => {
                         let new_task_handler = OnionAsyncHandle::new(gc);
                         Box::new(AsyncScheduler::new(Task::new(
@@ -1197,12 +1193,7 @@ pub fn map_to(
 ) -> StepResult {
     let container = unwrap_step_result!(runnable.context.get_object_rev(1));
     let mapper = unwrap_step_result!(runnable.context.get_object_rev(0));
-    let mapping = Mapping {
-        container: container.clone(),
-        mapper: mapper.clone(),
-        collected: vec![],
-        current_index: 0,
-    };
+    let mapping = Mapping::new(container, mapper);
     unwrap_step_result!(runnable.context.discard_objects(2));
     return StepResult::NewRunnable(Box::new(mapping));
 }
@@ -1227,7 +1218,7 @@ pub fn spawn_task(
     let new_runnable = unwrap_step_result!(lambda.weak().with_data(|lambda_obj| {
         match lambda_obj {
             OnionObject::Lambda(_) => Ok(Box::new(Scheduler::new(vec![Box::new(
-                OnionLambdaRunnableLauncher::new_static(lambda_obj, onion_tuple!(), &|r| Ok(r))?,
+                OnionLambdaRunnableLauncher::new(lambda_obj, onion_tuple!(), &|r| Ok(r))?,
             )]))),
             _ => Err(RuntimeError::DetailedError(
                 format!("spawn_task requires a Lambda object, but found {}", lambda).into(),
@@ -1275,7 +1266,7 @@ pub fn launch_thread(
 
             // 创建调度器运行 Lambda
             let mut scheduler: Box<dyn Runnable> = Box::new(Scheduler::new(vec![Box::new(
-                OnionLambdaRunnableLauncher::new_static(lambda_obj.weak(), onion_tuple!(), |r| {
+                OnionLambdaRunnableLauncher::new(lambda_obj.weak(), onion_tuple!(), |r| {
                     Ok(r)
                 })?,
             )]));
@@ -1388,7 +1379,7 @@ pub fn make_atomic(
     let new_lambda = unwrap_step_result!(value.weak().with_data(|obj| {
         match obj {
             OnionObject::Lambda((lambda_def, self_object)) => Ok(OnionObject::Lambda((
-                lambda_def.with_lambda_type(LambdaType::Normal).into(),
+                lambda_def.with_lambda_type(LambdaType::Atomic).into(),
                 self_object.clone(),
             ))
             .consume_and_stabilize()),

@@ -1,3 +1,9 @@
+//! Onion 虚拟机执行上下文与帧管理。
+//!
+//! - `Frame`：单个执行帧，包含变量表和操作数栈。
+//! - `Context`：多帧调用栈，支持变量作用域、栈操作、帧切换等。
+//! - 提供丰富的栈操作、变量管理与调试辅助方法。
+
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
@@ -8,13 +14,25 @@ use crate::{
     utils::format_object_summary,
 };
 
+
+/// 虚拟机执行帧。
+/// 
+/// 包含变量表和操作数栈，代表一次函数调用或执行环境。
 #[derive(Clone, Debug)]
 pub struct Frame {
-    pub variables: HashMap<usize, OnionStaticObject>,
-    pub stack: Vec<OnionStaticObject>,
+    /// 变量表，key 为常量池索引
+    variables: HashMap<usize, OnionStaticObject>,
+    /// 操作数栈
+    stack: Vec<OnionStaticObject>,
 }
 
 impl Frame {
+    pub fn new() -> Self {
+        Frame {
+            variables: HashMap::default(),
+            stack: Vec::new(),
+        }
+    }
     #[inline(always)]
     pub fn get_stack(&self) -> &Vec<OnionStaticObject> {
         &self.stack
@@ -61,9 +79,14 @@ impl Frame {
     }
 }
 
+
+/// Onion 虚拟机执行上下文。
+/// 
+/// 管理多帧调用栈，支持作用域、变量、栈和帧的各种操作。
 #[derive(Clone)]
 pub struct Context {
-    pub(crate) frames: Vec<Frame>,
+    /// 调用帧栈，栈顶为当前活跃帧
+    frames: Vec<Frame>,
 }
 
 impl Context {
@@ -142,9 +165,6 @@ impl Context {
                     .into(),
             ));
         }
-        // for _ in 0..count {
-        //     stack.pop();
-        // }
         stack.truncate(stack.len() - count);
         Ok(())
     }

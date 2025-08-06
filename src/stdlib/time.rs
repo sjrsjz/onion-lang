@@ -233,7 +233,7 @@ fn async_sleep(
         )),
         OnionFastMap::default(),
         "time::async_sleep".into(),
-        LambdaType::Normal,
+        LambdaType::Atomic,
     ))
 }
 

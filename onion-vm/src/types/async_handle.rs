@@ -1,3 +1,14 @@
+//! Onion 异步句柄模块。
+//!
+//! 提供 Onion 语言运行时的异步任务句柄实现，支持异步任务的状态管理、
+//! 结果缓存、GC 跟踪与类型扩展。可用于异步计算、并发调度和任务结果获取。
+//!
+//! # 主要功能
+//! - 异步任务的完成状态检测
+//! - 任务结果的安全存取与幂等设置
+//! - 支持 GC 跟踪与升级
+//! - 提供类型扩展与属性访问
+
 use std::{
     any::Any,
     collections::VecDeque,
@@ -18,12 +29,25 @@ use crate::{
 
 use super::object::{OnionObject, OnionObjectCell, OnionObjectExt};
 
+/// Onion 异步任务句柄。
+///
+/// 封装异步任务的状态与结果，支持线程安全的并发访问。
+/// 通过内部弱引用缓存任务结果，避免循环引用导致的内存泄漏。
+///
+/// # 字段
+/// - `inner`: (弱引用结果, 完成状态) 的互斥封装
 pub struct OnionAsyncHandle {
     inner: Mutex<(GCArcWeak<OnionObjectCell>, bool)>,
 }
 
 impl OnionAsyncHandle {
-    // 创建一个新的异步句柄，此时没有缓存结果
+    /// 创建一个新的异步句柄（未完成状态）。
+    ///
+    /// # 参数
+    /// - `gc`: Onion GC 管理器，用于分配初始结果对象
+    ///
+    /// # 返回
+    /// - `(Arc<Self>, GCArcStorage)`: 新的异步句柄和对应的 GC 存储
     pub fn new(gc: &mut GC<OnionObjectCell>) -> (Arc<Self>, GCArcStorage) {
         let tmp = gc.create(OnionObjectCell::from(OnionObject::Undefined(None)));
         (
@@ -34,13 +58,26 @@ impl OnionAsyncHandle {
         )
     }
 
-    /// 检查 handle 是否完成（供调度器使用）
+    /// 检查异步任务是否已完成。
+    ///
+    /// # 返回
+    /// - `true`: 任务已完成
+    /// - `false`: 任务仍在进行中
     pub fn is_finished(&self) -> bool {
         self.inner.lock().unwrap().1
     }
 
-    /// 设置任务结果（供调度器使用）
-    /// 为了保证幂等律，对result使用with_data
+    /// 设置异步任务的结果。
+    ///
+    /// 线程安全地将结果写入内部缓存，并标记为完成。
+    /// 幂等操作，多次调用只会以最后一次为准。
+    ///
+    /// # 参数
+    /// - `result`: 要设置的任务结果对象
+    ///
+    /// # 返回
+    /// - `Ok(())`: 设置成功
+    /// - `Err(RuntimeError)`: 异步句柄已失效或引用断裂
     pub fn set_result(&self, result: &OnionObject) -> Result<(), RuntimeError> {
         let mut guard = self.inner.lock().unwrap();
         guard.0.upgrade().map_or_else(
@@ -58,7 +95,9 @@ impl OnionAsyncHandle {
         Ok(())
     }
 
-    /// 设置任务为完成状态但无结果（供调度器使用）
+    /// 仅设置任务为完成状态，不写入结果。
+    ///
+    /// 适用于无返回值的异步任务。
     pub fn set_finished(&self) {
         let mut guard = self.inner.lock().unwrap();
         guard.1 = true;

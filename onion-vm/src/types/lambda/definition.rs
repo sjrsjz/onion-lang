@@ -1,3 +1,10 @@
+//! Onion 虚拟机 Lambda 定义与实现。
+//!
+//! - `OnionLambdaDefinition`：完整的 Lambda 定义，支持参数、捕获、原生与字节码体。
+//! - `LambdaBody`：Lambda 体类型，支持字节码与原生函数。
+//! - `LambdaType`：Lambda 类型（普通、异步、同步）。
+//! - 提供 Lambda 的构造、运行、属性访问、GC 跟踪等。
+
 use std::{
     collections::VecDeque,
     fmt::{Debug, Display},
@@ -23,8 +30,13 @@ use crate::{
 
 use super::runnable::OnionLambdaRunnable;
 
+/// Lambda 体类型。
+///
+/// 支持字节码（Instruction）和原生函数（NativeFunction）。
 pub enum LambdaBody {
+    /// 字节码实现
     Instruction(Arc<VMInstructionPackage>),
+    /// 原生函数实现（带字符串池），用于启动一个 Runnable
     NativeFunction(
         (
             Arc<
@@ -80,19 +92,33 @@ impl Display for LambdaBody {
     }
 }
 
+/// Lambda 类型。
 pub enum LambdaType {
-    Normal,
+    /// 普通 Lambda
+    Atomic,
+    /// 异步调度器
     AsyncLauncher,
+    /// 同步调度器
     SyncLauncher,
 }
 
+/// Onion 虚拟机 Lambda 定义。
+///
+/// 封装参数、捕获、Lambda 体、签名、类型等。
 pub struct OnionLambdaDefinition {
+    /// 参数定义
     parameter: LambdaParameter,
+    /// 展平后的参数名
     flatten_param_keys: Box<[Box<str>]>,
+    /// 展平后的参数约束
     flatten_param_constraints: Box<[OnionObject]>,
+    /// Lambda 体
     body: LambdaBody,
+    /// 捕获变量
     capture: OnionFastMap<Box<str>, OnionObject>,
+    /// 签名字符串
     signature: Box<str>,
+    /// Lambda 类型
     lambda_type: LambdaType,
 }
 

@@ -100,12 +100,12 @@ impl ReplExecutor {
             LambdaBody::Instruction(Arc::new(vm_instructions_package.clone())),
             capture,
             "__main__".into(),
-            LambdaType::Normal,
+            LambdaType::Atomic,
         );
 
         let args = OnionTuple::new_static(vec![]);
         let mut scheduler: Box<dyn Runnable> = Box::new(Scheduler::new(vec![Box::new(
-            OnionLambdaRunnableLauncher::new_static(lambda.weak(), args, Ok)
+            OnionLambdaRunnableLauncher::new(lambda.weak(), args, Ok)
                 .map_err(|e| format!("Failed to create runnable Lambda: {e:?}"))?,
         )]));
 

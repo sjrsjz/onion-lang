@@ -586,13 +586,13 @@ impl ComptimeSolver {
             LambdaBody::Instruction(Arc::new(vm_instructions_package.clone())),
             capture,
             "__main__".into(),
-            LambdaType::Normal,
+            LambdaType::Atomic,
         );
 
         let args = OnionTuple::new_static(vec![]);
 
         let mut scheduler: Box<dyn Runnable> = Box::new(Scheduler::new(vec![Box::new(
-            OnionLambdaRunnableLauncher::new_static(lambda.weak(), args, Ok)?,
+            OnionLambdaRunnableLauncher::new(lambda.weak(), args, Ok)?,
         )]));
         // Execute code
         loop {

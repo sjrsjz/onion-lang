@@ -1,3 +1,14 @@
+//! Onion 惰性集合（LazySet）模块。
+//!
+//! 提供 Onion 语言运行时的惰性集合实现，支持基于过滤器的延迟求值、
+//! 集合元素的惰性遍历与收集。适用于大数据集的高效筛选与惰性计算场景。
+//!
+//! # 主要功能
+//! - 惰性集合的容器与过滤器表达
+//! - 惰性收集与遍历接口
+//! - 支持 GC 跟踪与升级
+//! - 集合收集器的可运行实现
+
 use std::{collections::VecDeque, fmt::Debug, sync::Arc};
 
 use arc_gc::{
@@ -21,6 +32,14 @@ use super::{
     tuple::OnionTuple,
 };
 
+/// Onion 惰性集合。
+///
+/// 封装一个容器对象和一个过滤器对象，支持基于过滤器的惰性筛选。
+/// 适用于大规模数据的延迟求值与高效遍历。
+///
+/// # 字段
+/// - `container`: 集合的底层容器对象（如元组、数组等）
+/// - `filter`: 用于筛选元素的过滤器对象（如 Lambda 表达式）
 pub struct OnionLazySet {
     container: OnionObject,
     filter: OnionObject,
@@ -40,6 +59,14 @@ impl Debug for OnionLazySet {
 }
 
 impl OnionLazySet {
+    /// 创建新的惰性集合。
+    ///
+    /// # 参数
+    /// - `container`: 底层容器对象
+    /// - `filter`: 过滤器对象
+    ///
+    /// # 返回
+    /// 新的惰性集合实例
     pub fn new(container: OnionObject, filter: OnionObject) -> Self {
         OnionLazySet {
             container: container.into(),
@@ -47,6 +74,14 @@ impl OnionLazySet {
         }
     }
 
+    /// 创建静态惰性集合对象。
+    ///
+    /// # 参数
+    /// - `container`: 静态容器对象
+    /// - `filter`: 静态过滤器对象
+    ///
+    /// # 返回
+    /// 稳定化后的静态惰性集合对象
     pub fn new_static(
         container: &OnionStaticObject,
         filter: &OnionStaticObject,
@@ -61,21 +96,40 @@ impl OnionLazySet {
         .stabilize()
     }
 
+    /// 获取底层容器对象的引用。
     #[inline(always)]
     pub fn get_container(&self) -> &OnionObject {
         &self.container
     }
 
+    /// 获取过滤器对象的引用。
     #[inline(always)]
     pub fn get_filter(&self) -> &OnionObject {
         &self.filter
     }
 
+    /// 升级集合中的所有对象引用。
+    ///
+    /// 用于 GC 跟踪，防止集合中的对象被提前回收。
     pub fn upgrade(&self, collected: &mut Vec<GCArc<OnionObjectCell>>) {
         self.container.upgrade(collected);
         self.filter.upgrade(collected)
     }
 
+    /// 按属性名访问集合的内部成员或操作。
+    ///
+    /// 支持访问 "container"、"filter"、"collect" 三个属性：
+    /// - `container`: 返回底层容器对象
+    /// - `filter`: 返回过滤器对象
+    /// - `collect`: 返回惰性收集器 Lambda
+    ///
+    /// # 参数
+    /// - `key`: 属性名对象
+    /// - `f`: 处理函数，对应属性对象作为参数
+    ///
+    /// # 返回
+    /// - `Ok(R)`: 访问成功，返回处理函数结果
+    /// - `Err(RuntimeError)`: 属性不存在或访问失败
     pub fn with_attribute<F, R>(&self, key: &OnionObject, f: &F) -> Result<R, RuntimeError>
     where
         F: Fn(&OnionObject) -> Result<R, RuntimeError>,
@@ -102,9 +156,9 @@ impl OnionLazySet {
                     )),
                     OnionFastMap::new(empty_pool),
                     "collector".into(),
-                    LambdaType::Normal,
+                    LambdaType::Atomic,
                 );
-                // Keep the collector alive until after we use its weak reference
+                // 保证 collector 生命周期直到 weak 被用完
                 let result = {
                     let collector_weak = collector.weak();
                     f(collector_weak)
@@ -118,6 +172,16 @@ impl OnionLazySet {
     }
 }
 
+/// Onion 惰性集合收集器。
+///
+/// 作为可运行对象实现，支持惰性集合的逐步遍历与收集。
+/// 每次 step 调用处理一个元素，最终返回收集结果。
+///
+/// # 字段
+/// - `container`: 静态容器对象
+/// - `filter`: 静态过滤器对象
+/// - `collected`: 已收集的元素列表
+/// - `current_index`: 当前处理的元素索引
 #[derive(Clone)]
 pub struct OnionLazySetCollector {
     pub(crate) container: OnionStaticObject,
@@ -179,12 +243,11 @@ impl Runnable for OnionLazySetCollector {
                                 .weak()
                                 .with_data(|filter: &OnionObject| match filter {
                                     OnionObject::Lambda(_) => {
-                                        let runnable =
-                                            Box::new(OnionLambdaRunnableLauncher::new_static(
-                                                filter,
-                                                item.stabilize(),
-                                                &|r| Ok(r),
-                                            )?);
+                                        let runnable = Box::new(OnionLambdaRunnableLauncher::new(
+                                            filter,
+                                            item.stabilize(),
+                                            &|r| Ok(r),
+                                        )?);
                                         Ok(StepResult::NewRunnable(runnable))
                                     }
                                     v => {

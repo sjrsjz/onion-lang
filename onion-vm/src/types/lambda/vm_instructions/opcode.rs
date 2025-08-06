@@ -1,13 +1,33 @@
+//! Onion 虚拟机操作码（Opcode）编码与解码工具。
+//!
+//! - `Opcode32`：32位操作码结构，支持指令与操作数编码。
+//! - `OperandFlag`：操作数标志位，描述常量池、类型、有效性等。
+//! - `DecodedOpcode`/`ProcessedOpcode`：解码后操作码结构。
+//! - 提供操作码的编码、解码、操作数提取与类型转换等辅助函数。
+
 use std::ops::BitOr;
 
 use super::instruction_set::VMInstruction;
 
+/// 32位操作码结构。
+/// 
+/// 用于编码指令和操作数标志，便于虚拟机高效解析。
 #[derive(Debug)]
 pub struct Opcode32 {
     opcode: u32,
 }
 #[allow(dead_code)]
 impl Opcode32 {
+    /// 构造新的 32 位操作码。
+    /// 
+    /// # 参数
+    /// * `instruction` - 指令码
+    /// * `operand1` - 操作数1标志
+    /// * `operand2` - 操作数2标志
+    /// * `operand3` - 操作数3标志
+    /// 
+    /// # 返回值
+    /// 返回编码后的 Opcode32
     pub fn build_opcode(instruction: u8, operand1: u8, operand2: u8, operand3: u8) -> Opcode32 {
         let opcode = ((instruction as u32) << 24)
             | ((operand1 as u32) << 16)
@@ -37,11 +57,18 @@ impl Opcode32 {
     }
 }
 
+/// 操作数标志位。
+/// 
+/// 用于描述操作数的类型、是否有效、是否为常量池引用等。
 pub enum OperandFlag {
+    /// 操作数有效
     Valid = 0b00000001,
+    /// 使用常量池
     UseConstPool = 0b00000010,
+    /// 64位参数
     ArgSize64 = 0b000000100,
-    ShiftType = 0b00001000, // string/byte array or int/float, determine by UseConstPool
+    /// 类型切换（如字符串/字节数组、整型/浮点型）
+    ShiftType = 0b00001000,
 }
 
 impl BitOr for OperandFlag {
@@ -73,11 +100,12 @@ const FLAG_USE_CONST_POOL: u8 = OperandFlag::UseConstPool as u8;
 const FLAG_ARG_SIZE_64: u8 = OperandFlag::ArgSize64 as u8;
 const FLAG_SHIFT_TYPE: u8 = OperandFlag::ShiftType as u8;
 
+/// 解码后的操作码结构。
+/// 
+/// 包含指令码和三个操作数标志。
 pub struct DecodedOpcode {
     instruction: u8,
-    operand1: u8, // const pool idx/constant (1bit)
-    // argsize (1bit, 32/64)
-    // valid (1bit)
+    operand1: u8,
     operand2: u8,
     operand3: u8,
 }
@@ -110,6 +138,7 @@ impl DecodedOpcode {
     }
 }
 
+/// 操作码参数类型。
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub enum OpcodeArgument {
@@ -121,6 +150,9 @@ pub enum OpcodeArgument {
     String(u64),
     ByteArray(u64),
 }
+/// 处理后的操作码结构。
+/// 
+/// 包含指令码和已解析的三个操作数。
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct ProcessedOpcode {
@@ -144,6 +176,7 @@ impl ProcessedOpcode {
 }
 
 // 操作码处理的静态函数
+/// 从字节码流中读取一个 u32。
 #[inline(always)]
 pub fn take_u32(bytes: &[u32], pointer: &mut usize) -> u32 {
     if *pointer < bytes.len() {
@@ -155,6 +188,7 @@ pub fn take_u32(bytes: &[u32], pointer: &mut usize) -> u32 {
     }
 }
 
+/// 从字节码流中读取一个 u64（两个 u32 拼接）。
 #[inline(always)]
 pub fn take_u64(bytes: &[u32], pointer: &mut usize) -> u64 {
     if *pointer + 1 < bytes.len() {
@@ -166,6 +200,7 @@ pub fn take_u64(bytes: &[u32], pointer: &mut usize) -> u64 {
     }
 }
 
+/// 从字节码流中读取并解析一个完整的操作码。
 #[inline(always)]
 pub fn get_processed_opcode(bytes: &[u32], pointer: &mut usize) -> ProcessedOpcode {
     let opcode = take_u32(bytes, pointer);
@@ -187,7 +222,7 @@ pub fn get_processed_opcode(bytes: &[u32], pointer: &mut usize) -> ProcessedOpco
     }
 }
 
-// 根据操作数标志和原始值构建具体的操作数类型
+/// 根据操作数标志和原始值构建具体的操作数类型。
 #[inline(always)]
 pub fn build_operand_argument(operand_flags: u8, arg_value: u64) -> OpcodeArgument {
     // 如果操作数无效，返回None
@@ -227,6 +262,7 @@ pub fn build_operand_argument(operand_flags: u8, arg_value: u64) -> OpcodeArgume
     }
 }
 
+/// 解码 32 位操作码为 DecodedOpcode 结构。
 #[inline(always)]
 pub fn decode_opcode(opcode: u32) -> DecodedOpcode {
     let instruction = (opcode >> 24) as u8;
@@ -242,6 +278,7 @@ pub fn decode_opcode(opcode: u32) -> DecodedOpcode {
     }
 }
 
+/// 根据操作数标志从字节码流中读取参数值。
 #[inline(always)]
 pub fn get_operand_arg(bytes: &[u32], pointer: &mut usize, operand_flags: u8) -> u64 {
     if (operand_flags & FLAG_VALID) == 0 {

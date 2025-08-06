@@ -1,11 +1,21 @@
+//! Onion 虚拟机 IR（中间表示）定义。
+//!
+//! - `IROperation`：所有支持的运算操作符。
+//! - `IR`：中间表示指令枚举，描述虚拟机的抽象操作。
+//! - `DebugInfo`：调试信息结构。
+//! - `IRPackage`：IR 指令包，支持序列化与反序列化。
+//! - `Functions`：函数 IR 集合与构建工具。
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+/// IR 支持的运算操作符。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum IROperation {
     Add,          // +
-    Abs,         // 一元绝对值
+    Abs,          // 一元绝对值
     Subtract,     // -
-    Minus,       // 一元负号
+    Minus,        // 一元负号
     Multiply,     // *
     Divide,       // /
     Modulus,      // %
@@ -24,9 +34,13 @@ pub enum IROperation {
     Not,          // not
 }
 
+
+/// IR 调试信息结构。
+/// 
+/// 记录源代码 token 的起止位置，便于调试和错误定位。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DebugInfo {
-    token_span: (usize, usize), // The span of the token
+    token_span: (usize, usize),
 }
 
 impl DebugInfo {
@@ -39,6 +53,10 @@ impl DebugInfo {
     }
 }
 
+
+/// Onion 虚拟机 IR（中间表示）指令枚举。
+/// 
+/// 描述虚拟机支持的所有抽象操作，作为字节码生成的中间层。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum IR {
     LoadNull,                        // load null to stack
@@ -49,55 +67,60 @@ pub enum IR {
     LoadBytes(Vec<u8>),              // load bytes to stack
     LoadBool(bool),                  // load bool to stack
     LoadLambda(String, Vec<String>), // signature, capture variables
-    ForkInstruction, // "fork" instruction and push the forked instruction gcref to stack
-    BuildTuple(usize), // number of elements
-    BuildKeyValue,   // pop key and value from stack and build key value pair
-    BuildNamed,      // pop key and value from stack and build named argument
-    BuildRange,      // pop start and end from stack and build range
-    BuildSet,
-    BinaryOp(IROperation), // pop two values from stack and perform binary operation
-    UnaryOp(IROperation),  // pop one value from stack and perform unary operation
-    Let(String),           // pop value from stack and store it in variable
-    Get(String),           // get value from context and push the reference to stack
-    Set,                   // pop value and reference from stack and set value
-    GetAttr, // pop object and attribute from stack and push the reference to attribute to stack
-    KeyOf,   // pop object and get the key of the object
-    ValueOf, // pop object and get the value of the object
-    TypeOf,  // pop object and get the type of the object
-    Apply,   // pop lambda and arguments from stack and call lambda
-    Return,  // pop value from stack and return it
-    NewFrame, // create new frame
-    PopFrame, // pop frame
-    Pop,     // pop value from stack and discard it
-    JumpOffset(isize), // jump to offset
-    JumpIfFalseOffset(isize), // jump to offset if false
-    ResetStack, // reset stack
-    Mut,     // make value mutable
-    Const,   // make value constant
-    Launch,  // launch a new thread with the value
-    Spawn,   // spawn a new task with the value
-    Assert,  // assert value
-    Import,  // import module from file
-    RedirectJump(String), // redirect ir, not for vm just for ir generation
+    ForkInstruction,                 // "fork" instruction and push the forked instruction to stack
+    BuildTuple(usize),               // number of elements
+    BuildKeyValue,                   // pop key and value from stack and build key value pair
+    BuildNamed,                      // pop key and value from stack and build named argument
+    BuildRange,                      // pop start and end from stack and build range
+    BuildLazySet,                    // pop key and value from stack and build lazy set
+    BinaryOp(IROperation),           // pop two values from stack and perform binary operation
+    UnaryOp(IROperation),            // pop one value from stack and perform unary operation
+    Let(String),                     // pop value from stack and store it in variable
+    Get(String),                     // get value from context and push the reference to stack
+    Set,                             // pop value and reference from stack and set value
+    GetAttr,                         // pop object and attribute from stack and push the reference to attribute to stack
+    KeyOf,                           // pop object and get the key of the object
+    ValueOf,                         // pop object and get the value of the object
+    TypeOf,                          // pop object and get the type of the object
+    Apply,                           // pop lambda and arguments from stack and call lambda
+    Return,                          // pop value from stack and return it
+    NewFrame,                        // create new frame
+    PopFrame,                        // pop frame
+    Pop,                             // pop value from stack and discard it
+    JumpOffset(isize),               // jump to offset
+    JumpIfFalseOffset(isize),        // jump to offset if false
+    ResetStack,                      // reset stack
+    Mut,                             // make value mutable
+    Const,                           // make value constant
+    Launch,                          // launch a new thread with the value
+    Spawn,                           // spawn a new task with the value
+    Assert,                          // assert value
+    Import,                          // import module from file
+    RedirectJump(String),            // redirect ir, not for vm just for ir generation
     RedirectJumpIfFalse(String),
     RedirectLabel(String),
-    Namespace(String),
-    In,
-    Swap(usize, usize), // swap two values in stack
-    LengthOf,           // get length of object
-    IsSameObject,       // check if two objects are the same
-    MapTo,
-    Raise, // raise an custom value
-
-    MakeAsync,
-    MakeSync,
-    MakeAtomic,
+    Namespace(String),               // namespace operation, unused
+    In,                              // in operation, used for in operator
+    Swap(usize, usize),              // swap two values in stack
+    LengthOf,                        // get length of object
+    IsSameObject,                    // check if two objects are the same
+    MapTo,                           // map a collection to another
+    Raise,                           // raise an custom value
+    MakeAsync,                       // make lambda async
+    MakeSync,                        // make lambda sync
+    MakeAtomic,                      // make lambda atomic
 }
 
+/// IR 指令包结构。
+/// 
+/// 封装一组 IR 指令、函数入口表和源代码。
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct IRPackage {
+    /// 指令流（带调试信息）
     pub instructions: Vec<(DebugInfo, IR)>,
+    /// 函数名到入口点的映射
     pub function_ips: HashMap<String, usize>,
+    /// 源代码（可选）
     pub source: Option<String>,
 }
 impl IRPackage {
@@ -162,9 +185,13 @@ impl IRPackage {
     }
 }
 
+
+/// IR 函数集合。
+/// 
+/// 用于收集和组织各函数的 IR 指令，便于统一生成 IRPackage。
 #[derive(Debug)]
 pub struct Functions {
-    function_instructions: HashMap<String, Vec<(DebugInfo, IR)>>, // function name and instructions
+    function_instructions: HashMap<String, Vec<(DebugInfo, IR)>>,
 }
 
 impl Default for Functions {

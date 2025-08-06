@@ -1,3 +1,65 @@
+//! Onion VM 对象模型核心实现。
+//!
+//! 本模块定义了 Onion 语言运行时的完整对象系统，包括对象枚举、对象单元格、
+//! 静态对象封装、扩展trait、以及丰富的类型操作与转换接口。
+//!
+//! # 核心设计原则
+//!
+//! ## 不可变性原则
+//! Onion VM 采用严格的不可变对象模型：
+//! - 所有基础类型都是不可变的
+//! - "可变"操作实际上是创建新对象并更新引用
+//! - `Mut` 类型只是指向 `OnionObjectCell` 的弱引用容器
+//!
+//! ## 垃圾回收集成
+//! - 所有对象都支持 GC 跟踪与升级
+//! - 使用 `arc_gc` 提供的智能指针系统
+//! - 支持弱引用避免循环引用
+//!
+//! ## 类型安全与扩展性
+//! - 通过 `OnionObjectExt` trait 支持自定义类型
+//! - 统一的错误处理与类型转换接口
+//! - 丰富的运算符重载支持
+//!
+//! # 主要组件
+//!
+//! ## `OnionObject`
+//! 核心对象枚举，包含所有内置类型：
+//! - 基础类型：Integer, Float, String, Boolean 等
+//! - 容器类型：Tuple, Pair, LazySet
+//! - 函数类型：Lambda
+//! - 扩展类型：Custom
+//! - 可变引用：Mut
+//!
+//! ## `OnionObjectCell`
+//! 线程安全的对象容器，提供：
+//! - 读写锁保护的对象访问
+//! - 幂等性检查与验证
+//! - GC 跟踪支持
+//!
+//! ## `OnionStaticObject`
+//! 稳定化的对象封装，用于：
+//! - 跨函数调用的对象传递
+//! - 常量与字面量的表示
+//! - 序列化与反序列化
+//!
+//! # 典型用法
+//! ```ignore
+//! // 创建基础对象
+//! let obj = OnionObject::Integer(42);
+//! let static_obj = obj.stabilize();
+//!
+//! // 类型转换
+//! let as_float = obj.to_float()?;
+//! let as_string = obj.to_string(&vec![])?;
+//!
+//! // 运算操作
+//! let sum = obj1.binary_add(&obj2)?;
+//!
+//! // 属性访问
+//! obj.with_attribute(&key, |value| { ... })?;
+//! ```
+
 use std::{
     collections::VecDeque,
     fmt::{Debug, Display},
@@ -33,13 +95,40 @@ use super::{
     tuple::OnionTuple,
 };
 
-// Newtype wrapper to allow implementing GCTraceable for RefCell<OnionObject>
+/// Onion 对象单元格。
+///
+/// 线程安全的对象容器，使用读写锁保护内部对象，确保并发访问的安全性。
+/// 是 GC 系统中对象存储的基本单位。
+///
+/// # 设计原则
+/// - 严格的幂等性检查：Cell 中不应包含 `Mut` 对象
+/// - 线程安全的读写操作
+/// - GC 跟踪与弱引用支持
+///
+/// # 关键方法
+/// - `with_data()`: 安全地访问内部对象
+/// - `with_data_mut()`: 安全地可变访问内部对象
+/// - `with_attribute()`: 属性访问代理
 pub struct OnionObjectCell(pub RwLock<OnionObject>);
 
 impl OnionObjectCell {
+    /// 安全地访问内部对象数据。
+    ///
+    /// 获取对象的只读访问权限，并执行提供的闭包。
+    /// 包含严格的幂等性检查，确保 Cell 中不包含 `Mut` 对象。
+    ///
+    /// # 参数
+    /// - `f`: 处理对象的闭包
+    ///
+    /// # 返回
+    /// 闭包的执行结果
+    ///
+    /// # 错误
+    /// - `BorrowError`: 无法获取读锁
+    /// - Panic: 如果 Cell 中包含 `Mut` 对象（表示 VM 逻辑错误）
     #[inline(always)]
-    /// 严格遵循幂等律的情况下，Cell里不可能出现Mut对象。
-    /// 如果出现了Mut对象，说明VM对象分配或GC逻辑有bug
+    // 严格遵循幂等律的情况下，Cell里不可能出现Mut对象。
+    // 如果出现了Mut对象，说明VM对象分配或GC逻辑有bug
     pub fn with_data<T, F>(&self, f: F) -> Result<T, RuntimeError>
     where
         F: FnOnce(&OnionObject) -> Result<T, RuntimeError>,
@@ -60,9 +149,24 @@ impl OnionObjectCell {
             )),
         }
     }
+
+    /// 安全地可变访问内部对象数据。
+    ///
+    /// 获取对象的可写访问权限，并执行提供的闭包。
+    /// 同样包含严格的幂等性检查。
+    ///
+    /// # 参数
+    /// - `f`: 处理对象的可变闭包
+    ///
+    /// # 返回
+    /// 闭包的执行结果
+    ///
+    /// # 错误
+    /// - `BorrowError`: 无法获取写锁
+    /// - Panic: 如果 Cell 中包含 `Mut` 对象
     #[inline(always)]
-    /// 严格遵循幂等律的情况下，Cell里不可能出现Mut对象。
-    /// 如果出现了Mut对象，说明VM对象分配或GC逻辑有bug
+    // 严格遵循幂等律的情况下，Cell里不可能出现Mut对象。
+    // 如果出现了Mut对象，说明VM对象分配或GC逻辑有bug
     pub fn with_data_mut<T, F>(&self, f: F) -> Result<T, RuntimeError>
     where
         F: FnOnce(&mut OnionObject) -> Result<T, RuntimeError>,
@@ -84,6 +188,13 @@ impl OnionObjectCell {
         }
     }
 
+    /// 属性访问代理。
+    ///
+    /// 通过内部对象的 `with_attribute` 方法访问属性。
+    ///
+    /// # 参数
+    /// - `key`: 属性键对象
+    /// - `f`: 处理属性值的闭包
     #[inline(always)]
     pub fn with_attribute<T, F>(&self, key: &OnionObject, f: &F) -> Result<T, RuntimeError>
     where
@@ -101,6 +212,9 @@ impl OnionObjectCell {
             .with_attribute(key, f)
     }
 
+    /// 升级对象的弱引用为强引用。
+    ///
+    /// 用于 GC 跟踪，防止对象被提前回收。
     #[inline(always)]
     pub fn upgrade(&self, collected: &mut Vec<GCArc<OnionObjectCell>>) {
         match self.0.read() {
@@ -112,6 +226,10 @@ impl OnionObjectCell {
         }
     }
 
+    /// 稳定化对象为静态对象。
+    ///
+    /// 将 Cell 中的对象转换为 `OnionStaticObject`，
+    /// 用于跨函数调用和长期存储。
     #[inline(always)]
     pub fn stabilize(self) -> OnionStaticObject {
         OnionStaticObject::new(self.try_borrow().unwrap().clone())
@@ -196,11 +314,51 @@ impl Display for OnionObjectCell {
 }
 
 #[derive(Clone)]
-/// OnionObject is the main type for all objects in the Onion VM.
-/// The VM's types are all immutable(Mut is a immutable pointer to a VM object)
-/// If we need to 'mutate' an object, it is IMPOSSIBLE to mutate the object itself, we can only let the Mut object point to a new object.
-/// So all types defined in OnionObject do not implement 'Clone', because deep cloning an object is volition of the immutability principle.
+/// Onion VM 核心对象枚举。
+///
+/// 定义了 Onion 语言运行时的所有对象类型。遵循严格的不可变性原则：
+/// 所有类型都是不可变的，"可变"操作通过创建新对象并更新引用实现。
+///
+/// # 设计原则
+/// - **不可变性**: 对象一旦创建就不能修改
+/// - **引用透明性**: 相同输入总是产生相同输出
+/// - **GC 友好**: 所有类型都支持垃圾回收跟踪
+/// - **类型安全**: 严格的类型检查与转换
+///
+/// # 类型分类
+///
+/// ## 基础不可变类型
+/// - `Integer(i64)`: 64位有符号整数
+/// - `Float(f64)`: 64位浮点数
+/// - `String(Arc<str>)`: 不可变字符串
+/// - `Bytes(Arc<[u8]>)`: 不可变字节数组
+/// - `Boolean(bool)`: 布尔值
+/// - `Range(i64, i64)`: 整数范围
+/// - `Null`: 空值
+/// - `Undefined(Option<Arc<str>>)`: 未定义值（可选错误信息）
+///
+/// ## 容器类型
+/// - `Tuple(Arc<OnionTuple>)`: 有序对象集合
+/// - `Pair(Arc<OnionPair>)`: 键值对
+/// - `LazySet(Arc<OnionLazySet>)`: 惰性集合
+///
+/// ## 函数与扩展类型
+/// - `Lambda((Arc<OnionLambdaDefinition>, Arc<OnionObject>))`: Lambda 函数
+/// - `Custom(Arc<dyn OnionObjectExt>)`: 自定义扩展类型
+/// - `InstructionPackage(Arc<VMInstructionPackage>)`: 字节码指令包
+///
+/// ## 可变引用类型
+/// - `Mut(GCArcWeak<OnionObjectCell>)`: 可变对象的弱引用容器
+///
+/// # 重要说明
+/// `Mut` 类型不应直接使用，应通过 `mutablize()` 方法创建。
+/// `Mut` 只是一个指向 `OnionObjectCell` 的弱引用容器，不违反不可变性原则。
 pub enum OnionObject {
+    // OnionObject is the main type for all objects in the Onion VM.
+    // The VM's types are all immutable(Mut is a immutable pointer to a VM object)
+    // If we need to 'mutate' an object, it is IMPOSSIBLE to mutate the object itself, we can only let the Mut object point to a new object.
+    // So all types defined in OnionObject do not implement 'Clone', because deep cloning an object is volition of the immutability principle.
+
     // immutable basic types
     Integer(i64),
     Float(f64),
@@ -224,6 +382,58 @@ pub enum OnionObject {
     Mut(GCArcWeak<OnionObjectCell>),
 }
 
+/// Onion 对象扩展 trait。
+///
+/// 定义了所有自定义对象类型必须实现的接口，提供完整的对象行为规范。
+/// 支持类型内省、GC 管理、类型转换、运算操作等功能。
+///
+/// # 核心功能分类
+///
+/// ## 类型内省与 GC 管理
+/// - `as_any()`: 类型向下转换支持
+/// - `upgrade()`: GC 弱引用升级
+///
+/// ## 基础类型转换
+/// - `to_integer()`, `to_float()`, `to_string()` 等
+/// - `to_boolean()`: 布尔值转换
+/// - `repr()`: 调试表示
+/// - `type_of()`: 类型名称
+///
+/// ## 容器操作
+/// - `len()`: 长度获取
+/// - `contains()`: 包含关系检查
+/// - `apply()`: 函数应用
+///
+/// ## 键值操作
+/// - `key_of()`, `value_of()`: 键值提取
+/// - `with_attribute()`: 属性访问
+///
+/// ## 比较操作
+/// - `equals()`: 值相等性比较（必须实现）
+/// - `is_same()`: 引用相等性比较（必须实现）
+/// - `binary_eq()`, `binary_lt()`, `binary_gt()`: 二元比较
+///
+/// ## 算术运算
+/// - `binary_add()`, `binary_sub()`, `binary_mul()`, `binary_div()`: 四则运算
+/// - `binary_mod()`, `binary_pow()`: 取模与幂运算
+///
+/// ## 逻辑运算
+/// - `binary_and()`, `binary_or()`, `binary_xor()`: 位运算
+/// - `binary_shl()`, `binary_shr()`: 位移运算
+///
+/// ## 一元运算
+/// - `unary_neg()`: 负号运算
+/// - `unary_not()`: 逻辑非运算
+///
+/// # 实现注意事项
+/// - 所有方法都有默认的错误实现
+/// - 只需要重写适用于特定类型的方法
+/// - 必须实现 `equals()` 和 `is_same()` 方法
+/// - 所有实现都应该是线程安全的
+///
+/// # 错误处理
+/// 大部分方法默认返回 `InvalidType` 或 `InvalidOperation` 错误，
+/// 具体类型应该重写相关方法提供正确的实现。
 pub trait OnionObjectExt: GCTraceable<OnionObjectCell> + Debug + Send + Sync + 'static {
     // Type introspection for downcasting
     fn as_any(&self) -> &dyn std::any::Any;
@@ -445,6 +655,12 @@ impl GCTraceable<OnionObjectCell> for OnionObject {
     }
 }
 impl OnionObject {
+    /// 升级对象中的弱引用为强引用。
+    ///
+    /// 遍历对象结构，将所有弱引用升级为强引用，用于 GC 跟踪。
+    ///
+    /// # 参数
+    /// - `collected`: 用于收集强引用的向量
     pub fn upgrade(&self, collected: &mut Vec<GCArc<OnionObjectCell>>) {
         match self {
             OnionObject::Mut(weak) => {
@@ -464,20 +680,40 @@ impl OnionObject {
         }
     }
 
+    /// 将对象转换为对象单元格。
+    ///
+    /// 创建一个包含当前对象的 `OnionObjectCell`，用于 GC 管理。
     #[inline(always)]
     pub fn to_cell(self) -> OnionObjectCell {
         OnionObjectCell(RwLock::new(self))
     }
 
+    /// 稳定化对象（引用方式）。
+    ///
+    /// 创建对象的 `OnionStaticObject` 包装，通过克隆实现。
     #[inline(always)]
     pub fn stabilize(&self) -> OnionStaticObject {
         OnionStaticObject::new(self.clone())
     }
 
+    /// 稳定化对象（消费方式）。
+    ///
+    /// 通过消费当前对象创建 `OnionStaticObject`，避免克隆。
     #[inline(always)]
     pub fn consume_and_stabilize(self) -> OnionStaticObject {
         OnionStaticObject::new(self)
     }
+
+    /// 获取对象的长度。
+    ///
+    /// 支持多种容器类型的长度计算：
+    /// - Tuple: 元素数量
+    /// - String: 字符串长度
+    /// - Bytes: 字节数组长度
+    /// - Range: 范围大小
+    ///
+    /// # 返回
+    /// 包含长度值的静态整数对象
     pub fn len(&self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| match obj {
             OnionObject::Tuple(tuple) => tuple.len(),
@@ -539,6 +775,12 @@ impl OnionObject {
         }
     }
 
+    /// 对象的可变数据访问。
+    ///
+    /// 如果是 `Mut` 对象，则访问其指向的对象；否则直接访问当前对象。
+    ///
+    /// # 参数
+    /// - `f`: 处理对象数据的可变闭包
     #[inline(always)]
     pub fn with_data_mut<T, F>(&mut self, f: F) -> Result<T, RuntimeError>
     where
@@ -556,6 +798,20 @@ impl OnionObject {
         }
     }
 
+    /// 对可变对象进行赋值操作。
+    ///
+    /// 只有 `Mut` 类型的对象可以被赋值，这保证了不可变性原则。
+    /// 赋值实际上是更新 `Mut` 对象指向的内容。
+    ///
+    /// # 参数
+    /// - `other`: 要赋予的新值
+    ///
+    /// # 错误
+    /// - `InvalidOperation`: 尝试对不可变对象赋值
+    /// - `BrokenReference`: `Mut` 对象的引用已失效
+    ///
+    /// # 安全性
+    /// 由于不可变对象无法保证赋值后的稳定性，只允许对 `Mut` 对象赋值。
     #[inline(always)]
     /// Assign a new value to a mutable object.
     pub fn assign(&self, other: &OnionObject) -> Result<(), RuntimeError> {
@@ -563,7 +819,7 @@ impl OnionObject {
         // Mut类型由于是被GC管理的，因此可以安全地进行赋值操作（前提是GCArcWeak指向的对象仍然存在）。
         let OnionObject::Mut(weak) = self else {
             return Err(RuntimeError::InvalidOperation(
-                format!("Cannot assign to non-mutable object: {:?}", self).into(),
+                format!("Cannot assign to immutable object: {:?}", self).into(),
             ));
         };
         match weak.upgrade() {
@@ -581,6 +837,20 @@ impl OnionObject {
         }
     }
 
+    /// 将对象转换为整数。
+    ///
+    /// 支持多种类型的整数转换：
+    /// - Integer: 直接返回
+    /// - Float: 截断为整数
+    /// - String: 尝试解析为整数
+    /// - Boolean: true=1, false=0
+    /// - Custom: 调用自定义转换逻辑
+    ///
+    /// # 返回
+    /// 转换后的整数值
+    ///
+    /// # 错误
+    /// - `InvalidType`: 无法转换的类型或格式错误
     pub fn to_integer(&self) -> Result<i64, RuntimeError> {
         self.with_data(|obj| match obj {
             OnionObject::Integer(i) => Ok(*i),
@@ -795,6 +1065,20 @@ impl OnionObject {
         })
     }
 
+    /// 将对象转换为可变对象。
+    ///
+    /// 在 GC 中创建一个新的 `OnionObjectCell`，并返回指向它的 `Mut` 对象。
+    /// 这是创建可变引用的正确方式，遵循幂等性原则。
+    ///
+    /// # 参数
+    /// - `gc`: GC 管理器，用于分配新的对象单元格
+    ///
+    /// # 返回
+    /// 包含 `Mut` 对象的静态对象
+    ///
+    /// # 幂等性
+    /// 多次调用 `mutablize` 会创建指向相同值的不同可变对象，
+    /// 这符合 Onion VM 的不可变性设计。
     #[inline(always)]
     fn mutablize(self, gc: &mut GC<OnionObjectCell>) -> OnionStaticObject {
         let arc = gc.create(OnionObjectCell::from(self));
@@ -805,7 +1089,26 @@ impl OnionObject {
     }
 }
 
+/// OnionObject 的核心方法实现。
+///
+/// 包含对象的相等性比较、类型转换、运算操作等核心功能。
+/// 所有方法都遵循 Onion VM 的不可变性和幂等性原则。
 impl OnionObject {
+    /// 对象相等性比较。
+    ///
+    /// 实现了类型兼容的相等性检查，支持：
+    /// - 基础类型的直接比较
+    /// - 数值类型的隐式转换比较（Integer ↔ Float）
+    /// - 容器类型的递归比较
+    /// - 自定义类型的扩展比较
+    ///
+    /// # 参数
+    /// - `other`: 要比较的另一个对象
+    ///
+    /// # 返回
+    /// - `Ok(true)`: 对象相等
+    /// - `Ok(false)`: 对象不相等
+    /// - `Err(RuntimeError)`: 比较过程中发生错误
     pub fn equals(&self, other: &Self) -> Result<bool, RuntimeError> {
         self.with_data(|left| {
             other.with_data(|right| {
@@ -1942,6 +2245,18 @@ impl OnionObject {
 }
 
 #[derive(Clone)]
+/// GC 强引用存储策略枚举。
+///
+/// 根据对象的复杂性选择不同的引用存储策略，优化内存使用和性能。
+///
+/// # 变体说明
+/// - `None`: 无需额外引用（基础类型如 Integer, String）
+/// - `Single`: 单个强引用（如 Mut 对象）
+/// - `Multiple`: 多个强引用（复杂对象如 Tuple, Lambda）
+///
+/// # 设计考虑
+/// 这种分层设计避免了为简单对象分配不必要的 Vec，
+/// 同时为复杂对象提供了灵活的引用管理。
 pub enum GCArcStorage {
     None,
     Single(GCArc<OnionObjectCell>),
@@ -1960,9 +2275,35 @@ pub enum GCArcStorage {
 // }
 
 #[derive(Clone)]
+/// Onion 静态对象封装。
+///
+/// 稳定化的对象封装，用于跨函数调用、长期存储和序列化。
+/// 通过持有必要的强引用来确保对象在使用期间不被 GC 回收。
+///
+/// # 设计目的
+/// - **跨边界传递**: 在函数调用、模块间传递对象
+/// - **长期存储**: 作为常量、全局变量等存储
+/// - **GC 稳定性**: 确保对象在使用期间不被回收
+/// - **序列化支持**: 提供对象的稳定表示
+///
+/// # 内部结构
+/// - `obj`: 实际的对象数据
+/// - `_arcs`: GC 强引用存储，防止对象被回收
+///
+/// # GC 策略
+/// 根据对象类型采用不同的 GC 策略：
+/// - **基础类型**: 无需额外引用（如 Integer, String 等）
+/// - **Mut 类型**: 持有单个强引用
+/// - **复杂类型**: 持有多个强引用（如 Tuple, Lambda 等）
+///
+/// # 关键方法
+/// - `new()`: 创建静态对象并自动设置 GC 引用
+/// - `weak()`: 获取内部对象的弱引用
+/// - `mutablize()`: 转换为可变对象
+/// - `immutablize()`: 从可变对象中提取值
 pub struct OnionStaticObject {
-    pub(crate) _arcs: GCArcStorage,
-    pub(crate) obj: OnionObject,
+    _arcs: GCArcStorage,
+    obj: OnionObject,
 }
 
 impl Default for OnionStaticObject {

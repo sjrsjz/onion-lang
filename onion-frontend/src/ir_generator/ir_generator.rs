@@ -857,7 +857,7 @@ impl<'t> IRGenerator<'t> {
                     .extend(self.generate_without_redirect(collector, &ast_node.children[0])?);
                 instructions
                     .extend(self.generate_without_redirect(collector, &ast_node.children[1])?);
-                instructions.push((self.generate_debug_info(ast_node), IR::BuildSet));
+                instructions.push((self.generate_debug_info(ast_node), IR::BuildLazySet));
                 Ok(instructions)
             }
             ASTNodeType::Map => {

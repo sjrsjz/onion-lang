@@ -1,3 +1,14 @@
+//! Onion 线程句柄（ThreadHandle）类型模块。
+//!
+//! 提供 Onion 语言运行时的线程句柄类型实现，支持线程安全的并发任务管理、
+//! 结果获取、GC 跟踪与类型扩展。可用于多线程并发计算与任务同步。
+//!
+//! # 主要功能
+//! - 线程句柄的创建与状态检测
+//! - 线程结果的安全获取与同步
+//! - 支持 GC 跟踪与升级
+//! - 提供类型扩展与属性访问
+
 use std::{
     any::Any,
     collections::VecDeque,
@@ -19,7 +30,12 @@ use crate::{
 
 use super::object::{OnionObject, OnionObjectCell, OnionObjectExt};
 
-/// A wrapper around JoinHandle to make it work with OnionObject
+/// Onion 线程句柄类型。
+///
+/// 封装 JoinHandle 以适配 OnionObject，支持线程安全的并发任务管理。
+///
+/// # 字段
+/// - `inner`: (线程句柄, 完成状态, 结果弱引用) 的互斥封装
 pub struct OnionThreadHandle {
     inner: Mutex<(
         Option<JoinHandle<Result<Box<OnionStaticObject>, RuntimeError>>>,
@@ -29,6 +45,14 @@ pub struct OnionThreadHandle {
 }
 
 impl OnionThreadHandle {
+    /// 创建新的线程句柄。
+    ///
+    /// # 参数
+    /// - `handle`: Rust JoinHandle 对象
+    /// - `gc`: Onion GC 管理器，用于分配初始结果对象
+    ///
+    /// # 返回
+    /// - `(Self, GCArcStorage)`: 新的线程句柄和对应的 GC 存储
     pub fn new(
         handle: JoinHandle<Result<Box<OnionStaticObject>, RuntimeError>>,
         gc: &mut GC<OnionObjectCell>,
@@ -41,7 +65,12 @@ impl OnionThreadHandle {
             GCArcStorage::Single(tmp),
         )
     }
-    /// Check if the thread has finished without blocking
+
+    /// 检查线程是否已完成（非阻塞）。
+    ///
+    /// # 返回
+    /// - `true`: 线程已完成
+    /// - `false`: 线程仍在运行
     pub fn is_finished(&self) -> bool {
         let guard = self.inner.lock().unwrap();
         guard.1 || guard.0.is_none()
@@ -159,9 +188,7 @@ impl OnionObjectExt for OnionThreadHandle {
                     }
                     Err(err) => Err(err),
                 },
-                Err(_) => Err(RuntimeError::DetailedError(
-                    "Thread join failed".into(),
-                )),
+                Err(_) => Err(RuntimeError::DetailedError("Thread join failed".into())),
             }
         } else {
             Err(RuntimeError::DetailedError(

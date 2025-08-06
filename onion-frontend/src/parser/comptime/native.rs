@@ -96,6 +96,6 @@ where
         )),
         capture,
         signature.into(),
-        LambdaType::Normal,
+        LambdaType::Atomic,
     )
 }
