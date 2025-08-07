@@ -272,6 +272,17 @@ fn cmd_repl() -> Result<(), String> {
 fn run_source_file(file: &Path) -> Result<(), String> {
     let file: PathBuf =
         fs::canonicalize(file).map_err(|e| format!("Failed to canonicalize file path: {e:?}"))?;
+
+    // Change working directory to file's directory
+    if let Some(parent_dir) = file.parent() {
+        std::env::set_current_dir(parent_dir).map_err(|e| {
+            format!(
+                "Failed to change to directory '{}': {e}",
+                parent_dir.display()
+            )
+        })?;
+    }
+
     let source = Source::from_file(&file)
         .map_err(|e| format!("Failed to read file '{}': {}", file.display(), e))?;
     execute_code(&source)
@@ -280,6 +291,17 @@ fn run_source_file(file: &Path) -> Result<(), String> {
 fn run_ir_file(file: &Path) -> Result<(), String> {
     let file: PathBuf =
         fs::canonicalize(file).map_err(|e| format!("Failed to canonicalize file path: {e:?}"))?;
+
+    // Change working directory to file's directory
+    if let Some(parent_dir) = file.parent() {
+        std::env::set_current_dir(parent_dir).map_err(|e| {
+            format!(
+                "Failed to change to directory '{}': {e}",
+                parent_dir.display()
+            )
+        })?;
+    }
+
     let ir_package = IRPackage::read_from_file(file.to_str().unwrap())
         .map_err(|e| format!("Failed to read IR file: {e:?}"))?;
 
@@ -289,6 +311,17 @@ fn run_ir_file(file: &Path) -> Result<(), String> {
 fn run_bytecode_file(file: &Path) -> Result<(), String> {
     let file: PathBuf =
         fs::canonicalize(file).map_err(|e| format!("Failed to canonicalize file path: {e:?}"))?;
+
+    // Change working directory to file's directory
+    if let Some(parent_dir) = file.parent() {
+        std::env::set_current_dir(parent_dir).map_err(|e| {
+            format!(
+                "Failed to change to directory '{}': {e}",
+                parent_dir.display()
+            )
+        })?;
+    }
+
     let bytecode_package = VMInstructionPackage::read_from_file(file.to_str().unwrap())
         .map_err(|e| format!("Failed to read bytecode file: {e:?}"))?;
 

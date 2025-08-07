@@ -1,0 +1,21 @@
+// Simple Hello World example
+@required 'stdlib';
+
+main := () -> {
+    stdlib.io.println("Hello, Onion World!");
+    stdlib.io.println("This is a simple Onion language example");
+    
+    // Basic arithmetic
+    a := 10;
+    b := 20;
+    result := a + b;
+    stdlib.io.println("10 + 20 =", result);
+    
+    // Function definition and call
+    square := (x?) -> x * x;
+    stdlib.io.println("The square of 5 is:", square(5));
+    
+    return "Program execution completed";
+};
+
+main()

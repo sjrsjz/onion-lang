@@ -1,126 +1,126 @@
-// 文本冒险游戏：魔法森林探险
+// Text Adventure Game: Magic Forest Exploration
 @required 'stdlib';
 @include "std/tui_colors.onion";
 
-// 简单的伪随机数生成器
+// Simple pseudo-random number generator
 rand_seed := mut 12345;
 random := () -> {
     rand_seed = (rand_seed * 1103515245 + 12345) % 2147483648;
     return rand_seed / 2147483648.0;
 };
 
-// 游戏状态
+// Game state
 player := {
-    "name": "冒险者",
+    "name": "Adventurer",
     "health": mut 100,
     "magic": mut 50,
-    "items": mut ("火把", "面包"),
+    "items": mut ("Torch", "Bread"),
     "location": mut "forest_entrance"
 };
 
-// 游戏世界地图
+// Game world map
 world := {
     'forest_entrance': {
-        "name": "森林入口",
-        "description": "你站在一片神秘森林的入口。古老的树木高耸入云，微风中传来神秘的低语声。",
+        "name": "Forest Entrance",
+        "description": "You stand at the entrance of a mysterious forest. Ancient trees tower into the sky, and a mysterious whisper floats on the breeze.",
         "exits": ('north': "deep_forest", 'east': "crystal_cave"),
-        "items": ("魔法药水",),
+        "items": ("Magic Potion",),
         "events": ("encounter_fairy",)
     },
     'deep_forest': {
-        "name": "森林深处",
-        "description": "浓密的树叶遮天蔽日，只有零星的阳光洒在森林地面上。你听到远处传来神秘的咆哮声。",
+        "name": "Deep Forest",
+        "description": "Dense leaves block out the sun, with only scattered rays reaching the forest floor. You hear a mysterious roar in the distance.",
         "exits": ('south': "forest_entrance", 'west': "ancient_tree", 'north': "dragon_lair"),
-        "items": ("精灵之弓",),
+        "items": ("Elven Bow",),
         "events": ("encounter_wolf",)
     },
     'crystal_cave': {
-        "name": "水晶洞穴",
-        "description": "洞穴中闪烁着五光十色的水晶，空气中弥漫着魔法的气息。",
+        "name": "Crystal Cave",
+        "description": "Crystals of many colors shimmer in the cave, and the air is filled with magical energy.",
         "exits": ('west': "forest_entrance", 'north': "treasure_room"),
-        "items": ("水晶碎片",),
+        "items": ("Crystal Shard",),
         "events": ("find_treasure",)
     },
     'ancient_tree': {
-        "name": "远古巨树",
-        "description": "一棵巨大的古树矗立在你面前，树干上刻满了古老的符文。",
+        "name": "Ancient Tree",
+        "description": "A giant ancient tree stands before you, its trunk covered in old runes.",
         "exits": ('east': "deep_forest",),
-        "items": ("智慧之果",),
+        "items": ("Fruit of Wisdom",),
         "events": ("tree_spirit",)
     },
     'dragon_lair': {
-        "name": "巨龙巢穴",
-        "description": "一个黑暗的洞穴，地面上散落着金币和宝石。你能感受到强大魔法生物的存在。",
+        "name": "Dragon Lair",
+        "description": "A dark cave with gold and gems scattered on the ground. You sense the presence of a powerful magical creature.",
         "exits": ('south': "deep_forest",),
-        "items": ("龙鳞", "黄金",),
+        "items": ("Dragon Scale", "Gold",),
         "events": ("final_boss",)
     },
     'treasure_room': {
-        "name": "宝藏室",
-        "description": "一个隐秘的宝藏室，装满了闪闪发光的宝物。",
+        "name": "Treasure Room",
+        "description": "A secret treasure room filled with glittering treasures.",
         "exits": ('south': "crystal_cave",),
-        "items": ("传说宝剑", "魔法护符"),
+        "items": ("Legendary Sword", "Magic Amulet"),
         "events": ("victory",)
     }
 };
 
-// 随机事件系统
+// Random event system
 events := {
     'encounter_fairy': {
-        "description": "一个美丽的精灵出现在你面前，她的翅膀散发着柔和的光芒。",
+        "description": "A beautiful fairy appears before you, her wings glowing softly.",
         "options": (
-            ('和精灵交谈': "fairy_talk"),
-            ('给精灵礼物': "fairy_gift"),
-            ('继续前行': "continue")
+            ('Talk to the fairy': "fairy_talk"),
+            ('Give a gift to the fairy': "fairy_gift"),
+            ('Continue forward': "continue")
         )
     },
     'encounter_wolf': {
-        "description": "一只巨大的森林狼挡住了你的去路，它的眼睛闪烁着野性的光芒。",
+        "description": "A giant forest wolf blocks your path, its eyes shining with wild light.",
         "options": (
-            ('战斗': "wolf_fight"),
-            ('尝试驯服': "wolf_tame"),
-            ('逃跑': "wolf_flee")
+            ('Fight': "wolf_fight"),
+            ('Try to tame': "wolf_tame"),
+            ('Run away': "wolf_flee")
         )
     },
     'find_treasure': {
-        "description": "你在水晶中发现了一个隐藏的宝箱！",
+        "description": "You found a hidden treasure chest among the crystals!",
         "options": (
-            ('打开宝箱': "open_chest"),
-            ('检查陷阱': "check_trap"),
-            ('忽略宝箱': "ignore_chest")
+            ('Open the chest': "open_chest"),
+            ('Check for traps': "check_trap"),
+            ('Ignore the chest': "ignore_chest")
         )
     },
     'tree_spirit': {
-        "description": "远古巨树的精灵苏醒了，它古老的声音在你心中响起。",
+        "description": "The spirit of the ancient tree awakens, its ancient voice echoing in your mind.",
         "options": (
-            ('请求智慧': "ask_wisdom"),
-            ('请求力量': "ask_power"),
-            ('表示敬意': "show_respect")
+            ('Ask for wisdom': "ask_wisdom"),
+            ('Ask for power': "ask_power"),
+            ('Show respect': "show_respect")
         )
     },
     'final_boss': {
-        "description": "一条巨大的红龙从阴影中现身！它的鳞片如火焰般闪烁。",
+        "description": "A huge red dragon emerges from the shadows! Its scales shimmer like flames.",
         "options": (
-            ('英勇战斗': "dragon_fight"),
-            ('尝试谈判': "dragon_talk"),
-            ('使用魔法': "dragon_magic")
+            ('Brave fight': "dragon_fight"),
+            ('Try to negotiate': "dragon_talk"),
+            ('Use magic': "dragon_magic")
         )
     },
     'victory': {
-        "description": "恭喜！你找到了传说中的宝藏，成为了真正的英雄！",
+        "description": "Congratulations! You found the legendary treasure and became a true hero!",
         "options": (
-            ('庆祝胜利': "celebrate"),
+            ('Celebrate victory': "celebrate"),
         )
     }
 };
 
-// 显示当前状态
+// Display current status
 display_status := () -> {
-    stdlib.io.println(colorize("═══ 玩家状态 ═══", "bright_yellow", "bg_black"));
-    stdlib.io.println(colorize("姓名: " + player.name, "bright_green", "bg_black"));
-    stdlib.io.println(colorize("生命值: " + stdlib.types.to_string(player.health) + "/100", "bright_red", "bg_black"));
-    stdlib.io.println(colorize("魔法值: " + stdlib.types.to_string(player.magic) + "/100", "bright_blue", "bg_black"));
-      items_str := mut "物品: ";
+    stdlib.io.println(colorize("═══ Player Status ═══", "bright_yellow", "bg_black"));
+    stdlib.io.println(colorize("Name: " + player.name, "bright_green", "bg_black"));
+    stdlib.io.println(colorize("Health: " + stdlib.types.to_string(player.health) + "/100", "bright_red", "bg_black"));
+    stdlib.io.println(colorize("Magic: " + stdlib.types.to_string(player.magic) + "/100", "bright_blue", "bg_black"));
+      items_str := mut "Items: ";
     i := mut 0;
     while (i < lengthof player.items) {
         items_str = items_str + player.items[i];
@@ -133,7 +133,7 @@ display_status := () -> {
     stdlib.io.println("");
 };
 
-// 显示当前位置
+// Display current location
 display_location := () -> {
     current_location := world.{player.location};
     
@@ -141,24 +141,22 @@ display_location := () -> {
     stdlib.io.println(colorize(current_location.description, "white", "bg_black"));
     stdlib.io.println("");
     
-    // 显示可用出口
-    if (keyof (sync (() -> current_location.exits))()) {
-        stdlib.io.println(colorize("可前往的方向:", "bright_yellow", "bg_black"));
-        exits := current_location.exits;
-        i := mut 0;
-        while (i < lengthof exits) {
-            direction := keyof exits[i];
-            destination := valueof exits[i];
-            dest_name := world.{destination}.name;
-            stdlib.io.println(colorize("  " + direction + " → " + dest_name, "bright_green", "bg_black"));
-            i = i + 1;
-        };
-        stdlib.io.println("");
+    // Display available exits
+    stdlib.io.println(colorize("Available directions:", "bright_yellow", "bg_black"));
+    exits := current_location.exits;
+    i := mut 0;
+    while (i < lengthof exits) {
+        direction := keyof exits[i];
+        destination := valueof exits[i];
+        dest_name := world.{destination}.name;
+        stdlib.io.println(colorize("  " + direction + " → " + dest_name, "bright_green", "bg_black"));
+        i = i + 1;
     };
+    stdlib.io.println("");
     
-    // 显示可获得的物品
-    if (keyof (sync (() -> current_location.items))() and lengthof current_location.items > 0) {
-        stdlib.io.println(colorize("这里有物品:", "bright_cyan", "bg_black"));
+    // Display available items
+    if (lengthof current_location.items > 0) {
+        stdlib.io.println(colorize("Items here:", "bright_cyan", "bg_black"));
         i := mut 0;
         while (i < lengthof current_location.items) {
             stdlib.io.println(colorize("  ✨ " + current_location.items[i], "bright_white", "bg_black"));
@@ -168,18 +166,18 @@ display_location := () -> {
     };
 };
 
-// 处理事件
+// Handle event
 handle_event := (event_name?) -> {
-    if (not keyof (sync (() -> events.{event_name}))()) {
+    if (not keyof (sync (() -> events.{event_name}))()) { // just check if event_name exists
         return;
     };
     
     event := events.{event_name};
-    stdlib.io.println(colorize("🎭 事件发生 🎭", "bright_magenta", "bg_black"));
+    stdlib.io.println(colorize("🎭 Event Occurred 🎭", "bright_magenta", "bg_black"));
     stdlib.io.println(colorize(event.description, "yellow", "bg_black"));
     stdlib.io.println("");
     
-    stdlib.io.println(colorize("你的选择:", "bright_yellow", "bg_black"));
+    stdlib.io.println(colorize("Your choices:", "bright_yellow", "bg_black"));
     i := mut 0;
     while (i < lengthof event.options) {
         option := event.options[i];
@@ -187,50 +185,50 @@ handle_event := (event_name?) -> {
         stdlib.io.println(colorize(stdlib.types.to_string(i + 1) + ". " + choice_text, "bright_green", "bg_black"));
         i = i + 1;
     };
-      // 模拟玩家选择 (这里随机选择)
+    // Simulate player choice (random selection here)
     choice := stdlib.math.floor(random() * lengthof event.options);
     selected_option := event.options[choice];
     action := valueof selected_option;
     
     stdlib.io.println("");
-    stdlib.io.println(colorize("你选择了: " + keyof selected_option, "bright_cyan", "bg_black"));
+    stdlib.io.println(colorize("You chose: " + keyof selected_option, "bright_cyan", "bg_black"));
     
-    // 处理选择结果
+    // Handle choice result
     if (action == "fairy_talk") {
-        stdlib.io.println(colorize("精灵告诉了你森林的秘密，你的魔法值增加了！", "bright_blue", "bg_black"));
+        stdlib.io.println(colorize("The fairy tells you the secrets of the forest. Your magic increases!", "bright_blue", "bg_black"));
         player.magic = player.magic + 20;
         if (player.magic > 100) { player.magic = 100; };
     } else if (action == "wolf_fight") {
-        stdlib.io.println(colorize("你与狼进行了激烈的战斗，虽然获胜但受了伤。", "bright_red", "bg_black"));
+        stdlib.io.println(colorize("You fought fiercely with the wolf. You won but got injured.", "bright_red", "bg_black"));
         player.health = player.health - 20;
-        player.items = player.items + ("狼皮",);
+        player.items = player.items + ("Wolf Pelt",);
     } else if (action == "open_chest") {
-        stdlib.io.println(colorize("宝箱中有珍贵的宝石！", "bright_yellow", "bg_black"));
-        player.items = player.items + ("红宝石",);
+        stdlib.io.println(colorize("There are precious gems in the chest!", "bright_yellow", "bg_black"));
+        player.items = player.items + ("Ruby",);
     } else if (action == "ask_wisdom") {
-        stdlib.io.println(colorize("树精赐予了你智慧，你学会了治愈魔法！", "bright_green", "bg_black"));
+        stdlib.io.println(colorize("The tree spirit grants you wisdom. You learn healing magic!", "bright_green", "bg_black"));
         player.health = 100;
         player.magic = 100;
     } else if (action == "dragon_fight") {
         if (player.health > 50) {
-            stdlib.io.println(colorize("你英勇地击败了巨龙！获得了龙的宝藏！", "bright_yellow", "bg_black"));
-            player.items = player.items + ("龙心", "传奇武器");
+            stdlib.io.println(colorize("You bravely defeat the dragon! You get the dragon's treasure!", "bright_yellow", "bg_black"));
+            player.items = player.items + ("Dragon Heart", "Legendary Weapon");
         } else {
-            stdlib.io.println(colorize("你的力量不足以对抗巨龙，但你的勇气感动了它。", "bright_blue", "bg_black"));
-            player.items = player.items + ("龙的祝福",);
+            stdlib.io.println(colorize("You lack the strength to defeat the dragon, but your courage moves it.", "bright_blue", "bg_black"));
+            player.items = player.items + ("Dragon's Blessing",);
         };
     } else if (action == "celebrate") {
-        stdlib.io.println(colorize("🎉 你完成了这次伟大的冒险！ 🎉", "bright_magenta", "bg_black"));
+        stdlib.io.println(colorize("🎉 You have completed this great adventure! 🎉", "bright_magenta", "bg_black"));
         return true;
     } else {
-        stdlib.io.println(colorize("你继续了你的冒险...", "white", "bg_black"));
+        stdlib.io.println(colorize("You continue your adventure...", "white", "bg_black"));
     };
     
     stdlib.io.println("");
     return false;
 };
 
-// 模拟探索
+// Simulate exploration
 simulate_exploration := () -> {
     locations_to_visit := ("forest_entrance", "deep_forest", "crystal_cave", "ancient_tree", "dragon_lair", "treasure_room");
     
@@ -238,19 +236,19 @@ simulate_exploration := () -> {
     while (i < lengthof locations_to_visit) {
         player.location = locations_to_visit[i];
         
-        // 清屏
+        // Clear screen
         stdlib.io.println("\u001b[2J\u001b[H");
         
-        // 显示游戏标题
-        stdlib.io.println(colorize("🗡️  魔法森林探险  🗡️", "bright_yellow", "bg_black"));
+        // Display game title
+        stdlib.io.println(colorize("🗡️  Magic Forest Exploration  🗡️", "bright_yellow", "bg_black"));
         stdlib.io.println("");
         
         display_status();
         display_location();
         
-        // 触发事件
+        // Trigger event
         current_location := world.{player.location};
-        if (keyof (sync (() -> current_location.events))() and lengthof current_location.events > 0) {
+        if (lengthof current_location.events > 0) {
             event_name := current_location.events[0];
             game_ended := handle_event(event_name);
             if (game_ended) {
@@ -258,19 +256,19 @@ simulate_exploration := () -> {
             };
         };
         
-        // 自动拾取物品
-        if (keyof (sync (() -> current_location.items))() and lengthof current_location.items > 0) {
+        // Auto pickup items
+        if (lengthof current_location.items > 0) {
             j := mut 0;
             while (j < lengthof current_location.items) {
                 item := current_location.items[j];
                 player.items = player.items + (item,);
-                stdlib.io.println(colorize("你获得了: " + item, "bright_green", "bg_black"));
+                stdlib.io.println(colorize("You obtained: " + item, "bright_green", "bg_black"));
                 j = j + 1;
             };
             stdlib.io.println("");
         };
         
-        // 延迟
+        // Delay
         delay := mut 0;
         while (delay < 300000) {
             delay = delay + 1;
@@ -280,10 +278,10 @@ simulate_exploration := () -> {
     };
 };
 
-// 开始游戏
-stdlib.io.println(colorize("欢迎来到魔法森林探险！", "bright_magenta", "bg_black"));
-stdlib.io.println(colorize("按下回车开始你的冒险...", "bright_cyan", "bg_black"));
+// Start game
+stdlib.io.println(colorize("Welcome to Magic Forest Exploration!", "bright_magenta", "bg_black"));
+stdlib.io.println(colorize("Press Enter to start your adventure...", "bright_cyan", "bg_black"));
 
 simulate_exploration();
 
-stdlib.io.println(colorize("感谢游玩魔法森林探险！", "bright_yellow", "bg_black"));
+stdlib.io.println(colorize("Thank you for playing Magic Forest Exploration!", "bright_yellow", "bg_black"));

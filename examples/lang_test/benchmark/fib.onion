@@ -1,0 +1,13 @@
+@required "stdlib";
+@include "../../std/marcos.onion";
+start := stdlib.time.timestamp_millis();
+fib := "n" -> {
+    if (n <= 1) {
+        return n;
+    };
+    return this(n - 1) + this(n - 2);
+};
+result := fib(30);
+end := stdlib.time.timestamp_millis();
+stdlib.io.println(@strcat("The 30th Fibonacci number is: ", $result));
+stdlib.io.println(@strcat("Calculation completed, time taken: ", $end - start, " ms"));

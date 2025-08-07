@@ -1,0 +1,28 @@
+Modules := mut ();
+@required 'stdlib';
+@include "../../std/marcos.onion";
+@include "../../std/result.onion";
+
+obj := [
+    mut 0, // create a mutable pointer to an integer
+    1,
+];
+
+result := @try_expr($obj[0] = 42); // Modify the first element of obj
+stdlib.io.println(result.is_ok());
+
+stdlib.io.println(@strcat("The first element of obj is now: ", $obj[0]));
+
+result := @try_expr($obj[1] = 100); // Try to modify the second element of obj
+stdlib.io.println(result.is_ok());
+
+stdlib.io.println(@strcat("The second element of obj is now: ", $obj[1]));
+
+ref := obj[0]; // Get the first element of obj
+ref = 99; // Modify the value of ref
+stdlib.io.println(@strcat("The first element of obj is now: ", $obj[0])); // 99, because ref is a mutable pointer
+
+const_data := const obj[0]; // Get the first element of obj
+
+result := @try_expr($const_data = 100); // Try to modify the value of const_data
+stdlib.io.println(result.is_ok()); // Failed!

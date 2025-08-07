@@ -1,0 +1,19 @@
+@required 'stdlib';
+@include "../../std/marcos.onion";
+start := stdlib.time.timestamp_millis();
+f := mut stdlib.math.floor;
+a := mut 100;
+while (a > 0) {
+    b := mut 100;
+    while (b > 0) {
+        c := mut 100;
+        while (c > 0) {
+            f(4);
+            c = c - 1;
+        };
+        b = b - 1;
+    };
+    a = a - 1;
+};
+end := stdlib.time.timestamp_millis();
+stdlib.io.println(@strcat("Completed in ", $end - start, "ms"));

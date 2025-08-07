@@ -1,5 +1,4 @@
 // Onion Test Framework
-// Assert 函数
 @required 'stdlib';
 @required 'Modules';
 @include "constraint.onion";

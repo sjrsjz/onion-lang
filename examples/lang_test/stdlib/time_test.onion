@@ -1,0 +1,71 @@
+@required 'stdlib';
+@include "../../std/marcos.onion";
+
+stdlib.io.println("======== Time Module Test ========");
+
+// Get current timestamp
+current_timestamp := stdlib.time.timestamp();
+stdlib.io.println(@strcat("Current timestamp (seconds): ", $current_timestamp));
+
+// Get current timestamp (milliseconds)
+current_millis := stdlib.time.timestamp_millis();
+stdlib.io.println(@strcat("Current timestamp (milliseconds): ", $current_millis));
+
+// Get current timestamp (nanoseconds)
+current_nanos := stdlib.time.timestamp_nanos();
+stdlib.io.println(@strcat("Current timestamp (nanoseconds): ", $current_nanos));
+
+// Get formatted current time
+current_time := stdlib.time.now_utc();
+stdlib.io.println(@strcat("Current time (UTC): ", $current_time));
+
+// Format specified timestamp
+formatted_time := stdlib.time.format_time(1640995200); // 2022-01-01 00:00:00 UTC
+stdlib.io.println(@strcat("Formatted time: ", $formatted_time));
+
+// Calculate time difference
+start_time := stdlib.time.timestamp();
+stdlib.io.println(@strcat("Start time: ", $start_time));
+
+// Sleep 2 seconds
+stdlib.io.println("Sleeping for 2 seconds...");
+stdlib.time.sleep_seconds(2);
+
+end_time := stdlib.time.timestamp();
+stdlib.io.println(@strcat("End time: ", $end_time));
+
+time_diff := stdlib.time.time_diff(start_time, end_time);
+stdlib.io.println(@strcat("Time difference (seconds): ", $time_diff));
+
+// Test millisecond sleep
+stdlib.io.println("Sleeping for 500 milliseconds...");
+stdlib.time.sleep_millis(500);
+stdlib.io.println("Millisecond sleep complete");
+
+// Test microsecond sleep
+stdlib.io.println("Sleeping for 100 microseconds...");
+stdlib.time.sleep_micros(100);
+stdlib.io.println("Microsecond sleep complete");
+
+// async_sleep
+
+task1 := () -> {
+    stdlib.io.println("Starting async sleep task...");
+    stdlib.time.async_sleep(1000)();
+    stdlib.io.println("Async sleep task complete");
+};
+
+task2 := () -> {
+    stdlib.io.println("Starting async sleep task 2...");
+    stdlib.time.async_sleep(5000)();
+    stdlib.io.println("Async sleep task 2 complete");
+};
+
+pool := () -> {
+    spawn task1;
+    spawn task2;
+};
+
+(async pool)();
+
+stdlib.io.println("======== Time Module Test Complete ========");

@@ -2119,6 +2119,84 @@ impl OnionObject {
                     .into(),
                 ))
             }
+            OnionObject::Null => {
+                if let OnionObject::String(key_str) = key {
+                    match key_str.as_ref() {
+                        "string" => {
+                            let converter = wrap_native_function(
+                                LambdaParameter::Multiple(Box::new([])),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                obj,
+                                "converter::string",
+                                OnionKeyPool::create(vec![]),
+                                &native_string_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "bool" => {
+                            let converter = wrap_native_function(
+                                LambdaParameter::Multiple(Box::new([])),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                obj,
+                                "converter::bool",
+                                OnionKeyPool::create(vec![]),
+                                &native_bool_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        _ => {}
+                    }
+                }
+                Err(RuntimeError::InvalidOperation(
+                    format!(
+                        "Attribute '{}' not found for null",
+                        match key {
+                            OnionObject::String(s) => s.as_ref(),
+                            _ => "<non-string>",
+                        }
+                    )
+                    .into(),
+                ))
+            }
+            OnionObject::Undefined(_) => {
+                if let OnionObject::String(key_str) = key {
+                    match key_str.as_ref() {
+                        "string" => {
+                            let converter = wrap_native_function(
+                                LambdaParameter::Multiple(Box::new([])),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                obj,
+                                "converter::string",
+                                OnionKeyPool::create(vec![]),
+                                &native_string_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        "bool" => {
+                            let converter = wrap_native_function(
+                                LambdaParameter::Multiple(Box::new([])),
+                                OnionFastMap::new(OnionKeyPool::create(vec![])),
+                                obj,
+                                "converter::bool",
+                                OnionKeyPool::create(vec![]),
+                                &native_bool_converter,
+                            );
+                            return f(converter.weak());
+                        }
+                        _ => {}
+                    }
+                }
+                Err(RuntimeError::InvalidOperation(
+                    format!(
+                        "Attribute '{}' not found for undefined",
+                        match key {
+                            OnionObject::String(s) => s.as_ref(),
+                            _ => "<non-string>",
+                        }
+                    )
+                    .into(),
+                ))
+            }
             OnionObject::Custom(custom) => {
                 let mut result: Result<R, RuntimeError> = Err(RuntimeError::InvalidOperation(
                     "Custom with_attribute not called".into(),
@@ -2135,6 +2213,7 @@ impl OnionObject {
             )),
         })
     }
+    
     pub fn apply(&self, value: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| {
             value.with_data(|value| match obj {

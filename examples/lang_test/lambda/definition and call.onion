@@ -1,0 +1,60 @@
+@required 'stdlib';
+@include "../../std/marcos.onion";
+// Traditional functional style
+
+f := "x" -> x + 1;
+
+// You can call it like this
+// Onion syntax treats f x, f(x), and f[x] as equivalent, since parentheses and brackets only affect operator precedence
+
+// Traditional call
+assert f(1) == 2;
+// You can also use brackets
+assert f[1] == 2;
+// No parentheses call
+assert f 1 == 2;
+
+// You can add value constraints to function parameters
+guard := "x" -> x > 0;
+
+f := (x => guard) -> x + 1; // Or f := ("x" : guard) -> x + 1;
+// When calling, it will check if x > 0, if not, an exception will be thrown
+assert f(1) == 2;
+// f(0) // Throws exception
+
+// Or use boolean values as constraints, true means always valid, false means never valid
+f := (x => true) -> x + 1; // Or f := ("x" : true) -> x + 1;
+
+// No value check when calling
+assert f(1) == 2;
+
+// You can use x? to mean x => true
+f := (x?) -> x + 1;
+assert f(1) == 2;
+
+// Function parameters can also be a tuple
+f := ("x", "y") -> x + y;
+
+assert f(1, 2) == 3;
+
+// Since f x and f(x) are equivalent, you can also call like this
+// When calling, the VM will unpack the tuple and pass each value to the corresponding slot
+// Note: (x?,) -> {} and (x?) -> {} are different, the former is a tuple, the latter is a single value parameter. The latter will not unpack the input value. This means if a function expects a single-element tuple and you pass a single value, the VM will immediately report an error because it cannot unpack a single value. So you must pass a single-element tuple when required.
+packaged := (1, 2);
+assert f(packaged) == 3;
+assert f packaged == 3;
+
+// You can also add value constraints to tuple parameters
+f := (x => guard, y => guard) -> x + y;
+
+assert f(1, 2) == 3;
+
+
+// You can use keyof to get the function's parameter list
+stdlib.io.println(@strcat("Function parameters: ", $keyof f));
+
+// You can also do more complex parameter constraints
+// For example, require the parameter to be a tuple, and the first element is a positive integer, the second element is a tuple, whose first and second elements are both positive integers
+f := (x => guard, (y => guard, z => guard)) -> x + y + z;
+
+assert f(1, (2, 3)) == 6;

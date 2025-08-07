@@ -1,16 +1,16 @@
 interface := (interface_definition?) -> {
     pointer := mut interface_definition;
     return (
-        // 创建一个新的实例，返回一个结构体，该结构体实现了接口
-        // VM在进行成员访问时会优先在Pair的value中查找，如果没有找到，则会在Pair的key中查找
+        // Create a new instance and return a struct that implements the interface
+        // When the VM accesses members, it first looks in the Pair's value; if not found, it then looks in the Pair's key
         new => (structure?) -> structure : pointer,
-        // 检查一个实例是否实现了该接口
-        // 这里的检查是通过遍历原型链来实现的
+        // Check if an instance implements the interface
+        // The check is performed by traversing the prototype chain
         check => (prototype?) -> {
             v := mut prototype;
             while true {
                 if (typeof v == 'Pair') {
-                    // 检查 Pair 的 value 是否是接口定义，is的检查是通过比较指针来实现的
+                    // Check if the Pair's value is the interface definition; the 'is' check is done by pointer comparison
                     if ((valueof v) is pointer) {
                         return true;
                     };

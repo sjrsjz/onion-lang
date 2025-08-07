@@ -1,15 +1,15 @@
 @required 'Modules';
 if (not keyof (sync (() -> Modules.Option))()) {
-    // 定义临时的 Option 构造器和辅助函数
+    // Define temporary Option constructor and helper functions
     _Option_Temp_Constructor := mut undefined;
     _Some_Temp_Helper := (v?) -> _Option_Temp_Constructor.new(true : v);
     _None_Temp_Helper := () -> _Option_Temp_Constructor.new(false : undefined);
 
-    // 配置临时 Option 构造器
+    // Configure temporary Option constructor
     _Option_Temp_Constructor = {
-        @include "result.onion"; // 假设 result.onion 中的 Err 已通过其自身的缓存机制全局可用
+        @include "result.onion";
         @include "prototype.onion";
-        // Option 实例的接口定义
+        // Interface definition for Option instance
         Option_Interface := interface {
             is_some => () -> keyof keyof self,
             is_none => () -> not keyof keyof self,
@@ -31,7 +31,7 @@ if (not keyof (sync (() -> Modules.Option))()) {
                 if (self.is_some()) {
                     return valueof keyof self;
                 } else {
-                    raise Err("Option is None"); // 使用全局缓存的 Err
+                    raise Err("Option is None"); // Use globally cached Err
                 }
             },
             unwrap_or => (default?) -> {
@@ -63,16 +63,16 @@ if (not keyof (sync (() -> Modules.Option))()) {
                 }
             }
         };
-        Option_Interface // 块的计算结果是此接口，用于配置 _Option_Temp_Constructor
+        Option_Interface // The result of this block is the interface, used to configure _Option_Temp_Constructor
     };
 
-    // 缓存已配置的临时 Option 构造器
+    // Cache the configured temporary Option constructor
     Modules = Modules + (Option => _Option_Temp_Constructor,);
 };
 
-// 将缓存的构造器赋值给全局 Option
+// Assign the cached constructor to global Option
 Option := Modules.Option;
 
-// 使用缓存的全局 Option 构造器重新定义全局 Some 和 None 辅助函数
+// Redefine global Some and None helper functions using the cached global Option constructor
 Some := (v?) -> Option.new(true : v);
 None := () -> Option.new(false : undefined);

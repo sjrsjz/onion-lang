@@ -1,0 +1,71 @@
+// Use the built-in `required` function at comptime to declare that the `stdlib` variable exists at runtime
+@required 'stdlib'; 
+
+// Include the `strcat` macro
+@include "../../std/marcos.onion";
+
+// Use the `def` function to define a global function named `add`, which takes two parameters and returns their sum. 
+// The definition takes effect at the next macro expansion
+@def(add => (x?, y?) -> x + y); 
+
+// Call the `add` function at comptime, passing 1 and 2 as arguments. 
+// The result is automatically converted to AST and replaces this macro
+const_value := @add(1, 2); 
+
+// Check if `add` is defined
+stdlib.io.println(@strcat("has add : ", @ifdef "add")); 
+stdlib.io.println(@strcat("add(1, 2) = ", $const_value));
+
+// Use the `undef` function to undefine the `add` function, so it cannot be used in subsequent code
+@undef "add"; 
+// const_value := @add(1, 2); // This line will cause an error because add has been undefined
+
+// x := 1, use the built-in `ast` module to manually construct AST
+@ast.let("x") << (1,);
+
+stdlib.io.println(@strcat("x = ", $x));
+
+// The << operator is used to replace the child nodes of the parent AST with the child AST tuple
+lambda := @ast.lambda_def(false, ()) << ( 
+    ("x", "y"), 
+    ast.operation("+") << (
+        ast.variable("x"), 
+        ast.variable("y")
+    )
+);
+
+stdlib.io.println(@strcat("lambda(1, 2) = ", $lambda(1, 2)));
+
+// `$` is used to serialize the following expression as bytes, so that deserialize can convert it back to an AST object
+// note: `$"b64"` is represented as a base64 encoded bytes. If you want to express an ast, use `$("string")`
+lambda2 := @ast.deserialize(
+    $(x?, y?) -> x * y 
+);
+
+stdlib.io.println(@strcat("lambda2(3, 4) = ", $lambda2(3, 4)));
+
+@include "./sub module.onion";
+
+stdlib.io.println(foo());
+// Macros from the submodule affect the global scope
+stdlib.io.println(@bar()); 
+
+@def(
+    curry => "T_body_pair" -> ast.deserialize(
+        $()->()
+    ) << (
+        keyof T_body_pair,
+        ast.deserialize(
+            valueof T_body_pair
+        )
+    )
+);
+
+// Equivalent to "U" -> "V" -> U / V
+curry_test := @curry(
+    U => $@curry(
+        V => $U / V
+    )
+); 
+
+stdlib.io.println(@strcat("curry_test(10)(2) = ", $curry_test(10)(2)));

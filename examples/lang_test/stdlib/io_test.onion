@@ -1,0 +1,4 @@
+@required 'stdlib';
+@include "../../std/marcos.onion";
+value := stdlib.io.input("please input a value: ");
+stdlib.io.println(@strcat("The value you entered is: ", $value));

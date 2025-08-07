@@ -403,7 +403,7 @@ pub fn build_module() -> OnionStaticObject {
         ("continue", ASTNodeType::Continue),
         ("range", ASTNodeType::Range),
         ("in", ASTNodeType::In),
-        ("set", ASTNodeType::Set),
+        ("set", ASTNodeType::LazySet),
         ("map", ASTNodeType::Map),
         ("is", ASTNodeType::Is),
         ("raise", ASTNodeType::Raise),

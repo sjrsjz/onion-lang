@@ -1,27 +1,27 @@
 Modules := mut ();
 @required 'stdlib';
+@include "std/marcos.onion";
 @include "std/test_framework.onion";
 @include "std/prototype.onion";
 @include "std/result.onion";
 @include "std/option.onion";
 Test {
-    // Result 测试
     TestResultOk => () -> {
         stdlib.io.println("Testing Result Ok...");
         result := Ok(42);
-        stdlib.io.println("Result is Ok:", result.is_ok());
-        stdlib.io.println("Result is Err:", result.is_err());
-        stdlib.io.println("Unwrap value:", result.unwrap());
-        stdlib.io.println("Map result:", result.map((x?) -> x * 2).unwrap());
+        stdlib.io.println(@strcat("Result is Ok: ", $result.is_ok()));
+        stdlib.io.println(@strcat("Result is Err: ", $result.is_err()));
+        stdlib.io.println(@strcat("Unwrap value: ", $result.unwrap()));
+        stdlib.io.println(@strcat("Map result: ", $result.map((x?) -> x * 2).unwrap()));
     },
     
     TestResultErr => () -> {
         stdlib.io.println("Testing Result Err...");
         result := Err("Something went wrong");
-        stdlib.io.println("Result is Ok:", result.is_ok());
-        stdlib.io.println("Result is Err:", result.is_err());
-        stdlib.io.println("Unwrap or default:", result.unwrap_or(0));
-        stdlib.io.println("Map error:", result.map_err((e?) -> "Error: " + e).unwrap_err());
+        stdlib.io.println(@strcat("Result is Ok: ", $result.is_ok()));
+        stdlib.io.println(@strcat("Result is Err: ", $result.is_err()));
+        stdlib.io.println(@strcat("Unwrap or default: ", $result.unwrap_or(0)));
+        stdlib.io.println(@strcat("Map error: ", $result.map_err((e?) -> "Error: " + e).unwrap_err()));
     },
     
     TestResultChaining => () -> {
@@ -30,43 +30,42 @@ Test {
         chained := ok_result
             .map((x?) -> x + 5)
             .map((x?) -> x * 2);
-        stdlib.io.println("Chained result:", chained.unwrap());
+        stdlib.io.println(@strcat("Chained result: ", $chained.unwrap()));
         
         err_result := Err("error");
         err_chained := err_result
             .map((x?) -> x + 5)
             .map((x?) -> x * 2);
-        stdlib.io.println("Error chained is err:", err_chained.is_err());
+        stdlib.io.println(@strcat("Error chained is err: ", $err_chained.is_err()));
     },
     
-    // Option 测试
     TestOptionSome => () -> {
         stdlib.io.println("Testing Option Some...");
         option := Some(100);
-        stdlib.io.println("Option is Some:", option.is_some());
-        stdlib.io.println("Option is None:", option.is_none());
-        stdlib.io.println("Unwrap value:", option.unwrap());
-        stdlib.io.println("Map option:", option.map((x?) -> x / 2).unwrap());
+        stdlib.io.println(@strcat("Option is Some: ", $option.is_some()));
+        stdlib.io.println(@strcat("Option is None: ", $option.is_none()));
+        stdlib.io.println(@strcat("Unwrap value: ", $option.unwrap()));
+        stdlib.io.println(@strcat("Map option: ", $option.map((x?) -> x / 2).unwrap()));
     },
     
     TestOptionNone => () -> {
         stdlib.io.println("Testing Option None...");
         option := None();
-        stdlib.io.println("Option is Some:", option.is_some());
-        stdlib.io.println("Option is None:", option.is_none());
-        stdlib.io.println("Unwrap or default:", option.unwrap_or(999));
-        stdlib.io.println("Map none stays none:", option.map((x?) -> x * 10).is_none());
+        stdlib.io.println(@strcat("Option is Some: ", $option.is_some()));
+        stdlib.io.println(@strcat("Option is None: ", $option.is_none()));
+        stdlib.io.println(@strcat("Unwrap or default: ", $option.unwrap_or(999)));
+        stdlib.io.println(@strcat("Map none stays none: ", $option.map((x?) -> x * 10).is_none()));
     },
     
     TestOptionFilter => () -> {
         stdlib.io.println("Testing Option filter...");
         some_even := Some(20);
         filtered_even := some_even.filter((x?) -> x % 2 == 0);
-        stdlib.io.println("Even number filtered:", filtered_even.is_some());
+        stdlib.io.println(@strcat("Even number filtered: ", $filtered_even.is_some()));
         
         some_odd := Some(21);
         filtered_odd := some_odd.filter((x?) -> x % 2 == 0);
-        stdlib.io.println("Odd number filtered:", filtered_odd.is_none());
+        stdlib.io.println(@strcat("Odd number filtered: ", $filtered_odd.is_none()));
     },
     
     TestOptionAndThen => () -> {
@@ -79,25 +78,23 @@ Test {
                 return None();
             }
         });
-        stdlib.io.println("And then result:", result.unwrap());
+        stdlib.io.println(@strcat("And then result: ", $result.unwrap()));
     },
     
     TestOptionOrElse => () -> {
         stdlib.io.println("Testing Option or_else...");
         none_option := None();
         result := none_option.or_else(() -> Some(42));
-        stdlib.io.println("Or else result:", result.unwrap());
+        stdlib.io.println(@strcat("Or else result: ", $result.unwrap()));
         
         some_option := Some(10);
         result2 := some_option.or_else(() -> Some(42));
-        stdlib.io.println("Or else with Some:", result2.unwrap());
+        stdlib.io.println(@strcat("Or else with Some: ", $result2.unwrap()));
     },
     
-    // 综合测试
     TestResultOptionIntegration => () -> {
         stdlib.io.println("Testing Result and Option integration...");
         
-        // 模拟一个可能失败的操作
         safe_divide := (a?, b?) -> {
             if (b == 0) {
                 return Err("Division by zero");
@@ -107,12 +104,11 @@ Test {
         };
         
         result1 := safe_divide(10, 2);
-        stdlib.io.println("10 / 2 =", result1.unwrap());
+        stdlib.io.println(@strcat("10 / 2 = ", $result1.unwrap()));
         
         result2 := safe_divide(10, 0);
-        stdlib.io.println("10 / 0 error:", result2.unwrap_or(-1));
+        stdlib.io.println(@strcat("10 / 0 error: ", $result2.unwrap_or(-1)));
         
-        // 将 Result 转换为 Option 的示例
         to_option := (result?) -> {
             if (result.is_ok()) {
                 return Some(result.unwrap());
@@ -122,10 +118,10 @@ Test {
         };
         
         opt1 := to_option(Ok(100));
-        stdlib.io.println("Result to Option (Some):", opt1.unwrap());
+        stdlib.io.println(@strcat("Result to Option (Some): ", $opt1.unwrap()));
         
         opt2 := to_option(Err("error"));
-        stdlib.io.println("Result to Option (None):", opt2.is_none());
+        stdlib.io.println(@strcat("Result to Option (None): ", $opt2.is_none()));
     },
 
     TestAssertEq => () -> {

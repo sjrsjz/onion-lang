@@ -1,0 +1,28 @@
+@required "stdlib";
+@include "../../std/marcos.onion";
+
+x := 10;
+y := mut 20;
+
+f := () -> {
+    stdlib.io.println(@strcat("Function f called with x: ", $x, " and y: ", $y));
+    y = 30; // Modify the value of y
+};
+
+// g and f are equivalent, but the static analyzer will automatically capture variables. Of course, we can also capture manually, and even capture variables not present in the lexical scope (as long as they exist at runtime)
+g := () -> &[x, y] {
+    stdlib.io.println(@strcat("Function g called with x: ", $x, " and y: ", $y));
+    y = 40; // Modify the value of y
+};
+
+f();
+
+stdlib.io.println(@strcat("After calling f, y is now: ", $y));
+
+g();
+
+stdlib.io.println(@strcat("After calling g, y is now: ", $y));
+
+// We can access the variables captured by the function via the member operator
+stdlib.io.println(@strcat("Accessing captured variables in f: x = ", $f.x, ", y = ", $f.y));
+stdlib.io.println(@strcat("Accessing captured variables in g: x = ", $g.x, ", y = ", $g.y));

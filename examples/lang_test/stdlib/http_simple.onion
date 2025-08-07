@@ -1,0 +1,9 @@
+@required 'stdlib';
+request := async stdlib.http.get("https://www.google.com");
+// Since Onion VM is based on generators, we can also directly use `stdlib.http.get("https://www.google.com")()` to get the result。
+// But this is not recommended as it will run synchronously and block the current thread until the request is complete.
+// So we use `async` to get an entry point for AsyncScheduler, which allows us to run the request asynchronously.
+// In the AsyncScheduler, we can use `spawn f` to spawn a new task that runs concurrently.
+// `request()` will return a async task handle, which can be used to get the result later.
+result := valueof request();
+stdlib.io.println(stdlib.json.parse(result).body);

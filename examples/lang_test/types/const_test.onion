@@ -1,0 +1,36 @@
+@required 'stdlib';
+@include "../../std/marcos.onion";
+stdlib.io.println("Double quoted string");
+stdlib.io.println('Single quoted string');
+stdlib.io.println("String
+with
+line
+breaks");
+stdlib.io.println("String with double quotes: \"Hello, World!\"");
+stdlib.io.println('String with single quotes: \'Hello, World!\'');
+stdlib.io.println("String with escape characters: \\nNewline, \\tTab");
+stdlib.io.println("String with backslash: \\");
+stdlib.io.println("String with Unicode characters: \u6b63\u5e38\u5b57\u7b26\u4e32");
+stdlib.io.println("""Multiline string""");
+stdlib.io.println('''Multiline string''');
+stdlib.io.println("String concatenation: " + "Hello, " + "World!");
+stdlib.io.println(R"ABC(Raw string: \nNo escape needed, just use \n and \t etc)ABC" );
+
+stdlib.io.println(@strcat("Integer: ", 42));
+stdlib.io.println(@strcat("Hex integer: ", 0x2A));
+stdlib.io.println(@strcat("Octal integer: ", 0o52));
+stdlib.io.println(@strcat("Float: ", 3.14));
+stdlib.io.println(@strcat("Boolean: ", true));
+stdlib.io.println(@strcat("Boolean: ", false));
+stdlib.io.println(@strcat("Null: ", null));
+stdlib.io.println(@strcat("Undefined: ", undefined));
+
+stdlib.io.println(@strcat("Tuple: ", (1, 2, 3)));
+stdlib.io.println(@strcat("Tuple length: ", (1, 2, 3).length()));
+stdlib.io.println(@strcat("Tuple with method: ", (1, 2, 3, length => () -> "method").length()));
+
+stdlib.io.println(@strcat("Built-in type conversion: ", "42".int()));
+
+int := (x?) -> x.int();
+abs := (x?) -> +x;
+stdlib.io.println(@strcat("Custom type conversion: ", $int "-42" as abs));

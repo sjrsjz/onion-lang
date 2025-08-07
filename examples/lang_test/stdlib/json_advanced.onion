@@ -1,0 +1,94 @@
+// JSON Module Advanced Examples - Handling Complex Data Structures
+@required 'stdlib';
+@include "../../std/marcos.onion";
+
+stdlib.io.println("======== JSON Module Advanced Examples ========");
+
+// Example 1: Handling nested objects
+stdlib.io.println("Example 1: Handling nested objects");
+complex_data := {
+    "user": {
+        "id": 1001,
+        "profile": {
+            "name": "John Doe",
+            "email": "john.doe@example.com",
+            "preferences": {
+                "theme": "dark",
+                "language": "en-US"
+            }
+        }
+    },
+    "metadata": {
+        "version": "1.0",
+        "timestamp": 1640995200
+    }
+};
+
+json_output := stdlib.json.stringify_pretty(complex_data);
+stdlib.io.println("JSON output of complex object:");
+stdlib.io.println(json_output);
+stdlib.io.println();
+
+// Example 2: Handling mixed arrays
+stdlib.io.println("Example 2: Handling mixed arrays");
+mixed_array := [
+    {"type": "user", "id": 1, "active": true},
+    {"type": "admin", "id": 2, "active": false},
+    {"type": "guest", "id": 3, "active": true}
+];
+
+array_json := stdlib.json.stringify_pretty(mixed_array);
+stdlib.io.println("JSON output of mixed array:");
+stdlib.io.println(array_json);
+stdlib.io.println();
+
+// Example 3: API response simulation
+stdlib.io.println("Example 3: Simulating API response handling");
+api_response := '{"status": "success", "data": {"items": [{"name": "Product A", "price": 99.99}, {"name": "Product B", "price": 149.99}], "total": 2}, "message": "Data retrieved successfully"}';
+
+stdlib.io.println("Simulated API response:");
+stdlib.io.println(api_response);
+
+parsed_response := stdlib.json.parse(api_response);
+stdlib.io.println("Parsed response:");
+stdlib.io.println(parsed_response);
+stdlib.io.println();
+
+// Example 4: Configuration file handling
+stdlib.io.println("Example 4: Configuration file handling");
+config := {
+    "database": {
+        "host": "localhost",
+        "port": 5432,
+        "name": "myapp",
+        "ssl": true
+    },
+    "cache": {
+        "enabled": true,
+        "ttl": 3600,
+        "providers": ["redis", "memory"]
+    },
+    "logging": {
+        "level": "info",
+        "file": "/var/log/app.log"
+    }
+};
+
+config_json := stdlib.json.stringify_pretty(config);
+stdlib.io.println("Application configuration:");
+stdlib.io.println(config_json);
+stdlib.io.println();
+
+// Example 5: Data conversion and validation
+stdlib.io.println("Example 5: Data conversion and validation");
+input_json := '{"numbers": [1, 2, 3, 4, 5], "statistics": {"sum": 15, "average": 3.0, "count": 5}}';
+stdlib.io.println(@strcat("Input data: ", $input_json));
+
+parsed_input := stdlib.json.parse(input_json);
+stdlib.io.println(@strcat("Parse result: ", $parsed_input));
+
+// Re-serialize to verify data integrity
+output_json := stdlib.json.stringify(parsed_input);
+stdlib.io.println(@strcat("Re-serialized: ", $output_json));
+
+stdlib.io.println("======== Examples Complete ========");

@@ -19,34 +19,34 @@ Negative := (x?) -> x < 0;
 InstanceOf := (interface?) -> (x?) -> interface.check(x);
 
 Union := (checkers?) -> (v?) -> {
-    // 遍历传入的检查器元组
+    // Iterate through the passed checker tuple
     i := 0;
     len := lengthof checkers;
     while (i < len) (
         checker := checkers[i];
-        // 只要有一个检查器返回 true，整个 Union 就为 true
+        // If any checker returns true, the entire Union is true
         if (checker(v)) {
             return true;
         };
         i := i + 1
     );
-    // 如果所有检查器都返回 false，整个 Union 才为 false
+    // If all checkers return false, the entire Union is false
     return false;
 };
 
 Intersection := (checkers?) -> (v?) -> {
-    // 遍历传入的检查器元组
+    // Iterate through the passed checker tuple
     i := 0;
     len := lengthof checkers;
     while (i < len) (
         checker := checkers[i];
-        // 只要有一个检查器返回 false，整个 Intersection 就为 false
+        // If any checker returns false, the entire Intersection is false
         if (not checker(v)) {
             return false;
         };
         i := i + 1
     );
-    // 如果所有检查器都返回 true，整个 Intersection 才为 true
+    // If all checkers return true, the entire Intersection is true
     return true;
 };
 

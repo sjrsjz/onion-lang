@@ -211,7 +211,7 @@ impl OnionObjectExt for OnionASTObject {
                             ASTNodeType::Range => "Range",
                             ASTNodeType::In => "In",
                             ASTNodeType::Namespace(_) => "Namespace",
-                            ASTNodeType::Set => "Set",
+                            ASTNodeType::LazySet => "Set",
                             ASTNodeType::Map => "Map",
                             ASTNodeType::Is => "Is",
                             ASTNodeType::Raise => "Raise",

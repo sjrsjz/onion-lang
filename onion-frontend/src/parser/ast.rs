@@ -72,7 +72,11 @@ use crate::{
     diagnostics::{Diagnostic, SourceLocation, collector::DiagnosticCollector},
     parser::lexer::{Token, TokenType},
 };
-use std::{collections::HashSet, fmt::Debug, vec};
+use std::{
+    collections::HashSet,
+    fmt::{self, Debug, Display, Formatter},
+    vec,
+};
 
 /// AST 解析诊断信息类型。
 ///
@@ -338,7 +342,7 @@ pub enum ASTNodeType {
     Range, // x..y
     In,    // x in y
     Namespace(String), // Type::Value
-    Set,   // collection | filter
+    LazySet, // collection | filter
     Map,   // collection |> map
     Is,    // x is y
     Raise, // raise expression
@@ -347,6 +351,52 @@ pub enum ASTNodeType {
     Static,  // 假设子表达式的所有变量都在当前上下文中定义
 
     Comptime, // 编译时计算的表达式
+}
+
+impl Display for ASTNodeType {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                ASTNodeType::Null => "Null",
+                ASTNodeType::Undefined => "Undefined",
+                ASTNodeType::String(_) => "String",
+                ASTNodeType::Boolean(_) => "Boolean",
+                ASTNodeType::Number(_) => "Number",
+                ASTNodeType::Base64(_) => "Base64",
+                ASTNodeType::Variable(_) => "Variable",
+                ASTNodeType::Required(_) => "Required",
+                ASTNodeType::Let(_) => "Let",
+                ASTNodeType::Frame => "Frame",
+                ASTNodeType::Assign => "Assign",
+                ASTNodeType::LambdaDef(_, _) => "LambdaDef",
+                ASTNodeType::Expressions => "Expressions",
+                ASTNodeType::Apply => "Apply",
+                ASTNodeType::Operation(_) => "Operation",
+                ASTNodeType::Tuple => "Tuple",
+                ASTNodeType::AssumeTuple => "AssumeTuple",
+                ASTNodeType::Pair => "Pair",
+                ASTNodeType::GetAttr => "GetAttr",
+                ASTNodeType::Return => "Return",
+                ASTNodeType::If => "If",
+                ASTNodeType::While => "While",
+                ASTNodeType::Modifier(_) => "Modifier",
+                ASTNodeType::Break => "Break",
+                ASTNodeType::Continue => "Continue",
+                ASTNodeType::Range => "Range",
+                ASTNodeType::In => "In",
+                ASTNodeType::Namespace(_) => "Namespace",
+                ASTNodeType::LazySet => "LazySet",
+                ASTNodeType::Map => "Map",
+                ASTNodeType::Is => "Is",
+                ASTNodeType::Raise => "Raise",
+                ASTNodeType::Dynamic => "Dynamic",
+                ASTNodeType::Static => "Static",
+                ASTNodeType::Comptime => "Comptime",
+            }
+        )
+    }
 }
 
 /// AST 运算符枚举。
@@ -1662,7 +1712,7 @@ fn match_set_def(
     let right = try_match_node!(collector, &tokens[operator_pos + 1..]);
 
     return Ok(Some(ASTNode::new(
-        ASTNodeType::Set,
+        ASTNodeType::LazySet,
         span_from_tokens(&tokens),
         vec![left, right],
     )));
@@ -2014,21 +2064,10 @@ fn match_as(
     // 解析右侧表达式（目标类型，应该是一个变量如 int, string 等）
     let right = try_match_node!(collector, &tokens[operator_pos + 1..]);
 
-    // 将 x as int 转换为 int(x) 的 AST 结构
-    // 即：LambdaCall(right, Tuple(left))
-
-    // right 应该是类型名变量，如 int、string 等
-    // 将 left 作为参数包装成元组
-    let args_tuple = ASTNode::new(
-        ASTNodeType::Tuple,
-        span_from_tokens(&tokens[..operator_pos]),
-        vec![left],
-    );
-
     Ok(Some(ASTNode::new(
         ASTNodeType::Apply,
         span_from_tokens(&tokens),
-        vec![right, args_tuple],
+        vec![right, left],
     )))
 }
 

@@ -580,9 +580,12 @@ impl<'t> IRGenerator<'t> {
             ASTNodeType::Expressions => {
                 // Expects any number of children
                 let mut instructions = Vec::new();
-                for child in &ast_node.children {
-                    instructions.push((self.generate_debug_info(child), IR::ResetStack));
+                for (i,child) in ast_node.children.iter().enumerate() {
+                    // instructions.push((self.generate_debug_info(child), IR::ResetStack)); // 这个是严重错误的，会导致(;)把栈清空
                     instructions.extend(self.generate_without_redirect(collector, child)?);
+                    if i < ast_node.children.len() - 1 {
+                        instructions.push((self.generate_debug_info(child), IR::Pop));
+                    }
                 }
                 Ok(instructions)
             }
@@ -890,7 +893,7 @@ impl<'t> IRGenerator<'t> {
                     .extend(self.generate_without_redirect(collector, &ast_node.children[0])?);
                 Ok(instructions)
             }
-            ASTNodeType::Set => {
+            ASTNodeType::LazySet => {
                 // Expects 2 children
                 check_children_exact!(collector, ast_node, 2);
                 let mut instructions = Vec::new();

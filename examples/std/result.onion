@@ -1,14 +1,14 @@
 @required 'Modules';
 if (not keyof (sync (() -> Modules.Result))()) {
-    // 定义临时的 Result 构造器和辅助函数
+    // Define temporary Result constructor and helper functions
     _Result_Temp_Constructor := mut undefined;
     _Ok_Temp_Helper := (v?) -> _Result_Temp_Constructor.new(true : v);
     _Err_Temp_Helper := (v?) -> _Result_Temp_Constructor.new(false : v);
 
-    // 配置临时 Result 构造器
+    // Configure temporary Result constructor
     _Result_Temp_Constructor = {
         @include "prototype.onion";
-        // Result 实例的接口定义
+        // Interface definition for Result instance
         Result_Interface := interface {
             is_ok => () -> keyof keyof self,
             is_err => () -> not keyof keyof self,
@@ -55,20 +55,28 @@ if (not keyof (sync (() -> Modules.Result))()) {
                 }
             }
         };
-        Result_Interface // 块的计算结果是此接口，用于配置 _Result_Temp_Constructor
+        Result_Interface // The result of this block is the interface, used to configure _Result_Temp_Constructor
     };
 
-    // 缓存已配置的临时 Result 构造器
+    // Cache the configured temporary Result constructor
     Modules = Modules + (Result => _Result_Temp_Constructor,);
 };
 
-// 将缓存的构造器赋值给全局 Result
+// Assign the cached constructor to global Result
 Result := Modules.Result;
 
-// 使用缓存的全局 Result 构造器重新定义全局 Ok 和 Err 辅助函数
+// Redefine global Ok and Err helper functions using the cached global Result constructor
 Ok := (v?) -> Result.new(true : v);
 Err := (v?) -> Result.new(false : v);
 
 try := (f?) -> {
     Result.new((sync f)())
 };
+
+@def(try_expr => "expr" -> {
+    expr := ast.deserialize(expr);
+    return ast.apply << (
+        ast.variable("try"),
+        ast.lambda_def(false,()) << ((), expr)
+    );
+});

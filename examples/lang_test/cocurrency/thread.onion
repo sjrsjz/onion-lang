@@ -1,0 +1,24 @@
+@required 'stdlib';
+@include "../../std/marcos.onion";
+
+thread1 := () -> {
+    stdlib.io.println("Thread 1 started");
+    stdlib.time.sleep_seconds(2);
+    stdlib.io.println("Thread 1 completed");
+    return "Hello from thread 1";
+};
+
+thread2 := () -> {
+    stdlib.io.println("Thread 2 started");
+    stdlib.time.sleep_seconds(3);
+    stdlib.io.println("Thread 2 completed");
+    return "Hello from thread 2";
+};
+
+handle1 := launch thread1;
+handle2 := launch thread2;
+stdlib.time.sleep_seconds(5);
+result1 := valueof handle1;
+result2 := valueof handle2;
+stdlib.io.println(@strcat("Thread 1 result: ", $result1));
+stdlib.io.println(@strcat("Thread 2 result: ", $result2));

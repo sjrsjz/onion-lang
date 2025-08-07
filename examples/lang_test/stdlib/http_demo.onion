@@ -1,0 +1,43 @@
+@required 'stdlib';
+@include "../../std/marcos.onion";
+
+stdlib.io.println("======== HTTP Module Demo ========");
+
+// Demo 1: Simple GET request
+stdlib.io.println("\n1. Simple GET Request Demo:");
+try_get := () -> {
+    result := stdlib.http.get_sync("https://httpbin.org/json");
+    stdlib.io.println("   Status: Success");
+    stdlib.io.println(@strcat("   Response: ", $stdlib.string.length(result), " characters"));
+    return result;
+};
+
+get_response := try_get();
+
+// Demo 2: POST request sending JSON data
+stdlib.io.println("\n2. POST Request Demo:");
+try_post := () -> {
+    json_data := "{\"language\":\"Onion\", \"version\":\"0.1.2\", \"feature\":\"HTTP support\"}";
+    result := stdlib.http.post_sync(
+        "https://httpbin.org/post",
+        json_data
+    );
+    stdlib.io.println("   Status: Success");
+    stdlib.io.println(@strcat("   Sent data: ", $json_data));
+    return result;
+};
+
+post_response := try_post();
+
+// Demo 3: Error handling
+stdlib.io.println("\n3. Error Handling Demo:");
+try_error := () -> {
+    result := stdlib.http.get_sync("https://invalid-url-that-does-not-exist.com");
+    stdlib.io.println(@strcat("   Error info: ", $result));
+    return result;
+};
+
+error_response := try_error();
+
+stdlib.io.println("\n======== HTTP Demo Complete ========");
+stdlib.io.println("HTTP module is successfully implemented and ready to use!");

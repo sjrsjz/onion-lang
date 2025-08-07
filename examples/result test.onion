@@ -1,0 +1,21 @@
+@required 'stdlib';
+Modules := mut ();
+@include "std/prototype.onion";
+@include "std/result.onion";
+A := Ok("A");
+@include "std/result.onion"; // will not create Result again
+
+assert Modules.Result.check(A);
+
+@include "std/option.onion";
+stdlib.io.println(Ok("A").is_ok());
+
+stdlib.io.println(Err("B").is_err());
+stdlib.io.println(Ok("C").unwrap());
+stdlib.io.println(Err("D").unwrap_or("default value"));
+stdlib.io.println(Some(42).is_some());
+stdlib.io.println(None().is_none());
+stdlib.io.println(Some(42).unwrap());
+stdlib.io.println(None().unwrap_or(0));
+
+stdlib.io.println("Modules:", Modules |> "pair" -> keyof pair);

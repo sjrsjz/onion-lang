@@ -69,7 +69,7 @@ impl From<ASTNodeType> for SemanticTokenTypes {
             ASTNodeType::Range => Self::Range,
             ASTNodeType::In => Self::In,
             ASTNodeType::Namespace(_) => Self::Namespace,
-            ASTNodeType::Set => Self::Set,
+            ASTNodeType::LazySet => Self::Set,
             ASTNodeType::Map => Self::Map,
             ASTNodeType::Is => Self::Operation,
             ASTNodeType::Comptime => Self::Marco,

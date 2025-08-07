@@ -144,6 +144,7 @@ pub struct DiagnosticRelatedInformation {
 /// LSP 诊断严重级别
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
 #[serde(rename_all = "lowercase")]
+#[repr(u8)]
 pub enum DiagnosticSeverity {
     Error = 1,
     Warning = 2,

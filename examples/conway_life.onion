@@ -1,4 +1,4 @@
-// 康威生命游戏 (Conway's Game of Life)
+// Conway's Game of Life
 @required 'stdlib';
 @include "std/tui_colors.onion";
 
@@ -6,7 +6,7 @@ width := 60;
 height := 40;
 generations := 1000;
 
-// 简单的伪随机数生成器 (线性同余生成器)
+// Simple pseudo-random number generator (Linear Congruential Generator)
 rand_seed := mut 12345;
 random := () -> {
     rand_seed = (rand_seed * 1103515245 + 12345) % 2147483648;
@@ -21,8 +21,8 @@ create_grid := (w?, h?) -> {
         row := mut ();
         x := mut 0;
         while (x < w) {
-            // 随机初始化细胞（约30%的存活率）
-            alive := mut (random() < 0.3);  // 使布尔值可变
+            // Randomly initialize cells (about 30% alive)
+            alive := mut (random() < 0.3);  // Make boolean mutable
             row = row + (alive,);
             x = x + 1;
         };
@@ -32,7 +32,7 @@ create_grid := (w?, h?) -> {
     return grid;
 };
 
-// 计算邻居数量
+// Count number of neighbors
 count_neighbors := (grid?, x?, y?, w?, h?) -> {
     count := mut 0;
     dy := mut (-1);
@@ -55,7 +55,7 @@ count_neighbors := (grid?, x?, y?, w?, h?) -> {
     return count;
 };
 
-// 更新网格到缓冲区
+// Update grid to buffer
 update_grid := (current_grid?, buffer_grid?, w?, h?) -> {
     y := mut 0;
     while (y < h) {
@@ -64,12 +64,12 @@ update_grid := (current_grid?, buffer_grid?, w?, h?) -> {
             neighbors := count_neighbors(current_grid, x, y, w, h);
             current := current_grid[y][x];
             
-            // 康威生命游戏规则
+            // Conway's Game of Life rules
             new_cell := if (current) {
-                // 活细胞：2-3个邻居存活，否则死亡
+                // Live cell: survives with 2-3 neighbors, otherwise dies
                 neighbors == 2 or neighbors == 3
             } else {
-                // 死细胞：正好3个邻居复活
+                // Dead cell: revives with exactly 3 neighbors
                 neighbors == 3
             };
             
@@ -80,13 +80,13 @@ update_grid := (current_grid?, buffer_grid?, w?, h?) -> {
     };
 };
 
-// 交换缓冲区内容
+// Swap buffer contents
 swap_buffers := (grid1?, grid2?, w?, h?) -> {
     y := mut 0;
     while (y < h) {
         x := mut 0;
         while (x < w) {
-            temp := grid1[y][x];  // 使临时变量可变
+            temp := grid1[y][x];  // Make temp variable mutable
             grid1[y][x] = grid2[y][x];
             grid2[y][x] = temp;
             x = x + 1;
@@ -95,19 +95,19 @@ swap_buffers := (grid1?, grid2?, w?, h?) -> {
     };
 };
 
-// 双缓冲渲染 - 预先构建完整显示文本
+// Double-buffered rendering - prebuild full display text
 render_frame := (grid?, w?, h?, generation?) -> {
-    // 创建文本缓冲区
+    // Create text buffer
     display_buffer := mut "";
     
-    // 清屏和光标复位
+    // Clear screen and reset cursor
     display_buffer = display_buffer + "\u001b[2J\u001b[H";
     
-    // 构建标题
-    title := "🔬 康威生命游戏 [第" + stdlib.types.to_string(generation) + "代] 🧬";
+    // Build title
+    title := "🔬 Conway's Game of Life [Generation " + stdlib.types.to_string(generation) + "] 🧬";
     display_buffer = display_buffer + colorize(title, "bright_cyan", "bg_black") + "\n";
     
-    // 统计活细胞数量
+    // Count number of live cells
     alive_count := mut 0;
     y := mut 0;
     while (y < h) {
@@ -121,11 +121,11 @@ render_frame := (grid?, w?, h?, generation?) -> {
         y = y + 1;
     };
     
-    // 构建信息行
-    info := "活细胞: " + stdlib.types.to_string(alive_count) + " | 双缓冲渲染 | 尺寸: " + stdlib.types.to_string(w) + "x" + stdlib.types.to_string(h);
+    // Build info line
+    info := "Live cells: " + stdlib.types.to_string(alive_count) + " | Double-buffered rendering | Size: " + stdlib.types.to_string(w) + "x" + stdlib.types.to_string(h);
     display_buffer = display_buffer + colorize(info, "bright_yellow", "bg_black") + "\n";
     
-    // 构建边框顶部
+    // Build top border
     border_top := mut "┌";
     x := mut 0;
     while (x < w * 2) {
@@ -135,7 +135,7 @@ render_frame := (grid?, w?, h?, generation?) -> {
     border_top = border_top + "┐";
     display_buffer = display_buffer + colorize(border_top, "bright_white", "bg_black") + "\n";
     
-    // 构建网格内容
+    // Build grid content
     y = 0;
     while (y < h) {
         row_text := mut "│";
@@ -153,7 +153,7 @@ render_frame := (grid?, w?, h?, generation?) -> {
         y = y + 1;
     };
     
-    // 构建边框底部
+    // Build bottom border
     border_bottom := mut "└";
     x = 0;
     while (x < w * 2) {
@@ -163,49 +163,49 @@ render_frame := (grid?, w?, h?, generation?) -> {
     border_bottom = border_bottom + "┘";
     display_buffer = display_buffer + colorize(border_bottom, "bright_white", "bg_black") + "\n";
     
-    // 构建说明信息
-    rules := "规则: 活细胞2-3邻居存活 | 死细胞3邻居复活 | 其他情况死亡";
+    // Build rules info
+    rules := "Rules: Live cell survives with 2-3 neighbors | Dead cell revives with 3 neighbors | Otherwise dies";
     display_buffer = display_buffer + colorize(rules, "bright_cyan", "bg_black") + "\n";
     
-    // 一次性输出完整的显示缓冲区
+    // Output the full display buffer at once
     stdlib.io.print(display_buffer);
 };
 
-// 主循环 - 使用双缓冲技术和预渲染
+// Main loop - using double-buffering and pre-rendering
 current_grid := mut create_grid(width, height);
-buffer_grid := mut create_grid(width, height);  // 创建缓冲区
+buffer_grid := mut create_grid(width, height);  // Create buffer
 generation := mut 0;
 
-// 清空缓冲区（初始化为false）
+// Clear buffer (initialize to false)
 y := mut 0;
 while (y < height) {
     x := mut 0;
     while (x < width) {
-        buffer_grid[y][x] = mut false;  // 使布尔值可变
+        buffer_grid[y][x] = mut false;  // Make boolean mutable
         x = x + 1;
     };
     y = y + 1;
 };
 
-startup_msg := colorize("🎮 康威生命游戏启动！使用双缓冲+预渲染技术", "bright_magenta", "bg_black");
+startup_msg := colorize("🎮 Conway's Game of Life started! Using double-buffering + pre-rendering", "bright_magenta", "bg_black");
 stdlib.io.println(startup_msg);
-stdlib.io.println(colorize("按Ctrl+C退出程序", "bright_yellow", "bg_black"));
+stdlib.io.println(colorize("Press Ctrl+C to exit", "bright_yellow", "bg_black"));
 
 while (generation < generations) {
-    // 预先构建完整帧并一次性输出
+    // Prebuild full frame and output at once
     render_frame(current_grid, width, height, generation);
     
-    // 暂停一下，让用户能看到动画
+    // Pause to let user see the animation
     stdlib.time.sleep_millis(20);
     
-    // 计算下一代到缓冲区
+    // Calculate next generation to buffer
     update_grid(current_grid, buffer_grid, width, height);
     
-    // 交换缓冲区（双缓冲核心）
+    // Swap buffers (core of double-buffering)
     swap_buffers(current_grid, buffer_grid, width, height);
     
     generation = generation + 1;
 };
 
-stdlib.io.println(colorize("🎭 生命游戏结束！双缓冲+预渲染演示完成！", "bright_yellow", "bg_black"));
-stdlib.io.println(colorize("感谢体验流畅的渲染技术！", "bright_green", "bg_black"));
+stdlib.io.println(colorize("🎭 Game of Life ended! Double-buffered + pre-rendering demo complete!", "bright_yellow", "bg_black"));
+stdlib.io.println(colorize("Thank you for experiencing smooth rendering technology!", "bright_green", "bg_black"));

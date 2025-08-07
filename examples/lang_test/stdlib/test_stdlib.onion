@@ -1,0 +1,42 @@
+@required 'stdlib';
+@include "../../std/marcos.onion";
+
+main := () -> {
+    // Test sys module
+    stdlib.io.println("=== Testing sys module ===");
+    platform := stdlib.sys.platform();
+    stdlib.io.println(@strcat("Platform: ", $platform));
+    arch := stdlib.sys.arch();
+    stdlib.io.println(@strcat("Architecture: ", $arch));
+    cwd := stdlib.sys.getcwd();
+    stdlib.io.println(@strcat("Current working directory: ", $cwd));
+    stdlib.io.println("");
+
+    // Test os module
+    stdlib.io.println("=== Testing os module ===");
+    username := stdlib.os.username();
+    stdlib.io.println(@strcat("Username: ", $username));
+    temp := stdlib.os.temp_dir();
+    stdlib.io.println(@strcat("Temp directory: ", $temp));
+    path_exists := stdlib.os.path_exists(".");
+    stdlib.io.println(@strcat("Current directory exists: ", $path_exists));
+    is_dir := stdlib.os.is_dir(".");
+    stdlib.io.println(@strcat("Current path is directory: ", $is_dir));
+    stdlib.io.println("");
+
+    // Test fs module
+    stdlib.io.println("=== Testing fs module ===");
+    test_content := "Hello, this is a test file!";
+    stdlib.fs.write_file("test_stdlib.txt", test_content);
+    stdlib.io.println("Created test file: test_stdlib.txt");
+    read_content := stdlib.fs.read_file("test_stdlib.txt");
+    stdlib.io.println(@strcat("Read file content: ", $read_content));
+    file_exists := stdlib.fs.exists("test_stdlib.txt");
+    stdlib.io.println(@strcat("Test file exists: ", $file_exists));
+    stdlib.fs.remove_file("test_stdlib.txt");
+    stdlib.io.println("Cleaned up test file");
+    stdlib.io.println("");
+    stdlib.io.println("=== All tests completed ===");
+};
+
+main();

@@ -1,0 +1,243 @@
+// Math Function Visualizer - Dynamic Graph Drawing
+@required 'stdlib';
+@include "std/constraint.onion";
+colors := {
+    // Foreground colors
+    'black': "\u001b[30m",
+    'red': "\u001b[31m",
+    'green': "\u001b[32m",
+    'yellow': "\u001b[33m",
+    'blue': "\u001b[34m",
+    'magenta': "\u001b[35m",
+    'cyan': "\u001b[36m",
+    'white': "\u001b[37m",
+    'bright_black': "\u001b[90m",
+    'bright_red': "\u001b[91m",
+    'bright_green': "\u001b[92m",
+    'bright_yellow': "\u001b[93m",
+    'bright_blue': "\u001b[94m",
+    'bright_magenta': "\u001b[95m",
+    'bright_cyan': "\u001b[96m",
+    'bright_white': "\u001b[97m",
+
+    // Background colors
+    'bg_black': "\u001b[40m",
+    'bg_red': "\u001b[41m",
+    'bg_green': "\u001b[42m",
+    'bg_yellow': "\u001b[43m",
+    'bg_blue': "\u001b[44m",
+    'bg_magenta': "\u001b[45m",
+    'bg_cyan': "\u001b[46m",
+    'bg_white': "\u001b[47m",
+    'bg_bright_black': "\u001b[100m",
+    'bg_bright_red': "\u001b[101m",
+    'bg_bright_green': "\u001b[102m",
+    'bg_bright_yellow': "\u001b[103m",
+    'bg_bright_blue': "\u001b[104m",
+    'bg_bright_magenta': "\u001b[105m",
+    'bg_bright_cyan': "\u001b[106m",
+    'bg_bright_white': "\u001b[107m",
+
+    // Reset
+    'reset': "\u001b[0m"
+};
+
+colorize := (text => String, fg => String, bg => String) -> {
+    fg_color := colors.{fg};
+    bg_color := colors.{bg};
+    return fg_color + bg_color + text + colors.reset;
+};
+
+width := 120;
+height := 40;
+
+// Math function set
+math_functions := {
+    'sine': (x?, t?) -> stdlib.math.sin(x + t),
+    'cosine': (x?, t?) -> stdlib.math.cos(x + t),
+    'wave': (x?, t?) -> stdlib.math.sin(x) * stdlib.math.cos(x + t),
+    'pulse': (x?, t?) -> stdlib.math.sin(x * 3.0 + t) * stdlib.math.exp(-x * x / 10.0),
+    'spiral': (x?, t?) -> stdlib.math.sin(x + t) * x / 10.0,
+    'damped': (x?, t?) -> stdlib.math.sin(x * 2.0 + t) * stdlib.math.exp(-stdlib.math.abs(x) / 5.0)
+};
+
+// Get color mapping for function
+get_function_color := (func_name?) -> {
+    color_map := {
+        'sine': colors.bright_red,
+        'cosine': colors.bright_blue,
+        'wave': colors.bright_green,
+        'pulse': colors.bright_yellow,
+        'spiral': colors.bright_magenta,
+        'damped': colors.bright_cyan
+    };
+    return color_map.{func_name};
+};
+
+// Draw axes
+draw_axes := (canvas?) -> {
+    // X axis (center)
+    y_center := height / 2;
+    x := mut 0;
+    while (x < width) {
+        canvas[y_center][x] = colorize("─", "white", "bg_black");
+        x = x + 1;
+    };
+    
+    // Y axis (center)
+    x_center := width / 2;
+    y := mut 0;
+    while (y < height) {
+        canvas[y][x_center] = colorize("│", "white", "bg_black");
+        y = y + 1;
+    };
+    
+    // Origin
+    canvas[y_center][x_center] = colorize("┼", "bright_white", "bg_black");
+    
+    return canvas;
+};
+
+// Plot function curve
+plot_function := (canvas?, func_name?, func?, time?) -> {
+    color := get_function_color(func_name);
+    
+    x_pixel := mut 0;
+    while (x_pixel < width) {
+        // Convert pixel coordinate to math coordinate
+        x_math := (x_pixel - width / 2.0) / 10.0;
+        
+        // Calculate function value
+        y_math := func(x_math, time);
+        
+        // Convert math coordinate to pixel coordinate
+        y_pixel := height / 2 - stdlib.math.round(y_math * 8.0);
+        
+        // Ensure within canvas range
+        if (y_pixel >= 0 and y_pixel < height) {
+            // Select character
+            char := if (stdlib.math.abs(y_math) > 1.5) {
+                "█"
+            } else if (stdlib.math.abs(y_math) > 1.0) {
+                "▓"
+            } else if (stdlib.math.abs(y_math) > 0.5) {
+                "▒"
+            } else {
+                "░"
+            };
+            
+            canvas[y_pixel][x_pixel] = color + char + colors.reset;
+        };
+        
+        x_pixel = x_pixel + 1;
+    };
+    
+    return canvas;
+};
+
+// Create empty canvas
+create_canvas := () -> {
+    canvas := mut ();
+    y := mut 0;
+    while (y < height) {
+        row := mut ();
+        x := mut 0;
+        while (x < width) {
+            row = row + (mut " ",);
+            x = x + 1;
+        };
+        canvas = canvas + (row,);
+        y = y + 1;
+    };
+    return canvas;
+};
+
+// Render canvas
+render_canvas := (canvas?, frame?, current_functions?) -> {
+    // Clear screen
+    stdlib.io.println("\u001b[2J\u001b[H");
+    
+    // Title
+    stdlib.io.println(colorize("📊 Math Function Visualizer - Frame " + stdlib.types.to_string(frame) + " 📊", "bright_yellow", "bg_black"));
+    
+    // Display current functions
+    func_display := mut "Current functions: ";
+    i := mut 0;
+    while (i < lengthof current_functions) {
+        func_name := current_functions[i];
+        color := get_function_color(func_name);
+        func_display = func_display + color + func_name + colors.reset + " ";
+        i = i + 1;
+    };
+    stdlib.io.println(func_display);
+    stdlib.io.println("");
+    
+    // Output canvas
+    y := mut 0;
+    while (y < height) {
+        x := mut 0;
+        while (x < width) {
+            stdlib.io.print(canvas[y][x]);
+            x = x + 1;
+        };
+        stdlib.io.println("");
+        y = y + 1;
+    };
+    
+    // Info
+    stdlib.io.println("");
+    stdlib.io.println(colorize("X axis: -6 to +6 | Y axis: -5 to +5", "bright_cyan", "bg_black"));
+};
+
+// Main animation loop
+frame := mut 0;
+max_frames := 300;
+
+// Function combination sequence
+function_sequences := (
+    ("sine",),
+    ("cosine",),
+    ("sine", "cosine"),
+    ("wave",),
+    ("pulse",),
+    ("spiral",),
+    ("damped",),
+    ("sine", "wave", "pulse"),
+    ("cosine", "spiral", "damped")
+);
+stdlib.io.println(colorize("Welcome to Math Function Visualizer! 📈", "bright_green", "bg_black"));
+while (frame < max_frames) {
+    // Time parameter (for animation)
+    time := frame * 0.2;
+    
+    // Select current function combination
+    sequence_index := (frame / 30) % lengthof function_sequences;
+    current_functions := function_sequences[sequence_index];
+    
+    // Create new canvas
+    canvas := mut create_canvas();
+    
+    // Draw axes
+    canvas = draw_axes(canvas);
+    
+    // Plot all selected functions
+    func_index := mut 0;
+    while (func_index < lengthof current_functions) {
+        func_name := current_functions[func_index];
+        func := math_functions.{func_name};
+        canvas = plot_function(canvas, func_name, func, time);
+        func_index = func_index + 1;
+    };
+    // Render canvas
+    render_canvas(canvas, frame, current_functions);
+    
+    // Delay
+    delay := mut 0;
+    while (delay < 100000) {
+        delay = delay + 1;
+    };
+    
+    frame = frame + 1;
+};
+
+stdlib.io.println(colorize("Math visualization demo ended! 🎭", "bright_magenta", "bg_black"));

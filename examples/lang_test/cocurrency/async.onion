@@ -1,0 +1,27 @@
+@required 'stdlib';
+@include "../../std/marcos.onion";
+
+pool := async () -> { // `async` modifier creates an AsyncScheduler entry point, returns a function handle when called
+    stdlib.io.println("Starting async processing...");
+    return (0..5).elements() |> (x?) -> {
+        stdlib.io.println(@strcat("Processing element: ", $x));
+        stdlib.time.sleep_seconds(1);
+        return spawn () -> { // spawn creates a new async task, returns task handle immediately while task runs concurrently
+            stdlib.io.println(@strcat("Async processing element: ", $x));
+            n := mut 0;
+            while (n < 10) {
+                stdlib.io.println(@strcat("Async processing element: ", $x, " Count: ", $n));
+                n = n + 1;
+                stdlib.time.sleep_seconds(1);
+            };
+            return x;
+        };
+    };
+};
+
+tasks := pool(); // call async function, returns scheduler entry function handle, blocks until all spawned tasks complete
+stdlib.io.println(@strcat("Processing result: ", $valueof tasks)); // valueof extracts array of task handles from scheduler function handle
+
+(0..5).elements() |> (i?) -> {
+    stdlib.io.println(@strcat("Task: ", $i, "Result: ", $valueof (valueof tasks)[i])); // double valueof: first gets task handle array, second gets individual task result
+};

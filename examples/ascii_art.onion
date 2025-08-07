@@ -1,8 +1,8 @@
-// ASCII 艺术生成器 - 将文本转换为大字体艺术
+// ASCII Art Generator - Convert text to large font art
 @required 'stdlib';
 @include "std/tui_colors.onion";
 
-// 5x7 字体库 (简化版)
+// 5x7 Font Library (Simplified)
 font_data := {
     'A': (
         " ███ ",
@@ -87,7 +87,7 @@ font_data := {
     )
 };
 
-// 生成彩虹色彩序列
+// Generate rainbow color sequence
 get_rainbow_color := (index?) -> {
     colors_list := (
         colors.red,
@@ -100,7 +100,7 @@ get_rainbow_color := (index?) -> {
     return colors_list[index % 6];
 };
 
-// 渲染文本为ASCII艺术
+// Render text as ASCII art
 render_ascii_art := (text?, use_rainbow?) -> {
     if (lengthof text == 0) {
         return;
@@ -127,7 +127,7 @@ render_ascii_art := (text?, use_rainbow?) -> {
                     stdlib.io.print(colorize(line, "bright_cyan", "bg_black"));
                 };
             } else {
-                // 不支持的字符，显示空格
+                // Unsupported character, display as space
                 stdlib.io.print("     ");
             };
             
@@ -138,57 +138,57 @@ render_ascii_art := (text?, use_rainbow?) -> {
     };
 };
 
-// 创建动态标题动画
+// Create dynamic title animation
 animate_title := (text?, frames?) -> {
     frame := mut 0;
     while (frame < frames) {
-        // 清屏
+        // Clear screen
         stdlib.io.println("\u001b[2J\u001b[H");
         
-        // 渐变效果
+        // Gradient effect
         use_rainbow := (frame % 2 == 0);
         
-        stdlib.io.println(colorize("=== ASCII 艺术生成器 ===", "bright_yellow", "bg_black"));
+        stdlib.io.println(colorize("=== ASCII Art Generator ===", "bright_yellow", "bg_black"));
         render_ascii_art(text, use_rainbow);
         
-        // 添加闪烁效果
+        // Add blinking effect
         if (frame % 4 < 2) {
-            stdlib.io.println(colorize("✨ 闪闪发光! ✨", "bright_white", "bg_black"));
+            stdlib.io.println(colorize("✨ Shining! ✨", "bright_white", "bg_black"));
         } else {
-            stdlib.io.println(colorize("★ 绚烂夺目! ★", "bright_magenta", "bg_black"));
+            stdlib.io.println(colorize("★ Brilliant! ★", "bright_magenta", "bg_black"));
         };
         
-        // 延迟
-        stdlib.time.sleep_seconds(1); // 暂停1秒
+        // Delay
+        stdlib.time.sleep_seconds(1); // Pause for 1 second
         
         frame = frame + 1;
     };
 };
 
-// 主程序
-stdlib.io.println(colorize("欢迎使用 ASCII 艺术生成器!", "bright_green", "bg_black"));
+// Main program
+stdlib.io.println(colorize("Welcome to ASCII Art Generator!", "bright_green", "bg_black"));
 stdlib.io.println("");
 
-// 演示不同的文本
+// Demo different texts
 demo_texts := ("HELLO", "COOL", "HELLO!");
 
 text_index := mut 0;
 while (text_index < lengthof demo_texts) {
     text := demo_texts[text_index];
     
-    stdlib.io.println(colorize("正在生成: " + text, "bright_yellow", "bg_black"));
+    stdlib.io.println(colorize("Generating: " + text, "bright_yellow", "bg_black"));
     animate_title(text, 8);
     
-    // 静态显示
+    // Static display
     stdlib.io.println("\u001b[2J\u001b[H");
-    stdlib.io.println(colorize("=== 静态版本 ===", "bright_cyan", "bg_black"));
+    stdlib.io.println(colorize("=== Static Version ===", "bright_cyan", "bg_black"));
     render_ascii_art(text, false);
     
-    stdlib.io.println(colorize("=== 彩虹版本 ===", "bright_magenta", "bg_black"));
+    stdlib.io.println(colorize("=== Rainbow Version ===", "bright_magenta", "bg_black"));
     render_ascii_art(text, true);
     
-    // 暂停
-    stdlib.time.sleep_seconds(2); // 暂停2秒
+    // Pause
+    stdlib.time.sleep_seconds(2); // Pause for 2 seconds
     
     text_index = text_index + 1;
 };

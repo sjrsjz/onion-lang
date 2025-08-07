@@ -11,7 +11,7 @@
             apply_ast := ast.deserialize($(""()));
             as_string_ast := ast.deserialize($("".string));
             result = ast.operation("+") << (
-                const result, 
+                const result, // prevent from cyclic reference
                 apply_ast[0 => as_string_ast[0 => ast_result.unwrap()]]
             );
         };

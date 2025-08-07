@@ -1,0 +1,140 @@
+@required 'stdlib';
+@include "../../std/marcos.onion";
+
+// Church numeral encoding
+// 0 = λf.λx.x
+zero := (f?) -> (x?) -> x; // Equivalent: "f" -> "x" -> x;
+
+// 1 = λf.λx.f(x)
+one := (f?) -> (x?) -> f(x);
+
+// 2 = λf.λx.f(f(x))
+two := (f?) -> (x?) -> f(f(x));
+
+// 3 = λf.λx.f(f(f(x)))
+three := (f?) -> (x?) -> f(f(f(x)));
+
+// Successor function: succ n = λf.λx.f(n f x)
+succ := (n?) -> (f?) -> (x?) -> f(n(f)(x));
+
+// Addition: add m n = λf.λx.m f (n f x)
+add := (m?) -> (n?) -> (f?) -> (x?) -> m(f)(n(f)(x));
+
+// Multiplication: mult m n = λf.m(n f)
+mult := (m?) -> (n?) -> (f?) -> m(n(f));
+
+// Power: power m n = n m
+power := (m?) -> (n?) -> n(m);
+
+// Predecessor function (more complex implementation)
+pred := (n?) -> (f?) -> (x?) -> {
+    pair := (a?) -> (b?) -> (g?) -> g(a)(b);
+    fst := (p?) -> p((a?) -> (b?) -> a);
+    snd := (p?) -> p((a?) -> (b?) -> b);
+    
+    step := (p?) -> pair(snd(p))(f(snd(p)));
+    initial := pair(x)(x);
+    
+    return fst(n(step)(initial));
+};
+
+// Subtraction: sub m n = n pred m
+sub := (m?) -> (n?) -> n(pred)(m);
+
+// Boolean encoding
+true_church := (x?) -> (y?) -> x;
+false_church := (x?) -> (y?) -> y;
+
+// Logical NOT - avoid using the keyword not
+negate := (b?) -> (x?) -> (y?) -> b(y)(x);
+
+// Logical AND
+and := (p?) -> (q?) -> p(q)(p);
+
+// Logical OR
+or := (p?) -> (q?) -> p(p)(q);
+
+// Check if zero
+is_zero := (n?) -> n((x?) -> false_church)(true_church);
+
+// Less than or equal
+leq := (m?) -> (n?) -> is_zero(sub(m)(n));
+
+// Equality
+eq := (m?) -> (n?) -> and(leq(m)(n))(leq(n)(m));
+
+// Conditional expression
+if_then_else := (p?) -> (x?) -> (y?) -> p(x)(y);
+
+// Helper function to convert to regular number
+to_number := (church_num?) -> {
+    inc := (x?) -> x + 1;
+    return church_num(inc)(0);
+};
+
+// Helper function to convert to boolean
+to_bool := (church_bool?) -> church_bool(true)(false);
+
+// Test function
+test_church := () -> {
+    stdlib.io.println("=== Church encoding test ===");
+    
+    // Test numbers
+    stdlib.io.println(@strcat("zero: ", $to_number(zero)));
+    stdlib.io.println(@strcat("one: ", $to_number(one)));
+    stdlib.io.println(@strcat("two: ", $to_number(two)));
+    stdlib.io.println(@strcat("three: ", $to_number(three)));
+    
+    // Test successor
+    four := succ(three);
+    stdlib.io.println(@strcat("succ(three): ", $to_number(four)));
+    
+    // Test addition
+    five := add(two)(three);
+    stdlib.io.println(@strcat("add(two)(three): ", $to_number(five)));
+    
+    // Test multiplication
+    six := mult(two)(three);
+    stdlib.io.println(@strcat("mult(two)(three): ", $to_number(six)));
+    
+    // Test power
+    eight := power(two)(three);
+    stdlib.io.println(@strcat("power(two)(three): ", $to_number(eight)));
+    
+    // Test predecessor
+    two_pred := pred(three);
+    stdlib.io.println(@strcat("pred(three): ", $to_number(two_pred)));
+    
+    // Test subtraction
+    one_sub := sub(three)(two);
+    stdlib.io.println(@strcat("sub(three)(two): ", $to_number(one_sub)));
+    
+    // Test booleans
+    stdlib.io.println(@strcat("true_church: ", $to_bool(true_church)));
+    stdlib.io.println(@strcat("false_church: ", $to_bool(false_church)));
+    
+    // Fix logical operation call style - use negate instead of not
+    not_true := negate(true_church);
+    stdlib.io.println(@strcat("negate(true): ", $to_bool(not_true)));
+    
+    and_result := and(true_church)(false_church);
+    stdlib.io.println(@strcat("and(true)(false): ", $to_bool(and_result)));
+    
+    or_result := or(true_church)(false_church);
+    stdlib.io.println(@strcat("or(true)(false): ", $to_bool(or_result)));
+    
+    // Test comparisons
+    stdlib.io.println(@strcat("is_zero(zero): ", $to_bool(is_zero(zero))));
+    stdlib.io.println(@strcat("is_zero(one): ", $to_bool(is_zero(one))));
+    stdlib.io.println(@strcat("eq(two)(two): ", $to_bool(eq(two)(two))));
+    stdlib.io.println(@strcat("eq(two)(three): ", $to_bool(eq(two)(three))));
+    stdlib.io.println(@strcat("leq(two)(three): ", $to_bool(leq(two)(three))));
+    
+    // Conditional expression test
+    condition := eq(two)(two);
+    result := if_then_else(condition)("Equal")("Not equal");
+    stdlib.io.println(@strcat("Conditional expression test: ", $result));
+};
+
+// Run test
+test_church();

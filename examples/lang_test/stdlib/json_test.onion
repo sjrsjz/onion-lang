@@ -1,0 +1,47 @@
+// Complete JSON Module Test
+@required 'stdlib';
+@include "../../std/marcos.onion";
+
+stdlib.io.println("======== JSON Module Test Start ========");
+
+// Test 1: JSON Parsing
+stdlib.io.println("Test 1: JSON Parsing");
+json_string := '{"name": "Alice", "age": 30, "active": true}';
+stdlib.io.println(@strcat("Original JSON: ", $json_string));
+parsed := stdlib.json.parse(json_string);
+stdlib.io.println(@strcat("Parse result: ", $parsed));
+stdlib.io.println();
+
+// Test 2: Object Serialization
+stdlib.io.println("Test 2: Object Serialization");
+test_obj := {"name": "Bob", "score": 95.5, "passed": true};
+stdlib.io.println(@strcat("Original object: ", $test_obj));
+json_str := stdlib.json.stringify(test_obj);
+stdlib.io.println(@strcat("Serialization result: ", $json_str));
+stdlib.io.println();
+
+// Test 3: Pretty Serialization
+stdlib.io.println("Test 3: Pretty Serialization");
+pretty_json := stdlib.json.stringify_pretty(test_obj);
+stdlib.io.println("Pretty result:");
+stdlib.io.println(pretty_json);
+stdlib.io.println();
+
+// Test 4: Array Handling
+stdlib.io.println("Test 4: Array Handling");
+test_array := [1, "hello", true, null];
+stdlib.io.println(@strcat("Original array: ", $test_array));
+array_json := stdlib.json.stringify(test_array);
+stdlib.io.println(@strcat("Array JSON: ", $array_json));
+stdlib.io.println();
+
+// Test 5: Round-trip Conversion
+stdlib.io.println("Test 5: Round-trip Conversion");
+original := '{"temperature": 23.5, "humidity": 60}';
+stdlib.io.println(@strcat("Original: ", $original));
+parsed_again := stdlib.json.parse(original);
+stdlib.io.println(@strcat("Parsed: ", $parsed_again));
+stringified_again := stdlib.json.stringify(parsed_again);
+stdlib.io.println(@strcat("Re-serialized: ", $stringified_again));
+
+stdlib.io.println("======== JSON Module Test Complete ========");

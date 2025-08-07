@@ -1,10 +1,11 @@
 Modules := mut ();
 @include "std/constraint.onion";
 @include "std/result.onion";
+@include "std/marcos.onion";
 
 @required 'stdlib';
 print := (a => Union(Float, Integer), b => Union(Float, Integer)) -> {
-    stdlib.io.println('a:', a, 'b:', b);
+    stdlib.io.println(@strcat('a: ', $a, 'b: ', $b));
 };
 
 // Example usage
@@ -17,14 +18,14 @@ DynamicCheck := (v?) -> {
 
 // Example usage of DynamicCheck
 f := (v => DynamicCheck) -> {
-    stdlib.io.println('DynamicCheck value:', v);
+    stdlib.io.println(@strcat('DynamicCheck value: ', $v));
     v
 };
 
 stdlib.io.println(try(() -> f("Hello")).unwrap_or("Failed to match DynamicCheck"));
 
 foo := (x => Positive) -> {
-    stdlib.io.println('foo called with:', x);
+    stdlib.io.println(@strcat('foo called with: ', $x));
     "Success!"
 };
 
@@ -63,20 +64,20 @@ instanceA := interfaceA.new {
 
 
 some_function_A := (obj => InstanceOf(interfaceA)) -> {
-    stdlib.io.println("some_function called with:", obj.get_data());
+    stdlib.io.println(@strcat("some_function called with: ", $obj.get_data()));
 };
 
 some_function_B := (obj => InstanceOf(interfaceB)) -> {
-    stdlib.io.println("some_function called with:", obj.get_data());
+    stdlib.io.println(@strcat("some_function called with: ", $obj.get_data()));
 };
 
 instanceA.print();
 
-stdlib.io.println("Is instanceA an instance of interfaceA? ", interfaceA.check(instanceA));
+stdlib.io.println(@strcat("Is instanceA an instance of interfaceA? ", $interfaceA.check(instanceA)));
 some_function_A(instanceA); // Valid usage
 
-stdlib.io.println("Is instanceA an instance of interfaceB? ", interfaceB.check(instanceA));
+stdlib.io.println(@strcat("Is instanceA an instance of interfaceB? ", $interfaceB.check(instanceA)));
 // This will raise an error because instanceA does not implement interfaceB
 stdlib.io.println(
     try(() -> some_function_B(instanceA)).unwrap_or("Failed to match InstanceOf(interfaceA)")
-)
+);

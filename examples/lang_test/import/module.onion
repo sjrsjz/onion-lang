@@ -1,0 +1,7 @@
+// use `onion compile -b examples/lang_test/import/module.onion` to compile this file
+
+return {
+    get_version => () -> {
+        return "1.0.0";
+    },
+}

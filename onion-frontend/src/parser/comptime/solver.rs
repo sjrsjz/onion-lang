@@ -129,7 +129,13 @@ impl Diagnostic for ComptimeDiagnostic {
     }
 
     fn title(&self) -> String {
-        "Comptime Error".to_string()
+        match self {
+            ComptimeDiagnostic::RuntimeError(_, _) => "Runtime Error".to_string(),
+            ComptimeDiagnostic::BorrowError(_, _) => "Borrow Error".to_string(),
+            ComptimeDiagnostic::IRTranslatorError(_, _) => "IR Translator Error".to_string(),
+            ComptimeDiagnostic::CustomError(_, _) => "Custom Error".to_string(),
+            ComptimeDiagnostic::CustomWarning(_, _) => "Custom Warning".to_string(),
+        }
     }
 
     fn message(&self) -> String {
@@ -139,8 +145,8 @@ impl Diagnostic for ComptimeDiagnostic {
             ComptimeDiagnostic::IRTranslatorError(_, err) => {
                 format!("IR Translator Error: {}", err)
             }
-            ComptimeDiagnostic::CustomError(_, msg) => format!("Custom Error: {}", msg),
-            ComptimeDiagnostic::CustomWarning(_, msg) => format!("Custom Warning: {}", msg),
+            ComptimeDiagnostic::CustomError(_, msg) => msg.clone(),
+            ComptimeDiagnostic::CustomWarning(_, msg) => msg.clone(),
         }
     }
 

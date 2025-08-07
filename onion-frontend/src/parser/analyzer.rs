@@ -744,7 +744,27 @@ fn analyze_node(
             check_children_exact!(diagnostics, node, 1, "Continue");
             AssumedType::Unknown
         }
-        _ => {
+        node_type => {
+            let exact_children = match node_type {
+                ASTNodeType::Apply => 2, // Apply expects exactly two children (function and argument)
+                ASTNodeType::Tuple => 0, // Tuple can have variable number of children
+                ASTNodeType::AssumeTuple => 1, // AssumeTuple expects exactly one child
+                ASTNodeType::GetAttr => 2, // GetAttr expects exactly two children (object and attribute name)
+                ASTNodeType::Range => 2,   // Range expects exactly two children (start and end)
+                ASTNodeType::In => 2,      // In expects exactly two children (value and collection)
+                ASTNodeType::Namespace(_) => 1, // Namespace expects exactly one child (the namespace definition)
+                ASTNodeType::LazySet => 2, // LazySet expects exactly two children (container and filter)
+                ASTNodeType::Map => 2, // Map expects exactly two children (collection and function)
+                ASTNodeType::Is => 2,  // Is expects exactly two children (value and type)
+                ASTNodeType::Raise => 1, // Raise expects exactly one child (the error message)
+                ASTNodeType::Dynamic => 1, // Dynamic expects exactly one child (the dynamic expression)
+                ASTNodeType::Static => 1, // Static expects exactly one child (the static expression)
+                ASTNodeType::Comptime => 1, // Comptime expects exactly one child (the expression to evaluate at compile time)
+                _ => 0,                     // Default case for unhandled node types
+            };
+            if exact_children != 0 {
+                check_children_exact!(diagnostics, node, exact_children, node_type.to_string());
+            }
             // Default for variable-child nodes or unhandled ones
             let mut last_type = AssumedType::Unknown;
             for child in &node.children {

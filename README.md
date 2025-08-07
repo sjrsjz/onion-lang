@@ -16,7 +16,7 @@ The name `Onion` is inspired by its core design philosophy: a layered execution 
 ## ✨ Features
 
 - **Expressive Functional Paradigm**: Embraces higher-order functions, closures, pattern matching, and composition as first-class citizens.
-- **Generator-based Asynchronous Core**: The VM is built on generators, providing native, efficient support for asynchronous operations (`async`, `pool`).
+- **Generator-based Asynchronous Core**: The VM is built on generators, providing native, efficient support for asynchronous operations (`async`, `spawn`).
 - **GIL-Free Multi-threading**: True parallel execution with native threads (`launch`, `valueof`), free from a Global Interpreter Lock.
 - **Safe & Explicit Memory Management**: Fine-grained control over mutability (`mut`, `const`) and reference safety to prevent common bugs.
 - **Powerful Metaprogramming**: A compile-time macro system (`@def`, `@ast`) allows for syntax extension and code generation.
@@ -24,7 +24,7 @@ The name `Onion` is inspired by its core design philosophy: a layered execution 
 - **Lazy Collections and Streams**: Built-in support for lazy evaluation and efficient stream processing using the `|` and `|>` operators.
 - **Built-in Interface System**: A flexible, prototype-based system for defining and implementing contracts.
 - **Rich Data Types and Literals**: A comprehensive set of built-in types and an enhanced syntax for strings, tuples, and collections.
-- **High Performance**: The Onion VM is optimized for speed. For example, a 10 million iteration `while` loop completes in approximately 1.17s, about 40% faster than the same loop in RustPython (1.91s).
+- **High Performance**: The Onion VM is optimized for speed. For example, a 10 million iteration `while` loop completes in approximately 0.9s(pgo optimized can reach 0.6s), about 50% faster than the same loop in RustPython (1.91s).
 - **Excellent Tooling**: Includes a command-line interface, REPL, and Language Server Protocol (LSP) support for a modern development experience.
 
 ## 🚀 Quick Start

@@ -1,18 +1,18 @@
-// 粒子系统模拟器 - 烟花效果
+// Particle System Simulator - Fireworks Effect
 @required 'stdlib';
 @include "std/tui_colors.onion";
 
 width := 80;
 height := 30;
 
-// 简单的伪随机数生成器
+// Simple pseudo-random number generator
 rand_seed := mut 12345;
 random := () -> {
     rand_seed = (rand_seed * 1103515245 + 12345) % 2147483648;
     return rand_seed / 2147483648.0;
 };
 
-// 粒子结构
+// Particle structure
 create_particle := (x?, y?, vx?, vy?, life?, color?) -> {
     return {
         "x": x,
@@ -26,7 +26,7 @@ create_particle := (x?, y?, vx?, vy?, life?, color?) -> {
     };
 };
 
-// 创建烟花爆炸
+// Create firework explosion
 create_firework := (center_x?, center_y?) -> {
     particles := mut ();
     particle_count := 20;
@@ -47,7 +47,7 @@ create_firework := (center_x?, center_y?) -> {
     );
       i := mut 0;
     while (i < particle_count) {
-        // 随机方向和速度
+        // Random direction and speed
         angle := (random() * 2.0 * 3.14159);
         speed := random() * 3.0 + 1.0;
         
@@ -66,28 +66,28 @@ create_firework := (center_x?, center_y?) -> {
     return particles;
 };
 
-// 更新粒子
+// Update particles
 update_particles := (particles?) -> {
     new_particles := mut ();
     
     i := mut 0;
     while (i < lengthof particles) {
         particle := particles[i];
-          // 更新位置
+          // Update position
         new_x := particle.x + particle.vx;
         new_y := particle.y + particle.vy;
         
-        // 重力效果
+        // Gravity effect
         new_vy := mut (particle.vy + 0.2);
         
-        // 空气阻力
+        // Air resistance
         new_vx := particle.vx * 0.98;
         new_vy = new_vy * 0.98;
         
-        // 减少生命值
+        // Decrease life value
         new_life := particle.life - 1.0;
         
-        // 只保留活着的粒子
+        // Only keep alive particles
         if (new_life > 0.0 and new_x >= 0.0 and new_x < width and new_y >= 0.0 and new_y < height) {
             new_particle := {
                 "x": new_x,
@@ -108,20 +108,20 @@ update_particles := (particles?) -> {
     return new_particles;
 };
 
-// 渲染场景
+// Render scene
 render_scene := (all_particles?, frame?) -> {
-    // 清屏
+    // Clear screen
     stdlib.io.println("\u001b[2J\u001b[H");
     
-    // 显示标题
-    stdlib.io.println(colorize("🎆 粒子烟花模拟器 - 第" + stdlib.types.to_string(frame) + "帧 🎆", "bright_yellow", "bg_black"));
+    // Display title
+    stdlib.io.println(colorize("🎆 Particle Fireworks Simulator - Frame " + stdlib.types.to_string(frame) + " 🎆", "bright_yellow", "bg_black"));
     // 直接渲染每个位置
     y := mut 0;
     floor := stdlib.math.floor;
     while (y < height) {
         x := mut 0;
         while (x < width) {
-            // 查找这个位置是否有粒子
+            // Check if there is a particle at this position
             found_particle := mut false;
             particle_char := mut " ";
             
@@ -165,13 +165,13 @@ render_scene := (all_particles?, frame?) -> {
     };
 };
 
-// 主模拟循环
+// Main simulation loop
 all_particles := mut ();
 frame := mut 0;
 max_frames := 200;
 
 while (frame < max_frames) {
-    // 每30帧创建新烟花
+    // Create new firework every 30 frames
     if (frame % 30 == 0) {
         firework_x := random() * (width - 20.0) + 10.0;
         firework_y := random() * (height - 20.0) + 10.0;
@@ -179,7 +179,7 @@ while (frame < max_frames) {
         all_particles = all_particles + (new_firework,);
     };
     
-    // 更新所有粒子系统
+    // Update all particle systems
     updated_particles := mut ();
     i := mut 0;
     while (i < lengthof all_particles) {
@@ -191,16 +191,9 @@ while (frame < max_frames) {
     };
     all_particles = updated_particles;
     
-    // 渲染场景
+    // Render scene
     render_scene(all_particles, frame);
-    
-    // 延迟
-    delay := mut 0;
-    while (delay < 80000) {
-        delay = delay + 1;
-    };
-    
     frame = frame + 1;
 };
 
-stdlib.io.println(colorize("烟花表演结束! 🌟", "bright_magenta", "bg_black"));
+stdlib.io.println(colorize("Fireworks show ended! 🌟", "bright_magenta", "bg_black"));
