@@ -173,7 +173,7 @@ impl LspServer {
                     Some((diagnostics, semantic_tokens))
                 }
                 Err(e) => {
-                    error!("Panic during validation: {:?}", e);
+                    error!("Panic during validation: {e:?}");
                     let diag = Diagnostic {
                         range: Range::default_range(),
                         severity: Some(DiagnosticSeverity::Error),
@@ -301,7 +301,7 @@ impl LspServer {
         let byte_offset = match position_to_byte_offset(&document.content, position.clone()) {
             Some(offset) => offset,
             None => {
-                warn!("Could not convert position {:?} to byte offset", position);
+                warn!("Could not convert position {position:?} to byte offset");
                 return items;
             }
         };
@@ -332,7 +332,7 @@ impl LspServer {
                                 let (kind, detail) = match var.assumed_type {
                                     AssumedType::Lambda => (
                                         CompletionItemKind::Function,
-                                        format!("Function: {}", var_name),
+                                        format!("Function: {var_name}"),
                                     ),
                                     _ => (
                                         CompletionItemKind::Variable,
@@ -845,7 +845,7 @@ fn handle_notification<W: Write>(
                         let uri = change.uri;
                         if server_locked.documents.contains_key(&uri) {
                             files_to_revalidate.push(uri.clone());
-                            info!("File change detected for tracked document: {}", uri);
+                            info!("File change detected for tracked document: {uri}");
                         }
                     }
 

@@ -139,7 +139,7 @@ pub fn validate_document(
             error!("Comptime solving failed for: {}", document.uri);
             // 收集编译时错误
             let diagnostics_guard = comptime_solver.diagnostics().read().unwrap();
-            let comptime_diags = collector_to_lsp_diagnostics(&*diagnostics_guard, document);
+            let comptime_diags = collector_to_lsp_diagnostics(&diagnostics_guard, document);
             diagnostics.extend(comptime_diags);
             // 尽力而为：即使编译时求解失败，也尝试对原始 AST 进行语义高亮。
             let semantic_tokens = do_semantic(&document.content, &ast, &tokens).ok();
@@ -148,7 +148,7 @@ pub fn validate_document(
     };
     // 收集 comptime 阶段成功后的所有诊断信息（主要是警告）
     let diagnostics_guard = comptime_solver.diagnostics().read().unwrap();
-    let comptime_diags = collector_to_lsp_diagnostics(&*diagnostics_guard, document);
+    let comptime_diags = collector_to_lsp_diagnostics(&diagnostics_guard, document);
     diagnostics.extend(comptime_diags);
     info!("Compile-time solving successful.");
 
@@ -172,7 +172,7 @@ pub fn validate_document(
             Some(tokens)
         }
         Err(e) => {
-            error!("Semantic highlighting failed: {}", e);
+            error!("Semantic highlighting failed: {e}");
             None
         }
     };
@@ -193,7 +193,7 @@ pub fn new_solver_for_file(uri: &str) -> Result<ComptimeSolver, (Option<String>,
                 Diagnostic {
                     range: Range::default_range(),
                     severity: Some(DiagnosticSeverity::Error),
-                    message: format!("Invalid URI: {}", uri),
+                    message: format!("Invalid URI: {uri}"),
                     ..Default::default()
                 },
             )
@@ -205,7 +205,7 @@ pub fn new_solver_for_file(uri: &str) -> Result<ComptimeSolver, (Option<String>,
                 Diagnostic {
                     range: Range::default_range(),
                     severity: Some(DiagnosticSeverity::Error),
-                    message: format!("URI is not a valid file path: {}", uri),
+                    message: format!("URI is not a valid file path: {uri}"),
                     ..Default::default()
                 },
             )

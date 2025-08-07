@@ -96,7 +96,7 @@ pub fn do_semantic(
     char_to_byte_map.push(code.len());
 
     // 4. 严格遵循先序遍历，在字节图上标记类型。
-    process_node(&ast, &mut semantic_tokens, code, &char_to_byte_map)?;
+    process_node(ast, &mut semantic_tokens, code, &char_to_byte_map)?;
 
     // 5. 最后覆盖注释，确保最高优先级。
     for token in tokens_with_comment {
@@ -181,7 +181,7 @@ fn process_node(
 }
 
 /// 计算节点管辖的字节范围 (start_byte, end_byte)。
-fn calculate_node_byte_range(node: &ASTNode, char_map: &Vec<usize>) -> Option<(usize, usize)> {
+fn calculate_node_byte_range(node: &ASTNode, char_map: &[usize]) -> Option<(usize, usize)> {
     let location = node.source_location.as_ref()?;
 
     // 将字符 span 转换为字节 span
@@ -189,7 +189,7 @@ fn calculate_node_byte_range(node: &ASTNode, char_map: &Vec<usize>) -> Option<(u
 }
 
 /// 将字符索引范围转换为字节索引范围。
-fn get_byte_span(char_span: (usize, usize), char_map: &Vec<usize>) -> Option<(usize, usize)> {
+fn get_byte_span(char_span: (usize, usize), char_map: &[usize]) -> Option<(usize, usize)> {
     let start_byte = *char_map.get(char_span.0)?;
     let end_byte = *char_map.get(char_span.1)?;
     Some((start_byte, end_byte))
@@ -201,7 +201,7 @@ fn mark_byte_range_as(
     start: usize,
     end: usize,
     semantic_type: SemanticTokenTypes,
-    tokens: &mut Vec<SemanticTokenTypes>,
+    tokens: &mut [SemanticTokenTypes],
     skip_whitespace: bool,
     code: &str,
 ) {
