@@ -47,12 +47,13 @@ use onion_vm::{
 };
 
 use crate::{
-    diagnostics::{collector::DiagnosticCollector, Diagnostic, SourceLocation},
+    diagnostics::{Diagnostic, SourceLocation, collector::DiagnosticCollector},
     ir_generator::ir_generator::{IRGenerator, NameSpace},
     parser::{
+        Source,
         analyzer::{analyze_ast, auto_capture_and_rebuild},
         ast::{ASTNode, ASTNodeType},
-        comptime::{ast_bindings, native::wrap_native_function, OnionASTObject}, Source,
+        comptime::{OnionASTObject, ast_bindings, native::wrap_native_function},
     },
     utils::cycle_detector::CycleDetector,
 };
@@ -108,6 +109,10 @@ pub enum ComptimeDiagnostic {
     BorrowError(Option<SourceLocation>, String),
     /// IR 翻译错误。
     IRTranslatorError(Option<SourceLocation>, IRTranslatorError),
+    /// 自定义抛出错误。
+    CustomError(Option<SourceLocation>, String),
+    /// 自定义警告。
+    CustomWarning(Option<SourceLocation>, String),
 }
 
 impl Diagnostic for ComptimeDiagnostic {
@@ -118,6 +123,8 @@ impl Diagnostic for ComptimeDiagnostic {
             ComptimeDiagnostic::IRTranslatorError(_, _) => {
                 crate::diagnostics::ReportSeverity::Error
             }
+            ComptimeDiagnostic::CustomError(_, _) => crate::diagnostics::ReportSeverity::Error,
+            ComptimeDiagnostic::CustomWarning(_, _) => crate::diagnostics::ReportSeverity::Warning,
         }
     }
 
@@ -132,6 +139,8 @@ impl Diagnostic for ComptimeDiagnostic {
             ComptimeDiagnostic::IRTranslatorError(_, err) => {
                 format!("IR Translator Error: {}", err)
             }
+            ComptimeDiagnostic::CustomError(_, msg) => format!("Custom Error: {}", msg),
+            ComptimeDiagnostic::CustomWarning(_, msg) => format!("Custom Warning: {}", msg),
         }
     }
 
@@ -140,6 +149,8 @@ impl Diagnostic for ComptimeDiagnostic {
             ComptimeDiagnostic::RuntimeError(loc, _) => loc.clone(),
             ComptimeDiagnostic::BorrowError(loc, _) => loc.clone(),
             ComptimeDiagnostic::IRTranslatorError(loc, _) => loc.clone(),
+            ComptimeDiagnostic::CustomError(loc, _) => loc.clone(),
+            ComptimeDiagnostic::CustomWarning(loc, _) => loc.clone(),
         }
     }
 
@@ -455,6 +466,84 @@ impl ComptimeSolver {
                             None => {
                                 Err(RuntimeError::DetailedError("No 'path' in arguments".into()))
                             }
+                        }
+                    },
+                ),
+            ),
+        );
+
+        let diagnostics_ref_for_error = diagnostics.clone();
+        builtin_definitions.insert(
+            "error".into(),
+            wrap_native_function(
+                LambdaParameter::top("message"),
+                OnionFastMap::default(),
+                "comptime::error",
+                OnionKeyPool::create(vec!["message".into()]),
+                Arc::new(
+                    move |argument: &OnionFastMap<Box<str>, OnionStaticObject>,
+                          _gc: &mut GC<OnionObjectCell>|
+                          -> Result<OnionStaticObject, RuntimeError> {
+                        match argument.get("message") {
+                            Some(v) => v.weak().with_data(|v| match v {
+                                OnionObject::String(message) => {
+                                    let mut collector =
+                                        diagnostics_ref_for_error.write().map_err(|e| {
+                                            RuntimeError::BorrowError(e.to_string().into())
+                                        })?;
+                                    collector.report(ComptimeDiagnostic::CustomError(
+                                        None, // TODO: 可以从运行时上下文获取位置信息
+                                        message.to_string(),
+                                    ));
+                                    Err(RuntimeError::DetailedError(
+                                        format!("Comptime error: {}", message).into(),
+                                    ))
+                                }
+                                _ => Err(RuntimeError::InvalidType(
+                                    "Expect String for 'message'".into(),
+                                )),
+                            }),
+                            None => Err(RuntimeError::DetailedError(
+                                "No 'message' in arguments".into(),
+                            )),
+                        }
+                    },
+                ),
+            ),
+        );
+
+        let diagnostics_ref_for_warning = diagnostics.clone();
+        builtin_definitions.insert(
+            "warning".into(),
+            wrap_native_function(
+                LambdaParameter::top("message"),
+                OnionFastMap::default(),
+                "comptime::warning",
+                OnionKeyPool::create(vec!["message".into()]),
+                Arc::new(
+                    move |argument: &OnionFastMap<Box<str>, OnionStaticObject>,
+                          _gc: &mut GC<OnionObjectCell>|
+                          -> Result<OnionStaticObject, RuntimeError> {
+                        match argument.get("message") {
+                            Some(v) => v.weak().with_data(|v| match v {
+                                OnionObject::String(message) => {
+                                    let mut collector =
+                                        diagnostics_ref_for_warning.write().map_err(|e| {
+                                            RuntimeError::BorrowError(e.to_string().into())
+                                        })?;
+                                    collector.report(ComptimeDiagnostic::CustomWarning(
+                                        None, // TODO: 可以从运行时上下文获取位置信息
+                                        message.to_string(),
+                                    ));
+                                    Ok(OnionObject::Undefined(None).stabilize())
+                                }
+                                _ => Err(RuntimeError::InvalidType(
+                                    "Expect String for 'message'".into(),
+                                )),
+                            }),
+                            None => Err(RuntimeError::DetailedError(
+                                "No 'message' in arguments".into(),
+                            )),
                         }
                     },
                 ),

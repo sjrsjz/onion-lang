@@ -1,6 +1,6 @@
 [package]
 name = "onion-frontend"
-version = "0.3.2"
+version = "0.3.3"
 edition = "2024"
 authors = ["sjrsjz <sjrsjz@gmail.com>"]
 description = "Compilation frontend for the Onion programming language - lexer, parser, and IR generator"
@@ -26,7 +26,7 @@ base64 = "0.22.1"
 bincode = { version = "2.0.1", features = ["serde"] }
 colored = { workspace = true, optional = true }
 indexmap = "2.10.0"
-onion-vm = { version = "0.3.2", path = "../onion-vm" }
+onion-vm = { version = "0.3.3", path = "../onion-vm" }
 regex = "1.11.1"
 serde.workspace = true
 stacksafe = "0.1.4"

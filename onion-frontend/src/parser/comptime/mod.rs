@@ -92,6 +92,359 @@ impl OnionObjectExt for OnionASTObject {
         Ok(OnionObject::Tuple(OnionTuple::new(children).into()).stabilize())
     }
 
+    fn len(&self) -> Result<OnionStaticObject, RuntimeError> {
+        Ok(OnionObject::Integer(self.ast.children.len() as i64).stabilize())
+    }
+
+    fn apply(&self, value: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
+        value.with_data(|data| match data {
+            OnionObject::Integer(i) => {
+                // 通过索引访问子节点
+                let index = if *i < 0 {
+                    return Err(RuntimeError::InvalidOperation(
+                        "Negative index is not allowed".into(),
+                    ));
+                } else {
+                    *i as usize
+                };
+
+                if index >= self.ast.children.len() {
+                    return Err(RuntimeError::InvalidOperation(
+                        format!(
+                            "Index {} out of bounds for AST children of length {}",
+                            index,
+                            self.ast.children.len()
+                        )
+                        .into(),
+                    ));
+                }
+
+                let child_ast = self.ast.children[index].clone();
+                Ok(OnionObject::Custom(Arc::new(OnionASTObject { ast: child_ast })).stabilize())
+            }
+            OnionObject::Pair(pair) => {
+                // 通过 Pair 替换指定索引的子节点
+                let index = pair.get_key().with_data(|key_data| match key_data {
+                    OnionObject::Integer(i) => {
+                        if *i < 0 {
+                            Err(RuntimeError::InvalidOperation(
+                                "Negative index is not allowed".into(),
+                            ))
+                        } else {
+                            Ok(*i as usize)
+                        }
+                    }
+                    _ => Err(RuntimeError::InvalidType(
+                        "Pair key must be an integer index".into()
+                    )),
+                })?;
+
+                if index >= self.ast.children.len() {
+                    return Err(RuntimeError::InvalidOperation(
+                        format!(
+                            "Index {} out of bounds for AST children of length {}",
+                            index,
+                            self.ast.children.len()
+                        )
+                        .into(),
+                    ));
+                }
+
+                // 将 Pair 的值转换为 AST 节点
+                let new_child_ast = OnionASTObject::from_onion(pair.get_value())?;
+
+                // 创建新的子节点列表，替换指定索引的节点
+                let mut new_children = self.ast.children.clone();
+                new_children[index] = new_child_ast;
+
+                // 创建新的 AST 对象
+                let new_ast = ASTNode {
+                    node_type: self.ast.node_type.clone(),
+                    source_location: self.ast.source_location.clone(),
+                    children: new_children,
+                };
+
+                Ok(OnionObject::Custom(Arc::new(OnionASTObject { ast: new_ast })).stabilize())
+            }
+            _ => Err(RuntimeError::InvalidType(
+                "Apply argument must be an integer (for access) or a pair (for replacement)".into()
+            )),
+        })
+    }
+
+    fn with_attribute(
+            &self,
+            key: &OnionObject,
+            f: &mut dyn FnMut(&OnionObject) -> Result<(), RuntimeError>,
+        ) -> Result<(), RuntimeError> {
+        key.with_data(|key_data| match key_data {
+            OnionObject::String(attr_name) => {
+                match attr_name.as_ref() {
+                    "node_type" => {
+                        // 返回节点类型的字符串表示
+                        let type_name = match &self.ast.node_type {
+                            ASTNodeType::Null => "Null",
+                            ASTNodeType::Undefined => "Undefined",
+                            ASTNodeType::String(_) => "String",
+                            ASTNodeType::Boolean(_) => "Boolean",
+                            ASTNodeType::Number(_) => "Number",
+                            ASTNodeType::Base64(_) => "Base64",
+                            ASTNodeType::Variable(_) => "Variable",
+                            ASTNodeType::Required(_) => "Required",
+                            ASTNodeType::Let(_) => "Let",
+                            ASTNodeType::Frame => "Frame",
+                            ASTNodeType::Assign => "Assign",
+                            ASTNodeType::LambdaDef(_, _) => "LambdaDef",
+                            ASTNodeType::Expressions => "Expressions",
+                            ASTNodeType::Apply => "Apply",
+                            ASTNodeType::Operation(_) => "Operation",
+                            ASTNodeType::Tuple => "Tuple",
+                            ASTNodeType::AssumeTuple => "AssumeTuple",
+                            ASTNodeType::Pair => "Pair",
+                            ASTNodeType::GetAttr => "GetAttr",
+                            ASTNodeType::Return => "Return",
+                            ASTNodeType::If => "If",
+                            ASTNodeType::While => "While",
+                            ASTNodeType::Modifier(_) => "Modifier",
+                            ASTNodeType::Break => "Break",
+                            ASTNodeType::Continue => "Continue",
+                            ASTNodeType::Range => "Range",
+                            ASTNodeType::In => "In",
+                            ASTNodeType::Namespace(_) => "Namespace",
+                            ASTNodeType::Set => "Set",
+                            ASTNodeType::Map => "Map",
+                            ASTNodeType::Is => "Is",
+                            ASTNodeType::Raise => "Raise",
+                            ASTNodeType::Dynamic => "Dynamic",
+                            ASTNodeType::Static => "Static",
+                            ASTNodeType::Comptime => "Comptime",
+                        };
+                        let type_obj = OnionObject::String(type_name.into());
+                        f(&type_obj)
+                    },
+                    "has_data" => {
+                        // 返回是否携带数据
+                        let has_data = matches!(
+                            &self.ast.node_type,
+                            ASTNodeType::String(_) | ASTNodeType::Boolean(_) | ASTNodeType::Number(_) |
+                            ASTNodeType::Base64(_) | ASTNodeType::Variable(_) | ASTNodeType::Required(_) |
+                            ASTNodeType::Let(_) | ASTNodeType::LambdaDef(_, _) | ASTNodeType::Operation(_) |
+                            ASTNodeType::Modifier(_) | ASTNodeType::Namespace(_)
+                        );
+                        let has_data_obj = OnionObject::Boolean(has_data);
+                        f(&has_data_obj)
+                    },
+                    "data" => {
+                        // 返回节点类型携带的原始数据
+                        match &self.ast.node_type {
+                            ASTNodeType::String(s) => {
+                                let data_obj = OnionObject::String(s.clone().into());
+                                f(&data_obj)
+                            },
+                            ASTNodeType::Boolean(b) => {
+                                let data_obj = OnionObject::Boolean(*b);
+                                f(&data_obj)
+                            },
+                            ASTNodeType::Number(n) => {
+                                let data_obj = OnionObject::String(n.clone().into());
+                                f(&data_obj)
+                            },
+                            ASTNodeType::Base64(b64) => {
+                                let data_obj = OnionObject::String(b64.clone().into());
+                                f(&data_obj)
+                            },
+                            ASTNodeType::Variable(name) | ASTNodeType::Required(name) | 
+                            ASTNodeType::Let(name) | ASTNodeType::Namespace(name) => {
+                                let data_obj = OnionObject::String(name.clone().into());
+                                f(&data_obj)
+                            },
+                            ASTNodeType::LambdaDef(is_dyn, captures) => {
+                                // 返回一个包含 is_dyn 和 captures 的元组
+                                let captures_vec: Vec<OnionObject> = captures.iter()
+                                    .map(|s| OnionObject::String(s.clone().into()))
+                                    .collect();
+                                let captures_tuple = OnionObject::Tuple(OnionTuple::new(captures_vec).into());
+                                let data_tuple = OnionObject::Tuple(OnionTuple::new(vec![
+                                    OnionObject::Boolean(*is_dyn),
+                                    captures_tuple
+                                ]).into());
+                                f(&data_tuple)
+                            },
+                            ASTNodeType::Operation(op) => {
+                                let op_str = match op {
+                                    crate::parser::ast::ASTNodeOperation::Add => "+",
+                                    crate::parser::ast::ASTNodeOperation::Abs => "abs",
+                                    crate::parser::ast::ASTNodeOperation::Subtract => "-",
+                                    crate::parser::ast::ASTNodeOperation::Minus => "minus",
+                                    crate::parser::ast::ASTNodeOperation::Multiply => "*",
+                                    crate::parser::ast::ASTNodeOperation::Divide => "/",
+                                    crate::parser::ast::ASTNodeOperation::Modulus => "%",
+                                    crate::parser::ast::ASTNodeOperation::Power => "**",
+                                    crate::parser::ast::ASTNodeOperation::And => "and",
+                                    crate::parser::ast::ASTNodeOperation::Xor => "xor",
+                                    crate::parser::ast::ASTNodeOperation::Or => "or",
+                                    crate::parser::ast::ASTNodeOperation::Not => "not",
+                                    crate::parser::ast::ASTNodeOperation::Equal => "==",
+                                    crate::parser::ast::ASTNodeOperation::NotEqual => "!=",
+                                    crate::parser::ast::ASTNodeOperation::Greater => ">",
+                                    crate::parser::ast::ASTNodeOperation::Less => "<",
+                                    crate::parser::ast::ASTNodeOperation::GreaterEqual => ">=",
+                                    crate::parser::ast::ASTNodeOperation::LessEqual => "<=",
+                                    crate::parser::ast::ASTNodeOperation::LeftShift => "<<",
+                                    crate::parser::ast::ASTNodeOperation::RightShift => ">>",
+                                };
+                                let data_obj = OnionObject::String(op_str.into());
+                                f(&data_obj)
+                            },
+                            ASTNodeType::Modifier(mod_type) => {
+                                let mod_str = match mod_type {
+                                    crate::parser::ast::ASTNodeModifier::Mut => "mut",
+                                    crate::parser::ast::ASTNodeModifier::Const => "const",
+                                    crate::parser::ast::ASTNodeModifier::KeyOf => "keyof",
+                                    crate::parser::ast::ASTNodeModifier::ValueOf => "valueof",
+                                    crate::parser::ast::ASTNodeModifier::Assert => "assert",
+                                    crate::parser::ast::ASTNodeModifier::Import => "import",
+                                    crate::parser::ast::ASTNodeModifier::TypeOf => "typeof",
+                                    crate::parser::ast::ASTNodeModifier::LengthOf => "lengthof",
+                                    crate::parser::ast::ASTNodeModifier::Launch => "launch",
+                                    crate::parser::ast::ASTNodeModifier::Spawn => "spawn",
+                                    crate::parser::ast::ASTNodeModifier::Async => "async",
+                                    crate::parser::ast::ASTNodeModifier::Sync => "sync",
+                                    crate::parser::ast::ASTNodeModifier::Atomic => "atomic",
+                                };
+                                let data_obj = OnionObject::String(mod_str.into());
+                                f(&data_obj)
+                            },
+                            _ => {
+                                // 对于没有数据的节点类型，返回 null
+                                let null_obj = OnionObject::Null;
+                                f(&null_obj)
+                            }
+                        }
+                    },
+                    // 直接通过数据字段名访问
+                    "value" => {
+                        match &self.ast.node_type {
+                            ASTNodeType::String(s) | ASTNodeType::Number(s) | ASTNodeType::Base64(s) => {
+                                let value_obj = OnionObject::String(s.clone().into());
+                                f(&value_obj)
+                            },
+                            ASTNodeType::Boolean(b) => {
+                                let value_obj = OnionObject::Boolean(*b);
+                                f(&value_obj)
+                            },
+                            _ => Err(RuntimeError::InvalidOperation(
+                                "Attribute 'value' is only supported for String, Number, Base64, and Boolean node types".into()
+                            ))
+                        }
+                    },
+                    "name" => {
+                        match &self.ast.node_type {
+                            ASTNodeType::Variable(name) | ASTNodeType::Required(name) | 
+                            ASTNodeType::Let(name) | ASTNodeType::Namespace(name) => {
+                                let name_obj = OnionObject::String(name.clone().into());
+                                f(&name_obj)
+                            },
+                            _ => Err(RuntimeError::InvalidOperation(
+                                "Attribute 'name' is only supported for Variable, Required, Let, and Namespace node types".into()
+                            ))
+                        }
+                    },
+                    "op" => {
+                        match &self.ast.node_type {
+                            ASTNodeType::Operation(op) => {
+                                let op_str = match op {
+                                    crate::parser::ast::ASTNodeOperation::Add => "+",
+                                    crate::parser::ast::ASTNodeOperation::Abs => "abs",
+                                    crate::parser::ast::ASTNodeOperation::Subtract => "-",
+                                    crate::parser::ast::ASTNodeOperation::Minus => "minus",
+                                    crate::parser::ast::ASTNodeOperation::Multiply => "*",
+                                    crate::parser::ast::ASTNodeOperation::Divide => "/",
+                                    crate::parser::ast::ASTNodeOperation::Modulus => "%",
+                                    crate::parser::ast::ASTNodeOperation::Power => "**",
+                                    crate::parser::ast::ASTNodeOperation::And => "and",
+                                    crate::parser::ast::ASTNodeOperation::Xor => "xor",
+                                    crate::parser::ast::ASTNodeOperation::Or => "or",
+                                    crate::parser::ast::ASTNodeOperation::Not => "not",
+                                    crate::parser::ast::ASTNodeOperation::Equal => "==",
+                                    crate::parser::ast::ASTNodeOperation::NotEqual => "!=",
+                                    crate::parser::ast::ASTNodeOperation::Greater => ">",
+                                    crate::parser::ast::ASTNodeOperation::Less => "<",
+                                    crate::parser::ast::ASTNodeOperation::GreaterEqual => ">=",
+                                    crate::parser::ast::ASTNodeOperation::LessEqual => "<=",
+                                    crate::parser::ast::ASTNodeOperation::LeftShift => "<<",
+                                    crate::parser::ast::ASTNodeOperation::RightShift => ">>",
+                                };
+                                let op_obj = OnionObject::String(op_str.into());
+                                f(&op_obj)
+                            },
+                            _ => Err(RuntimeError::InvalidOperation(
+                                "Attribute 'op' is only supported for Operation node type".into()
+                            ))
+                        }
+                    },
+                    "modifier" => {
+                        match &self.ast.node_type {
+                            ASTNodeType::Modifier(mod_type) => {
+                                let mod_str = match mod_type {
+                                    crate::parser::ast::ASTNodeModifier::Mut => "mut",
+                                    crate::parser::ast::ASTNodeModifier::Const => "const",
+                                    crate::parser::ast::ASTNodeModifier::KeyOf => "keyof",
+                                    crate::parser::ast::ASTNodeModifier::ValueOf => "valueof",
+                                    crate::parser::ast::ASTNodeModifier::Assert => "assert",
+                                    crate::parser::ast::ASTNodeModifier::Import => "import",
+                                    crate::parser::ast::ASTNodeModifier::TypeOf => "typeof",
+                                    crate::parser::ast::ASTNodeModifier::LengthOf => "lengthof",
+                                    crate::parser::ast::ASTNodeModifier::Launch => "launch",
+                                    crate::parser::ast::ASTNodeModifier::Spawn => "spawn",
+                                    crate::parser::ast::ASTNodeModifier::Async => "async",
+                                    crate::parser::ast::ASTNodeModifier::Sync => "sync",
+                                    crate::parser::ast::ASTNodeModifier::Atomic => "atomic",
+                                };
+                                let mod_obj = OnionObject::String(mod_str.into());
+                                f(&mod_obj)
+                            },
+                            _ => Err(RuntimeError::InvalidOperation(
+                                "Attribute 'modifier' is only supported for Modifier node type".into()
+                            ))
+                        }
+                    },
+                    "is_dyn" | "dyn" => {
+                        match &self.ast.node_type {
+                            ASTNodeType::LambdaDef(is_dyn, _) => {
+                                let dyn_obj = OnionObject::Boolean(*is_dyn);
+                                f(&dyn_obj)
+                            },
+                            _ => Err(RuntimeError::InvalidOperation(
+                                "Attribute 'is_dyn'/'dyn' is only supported for LambdaDef node type".into()
+                            ))
+                        }
+                    },
+                    "captures" => {
+                        match &self.ast.node_type {
+                            ASTNodeType::LambdaDef(_, captures) => {
+                                let captures_vec: Vec<OnionObject> = captures.iter()
+                                    .map(|s| OnionObject::String(s.clone().into()))
+                                    .collect();
+                                let captures_obj = OnionObject::Tuple(OnionTuple::new(captures_vec).into());
+                                f(&captures_obj)
+                            },
+                            _ => Err(RuntimeError::InvalidOperation(
+                                "Attribute 'captures' is only supported for LambdaDef node type".into()
+                            ))
+                        }
+                    },
+                    _ => Err(RuntimeError::InvalidOperation(
+                        format!("Unknown attribute '{}'. Available attributes: node_type, has_data, data, value (for String/Number/Base64/Boolean), name (for Variable/Required/Let/Namespace), op (for Operation), modifier (for Modifier), is_dyn/dyn (for LambdaDef), captures (for LambdaDef)", attr_name).into()
+                    ))
+                }
+            },
+            _ => Err(RuntimeError::InvalidType(
+                "Attribute key must be a string".into()
+            ))
+        })
+    }
+
     fn type_of(&self) -> Result<String, RuntimeError> {
         Ok("OnionASTObject".to_string())
     }

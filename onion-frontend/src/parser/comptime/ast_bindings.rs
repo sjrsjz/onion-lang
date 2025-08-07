@@ -48,7 +48,6 @@ fn ast_wrapper(ast: ASTNode) -> OnionStaticObject {
     OnionObject::Custom(Arc::new(OnionASTObject { ast })).stabilize()
 }
 
-
 // --- 各类带数据 AST 节点的构造函数 ---
 
 /// 构造 String 类型 AST 节点。
@@ -366,6 +365,19 @@ fn lambda_def(
     })
 }
 
+fn from_onion(
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
+    _gc: &mut GC<OnionObjectCell>,
+) -> Result<OnionStaticObject, RuntimeError> {
+    let value = argument.get("value").ok_or_else(|| {
+        RuntimeError::InvalidOperation("from() requires a 'value' argument".into())
+    })?;
+
+    value
+        .weak()
+        .with_data(|data| OnionASTObject::from_onion(data).map(ast_wrapper))
+}
+
 /// 构建 AST 构造模块，导出所有节点构造函数和常量。
 ///
 /// 返回值为 VM 可用的静态对象（Tuple of Pair）。
@@ -431,6 +443,7 @@ pub fn build_module() -> OnionStaticObject {
         ("lambda_def", lambda_def, vec!["dyn", "captures"]),
         ("serialize", serialize_ast, vec!["value"]),
         ("deserialize", deserialize_ast, vec!["value"]),
+        ("from", from_onion, vec!["value"]),
     ];
 
     for (name, func, params) in builders {

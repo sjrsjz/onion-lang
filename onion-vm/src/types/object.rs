@@ -2139,63 +2139,114 @@ impl OnionObject {
         self.with_data(|obj| {
             value.with_data(|value| match obj {
                 OnionObject::Tuple(tuple) => {
-                    let index = match value {
-                        OnionObject::Integer(i) => *i,
-                        _ => {
-                            return Err(RuntimeError::InvalidType(
-                                "Argument 'index' must be an integer".into(),
-                            ));
+                    match value {
+                        OnionObject::Integer(i) => {
+                            // 单索引访问
+                            let elements = tuple.get_elements();
+                            if (*i as usize) < elements.len() {
+                                Ok(OnionStaticObject::new(elements[*i as usize].clone()))
+                            } else {
+                                Err(RuntimeError::InvalidOperation(
+                                    "Index out of bounds for tuple".into(),
+                                ))
+                            }
                         }
-                    };
+                        OnionObject::Range(start, end) => {
+                            // 切片访问
+                            let elements = tuple.get_elements();
+                            let len = elements.len() as i64;
+                            let start_idx = (*start).max(0).min(len) as usize;
+                            let end_idx = (*end).max(0).min(len) as usize;
 
-                    let elements = tuple.get_elements();
-                    if (index as usize) < elements.len() {
-                        Ok(OnionStaticObject::new(elements[index as usize].clone()))
-                    } else {
-                        Err(RuntimeError::InvalidOperation(
-                            "Index out of bounds for tuple".into(),
-                        ))
+                            if start_idx <= end_idx {
+                                let sliced: Vec<OnionObject> =
+                                    elements[start_idx..end_idx].to_vec();
+                                Ok(OnionStaticObject::new(OnionObject::Tuple(
+                                    OnionTuple::new(sliced).into(),
+                                )))
+                            } else {
+                                Ok(OnionStaticObject::new(OnionObject::Tuple(
+                                    OnionTuple::new(vec![]).into(),
+                                )))
+                            }
+                        }
+                        _ => Err(RuntimeError::InvalidType(
+                            "Tuple apply() expects Integer (index) or Range (slice)".into(),
+                        )),
                     }
                 }
                 OnionObject::String(s) => {
-                    let index = match value {
-                        OnionObject::Integer(i) => *i,
-                        _ => {
-                            return Err(RuntimeError::InvalidType(
-                                "Argument 'index' must be an integer".into(),
-                            ));
+                    match value {
+                        OnionObject::Integer(i) => {
+                            // 单字符访问
+                            if *i < 0 || *i >= s.chars().count() as i64 {
+                                return Err(RuntimeError::InvalidOperation(
+                                    format!("Index out of bounds for String: {}", s).into(),
+                                ));
+                            }
+                            Ok(OnionStaticObject::new(OnionObject::String(Arc::from(
+                                s.chars().nth(*i as usize).unwrap().to_string(),
+                            ))))
                         }
-                    };
-                    if index < 0 || index >= s.len() as i64 {
-                        return Err(RuntimeError::InvalidOperation(
-                            format!("Index out of bounds for String: {}", s).into(),
-                        ));
+                        OnionObject::Range(start, end) => {
+                            // 字符串切片
+                            let chars: Vec<char> = s.chars().collect();
+                            let len = chars.len() as i64;
+                            let start_idx = (*start).max(0).min(len) as usize;
+                            let end_idx = (*end).max(0).min(len) as usize;
+
+                            if start_idx <= end_idx {
+                                let sliced: String = chars[start_idx..end_idx].iter().collect();
+                                Ok(OnionStaticObject::new(OnionObject::String(Arc::from(
+                                    sliced,
+                                ))))
+                            } else {
+                                Ok(OnionStaticObject::new(OnionObject::String(Arc::from(""))))
+                            }
+                        }
+                        _ => Err(RuntimeError::InvalidType(
+                            "String apply() expects Integer (index) or Range (slice)".into(),
+                        )),
                     }
-                    Ok(OnionStaticObject::new(OnionObject::String(Arc::from(
-                        s.chars().nth(index as usize).unwrap().to_string(),
-                    ))))
                 }
                 OnionObject::Bytes(b) => {
-                    let index = match value {
-                        OnionObject::Integer(i) => *i,
-                        _ => {
-                            return Err(RuntimeError::InvalidType(
-                                "Argument 'index' must be an integer".into(),
-                            ));
+                    match value {
+                        OnionObject::Integer(i) => {
+                            // 单字节访问
+                            if *i < 0 || *i >= b.len() as i64 {
+                                return Err(RuntimeError::InvalidOperation(
+                                    format!("Index out of bounds for Bytes: {:?}", b).into(),
+                                ));
+                            }
+                            Ok(OnionStaticObject::new(OnionObject::Bytes(Arc::from(vec![
+                                b[*i as usize],
+                            ]))))
                         }
-                    };
-                    if index < 0 || index >= b.len() as i64 {
-                        return Err(RuntimeError::InvalidOperation(
-                            format!("Index out of bounds for Bytes: {:?}", b).into(),
-                        ));
+                        OnionObject::Range(start, end) => {
+                            // 字节切片
+                            let len = b.len() as i64;
+                            let start_idx = (*start).max(0).min(len) as usize;
+                            let end_idx = (*end).max(0).min(len) as usize;
+
+                            if start_idx <= end_idx {
+                                let sliced = &b[start_idx..end_idx];
+                                Ok(OnionStaticObject::new(OnionObject::Bytes(Arc::from(
+                                    sliced,
+                                ))))
+                            } else {
+                                Ok(OnionStaticObject::new(OnionObject::Bytes(Arc::from(
+                                    vec![],
+                                ))))
+                            }
+                        }
+                        _ => Err(RuntimeError::InvalidType(
+                            "Bytes apply() expects Integer (index) or Range (slice)".into(),
+                        )),
                     }
-                    Ok(OnionStaticObject::new(OnionObject::Bytes(Arc::from(vec![
-                        b[index as usize],
-                    ]))))
                 }
                 OnionObject::Custom(custom) => custom.apply(value),
                 _ => Err(RuntimeError::InvalidOperation(
-                    format!("index_of() not supported for {:?}", self).into(),
+                    format!("apply() not supported for {:?}", obj).into(),
                 )),
             })
         })
