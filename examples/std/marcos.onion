@@ -1,0 +1,21 @@
+@def(strcat => "strs" -> {
+    Modules := mut ();
+    @include "result.onion";
+    result := mut ast.string("");
+    i := mut 0;
+    while (i < lengthof strs) {
+        ast_result := try(() -> ast.deserialize(strs[i]));
+        if (ast_result.is_err()) {
+            result = ast.operation("+") << (const result, ast.string(strs[i].string()));
+        } else {
+            apply_ast := ast.deserialize($(""()));
+            as_string_ast := ast.deserialize($("".string));
+            result = ast.operation("+") << (
+                const result, 
+                apply_ast[0 => as_string_ast[0 => ast_result.unwrap()]]
+            );
+        };
+        i = i + 1;
+    };
+    return const result;
+});
