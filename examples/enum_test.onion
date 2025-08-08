@@ -1,0 +1,33 @@
+
+Modules := mut ();
+@required 'stdlib';
+@include 'std/marcos.onion';
+@include 'std/enum.onion';
+@include 'std/constraint.onion';
+TestEnum := Enum(
+    Success => String,
+    Failure => String,
+    Pending => Integer,
+    Any?
+);
+TestEnum_Success := TestEnum.new(Success => "Operation completed successfully");
+TestEnum_Failure := TestEnum.new(Failure => "Operation failed");
+TestEnum_Pending := TestEnum.new(Pending => 42);
+TestEnum_Any := TestEnum.new(Any => "This can be anything");
+stdlib.io.println(@strcat("TestEnum_Success tag: ", $TestEnum_Success.tag()));
+stdlib.io.println(@strcat("TestEnum_Failure tag: ", $TestEnum_Failure.tag()));
+stdlib.io.println(@strcat("TestEnum_Pending tag: ", $TestEnum_Pending.tag()));
+stdlib.io.println(@strcat("TestEnum_Any tag: ", $TestEnum_Any.tag()));
+stdlib.io.println(@strcat("TestEnum_Success data: ", $TestEnum_Success.unwrap()));
+stdlib.io.println(@strcat("TestEnum_Failure data: ", $TestEnum_Failure.unwrap()));
+stdlib.io.println(@strcat("TestEnum_Pending data: ", $TestEnum_Pending.unwrap()));
+stdlib.io.println(@strcat("TestEnum_Any data: ", $TestEnum_Any.unwrap()));
+
+data := TestEnum_Failure.map(
+    Success => (data?) -> @strcat("Success: ", $data),
+    Failure => (data?) -> @strcat("Failure: ", $data),
+    Pending => (data?) -> @strcat("Pending: ", $data),
+    Any => (data?) -> @strcat("Any: ", $data)
+).unwrap_or("No mapping found");
+
+stdlib.io.println(@strcat("Mapped data: ", $data));

@@ -26,6 +26,13 @@ if (not keyof (sync (() -> Modules.Result))()) {
                     return _Result_Temp_Constructor.new(keyof self);
                 }
             },
+            add_then => (f?) -> {
+                if (self.is_ok()) {
+                    return f(valueof keyof self);
+                } else {
+                    return _Result_Temp_Constructor.new(keyof self);
+                }
+            },
             unwrap => () -> {
                 if (self.is_ok()) {
                     return valueof keyof self;

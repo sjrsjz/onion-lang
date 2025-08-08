@@ -1,0 +1,50 @@
+@required 'Modules';
+if (not keyof (sync (() -> Modules.Enum))()) {
+    @include "constraint.onion";
+    // Define temporary Enum constructor
+    _Enum_Temp_Constructor := mut undefined;
+    // Configure temporary Enum constructor
+    _Enum_Temp_Constructor = (tags => Tuple) -> {
+        @include "prototype.onion";
+        @include "result.onion";
+        
+        // Enum definition
+        // (tag: data) : interface
+        // Goal: Define enum using A := Enum(tag1 => constraint1, tag2 => constraint2, ...)
+        // Create enum instance using enum1 := A.new(tag1 => data)
+        // Get enum tag using enum1.tag()
+        // Get enum data using enum1.unwrap()
+        
+        _Enum_Interface := interface {
+            tag => () -> keyof keyof self,
+            unwrap => () -> valueof keyof self,
+            map => (mappers => Tuple) -> {
+                _self := self; // Important! Since entering a new function scope will shadow `self` and `this`, we need to save it by assigning it to a new variable
+                try(() -> mappers.{keyof keyof _self}).map((f?) -> f(valueof keyof _self))
+            },
+        };
+        constructors := mut ();
+        i := mut 0;
+        while (i < lengthof tags) {
+            tag := tags[i];
+            key := keyof tag;
+            constraint := valueof tag;
+            constructor := (x => constraint) -> _Enum_Interface.new(key : x);
+            constructors = constructors + (key : constructor,);
+            i = i + 1;
+        };
+        constructors := const constructors; // get the const value from mut
+        new := (x => Pair) -> constructors.{keyof x}(valueof x);
+        return (
+            check => _Enum_Interface.check,
+            new => new,
+            interface => _Enum_Interface,
+        )
+    };
+
+    // Cache the configured temporary Enum constructor
+    Modules = Modules + (Enum => _Enum_Temp_Constructor,);
+};
+
+// Assign the cached constructor to global Enum
+Enum := Modules.Enum;

@@ -1,0 +1,29 @@
+@required 'stdlib';
+
+prototype := "Hello, World!" : {
+    print_self => () -> stdlib.io.println(self),
+    print_data => () -> stdlib.io.println(keyof self),
+    print_interface => () -> stdlib.io.println(valueof self),
+    call_print_self => () -> self.print_self(),
+    self_scope => () -> {
+        // When use `A.method`, `self` will be the instance of `A`, then VM will create a new object as LambdaDef(method_lambda_ref, self_ref)
+        stdlib.io.println("self of current function scope: ");
+        stdlib.io.println(self);
+        _self := self; // Save `self` to a new variable to avoid shadowing in inner function scope
+        inner_function := () -> {
+            // When enter a new function scope, `self` will be shadowed
+            // Since `inner_function` was not called with `A.method`, `self` will be undefined
+            stdlib.io.println("self of inner function scope: ");
+            stdlib.io.println(self); // undefined!
+            stdlib.io.println(_self); // Hello, World!
+        };
+        inner_function(); // `inner_function` will be represent as LambdaDef(inner_function_ref, undefined)
+
+    }
+};
+
+prototype.print_self();
+prototype.print_data();
+prototype.print_interface();
+prototype.call_print_self();
+prototype.self_scope();
