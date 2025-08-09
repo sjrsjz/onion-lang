@@ -200,16 +200,9 @@ pub fn build_tuple(
     _gc: &mut GC<OnionObjectCell>,
 ) -> StepResult {
     if let OpcodeArgument::Int64(size) = opcode.operand1 {
-        // 快速路径：一次获取栈的可变引用，避免重复查找
         let stack = unwrap_step_result!(runnable.context.get_current_stack_mut());
-        let mut tuple = Vec::with_capacity(size as usize);
-        for i in 1..=size as usize {
-            tuple.push(unwrap_step_result!(Context::get_object_from_stack(
-                stack,
-                size as usize - i
-            )));
-        }
-        let tuple = OnionTuple::new_static(tuple);
+        let slice = unwrap_step_result!(Context::get_objects_slice(stack, 0, size as usize));
+        let tuple = OnionTuple::new_from_slice(slice);
         unwrap_step_result!(Context::discard_from_stack(stack, size as usize));
         Context::push_to_stack(stack, tuple);
         StepResult::Continue
@@ -1266,9 +1259,7 @@ pub fn launch_thread(
 
             // 创建调度器运行 Lambda
             let mut scheduler: Box<dyn Runnable> = Box::new(Scheduler::new(vec![Box::new(
-                OnionLambdaRunnableLauncher::new(lambda_obj.weak(), onion_tuple!(), |r| {
-                    Ok(r)
-                })?,
+                OnionLambdaRunnableLauncher::new(lambda_obj.weak(), onion_tuple!(), |r| Ok(r))?,
             )]));
 
             // 执行循环

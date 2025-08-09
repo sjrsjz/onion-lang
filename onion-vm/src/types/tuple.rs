@@ -118,6 +118,27 @@ impl OnionTuple {
         .consume_and_stabilize()
     }
 
+    /// 创建静态元组对象（元素为静态对象，参数为切片）。
+    ///
+    /// # 参数
+    /// - `elements`: 静态对象切片
+    ///
+    /// # 返回
+    /// 稳定化后的静态元组对象
+    pub fn new_from_slice(elements: &[OnionStaticObject]) -> OnionStaticObject {
+        OnionObject::Tuple(
+            OnionTuple {
+                elements: elements
+                    .iter()
+                    .map(|e| e.weak().clone())
+                    .collect::<Vec<_>>()
+                    .into(),
+            }
+            .into(),
+        )
+        .consume_and_stabilize()
+    }
+
     /// 获取元组元素的引用。
     #[inline(always)]
     pub fn get_elements(&self) -> &[OnionObject] {

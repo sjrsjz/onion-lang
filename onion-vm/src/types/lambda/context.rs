@@ -14,9 +14,8 @@ use crate::{
     utils::format_object_summary,
 };
 
-
 /// 虚拟机执行帧。
-/// 
+///
 /// 包含变量表和操作数栈，代表一次函数调用或执行环境。
 #[derive(Clone, Debug)]
 pub struct Frame {
@@ -79,9 +78,8 @@ impl Frame {
     }
 }
 
-
 /// Onion 虚拟机执行上下文。
-/// 
+///
 /// 管理多帧调用栈，支持作用域、变量、栈和帧的各种操作。
 #[derive(Clone)]
 pub struct Context {
@@ -212,9 +210,7 @@ impl Context {
         }
         let stack = last_frame.get_stack();
         match stack.get(stack.len() - 1 - idx) {
-            None => Err(RuntimeError::DetailedError(
-                "Index out of bounds".into(),
-            )),
+            None => Err(RuntimeError::DetailedError("Index out of bounds".into())),
             Some(o) => Ok(o),
         }
     }
@@ -237,9 +233,7 @@ impl Context {
         let stack = last_frame.get_stack_mut();
         let idx = stack.len() - 1 - idx;
         match stack.get_mut(idx) {
-            None => Err(RuntimeError::DetailedError(
-                "Index out of bounds".into(),
-            )),
+            None => Err(RuntimeError::DetailedError("Index out of bounds".into())),
             Some(o) => Ok(o),
         }
     }
@@ -359,13 +353,36 @@ impl Context {
         idx: usize,
     ) -> Result<&OnionStaticObject, RuntimeError> {
         if stack.len() <= idx {
-            return Err(RuntimeError::DetailedError(
-                "Index out of bounds".into(),
-            ));
+            return Err(RuntimeError::DetailedError("Index out of bounds".into()));
         }
         Ok(&stack[stack.len() - 1 - idx])
     }
 
+    #[inline(always)]
+    pub fn get_objects_slice(
+        stack: &Vec<OnionStaticObject>,
+        idx: usize,
+        len: usize,
+    ) -> Result<&[OnionStaticObject], RuntimeError> {
+        // 如果长度为0，直接返回空切片
+        if len == 0 {
+            return Ok(&[]);
+        }
+
+        if stack.len() <= idx {
+            return Err(RuntimeError::DetailedError("Index out of bounds".into()));
+        }
+
+        if idx + len > stack.len() {
+            return Err(RuntimeError::DetailedError(
+                "Slice length exceeds available elements".into(),
+            ));
+        }
+
+        let start = stack.len() - idx - len;
+        let end = stack.len() - idx;
+        Ok(&stack[start..end])
+    }
     pub fn replace_last_object(stack: &mut Vec<OnionStaticObject>, object: OnionStaticObject) {
         let last_index = stack.len() - 1;
         stack[last_index] = object;
