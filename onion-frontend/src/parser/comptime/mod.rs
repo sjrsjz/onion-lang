@@ -67,10 +67,6 @@ impl OnionObjectExt for OnionASTObject {
         })
     }
 
-    fn is_same(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
-        self.equals(other)
-    }
-
     fn key_of(&self) -> Result<OnionStaticObject, RuntimeError> {
         // 获取一个移除了子节点的 AST 节点
         let key_ast = ASTNode {

@@ -62,7 +62,7 @@ pub struct OnionLambdaRunnableLauncher {
 
     /// 对生成的 runnable 进行包装/变换的回调
     runnable_mapper:
-        Arc<dyn Fn(Box<dyn Runnable>) -> Result<Box<dyn Runnable>, RuntimeError> + Sync + Send>,
+        Box<dyn Fn(Box<dyn Runnable>) -> Result<Box<dyn Runnable>, RuntimeError> + Sync + Send>,
 }
 
 impl OnionLambdaRunnableLauncher {
@@ -108,7 +108,7 @@ impl OnionLambdaRunnableLauncher {
             flatten_argument,
             string_pool: key_pool.clone(),
             current_argument_index: 0,
-            runnable_mapper: Arc::new(runnable_mapper),
+            runnable_mapper: Box::new(runnable_mapper),
         })
     }
 }

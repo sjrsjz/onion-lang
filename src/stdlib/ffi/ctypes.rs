@@ -114,9 +114,6 @@ impl OnionObjectExt for CTypes {
         Ok(false)
     }
     fn upgrade(&self, _collected: &mut Vec<GCArc<OnionObjectCell>>) {}
-    fn is_same(&self, _other: &OnionObject) -> Result<bool, RuntimeError> {
-        Ok(false)
-    }
     fn with_attribute(
         &self,
         key: &OnionObject,

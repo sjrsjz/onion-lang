@@ -19,7 +19,7 @@ pool := async () -> { // `async` modifier creates an AsyncScheduler entry point,
     };
 };
 
-tasks := pool(); // call async function, returns scheduler entry function handle, blocks until all spawned tasks complete
+tasks := pool(); // call async function, returns a pair containing success status(boolean) and array of task handles(entry function's result), blocks until all spawned tasks complete
 stdlib.io.println(@strcat("Processing result: ", $valueof tasks)); // valueof extracts array of task handles from scheduler function handle
 
 (0..5).elements() |> (i?) -> {

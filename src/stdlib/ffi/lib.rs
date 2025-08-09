@@ -118,9 +118,6 @@ impl OnionObjectExt for CLib {
         Ok(false)
     }
     fn upgrade(&self, _collected: &mut Vec<GCArc<OnionObjectCell>>) {}
-    fn is_same(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
-        self.equals(other)
-    }
     fn with_attribute(
         &self,
         key: &OnionObject,
@@ -335,9 +332,6 @@ impl OnionObjectExt for CFunctionHandle {
         Ok(false)
     }
     fn upgrade(&self, _collected: &mut Vec<GCArc<OnionObjectCell>>) {}
-    fn is_same(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
-        self.equals(other)
-    }
     fn with_attribute(
         &self,
         key: &OnionObject,

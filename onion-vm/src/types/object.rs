@@ -371,7 +371,7 @@ pub enum OnionObject {
     InstructionPackage(Arc<VMInstructionPackage>),
 
     // immutable container types
-    Tuple(Arc<OnionTuple>),
+    Tuple(OnionTuple), // Arc<[OnionObject]> is used inside OnionTuple
     Pair(Arc<OnionPair>),
     LazySet(Arc<OnionLazySet>),
     Lambda((Arc<OnionLambdaDefinition>, Arc<OnionObject>)), // (definition, self_object)
@@ -527,7 +527,6 @@ pub trait OnionObjectExt: GCTraceable<OnionObjectCell> + Debug + Send + Sync + '
 
     // Comparison operations
     fn equals(&self, other: &OnionObject) -> Result<bool, RuntimeError>;
-    fn is_same(&self, other: &OnionObject) -> Result<bool, RuntimeError>;
     fn binary_eq(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
         Err(RuntimeError::InvalidOperation(
             format!("binary_eq() not supported for {:?} and {:?}", self, other).into(),
@@ -862,7 +861,7 @@ impl OnionObject {
 
     /// 检查两个对象是否是同一个引用。
     /// 如果是 `Mut` 类型，则比较其指向的强引用对象地址。
-    /// 对于其他类型，使用 `equals` 方法进行值比较。
+    /// 对于其他类型，直接返回 `false`。
     pub fn is_same(&self, other: &Self) -> Result<bool, RuntimeError> {
         match (self, other) {
             (OnionObject::Mut(weak1), OnionObject::Mut(weak2)) => {
@@ -872,8 +871,7 @@ impl OnionObject {
                     Ok(false)
                 }
             }
-            (OnionObject::Custom(c1), _) => c1.is_same(other),
-            _ => self.equals(other),
+            _ => Ok(false), // 非 Mut 类型直接返回 false
         }
     }
 
@@ -2487,7 +2485,11 @@ impl OnionStaticObject {
             _ => {
                 let mut arcs = vec![];
                 obj.upgrade(&mut arcs);
-                GCArcStorage::Multiple(Arc::new(arcs))
+                match arcs.len() {
+                    0 => GCArcStorage::None,
+                    1 => GCArcStorage::Single(arcs[0].clone()),
+                    _ => GCArcStorage::Multiple(Arc::new(arcs)),
+                }
             }
         };
         OnionStaticObject {

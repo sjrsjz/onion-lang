@@ -1,4 +1,3 @@
-
 //! Onion 元组（Tuple）类型模块。
 //!
 //! 提供 Onion 语言运行时的元组类型实现，支持任意对象的有序集合表达，
@@ -10,7 +9,7 @@
 //! - 元组拼接与包含关系判断
 //! - GC 跟踪与升级
 
-use std::{collections::VecDeque, fmt::Debug};
+use std::{collections::VecDeque, fmt::Debug, sync::Arc};
 
 use arc_gc::{
     arc::{GCArc, GCArcWeak},
@@ -21,20 +20,20 @@ use crate::lambda::runnable::RuntimeError;
 
 use super::object::{OnionObject, OnionObjectCell, OnionStaticObject};
 
-
 /// Onion 元组类型。
 ///
 /// 封装有序对象集合，支持高效的索引访问与属性查找。
 ///
 /// # 字段
 /// - `elements`: 元组元素的有序对象数组
+#[derive(Clone)]
 pub struct OnionTuple {
-    elements: Box<[OnionObject]>,
+    elements: Arc<[OnionObject]>,
 }
 
 impl GCTraceable<OnionObjectCell> for OnionTuple {
     fn collect(&self, queue: &mut VecDeque<GCArcWeak<OnionObjectCell>>) {
-        for element in &self.elements {
+        for element in self.elements.as_ref() {
             element.collect(queue);
         }
     }
@@ -92,7 +91,7 @@ impl OnionTuple {
                     .into_iter()
                     .map(|e| e.weak().clone())
                     .collect::<Vec<_>>()
-                    .into_boxed_slice(),
+                    .into(),
             }
             .into(),
         ))
@@ -112,7 +111,7 @@ impl OnionTuple {
                     .into_iter()
                     .map(|e| e.weak().clone())
                     .collect::<Vec<_>>()
-                    .into_boxed_slice(),
+                    .into(),
             }
             .into(),
         )
@@ -121,8 +120,8 @@ impl OnionTuple {
 
     /// 获取元组元素的引用。
     #[inline(always)]
-    pub fn get_elements(&self) -> &Box<[OnionObject]> {
-        &self.elements
+    pub fn get_elements(&self) -> &[OnionObject] {
+        self.elements.as_ref()
     }
 
     /// 升级元组中所有元素的对象引用。
@@ -200,7 +199,7 @@ impl OnionTuple {
     where
         F: Fn(&OnionObject) -> Result<R, RuntimeError>,
     {
-        for element in &self.elements {
+        for element in self.elements.as_ref() {
             match element {
                 OnionObject::Pair(pair) => {
                     if pair.get_key().equals(key)? {
@@ -225,7 +224,7 @@ impl OnionTuple {
     pub fn binary_add(&self, other: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
         match other {
             OnionObject::Tuple(other_tuple) => {
-                let new_elements: Box<[OnionObject]> = self
+                let new_elements: Arc<[OnionObject]> = self
                     .elements
                     .iter()
                     .chain(other_tuple.elements.iter())
@@ -253,7 +252,7 @@ impl OnionTuple {
     /// - `true`: 包含
     /// - `false`: 不包含
     pub fn contains(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
-        for element in &self.elements {
+        for element in self.elements.as_ref() {
             if element.equals(other)? {
                 return Ok(true);
             }
@@ -269,7 +268,7 @@ impl OnionTuple {
                 if self.elements.len() != other_tuple.elements.len() {
                     return Ok(false);
                 }
-                for (a, b) in self.elements.iter().zip(&other_tuple.elements) {
+                for (a, b) in self.elements.iter().zip(other_tuple.elements.as_ref()) {
                     if a.equals(b)? {
                         return Ok(false);
                     }

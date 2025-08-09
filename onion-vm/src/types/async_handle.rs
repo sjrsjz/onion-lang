@@ -140,19 +140,6 @@ impl OnionObjectExt for OnionAsyncHandle {
         }
     }
 
-    fn is_same(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
-        if let OnionObject::Custom(other_custom) = other {
-            if let Some(other_handle) = other_custom.as_any().downcast_ref::<OnionAsyncHandle>() {
-                // Use pointer equality to check if it's the same Arc
-                Ok(std::ptr::eq(self, other_handle))
-            } else {
-                Ok(false)
-            }
-        } else {
-            Ok(false)
-        }
-    }
-
     fn to_boolean(&self) -> Result<bool, RuntimeError> {
         // A async handle is "truthy" if it hasn't finished yet
         Ok(!self.is_finished())

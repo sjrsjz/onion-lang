@@ -215,7 +215,7 @@ impl ReplExecutor {
     fn add_result_to_out(&mut self, result: OnionObject) {
         let new_elements = {
             if let OnionObject::Tuple(tuple) = self.out_tuple.weak() {
-                let mut elements = tuple.get_elements().clone().to_vec();
+                let mut elements = tuple.get_elements().to_vec();
                 elements.push(result);
                 elements
             } else {
