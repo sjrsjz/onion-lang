@@ -5,7 +5,7 @@ Modules := mut ();
 
 @required 'stdlib';
 print := (a => Union(Float, Integer), b => Union(Float, Integer)) -> {
-    stdlib.io.println(@strcat('a: ', $a, 'b: ', $b));
+    stdlib.io.println(@strcat('a: ', $a, ' b: ', $b));
 };
 
 // Example usage

@@ -1,21 +1,59 @@
-@def(strcat => "strs" -> {
-    Modules := mut ();
-    @include "result.onion";
-    result := mut ast.string("");
-    i := mut 0;
-    while (i < lengthof strs) {
-        ast_result := try(() -> ast.deserialize(strs[i]));
-        if (ast_result.is_err()) {
-            result = ast.operation("+") << (const result, ast.string(strs[i].string()));
-        } else {
-            apply_ast := ast.deserialize($(""()));
-            as_string_ast := ast.deserialize($("".string));
-            result = ast.operation("+") << (
+@def(
+    @include "constraint.onion"; 
+    strcat => (parts => Tuple) -> {
+        result := mut $ ""; // requires a space to prevent from parsing `$""` as base64
+        i := mut 0;
+        while (i < lengthof parts) {
+            apply_ast := $f();
+            as_string_ast := $obj.string;
+            result = ($a + b) << (
                 const result, // prevent from cyclic reference
-                apply_ast[0 => as_string_ast[0 => ast_result.unwrap()]]
+                apply_ast[0 => as_string_ast[0 => const parts[i]]] // `ast[index => node]` will create a new ast and replace its child
             );
+            i = i + 1;
         };
-        i = i + 1;
-    };
-    return const result;
-});
+        return const result;
+    }
+);
+
+@def(
+    @include "constraint.onion"; 
+    format => (template_and_values => Tuple) -> {
+        if (lengthof template_and_values < 1) {
+            error("format requires at least one argument");
+        };
+        template := template_and_values[0];
+        args := template_and_values[1..lengthof template_and_values]; // get all arguments except the first one
+        
+        parts := mut ();
+        string_index := mut 0;
+        arg_index := mut 0;
+        buffer := mut "";
+
+        // `%s` means take the next argument, `%%` means literal `%`
+        while (string_index < lengthof template) {
+            if (template[string_index] == "%" and string_index + 1 < lengthof template) {
+                if (template[string_index + 1] == "s") {
+                    // Replace `%s` with the next argument
+                    if (arg_index >= lengthof args) {
+                        error("format: not enough arguments provided for template");
+                    };
+                    parts = parts + (const buffer, const args[arg_index],); // use `const` to prevent others from modifying
+                    buffer = "";
+                    arg_index = arg_index + 1;
+                    string_index = string_index + 2;
+                    continue;
+                } else if (template[string_index + 1] == "%") {
+                    // Replace `%%` with `%`
+                    buffer = buffer + "%";
+                    string_index = string_index + 2;
+                    continue;
+                };
+            };
+            buffer = buffer + template[string_index];
+            string_index = string_index + 1;
+        };
+        parts = parts + (const buffer,);
+        return strcat(parts);
+    }
+);

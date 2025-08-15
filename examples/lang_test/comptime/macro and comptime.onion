@@ -36,9 +36,9 @@ lambda := @ast.lambda_def(false, ()) << (
 
 stdlib.io.println(@strcat("lambda(1, 2) = ", $lambda(1, 2)));
 
-// `$` is used to serialize the following expression as bytes, so that deserialize can convert it back to an AST object
-// note: `$"b64"` is represented as a base64 encoded bytes. If you want to express an ast, use `$("string")`
-lambda2 := @ast.deserialize(
+// `$` is used to serialize the following expression as bytes and convert it back to an AST object at comptime
+// note: `$"b64"` is represented as a base64 encoded bytes. If you want to express an ast, use `$("string")` or `$ "string"`(add a space)
+lambda2 := @(
     $(x?, y?) -> x * y 
 );
 
@@ -51,14 +51,7 @@ stdlib.io.println(foo());
 stdlib.io.println(@bar()); 
 
 @def(
-    curry => "T_body_pair" -> ast.deserialize(
-        $()->()
-    ) << (
-        keyof T_body_pair,
-        ast.deserialize(
-            valueof T_body_pair
-        )
-    )
+    curry => "T_body_pair" -> ($param->body) << (keyof T_body_pair, valueof T_body_pair)
 );
 
 // Equivalent to "U" -> "V" -> U / V

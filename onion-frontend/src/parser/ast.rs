@@ -1059,14 +1059,30 @@ fn match_serialize_to_base64(
     };
     let base64_encoded = base64::engine::general_purpose::STANDARD.encode(serialized);
 
-    let node = ASTNode::new(
-        ASTNodeType::Base64(base64_encoded),
-        span_from_tokens(&tokens),
-        vec![], // 我们不保留原始 AST，因为我们的静态分析器会拒绝Base64的子节点
-    );
-    Ok(Some(node))
-}
+    // 将 `$expr` 解糖为 `ast.deserialize("base64...")` 的AST结构
 
+    // 1. 创建 `ast.deserialize` 节点 (GetAttr)
+    let get_attr_node = ASTNode::new(
+        ASTNodeType::GetAttr,
+        None, // 这是一个生成的节点，没有直接的源码位置
+        vec![
+            ASTNode::new(ASTNodeType::Variable("ast".to_string()), None, vec![]),
+            ASTNode::new(ASTNodeType::String("deserialize".to_string()), None, vec![]),
+        ],
+    );
+
+    // 2. 创建参数节点 (Base64编码的字符串)
+    let arg_node = ASTNode::new(ASTNodeType::Base64(base64_encoded), None, vec![]);
+
+    // 3. 创建函数调用节点 (Apply)
+    let apply_node = ASTNode::new(
+        ASTNodeType::Apply,
+        span_from_tokens(&tokens), // 整个调用节点的源码位置对应于原始的 `$expr`
+        vec![get_attr_node, arg_node],
+    );
+
+    Ok(Some(apply_node))
+}
 fn match_dynamic_and_static(
     collector: &mut DiagnosticCollector,
     tokens: &[GatheredTokens],
