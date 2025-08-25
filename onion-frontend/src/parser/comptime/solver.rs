@@ -756,7 +756,12 @@ impl ComptimeSolver {
         let args = OnionTuple::new_static(vec![]);
 
         let mut scheduler: Box<dyn Runnable> = Box::new(Scheduler::new(vec![Box::new(
-            OnionLambdaRunnableLauncher::new(lambda.weak(), args, Ok)?,
+            OnionLambdaRunnableLauncher::new(
+                lambda.weak(),
+                OnionObject::Undefined(None).stabilize(),
+                args,
+                Ok,
+            )?,
         )]));
         // Execute code
         loop {

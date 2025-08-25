@@ -242,9 +242,10 @@ impl Runnable for OnionLazySetCollector {
                             self.filter
                                 .weak()
                                 .with_data(|filter: &OnionObject| match filter {
-                                    OnionObject::Lambda(_) => {
+                                    OnionObject::Lambda((_, self_object)) => {
                                         let runnable = Box::new(OnionLambdaRunnableLauncher::new(
                                             filter,
+                                            self_object.stabilize(),
                                             item.stabilize(),
                                             &|r| Ok(r),
                                         )?);

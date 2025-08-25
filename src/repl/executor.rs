@@ -21,8 +21,8 @@ use onion_vm::{
     utils::fastmap::OnionFastMap,
 };
 
-use onion_frontend::{compile::build_code, parser::Source};
 use onion_frontend::diagnostics::collector::DiagnosticCollector;
+use onion_frontend::{compile::build_code, parser::Source};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -60,14 +60,18 @@ impl ReplExecutor {
     }
 
     /// 执行代码并将结果存储到Out参数中
-    pub fn execute_code(&mut self, source: &Source, collector: &mut DiagnosticCollector) -> Result<(), String> {
+    pub fn execute_code(
+        &mut self,
+        source: &Source,
+        collector: &mut DiagnosticCollector,
+    ) -> Result<(), String> {
         let ir_package = match build_code(collector, source) {
             Ok(package) => {
                 if collector.has_errors() {
                     return Err("Compilation failed".to_string());
                 }
                 package
-            },
+            }
             Err(_) => return Err("Compilation failed".to_string()),
         };
 
@@ -105,8 +109,13 @@ impl ReplExecutor {
 
         let args = OnionTuple::new_static(vec![]);
         let mut scheduler: Box<dyn Runnable> = Box::new(Scheduler::new(vec![Box::new(
-            OnionLambdaRunnableLauncher::new(lambda.weak(), args, Ok)
-                .map_err(|e| format!("Failed to create runnable Lambda: {e:?}"))?,
+            OnionLambdaRunnableLauncher::new(
+                lambda.weak(),
+                OnionObject::Undefined(None).stabilize(),
+                args,
+                Ok,
+            )
+            .map_err(|e| format!("Failed to create runnable Lambda: {e:?}"))?,
         )]));
 
         let mut gc = GC::new_with_memory_threshold(1024 * 1024);

@@ -380,8 +380,13 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
     let args = OnionTuple::new_static(vec![]);
 
     let mut scheduler: Box<dyn Runnable> = Box::new(Scheduler::new(vec![Box::new(
-        OnionLambdaRunnableLauncher::new(lambda.weak(), args, Ok)
-            .map_err(|e| format!("Failed to create runnable Lambda: {e:?}"))?,
+        OnionLambdaRunnableLauncher::new(
+            lambda.weak(),
+            OnionObject::Undefined(None).stabilize(),
+            args,
+            Ok,
+        )
+        .map_err(|e| format!("Failed to create runnable Lambda: {e:?}"))?,
     )]));
     // Execute code
     loop {

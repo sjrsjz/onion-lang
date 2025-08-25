@@ -7,12 +7,8 @@ use opcode::{OpcodeArgument, ProcessedOpcode};
 
 use crate::{
     lambda::{
-        runnable::{Runnable, RuntimeError, StepResult},
-        scheduler::{
-            async_scheduler::{AsyncScheduler, Task},
-            map_scheduler::Mapping,
-            scheduler::Scheduler,
-        },
+        runnable::{RuntimeError, StepResult},
+        scheduler::{async_scheduler::Task, map_scheduler::Mapping, scheduler::Scheduler},
     },
     onion_tuple,
     types::{
@@ -1064,39 +1060,17 @@ pub fn apply(
 ) -> StepResult {
     let object = unwrap_step_result!(runnable.context.get_object_rev(1));
     let argument = unwrap_step_result!(runnable.context.get_object_rev(0));
-    let (step_result, push_object) = unwrap_step_result!(object.weak().with_data(|obj_ref| {
-        match obj_ref {
-            OnionObject::Lambda((lambda_def, _)) => {
-                let launcher =
-                    OnionLambdaRunnableLauncher::new(obj_ref, argument.clone(), |r| Ok(r))?;
-                let new_runnable: Box<dyn Runnable> = match lambda_def.lambda_type() {
-                    LambdaType::Atomic => Box::new(launcher),
-                    LambdaType::AsyncLauncher => {
-                        let new_task_handler = OnionAsyncHandle::new(gc);
-                        Box::new(AsyncScheduler::new(Task::new(
-                            Box::new(Scheduler::new(vec![Box::new(launcher)])),
-                            new_task_handler,
-                            0,
-                        )))
-                    }
-                    LambdaType::SyncLauncher => Box::new(Scheduler::new(vec![Box::new(launcher)])),
-                };
-                return Ok((StepResult::NewRunnable(new_runnable), None));
-            }
-            _ => {
-                return Ok((
-                    StepResult::Continue,
-                    Some(object.weak().apply(argument.weak())?),
-                ));
-            }
+    match unwrap_step_result!(object.weak().apply(None, argument.weak(), gc)) {
+        Ok(step_result) => {
+            unwrap_step_result!(runnable.context.discard_objects(2));
+            step_result
         }
-    }));
-
-    unwrap_step_result!(runnable.context.discard_objects(2));
-    if let Some(element) = push_object {
-        unwrap_step_result!(runnable.context.push_object(element));
+        Err(element) => {
+            unwrap_step_result!(runnable.context.discard_objects(2));
+            unwrap_step_result!(runnable.context.push_object(element));
+            StepResult::Continue
+        }
     }
-    step_result
 }
 
 pub fn mutablize(
@@ -1210,8 +1184,13 @@ pub fn spawn_task(
 
     let new_runnable = unwrap_step_result!(lambda.weak().with_data(|lambda_obj| {
         match lambda_obj {
-            OnionObject::Lambda(_) => Ok(Box::new(Scheduler::new(vec![Box::new(
-                OnionLambdaRunnableLauncher::new(lambda_obj, onion_tuple!(), &|r| Ok(r))?,
+            OnionObject::Lambda((_, self_object)) => Ok(Box::new(Scheduler::new(vec![Box::new(
+                OnionLambdaRunnableLauncher::new(
+                    lambda_obj,
+                    self_object.stabilize(),
+                    onion_tuple!(),
+                    &|r| Ok(r),
+                )?,
             )]))),
             _ => Err(RuntimeError::DetailedError(
                 format!("spawn_task requires a Lambda object, but found {}", lambda).into(),
@@ -1235,9 +1214,9 @@ pub fn launch_thread(
     let value = unwrap_step_result!(runnable.context.get_object_rev(0));
 
     // 检查 value 是否为 Lambda 对象
-    let lambda_obj = unwrap_step_result!(value.weak().with_data(|data| {
+    let (lambda_obj, self_object) = unwrap_step_result!(value.weak().with_data(|data| {
         match data {
-            OnionObject::Lambda(_) => Ok(value.clone()),
+            OnionObject::Lambda((_, self_object)) => Ok((value.clone(), self_object.stabilize())),
             _ => Err(RuntimeError::DetailedError(
                 format!(
                     "launch_thread requires a Lambda object, but found {}",
@@ -1259,7 +1238,12 @@ pub fn launch_thread(
 
             // 创建调度器运行 Lambda
             let mut scheduler: Box<dyn Runnable> = Box::new(Scheduler::new(vec![Box::new(
-                OnionLambdaRunnableLauncher::new(lambda_obj.weak(), onion_tuple!(), |r| Ok(r))?,
+                OnionLambdaRunnableLauncher::new(
+                    lambda_obj.weak(),
+                    self_object,
+                    onion_tuple!(),
+                    |r| Ok(r),
+                )?,
             )]));
 
             // 执行循环

@@ -82,13 +82,14 @@ impl OnionLambdaRunnableLauncher {
     /// - runnable_mapper 可用于包装异步、同步等调度器
     pub fn new<F: Sync + Send + 'static>(
         lambda: &OnionObject,
+        self_object: OnionStaticObject,
         argument: OnionStaticObject,
         runnable_mapper: F,
     ) -> Result<OnionLambdaRunnableLauncher, RuntimeError>
     where
         F: Fn(Box<dyn Runnable>) -> Result<Box<dyn Runnable>, RuntimeError> + Sync + Send + 'static,
     {
-        let OnionObject::Lambda((lambda_ref, self_object)) = lambda else {
+        let OnionObject::Lambda((lambda_ref, _)) = lambda else {
             return Err(RuntimeError::InvalidType(
                 "Cannot launch non-lambda object".into(),
             ));
@@ -103,7 +104,7 @@ impl OnionLambdaRunnableLauncher {
         Ok(Self {
             lambda: lambda.stabilize(),
             lambda_ref: lambda_ref.clone(),
-            lambda_self_object: self_object.stabilize(),
+            lambda_self_object: self_object,
             argument,
             flatten_argument,
             string_pool: key_pool.clone(),
@@ -199,12 +200,13 @@ impl Runnable for OnionLambdaRunnableLauncher {
                         ));
                     }
                 }
-                lambda @ OnionObject::Lambda(_) => {
+                lambda @ OnionObject::Lambda((_, self_object)) => {
                     // 嵌套 Lambda 约束，递归生成新 Launcher
                     self.current_argument_index = index + 1;
                     return StepResult::NewRunnable(Box::new(unwrap_step_result!(
                         OnionLambdaRunnableLauncher::new(
                             lambda,
+                            self_object.stabilize(),
                             self.flatten_argument[index].stabilize(),
                             |r| Ok(r),
                         )

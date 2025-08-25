@@ -68,14 +68,25 @@ use std::{
 };
 
 use crate::{
-    lambda::runnable::RuntimeError,
-    types::lambda::{
-        native::{
-            native_bool_converter, native_bytes_converter, native_elements_method,
-            native_float_converter, native_int_converter, native_length_method,
-            native_string_converter, wrap_native_function,
+    lambda::{
+        runnable::{Runnable, RuntimeError, StepResult},
+        scheduler::{
+            async_scheduler::{AsyncScheduler, Task},
+            scheduler::Scheduler,
         },
-        parameter::LambdaParameter,
+    },
+    types::{
+        async_handle::OnionAsyncHandle,
+        lambda::{
+            definition::LambdaType,
+            launcher::OnionLambdaRunnableLauncher,
+            native::{
+                native_bool_converter, native_bytes_converter, native_elements_method,
+                native_float_converter, native_int_converter, native_length_method,
+                native_string_converter, wrap_native_function,
+            },
+            parameter::LambdaParameter,
+        },
     },
     utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
@@ -489,7 +500,10 @@ pub trait OnionObjectExt: GCTraceable<OnionObjectCell> + Debug + Send + Sync + '
             format!("contains() not supported for {:?} and {:?}", self, other).into(),
         ))
     }
-    fn apply(&self, value: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
+    fn apply(
+        &self,
+        value: &OnionObject,
+    ) -> Result<Result<StepResult, OnionStaticObject>, RuntimeError> {
         Err(RuntimeError::InvalidOperation(
             format!(
                 "apply() not supported for {:?} with value {:?}",
@@ -2211,17 +2225,52 @@ impl OnionObject {
             )),
         })
     }
-    
-    pub fn apply(&self, value: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
+
+    pub fn apply(
+        &self,
+        override_self_object: Option<&OnionObject>,
+        value: &OnionObject,
+        gc: &mut GC<OnionObjectCell>,
+    ) -> Result<Result<StepResult, OnionStaticObject>, RuntimeError> {
         self.with_data(|obj| {
-            value.with_data(|value| match obj {
+            match obj {
+                OnionObject::Lambda((lambda_def, self_object)) => {
+                    let launcher = OnionLambdaRunnableLauncher::new(
+                        obj,
+                        match override_self_object {
+                            Some(override_self) => override_self.stabilize(),
+                            None => self_object.stabilize(),
+                        },
+                        value.stabilize(),
+                        |r| Ok(r),
+                    )?;
+                    let new_runnable: Box<dyn Runnable> = match lambda_def.lambda_type() {
+                        LambdaType::Atomic => Box::new(launcher),
+                        LambdaType::AsyncLauncher => {
+                            let new_task_handler = OnionAsyncHandle::new(gc);
+                            Box::new(AsyncScheduler::new(Task::new(
+                                Box::new(Scheduler::new(vec![Box::new(launcher)])),
+                                new_task_handler,
+                                0,
+                            )))
+                        }
+                        LambdaType::SyncLauncher => {
+                            Box::new(Scheduler::new(vec![Box::new(launcher)]))
+                        }
+                    };
+                    return Ok(Ok(StepResult::NewRunnable(new_runnable)));
+                }
+                OnionObject::Pair(pair) => {
+                    let override_self = Some(override_self_object.unwrap_or(pair.get_key()));
+                    pair.get_value().apply(override_self, value, gc)
+                }
                 OnionObject::Tuple(tuple) => {
-                    match value {
+                    value.with_data(|value| match value {
                         OnionObject::Integer(i) => {
                             // 单索引访问
                             let elements = tuple.get_elements();
                             if (*i as usize) < elements.len() {
-                                Ok(OnionStaticObject::new(elements[*i as usize].clone()))
+                                Ok(Err(OnionStaticObject::new(elements[*i as usize].clone())))
                             } else {
                                 Err(RuntimeError::InvalidOperation(
                                     "Index out of bounds for tuple".into(),
@@ -2238,22 +2287,22 @@ impl OnionObject {
                             if start_idx <= end_idx {
                                 let sliced: Vec<OnionObject> =
                                     elements[start_idx..end_idx].to_vec();
-                                Ok(OnionStaticObject::new(OnionObject::Tuple(
+                                Ok(Err(OnionStaticObject::new(OnionObject::Tuple(
                                     OnionTuple::new(sliced).into(),
-                                )))
+                                ))))
                             } else {
-                                Ok(OnionStaticObject::new(OnionObject::Tuple(
+                                Ok(Err(OnionStaticObject::new(OnionObject::Tuple(
                                     OnionTuple::new(vec![]).into(),
-                                )))
+                                ))))
                             }
                         }
                         _ => Err(RuntimeError::InvalidType(
                             "Tuple apply() expects Integer (index) or Range (slice)".into(),
                         )),
-                    }
+                    })
                 }
                 OnionObject::String(s) => {
-                    match value {
+                    value.with_data(|value| match value {
                         OnionObject::Integer(i) => {
                             // 单字符访问
                             if *i < 0 || *i >= s.chars().count() as i64 {
@@ -2261,9 +2310,9 @@ impl OnionObject {
                                     format!("Index out of bounds for String: {}", s).into(),
                                 ));
                             }
-                            Ok(OnionStaticObject::new(OnionObject::String(Arc::from(
+                            Ok(Err(OnionStaticObject::new(OnionObject::String(Arc::from(
                                 s.chars().nth(*i as usize).unwrap().to_string(),
-                            ))))
+                            )))))
                         }
                         OnionObject::Range(start, end) => {
                             // 字符串切片
@@ -2274,20 +2323,22 @@ impl OnionObject {
 
                             if start_idx <= end_idx {
                                 let sliced: String = chars[start_idx..end_idx].iter().collect();
-                                Ok(OnionStaticObject::new(OnionObject::String(Arc::from(
+                                Ok(Err(OnionStaticObject::new(OnionObject::String(Arc::from(
                                     sliced,
-                                ))))
+                                )))))
                             } else {
-                                Ok(OnionStaticObject::new(OnionObject::String(Arc::from(""))))
+                                Ok(Err(OnionStaticObject::new(OnionObject::String(Arc::from(
+                                    "",
+                                )))))
                             }
                         }
                         _ => Err(RuntimeError::InvalidType(
                             "String apply() expects Integer (index) or Range (slice)".into(),
                         )),
-                    }
+                    })
                 }
                 OnionObject::Bytes(b) => {
-                    match value {
+                    value.with_data(|value| match value {
                         OnionObject::Integer(i) => {
                             // 单字节访问
                             if *i < 0 || *i >= b.len() as i64 {
@@ -2295,9 +2346,9 @@ impl OnionObject {
                                     format!("Index out of bounds for Bytes: {:?}", b).into(),
                                 ));
                             }
-                            Ok(OnionStaticObject::new(OnionObject::Bytes(Arc::from(vec![
-                                b[*i as usize],
-                            ]))))
+                            Ok(Err(OnionStaticObject::new(OnionObject::Bytes(Arc::from(
+                                vec![b[*i as usize]],
+                            )))))
                         }
                         OnionObject::Range(start, end) => {
                             // 字节切片
@@ -2307,25 +2358,25 @@ impl OnionObject {
 
                             if start_idx <= end_idx {
                                 let sliced = &b[start_idx..end_idx];
-                                Ok(OnionStaticObject::new(OnionObject::Bytes(Arc::from(
+                                Ok(Err(OnionStaticObject::new(OnionObject::Bytes(Arc::from(
                                     sliced,
-                                ))))
+                                )))))
                             } else {
-                                Ok(OnionStaticObject::new(OnionObject::Bytes(Arc::from(
+                                Ok(Err(OnionStaticObject::new(OnionObject::Bytes(Arc::from(
                                     vec![],
-                                ))))
+                                )))))
                             }
                         }
                         _ => Err(RuntimeError::InvalidType(
                             "Bytes apply() expects Integer (index) or Range (slice)".into(),
                         )),
-                    }
+                    })
                 }
                 OnionObject::Custom(custom) => custom.apply(value),
                 _ => Err(RuntimeError::InvalidOperation(
                     format!("apply() not supported for {:?}", obj).into(),
                 )),
-            })
+            }
         })
     }
 

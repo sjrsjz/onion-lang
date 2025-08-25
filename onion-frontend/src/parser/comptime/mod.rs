@@ -23,12 +23,10 @@ pub mod solver;
 use std::sync::Arc;
 
 use onion_vm::{
-    GCTraceable,
-    lambda::runnable::RuntimeError,
-    types::{
+    lambda::runnable::{RuntimeError, StepResult}, types::{
         object::{OnionObject, OnionObjectCell, OnionObjectExt, OnionStaticObject},
         tuple::OnionTuple,
-    },
+    }, GCTraceable
 };
 
 use crate::parser::ast::{ASTNode, ASTNodeType};
@@ -92,7 +90,7 @@ impl OnionObjectExt for OnionASTObject {
         Ok(OnionObject::Integer(self.ast.children.len() as i64).stabilize())
     }
 
-    fn apply(&self, value: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
+    fn apply(&self, value: &OnionObject) -> Result<Result<StepResult, OnionStaticObject>, RuntimeError> {
         value.with_data(|data| match data {
             OnionObject::Integer(i) => {
                 // 通过索引访问子节点
@@ -116,7 +114,7 @@ impl OnionObjectExt for OnionASTObject {
                 }
 
                 let child_ast = self.ast.children[index].clone();
-                Ok(OnionObject::Custom(Arc::new(OnionASTObject { ast: child_ast })).stabilize())
+                Ok(Err(OnionObject::Custom(Arc::new(OnionASTObject { ast: child_ast })).stabilize()))
             }
             OnionObject::Pair(pair) => {
                 // 通过 Pair 替换指定索引的子节点
@@ -160,7 +158,7 @@ impl OnionObjectExt for OnionASTObject {
                     children: new_children,
                 };
 
-                Ok(OnionObject::Custom(Arc::new(OnionASTObject { ast: new_ast })).stabilize())
+                Ok(Err(OnionObject::Custom(Arc::new(OnionASTObject { ast: new_ast })).stabilize()))
             }
             _ => Err(RuntimeError::InvalidType(
                 "Apply argument must be an integer (for access) or a pair (for replacement)".into()
