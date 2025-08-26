@@ -2,6 +2,7 @@ use std::{collections::VecDeque, fmt::Debug, sync::Arc};
 
 use arc_gc::{
     arc::{GCArc, GCArcWeak},
+    gc::GC,
     traceable::GCTraceable,
 };
 use base64::Engine;
@@ -59,11 +60,22 @@ impl OnionBytesValue {
     pub fn value(&self) -> &[u8] {
         &self.value
     }
+
+    #[inline(always)]
+    pub fn as_arc(&self) -> &Arc<[u8]> {
+        &self.value
+    }
 }
 
 impl OnionObjectProtocol for OnionBytesValue {
     fn repr(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
-        Ok(format!("{:?}", self))
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&self.value);
+        Ok(format!("${}", b64))
+    }
+
+    fn display(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&self.value);
+        Ok(format!("${}", b64))
     }
 
     fn type_of(&self) -> Result<String, RuntimeError> {
@@ -79,7 +91,7 @@ impl OnionObjectProtocol for OnionBytesValue {
             OnionObject::BytesValue(b) => {
                 let needle = b.value();
                 if needle.is_empty() {
-                    Ok(false)
+                    Ok(true)
                 } else {
                     Ok(self
                         .value
@@ -128,7 +140,10 @@ impl OnionObjectProtocol for OnionBytesValue {
 
     fn apply(
         &self,
+        _this_object: &OnionObject,
+        _self_object: Option<&OnionObject>,
         value: &OnionObject,
+        _gc: &mut GC<OnionObjectCell>,
     ) -> Result<Result<StepResult, OnionStaticObject>, RuntimeError> {
         match value {
             OnionObject::IntegerValue(i) => {

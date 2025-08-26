@@ -41,13 +41,27 @@ impl OnionInstructionPackage {
     }
 
     #[inline(always)]
+    pub fn from_arc(value: Arc<VMInstructionPackage>) -> Self {
+        OnionInstructionPackage { value }
+    }
+
+    #[inline(always)]
     pub fn value(&self) -> &VMInstructionPackage {
+        &self.value
+    }
+
+    #[inline(always)]
+    pub fn as_arc(&self) -> &Arc<VMInstructionPackage> {
         &self.value
     }
 }
 
 impl OnionObjectProtocol for OnionInstructionPackage {
     fn repr(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+        Ok("InstructionPackage(...)".into())
+    }
+
+    fn display(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
         Ok("InstructionPackage(...)".into())
     }
 

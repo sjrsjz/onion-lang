@@ -49,6 +49,10 @@ impl OnionObjectProtocol for OnionNull {
         Ok("null".into())
     }
 
+    fn display(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+        Ok("null".into())
+    }
+
     fn type_of(&self) -> Result<String, RuntimeError> {
         Ok("Null".into())
     }

@@ -10,8 +10,6 @@
 //! - 兼容原生与字节码 Lambda
 //! - 便于与异步/同步调度器集成
 
-use std::sync::Arc;
-
 use arc_gc::gc::GC;
 
 use crate::{
@@ -46,7 +44,7 @@ pub struct OnionLambdaRunnableLauncher {
     /// 被调用的 Lambda 对象（OnionObject::Lambda）
     lambda: OnionStaticObject,
     /// Lambda 定义的强引用
-    lambda_ref: Arc<OnionLambdaDefinition>,
+    lambda_def: OnionLambdaDefinition,
     /// Lambda 的 self 对象
     lambda_self_object: OnionStaticObject,
 
@@ -89,21 +87,21 @@ impl OnionLambdaRunnableLauncher {
     where
         F: Fn(Box<dyn Runnable>) -> Result<Box<dyn Runnable>, RuntimeError> + Sync + Send + 'static,
     {
-        let OnionObject::Lambda((lambda_ref, _)) = lambda else {
+        let OnionObject::Lambda(lambda_def) = lambda else {
             return Err(RuntimeError::InvalidType(
                 "Cannot launch non-lambda object".into(),
             ));
         };
-        let key_pool = lambda_ref.create_key_pool();
+        let key_pool = lambda_def.create_key_pool();
 
         // 参数自动展开，支持元组/字典等多种形式
-        let flatten_argument = lambda_ref
+        let flatten_argument = lambda_def
             .get_parameter()
             .unpack_arguments(argument.weak())?;
 
         Ok(Self {
             lambda: lambda.stabilize(),
-            lambda_ref: lambda_ref.clone(),
+            lambda_def: lambda_def.clone(),
             lambda_self_object: self_object,
             argument,
             flatten_argument,
@@ -135,13 +133,22 @@ impl Runnable for OnionLambdaRunnableLauncher {
             )),
             StepResult::Return(constraint_result) => {
                 // 约束校验结果，必须为 true
-                if constraint_result.weak().to_boolean()? {
-                    Ok(())
-                } else {
-                    Err(RuntimeError::InvalidOperation(
-                        "Constraint check failed".into(),
-                    ))
+                if let OnionObject::BooleanValue(v) = constraint_result.weak() {
+                    if v.value() {
+                        return Ok(());
+                    } else {
+                        return Err(RuntimeError::InvalidOperation(
+                            "Constraint check failed".into(),
+                        ));
+                    }
                 }
+                Err(RuntimeError::InvalidOperation(
+                    format!(
+                        "Expect boolean for constraint result, but found: {:?}",
+                        constraint_result
+                    )
+                    .into(),
+                ))
             }
             StepResult::ReplaceRunnable(_) => Err(RuntimeError::DetailedError(
                 "OnionLambdaRunnableLauncher cannot replace runnables"
@@ -166,17 +173,17 @@ impl Runnable for OnionLambdaRunnableLauncher {
     /// - 所有约束校验通过后，收集参数，调用 lambda_ref.create_runnable 构造 runnable
     /// - 通过 runnable_mapper 包装后，替换当前 runnable
     fn step(&mut self, gc: &mut GC<OnionObjectCell>) -> StepResult {
-        if self.current_argument_index == self.lambda_ref.get_flatten_param_keys().len() {
+        if self.current_argument_index == self.lambda_def.get_flatten_param_keys().len() {
             // 所有参数约束校验通过，收集参数并构造 runnable
             let mut collected_arguments = OnionFastMap::new(self.string_pool.clone());
             for i in 0..self.current_argument_index {
                 collected_arguments.push(
-                    &self.lambda_ref.get_flatten_param_keys()[i],
+                    &self.lambda_def.get_flatten_param_keys()[i],
                     self.flatten_argument[i].stabilize(),
                 );
             }
 
-            let runnable = unwrap_step_result!(self.lambda_ref.create_runnable(
+            let runnable = unwrap_step_result!(self.lambda_def.create_runnable(
                 &collected_arguments,
                 &self.lambda,
                 self.lambda_self_object.weak(),
@@ -190,23 +197,23 @@ impl Runnable for OnionLambdaRunnableLauncher {
 
         // 依次校验参数约束
         let mut index = self.current_argument_index;
-        while index < self.lambda_ref.get_flatten_param_keys().len() {
-            match &self.lambda_ref.get_flatten_param_constraints()[index] {
+        while index < self.lambda_def.get_flatten_param_keys().len() {
+            match &self.lambda_def.get_flatten_param_constraints()[index] {
                 OnionObject::BooleanValue(v) => {
-                    if !*v {
+                    if !v.value() {
                         self.current_argument_index = index + 1;
                         return StepResult::Error(RuntimeError::InvalidOperation(
                             "Constraint check failed".into(),
                         ));
                     }
                 }
-                lambda @ OnionObject::Lambda((_, self_object)) => {
+                lambda @ OnionObject::Lambda(lambda_def) => {
                     // 嵌套 Lambda 约束，递归生成新 Launcher
                     self.current_argument_index = index + 1;
                     return StepResult::NewRunnable(Box::new(unwrap_step_result!(
                         OnionLambdaRunnableLauncher::new(
                             lambda,
-                            self_object.stabilize(),
+                            lambda_def.temp_self_object().stabilize(),
                             self.flatten_argument[index].stabilize(),
                             |r| Ok(r),
                         )
@@ -240,7 +247,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
             + &format!(
                 " (current index: {}, expected: {})",
                 self.current_argument_index,
-                self.lambda_ref.get_flatten_param_keys().len()
+                self.lambda_def.get_flatten_param_keys().len()
             )
             + &format!(", lambda: {}", format_object_summary(self.lambda.weak()))
     }

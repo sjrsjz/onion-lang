@@ -9,8 +9,17 @@ use onion_vm::{
     GC,
     lambda::runnable::RuntimeError,
     types::{
+        boolean_value::OnionBooleanValue,
+        bytes_value::OnionBytesValue,
+        float_value::OnionFloatValue,
+        integer_value::OnionIntegerValue,
         lambda::parameter::LambdaParameter,
-        object::{OnionObject, OnionObjectCell, OnionObjectProtocol, OnionStaticObject},
+        null::OnionNull,
+        object::{
+            OnionObject, OnionObjectCell, OnionObjectProtocol, OnionObjectProtocolAny,
+            OnionStaticObject,
+        },
+        string_value::OnionStringValue,
     },
     utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
@@ -50,6 +59,10 @@ impl GCTraceable<OnionObjectCell> for CTypes {
 
 // The OnionObjectExt implementation remains the same.
 impl OnionObjectProtocol for CTypes {
+    fn type_of(&self) -> Result<String, RuntimeError> {
+        Ok("CTypes".into())
+    }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -77,73 +90,77 @@ impl OnionObjectProtocol for CTypes {
             CTypes::CNull => Ok("ctypes.null".to_string()),
         }
     }
+
+    fn display(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+        self.repr(ptrs)
+    }
+
     // value_of, equals, etc. also remain unchanged.
     fn value_of(&self) -> Result<OnionStaticObject, RuntimeError> {
         match self {
-            CTypes::CInt8(v) => Ok(OnionObject::IntegerValue(*v as i64).stabilize()),
-            CTypes::CInt16(v) => Ok(OnionObject::IntegerValue(*v as i64).stabilize()),
-            CTypes::CInt32(v) => Ok(OnionObject::IntegerValue(*v as i64).stabilize()),
-            CTypes::CInt64(v) => Ok(OnionObject::IntegerValue(*v).stabilize()),
-            CTypes::CUInt8(v) => Ok(OnionObject::IntegerValue(*v as i64).stabilize()),
-            CTypes::CUInt16(v) => Ok(OnionObject::IntegerValue(*v as i64).stabilize()),
-            CTypes::CUInt32(v) => Ok(OnionObject::IntegerValue(*v as i64).stabilize()),
-            CTypes::CUInt64(v) => Ok(OnionObject::IntegerValue(*v as i64).stabilize()),
-            CTypes::CFloat(v) => Ok(OnionObject::FloatValue(*v as f64).stabilize()),
-            CTypes::CDouble(v) => Ok(OnionObject::FloatValue(*v).stabilize()),
-            CTypes::CBool(v) => Ok(OnionObject::BooleanValue(*v).stabilize()),
-            CTypes::CString(v) => Ok(OnionObject::StringValue(v.clone().into()).stabilize()),
-            CTypes::CBuffer(v) => Ok(OnionObject::BytesValue(v.clone().into()).stabilize()),
-            CTypes::CPointer(v) => Ok(OnionObject::IntegerValue(*v as i64).stabilize()),
-            CTypes::CChar(v) => Ok(OnionObject::StringValue(
-                std::str::from_utf8(&[*v as u8])
-                    .unwrap_or("")
-                    .to_string()
-                    .into(),
-            )
-            .stabilize()),
-            CTypes::CUChar(v) => Ok(OnionObject::StringValue(
-                std::str::from_utf8(&[*v]).unwrap_or("").into(),
-            )
-            .stabilize()),
-            CTypes::CSize(v) => Ok(OnionObject::IntegerValue(*v as i64).stabilize()),
-            CTypes::CSSize(v) => Ok(OnionObject::IntegerValue(*v as i64).stabilize()),
-            CTypes::CVoid | CTypes::CNull => Ok(OnionObject::Null.stabilize()),
+            CTypes::CInt8(v) => Ok(OnionIntegerValue::new_static(*v as i64)),
+            CTypes::CInt16(v) => Ok(OnionIntegerValue::new_static(*v as i64)),
+            CTypes::CInt32(v) => Ok(OnionIntegerValue::new_static(*v as i64)),
+            CTypes::CInt64(v) => Ok(OnionIntegerValue::new_static(*v)),
+            CTypes::CUInt8(v) => Ok(OnionIntegerValue::new_static(*v as i64)),
+            CTypes::CUInt16(v) => Ok(OnionIntegerValue::new_static(*v as i64)),
+            CTypes::CUInt32(v) => Ok(OnionIntegerValue::new_static(*v as i64)),
+            CTypes::CUInt64(v) => Ok(OnionIntegerValue::new_static(*v as i64)),
+            CTypes::CFloat(v) => Ok(OnionFloatValue::new_static(*v as f64)),
+            CTypes::CDouble(v) => Ok(OnionFloatValue::new_static(*v)),
+            CTypes::CBool(v) => Ok(OnionBooleanValue::new_static(*v)),
+            CTypes::CString(v) => Ok(OnionStringValue::new_static(v)),
+            CTypes::CBuffer(v) => Ok(OnionBytesValue::new_static(v)),
+            CTypes::CPointer(v) => Ok(OnionIntegerValue::new_static(*v as i64)),
+            CTypes::CChar(v) => Ok(OnionStringValue::new_static(
+                std::str::from_utf8(&[*v as u8]).unwrap_or(""),
+            )),
+            CTypes::CUChar(v) => Ok(OnionStringValue::new_static(
+                std::str::from_utf8(&[*v]).unwrap_or(""),
+            )),
+            CTypes::CSize(v) => Ok(OnionIntegerValue::new_static(*v as i64)),
+            CTypes::CSSize(v) => Ok(OnionIntegerValue::new_static(*v as i64)),
+            CTypes::CVoid | CTypes::CNull => Ok(OnionNull::new_static()),
         }
     }
     fn equals(&self, _other: &OnionObject) -> Result<bool, RuntimeError> {
         Ok(false)
     }
     fn upgrade(&self, _collected: &mut Vec<GCArc<OnionObjectCell>>) {}
+    fn len(&self) -> Result<OnionStaticObject, RuntimeError> {
+        match self {
+            CTypes::CBuffer(bytes) => Ok(OnionIntegerValue::new_static(bytes.len() as i64)),
+            CTypes::CString(s) => Ok(OnionIntegerValue::new_static(s.len() as i64)),
+            _ => Err(RuntimeError::InvalidOperation(
+                "len() is not applicable for this CTypes variant"
+                    .to_string()
+                    .into(),
+            )),
+        }
+    }
+}
+
+impl OnionObjectProtocolAny for CTypes {
     fn with_attribute(
         &self,
+        _self_object: &OnionObject,
         key: &OnionObject,
         f: &mut dyn FnMut(&OnionObject) -> Result<(), RuntimeError>,
     ) -> Result<(), RuntimeError> {
         if let OnionObject::StringValue(attr) = key {
-            match attr.as_ref() {
+            match attr.value() {
                 "value" => {
                     let v = self.value_of()?;
                     f(v.weak())
                 }
                 _ => Err(RuntimeError::InvalidOperation(
-                    format!("Attribute '{attr}' not found on CTypes object").into(),
+                    format!("Attribute {attr:?} not found on CTypes object").into(),
                 )),
             }
         } else {
             Err(RuntimeError::InvalidType(
                 "Attribute key must be a string".into(),
             ))
-        }
-    }
-    fn len(&self) -> Result<OnionStaticObject, RuntimeError> {
-        match self {
-            CTypes::CBuffer(bytes) => Ok(OnionObject::IntegerValue(bytes.len() as i64).stabilize()),
-            CTypes::CString(s) => Ok(OnionObject::IntegerValue(s.len() as i64).stabilize()),
-            _ => Err(RuntimeError::InvalidOperation(
-                "len() is not applicable for this CTypes variant"
-                    .to_string()
-                    .into(),
-            )),
         }
     }
 }
@@ -163,7 +180,7 @@ fn get_integer_arg(
 ) -> Result<i64, RuntimeError> {
     let obj = get_value_arg(argument)?;
     match obj.weak() {
-        OnionObject::IntegerValue(i) => Ok(*i),
+        OnionObject::IntegerValue(i) => Ok(i.value()),
         _ => Err(RuntimeError::InvalidType(
             "Argument 'value' must be an integer".into(),
         )),
@@ -180,8 +197,8 @@ fn get_numeric_arg(
 ) -> Result<NumericArg, RuntimeError> {
     let obj = get_value_arg(argument)?;
     match obj.weak() {
-        OnionObject::IntegerValue(i) => Ok(NumericArg::Int(*i)),
-        OnionObject::FloatValue(f) => Ok(NumericArg::Float(*f)),
+        OnionObject::IntegerValue(i) => Ok(NumericArg::Int(i.value())),
+        OnionObject::FloatValue(f) => Ok(NumericArg::Float(f.value())),
         _ => Err(RuntimeError::InvalidType(
             "Argument 'value' must be a numeric type (integer or float)"
                 .to_string()
@@ -289,17 +306,17 @@ fn c_char(
     let value_obj = get_value_arg(argument)?;
     match value_obj.weak() {
         OnionObject::IntegerValue(n) => {
-            if *n >= i8::MIN as i64 && *n <= i8::MAX as i64 {
-                Ok(OnionObject::Custom(Arc::new(CTypes::CChar(*n as i8))).stabilize())
+            if n.value() >= i8::MIN as i64 && n.value() <= i8::MAX as i64 {
+                Ok(OnionObject::Custom(Arc::new(CTypes::CChar(n.value() as i8))).stabilize())
             } else {
                 Err(RuntimeError::InvalidOperation(
-                    format!("Value {n} out of range for char").into(),
+                    format!("Value {} out of range for char", n.value()).into(),
                 ))
             }
         }
-        OnionObject::StringValue(s) if s.chars().count() == 1 => Ok(OnionObject::Custom(Arc::new(
-            CTypes::CChar(s.chars().next().unwrap() as i8),
-        ))
+        OnionObject::StringValue(s) if s.value().chars().count() == 1 => Ok(OnionObject::Custom(
+            Arc::new(CTypes::CChar(s.value().chars().next().unwrap() as i8)),
+        )
         .stabilize()),
         _ => Err(RuntimeError::InvalidType(
             "c_char requires an integer or a single-character string"
@@ -316,17 +333,17 @@ fn c_uchar(
     let value_obj = get_value_arg(argument)?;
     match value_obj.weak() {
         OnionObject::IntegerValue(n) => {
-            if *n >= 0 && *n <= u8::MAX as i64 {
-                Ok(OnionObject::Custom(Arc::new(CTypes::CUChar(*n as u8))).stabilize())
+            if n.value() >= 0 && n.value() <= u8::MAX as i64 {
+                Ok(OnionObject::Custom(Arc::new(CTypes::CUChar(n.value() as u8))).stabilize())
             } else {
                 Err(RuntimeError::InvalidOperation(
-                    format!("Value {n} out of range for unsigned char").into(),
+                    format!("Value {} out of range for unsigned char", n.value()).into(),
                 ))
             }
         }
-        OnionObject::StringValue(s) if s.chars().count() == 1 => Ok(OnionObject::Custom(Arc::new(
-            CTypes::CUChar(s.chars().next().unwrap() as u8),
-        ))
+        OnionObject::StringValue(s) if s.value().chars().count() == 1 => Ok(OnionObject::Custom(
+            Arc::new(CTypes::CUChar(s.value().chars().next().unwrap() as u8)),
+        )
         .stabilize()),
         _ => Err(RuntimeError::InvalidType(
             "c_uchar requires a non-negative integer or a single-character string"
@@ -341,8 +358,14 @@ fn c_bool(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let value_obj = get_value_arg(argument)?;
-    let b = value_obj.weak().to_boolean()?;
-    Ok(OnionObject::Custom(Arc::new(CTypes::CBool(b))).stabilize())
+    match value_obj.weak() {
+        OnionObject::BooleanValue(b) => {
+            Ok(OnionObject::Custom(Arc::new(CTypes::CBool(b.value()))).stabilize())
+        }
+        _ => Err(RuntimeError::InvalidType(
+            "c_bool requires a boolean".into(),
+        )),
+    }
 }
 
 fn c_string(
@@ -350,8 +373,14 @@ fn c_string(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let value_obj = get_value_arg(argument)?;
-    let s = value_obj.weak().to_string(&vec![])?;
-    Ok(OnionObject::Custom(Arc::new(CTypes::CString(s))).stabilize())
+    match value_obj.weak() {
+        OnionObject::StringValue(s) => {
+            Ok(OnionObject::Custom(Arc::new(CTypes::CString(s.value().to_string()))).stabilize())
+        }
+        _ => Err(RuntimeError::InvalidType(
+            "c_string requires a string".into(),
+        )),
+    }
 }
 
 fn c_buffer(
@@ -361,11 +390,12 @@ fn c_buffer(
     let value_obj = get_value_arg(argument)?;
     match value_obj.weak() {
         OnionObject::BytesValue(b) => {
-            Ok(OnionObject::Custom(Arc::new(CTypes::CBuffer(b.to_vec()))).stabilize())
+            Ok(OnionObject::Custom(Arc::new(CTypes::CBuffer(b.value().to_vec()))).stabilize())
         }
-        OnionObject::StringValue(s) => {
-            Ok(OnionObject::Custom(Arc::new(CTypes::CBuffer(s.as_bytes().to_vec()))).stabilize())
-        }
+        OnionObject::StringValue(s) => Ok(OnionObject::Custom(Arc::new(CTypes::CBuffer(
+            s.value().as_bytes().to_vec(),
+        )))
+        .stabilize()),
         _ => Err(RuntimeError::InvalidType(
             "c_buffer requires bytes or a string".into(),
         )),

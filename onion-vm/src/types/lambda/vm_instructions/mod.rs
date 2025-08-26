@@ -13,15 +13,25 @@ use crate::{
     onion_tuple,
     types::{
         async_handle::OnionAsyncHandle,
+        boolean_value::OnionBooleanValue,
+        bytes_value::OnionBytesValue,
+        float_value::OnionFloatValue,
+        instruction_package::OnionInstructionPackage,
+        integer_value::OnionIntegerValue,
         lambda::{
-            definition::LambdaType, launcher::OnionLambdaRunnableLauncher,
+            definition::{LambdaType, OnionLambdaDefinitionInner},
+            launcher::OnionLambdaRunnableLauncher,
             parameter::LambdaParameter,
         },
         lazy_set::OnionLazySet,
+        null::OnionNull,
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         pair::OnionPair,
+        range_value::OnionRange,
+        string_value::OnionStringValue,
         thread_handle::OnionThreadHandle,
         tuple::OnionTuple,
+        undefined::OnionUndefined,
     },
     unwrap_step_result,
     utils::fastmap::OnionFastMap,
@@ -29,7 +39,7 @@ use crate::{
 
 use super::{
     context::{Context, Frame},
-    definition::{LambdaBody, OnionLambdaDefinition},
+    definition::LambdaBody,
     runnable::OnionLambdaRunnable as LambdaRunnable,
 };
 
@@ -47,7 +57,7 @@ pub fn load_int(
         unwrap_step_result!(
             runnable
                 .context
-                .push_object(OnionObject::IntegerValue(value).consume_and_stabilize())
+                .push_object(OnionIntegerValue::new_static(value))
         );
         StepResult::Continue
     } else {
@@ -66,11 +76,7 @@ pub fn load_null(
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObjectCell>,
 ) -> StepResult {
-    unwrap_step_result!(
-        runnable
-            .context
-            .push_object(OnionObject::Null.consume_and_stabilize())
-    );
+    unwrap_step_result!(runnable.context.push_object(OnionNull::new_static()));
     StepResult::Continue
 }
 
@@ -82,7 +88,7 @@ pub fn load_undefined(
     unwrap_step_result!(
         runnable
             .context
-            .push_object(OnionObject::Undefined(None).consume_and_stabilize())
+            .push_object(OnionUndefined::new_static(None))
     );
     StepResult::Continue
 }
@@ -96,7 +102,7 @@ pub fn load_float(
         unwrap_step_result!(
             runnable
                 .context
-                .push_object(OnionObject::FloatValue(value).consume_and_stabilize())
+                .push_object(OnionFloatValue::new_static(value))
         );
         StepResult::Continue
     } else {
@@ -116,10 +122,9 @@ pub fn load_string(
     _gc: &mut GC<OnionObjectCell>,
 ) -> StepResult {
     if let OpcodeArgument::String(value) = opcode.operand1 {
-        let string = OnionObject::StringValue(Arc::from(
+        let string = OnionStringValue::new_static(
             runnable.instruction.get_string_pool()[value as usize].as_ref(),
-        ))
-        .consume_and_stabilize();
+        );
         unwrap_step_result!(runnable.context.push_object(string));
         StepResult::Continue
     } else {
@@ -139,10 +144,9 @@ pub fn load_bytes(
     _gc: &mut GC<OnionObjectCell>,
 ) -> StepResult {
     if let OpcodeArgument::ByteArray(value) = opcode.operand1 {
-        let bytes = OnionObject::BytesValue(Arc::from(
+        let bytes = OnionBytesValue::new_static(
             runnable.instruction.get_bytes_pool()[value as usize].as_slice(),
-        ))
-        .consume_and_stabilize();
+        );
         unwrap_step_result!(runnable.context.push_object(bytes));
         StepResult::Continue
     } else {
@@ -165,7 +169,7 @@ pub fn load_bool(
         unwrap_step_result!(
             runnable
                 .context
-                .push_object(OnionObject::BooleanValue(value != 0).consume_and_stabilize())
+                .push_object(OnionBooleanValue::new_static(value != 0))
         );
         StepResult::Continue
     } else {
@@ -237,21 +241,18 @@ pub fn build_range(
     let stack = unwrap_step_result!(runnable.context.get_current_stack_mut());
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
     let right = unwrap_step_result!(Context::get_object_from_stack(stack, 0));
-    let range =
-        OnionObject::Range(
-            unwrap_step_result!(
-                left.weak()
-                    .to_integer()
-                    .map_err(|e| RuntimeError::DetailedError(
-                        format!("Failed to build range: {}", e).into()
-                    ))
-            ),
-            unwrap_step_result!(right.weak().to_integer().map_err(
-                |e| RuntimeError::DetailedError(format!("Failed to build range: {}", e).into())
+    fn get_int(obj: &OnionObject) -> Result<i64, RuntimeError> {
+        match obj {
+            OnionObject::IntegerValue(v) => Ok(v.value()),
+            _ => Err(RuntimeError::InvalidOperation(
+                format!("Range bounds must be integers, but found {:?}", obj).into(),
             )),
-        )
-        .consume_and_stabilize();
+        }
+    }
 
+    let left = unwrap_step_result!(get_int(left.weak()));
+    let right = unwrap_step_result!(get_int(right.weak()));
+    let range = OnionRange::new_static(left, right);
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
     Context::push_to_stack(stack, range);
     StepResult::Continue
@@ -272,7 +273,7 @@ pub fn build_set(
     StepResult::Continue
 }
 
-pub fn load_lambda(
+pub fn build_lambda(
     runnable: &mut LambdaRunnable,
     opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObjectCell>,
@@ -377,7 +378,7 @@ pub fn load_lambda(
             match runnable.context.get_variable(*i) {
                 Some(v) => {
                     let mapped_index =
-                        unwrap_step_result!(package.get_string_index(k).ok_or_else(|| {
+                        unwrap_step_result!(package.value().get_string_index(k).ok_or_else(|| {
                             RuntimeError::DetailedError(
                                 format!("Variable '{}' not found in instruction package", k).into(),
                             )
@@ -396,12 +397,12 @@ pub fn load_lambda(
             }
         }
 
-        OnionFastMap::new_with_pairs(captured_values, package.create_key_pool())
+        OnionFastMap::new_with_pairs(captured_values, package.value().create_key_pool())
     };
 
-    let lambda = OnionLambdaDefinition::new_static(
+    let lambda = OnionLambdaDefinitionInner::new_static(
         default_parameters,
-        LambdaBody::Instruction(package.clone()),
+        LambdaBody::Instruction(package.as_arc().clone()),
         captured_value,
         signature,
         LambdaType::Atomic,
@@ -508,27 +509,24 @@ pub fn get_attr(
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObjectCell>,
 ) -> StepResult {
-    let attr = unwrap_step_result!(runnable.context.get_object_rev(0)).weak();
+    let attr = unwrap_step_result!(runnable.context.get_object_rev(0));
     let obj = unwrap_step_result!(runnable.context.get_object_rev(1));
-    let element = unwrap_step_result!(obj.weak().with_data(|inner| attr.with_data(|attr| {
-        Ok(match inner.with_attribute(attr, &|attr| Ok(attr.clone())) {
-            Ok(value) => match value {
-                OnionObject::Lambda((lambda, _)) => {
-                    OnionObject::Lambda((lambda.clone(), inner.clone().into())).stabilize()
-                }
-                _ => value.stabilize(),
-            },
-            Err(e) => {
-                return Err(RuntimeError::InvalidOperation(
-                    format!(
-                        "Cannot access attribute {:?} on object {:?}: {}",
-                        attr, inner, e
-                    )
-                    .into(),
-                ));
-            }
-        })
-    })));
+    let element =
+        unwrap_step_result!(obj.weak().with_data(|inner| attr.weak().with_data(|attr| {
+            Ok(inner.with_attribute(
+                &OnionObject::Undefined(OnionUndefined::new(None)),
+                attr,
+                &|attr| {
+                    Ok(match inner {
+                        OnionObject::Lambda(lambda) => {
+                            OnionObject::Lambda(lambda.bind_self_object(attr.clone()))
+                        }
+                        _ => attr.clone(),
+                    })
+                },
+            )?)
+        })))
+        .consume_and_stabilize();
 
     unwrap_step_result!(runnable.context.discard_objects(2));
     unwrap_step_result!(runnable.context.push_object(element));
@@ -569,10 +567,7 @@ pub fn type_of(
     let stack = unwrap_step_result!(runnable.context.get_current_stack_mut());
     let obj = unwrap_step_result!(Context::get_object_from_stack(stack, 0));
     let type_name = unwrap_step_result!(obj.weak().type_of());
-    Context::replace_last_object(
-        stack,
-        OnionObject::StringValue(Arc::from(type_name)).consume_and_stabilize(),
-    );
+    Context::replace_last_object(stack, OnionStringValue::new_static(type_name));
     StepResult::Continue
 }
 
@@ -588,7 +583,7 @@ pub fn check_is_same_object(
     unwrap_step_result!(
         runnable
             .context
-            .push_object(OnionObject::BooleanValue(is_same).consume_and_stabilize())
+            .push_object(OnionBooleanValue::new_static(is_same))
     );
     StepResult::Continue
 }
@@ -769,7 +764,7 @@ pub fn binary_equal(
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
     let result = unwrap_step_result!(left.weak().binary_eq(right.weak()));
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
-    Context::push_to_stack(stack, OnionObject::BooleanValue(result).consume_and_stabilize());
+    Context::push_to_stack(stack, OnionBooleanValue::new_static(result));
     StepResult::Continue
 }
 
@@ -784,7 +779,7 @@ pub fn binary_not_equal(
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
     let result = unwrap_step_result!(left.weak().binary_eq(right.weak()));
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
-    Context::push_to_stack(stack, OnionObject::BooleanValue(!result).consume_and_stabilize());
+    Context::push_to_stack(stack, OnionBooleanValue::new_static(!result));
     StepResult::Continue
 }
 
@@ -799,7 +794,7 @@ pub fn binary_greater(
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
     let result = unwrap_step_result!(left.weak().binary_gt(right.weak()));
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
-    Context::push_to_stack(stack, OnionObject::BooleanValue(result).consume_and_stabilize());
+    Context::push_to_stack(stack, OnionBooleanValue::new_static(result));
     StepResult::Continue
 }
 
@@ -814,7 +809,7 @@ pub fn binary_greater_equal(
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
     let result = unwrap_step_result!(left.weak().binary_lt(right.weak()));
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
-    Context::push_to_stack(stack, OnionObject::BooleanValue(!result).consume_and_stabilize());
+    Context::push_to_stack(stack, OnionBooleanValue::new_static(!result));
     StepResult::Continue
 }
 
@@ -829,7 +824,7 @@ pub fn binary_less(
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
     let result = unwrap_step_result!(left.weak().binary_lt(right.weak()));
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
-    Context::push_to_stack(stack, OnionObject::BooleanValue(result).consume_and_stabilize());
+    Context::push_to_stack(stack, OnionBooleanValue::new_static(result));
     StepResult::Continue
 }
 
@@ -844,7 +839,7 @@ pub fn binary_less_equal(
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
     let result = unwrap_step_result!(left.weak().binary_gt(right.weak()));
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
-    Context::push_to_stack(stack, OnionObject::BooleanValue(!result).consume_and_stabilize());
+    Context::push_to_stack(stack, OnionBooleanValue::new_static(!result));
     StepResult::Continue
 }
 
@@ -925,9 +920,23 @@ pub fn jump_if_false(
         ));
     };
     let condition = unwrap_step_result!(runnable.context.get_object_rev(0));
-    if !unwrap_step_result!(condition.weak().to_boolean()) {
-        runnable.ip += offset as isize;
-    }
+    unwrap_step_result!(condition.weak().with_data(|obj| {
+        match obj {
+            OnionObject::BooleanValue(b) => {
+                if !b.value() {
+                    runnable.ip += offset as isize;
+                }
+                Ok(())
+            }
+            _ => Err(RuntimeError::InvalidOperation(
+                format!(
+                    "Condition for JumpIfNot must be a Boolean, but found {:?}",
+                    obj
+                )
+                .into(),
+            )),
+        }
+    }));
     unwrap_step_result!(runnable.context.discard_objects(1));
     StepResult::Continue
 }
@@ -976,15 +985,29 @@ pub fn assert(
     _gc: &mut GC<OnionObjectCell>,
 ) -> StepResult {
     let condition = unwrap_step_result!(runnable.context.get_object_rev(0));
-    if !unwrap_step_result!(condition.weak().to_boolean()) {
-        return StepResult::Error(RuntimeError::DetailedError(
-            format!(
-                "Assertion failed: condition evaluated to false (value: {})",
-                condition
-            )
-            .into(),
-        ));
-    }
+    unwrap_step_result!(condition.weak().with_data(|obj| {
+        match obj {
+            OnionObject::BooleanValue(b) => {
+                if !b.value() {
+                    return Err(RuntimeError::DetailedError(
+                        format!(
+                            "Assertion failed: condition evaluated to false (value: {})",
+                            condition
+                        )
+                        .into(),
+                    ));
+                }
+                Ok(())
+            }
+            _ => Err(RuntimeError::InvalidOperation(
+                format!(
+                    "Condition for assert must be a Boolean, but found {:?}",
+                    obj
+                )
+                .into(),
+            )),
+        }
+    }));
     StepResult::Continue
 }
 
@@ -1014,7 +1037,7 @@ pub fn is_in(
         unwrap_step_result!(
             runnable
                 .context
-                .push_object(OnionObject::BooleanValue(false).consume_and_stabilize())
+                .push_object(OnionBooleanValue::new_static(false))
         );
         return StepResult::Continue;
     }
@@ -1111,8 +1134,10 @@ pub fn fork_instruction(
     _opcode: &ProcessedOpcode,
     _gc: &mut GC<OnionObjectCell>,
 ) -> StepResult {
-    let forked =
-        OnionObject::InstructionPackage(runnable.instruction.clone()).consume_and_stabilize();
+    let forked = OnionObject::InstructionPackage(OnionInstructionPackage::from_arc(
+        runnable.instruction.clone(),
+    ))
+    .consume_and_stabilize();
     unwrap_step_result!(runnable.context.push_object(forked));
     StepResult::Continue
 }
@@ -1130,9 +1155,9 @@ pub fn import(
                 format!("Invalid path type for 'import': {}", path).into(),
             ));
         };
-        VMInstructionPackage::read_from_file(&path).map_err(|e| {
+        VMInstructionPackage::read_from_file(path.value()).map_err(|e| {
             RuntimeError::DetailedError(
-                format!("Failed to load instruction package from '{}': {}", path, e).into(),
+                format!("Failed to load instruction package from {:?}: {}", path, e).into(),
             )
         })
     }));
@@ -1146,9 +1171,9 @@ pub fn import(
     }
     unwrap_step_result!(runnable.context.discard_objects(1));
     unwrap_step_result!(
-        runnable.context.push_object(
-            OnionObject::InstructionPackage(Arc::new(package)).consume_and_stabilize()
-        )
+        runnable
+            .context
+            .push_object(OnionInstructionPackage::new_static(package))
     );
     StepResult::Continue
 }
@@ -1184,10 +1209,10 @@ pub fn spawn_task(
 
     let new_runnable = unwrap_step_result!(lambda.weak().with_data(|lambda_obj| {
         match lambda_obj {
-            OnionObject::Lambda((_, self_object)) => Ok(Box::new(Scheduler::new(vec![Box::new(
+            OnionObject::Lambda(lambda_def) => Ok(Box::new(Scheduler::new(vec![Box::new(
                 OnionLambdaRunnableLauncher::new(
                     lambda_obj,
-                    self_object.stabilize(),
+                    lambda_def.temp_self_object().stabilize(),
                     onion_tuple!(),
                     &|r| Ok(r),
                 )?,
@@ -1216,7 +1241,9 @@ pub fn launch_thread(
     // 检查 value 是否为 Lambda 对象
     let (lambda_obj, self_object) = unwrap_step_result!(value.weak().with_data(|data| {
         match data {
-            OnionObject::Lambda((_, self_object)) => Ok((value.clone(), self_object.stabilize())),
+            OnionObject::Lambda(lambda_def) => {
+                Ok((value.clone(), lambda_def.temp_self_object().stabilize()))
+            }
             _ => Err(RuntimeError::DetailedError(
                 format!(
                     "launch_thread requires a Lambda object, but found {}",
@@ -1301,12 +1328,9 @@ pub fn make_async(
 
     let new_lambda = unwrap_step_result!(value.weak().with_data(|obj| {
         match obj {
-            OnionObject::Lambda((lambda_def, self_object)) => Ok(OnionObject::Lambda((
-                lambda_def
-                    .with_lambda_type(LambdaType::AsyncLauncher)
-                    .into(),
-                self_object.clone(),
-            ))
+            OnionObject::Lambda(lambda_def) => Ok(OnionObject::Lambda(
+                lambda_def.with_lambda_type(LambdaType::AsyncLauncher),
+            )
             .consume_and_stabilize()),
             _ => Err(RuntimeError::DetailedError(
                 format!("make_async requires a Lambda object, but found {}", value).into(),
@@ -1328,10 +1352,9 @@ pub fn make_sync(
 
     let new_lambda = unwrap_step_result!(value.weak().with_data(|obj| {
         match obj {
-            OnionObject::Lambda((lambda_def, self_object)) => Ok(OnionObject::Lambda((
-                lambda_def.with_lambda_type(LambdaType::SyncLauncher).into(),
-                self_object.clone(),
-            ))
+            OnionObject::Lambda(lambda_def) => Ok(OnionObject::Lambda(
+                lambda_def.with_lambda_type(LambdaType::SyncLauncher),
+            )
             .consume_and_stabilize()),
             _ => Err(RuntimeError::DetailedError(
                 format!("make_sync requires a Lambda object, but found {}", value).into(),
@@ -1353,10 +1376,9 @@ pub fn make_atomic(
 
     let new_lambda = unwrap_step_result!(value.weak().with_data(|obj| {
         match obj {
-            OnionObject::Lambda((lambda_def, self_object)) => Ok(OnionObject::Lambda((
-                lambda_def.with_lambda_type(LambdaType::Atomic).into(),
-                self_object.clone(),
-            ))
+            OnionObject::Lambda(lambda_def) => Ok(OnionObject::Lambda(
+                lambda_def.with_lambda_type(LambdaType::Atomic),
+            )
             .consume_and_stabilize()),
             _ => Err(RuntimeError::DetailedError(
                 format!("make_atomic requires a Lambda object, but found {}", value).into(),

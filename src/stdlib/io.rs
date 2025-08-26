@@ -6,7 +6,9 @@ use onion_vm::{
     lambda::runnable::RuntimeError,
     types::{
         lambda::parameter::LambdaParameter,
-        object::{OnionObject, OnionObjectCell, OnionStaticObject},
+        object::{OnionObjectCell, OnionStaticObject},
+        string_value::OnionStringValue,
+        undefined::OnionUndefined,
     },
     utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
@@ -23,8 +25,8 @@ fn println(
         ));
     };
 
-    println!("{}", value.weak().to_string(&vec![])?);
-    Ok(OnionObject::Undefined(Some("Print completed".into())).stabilize())
+    println!("{}", value.weak().display(&vec![])?);
+    Ok(OnionUndefined::new_static(None))
 }
 
 fn print(
@@ -37,8 +39,8 @@ fn print(
         ));
     };
 
-    print!("{}", value.weak().to_string(&vec![])?);
-    Ok(OnionObject::Undefined(Some("Print completed".into())).stabilize())
+    print!("{}", value.weak().display(&vec![])?);
+    Ok(OnionUndefined::new_static(None))
 }
 
 fn input(
@@ -51,7 +53,7 @@ fn input(
         ));
     };
 
-    print!("{}", hint.weak().to_string(&vec![])?);
+    print!("{}", hint.weak().display(&vec![])?);
     // flush
     std::io::stdout()
         .flush()
@@ -65,7 +67,7 @@ fn input(
         }
         buffer.trim().to_string()
     };
-    Ok(OnionObject::StringValue(input.into()).stabilize())
+    Ok(OnionStringValue::new_static(input))
 }
 
 pub fn build_module() -> OnionStaticObject {

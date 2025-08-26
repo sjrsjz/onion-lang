@@ -1,15 +1,15 @@
-use std::{
-    alloc::{Layout, alloc, dealloc},
-    sync::Arc,
-};
+use std::alloc::{Layout, alloc, dealloc};
 
 use indexmap::IndexMap;
 use onion_vm::{
     GC,
     lambda::runnable::RuntimeError,
     types::{
+        bytes_value::OnionBytesValue,
+        integer_value::OnionIntegerValue,
         lambda::parameter::LambdaParameter,
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
+        undefined::OnionUndefined,
     },
     utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
@@ -31,7 +31,7 @@ fn get_integer_arg(
         )
     })?;
     match obj.weak() {
-        OnionObject::IntegerValue(i) => Ok(*i),
+        OnionObject::IntegerValue(i) => Ok(i.value()),
         _ => Err(RuntimeError::InvalidType(
             format!("Argument '{name}' must be an integer")
                 .to_string()
@@ -64,7 +64,7 @@ fn mem_alloc(
                 "Memory allocation failed".into(),
             ))
         } else {
-            Ok(OnionObject::IntegerValue(ptr as usize as i64).stabilize())
+            Ok(OnionIntegerValue::new_static(ptr as usize as i64))
         }
     }
 }
@@ -95,7 +95,7 @@ fn mem_free(
         dealloc(ptr as usize as *mut u8, layout);
     }
 
-    Ok(OnionObject::Null.stabilize())
+    Ok(OnionUndefined::new_static(None))
 }
 
 /// 分配并清零内存
@@ -130,7 +130,7 @@ fn mem_calloc(
             ))
         } else {
             std::ptr::write_bytes(ptr, 0, total_size);
-            Ok(OnionObject::IntegerValue(ptr as usize as i64).stabilize())
+            Ok(OnionIntegerValue::new_static(ptr as usize as i64))
         }
     }
 }
@@ -156,7 +156,7 @@ fn mem_read(
 
     unsafe {
         let slice = std::slice::from_raw_parts(ptr as usize as *const u8, size as usize);
-        Ok(OnionObject::BytesValue(Arc::from(slice)).stabilize())
+        Ok(OnionBytesValue::new_static(slice))
     }
 }
 
@@ -178,7 +178,7 @@ fn mem_write(
 
     let bytes_to_write = match buffer_obj.weak() {
         OnionObject::BytesValue(b) => b.clone(),
-        OnionObject::StringValue(s) => Arc::from(s.as_bytes()),
+        OnionObject::StringValue(s) => OnionBytesValue::new(s.value().as_bytes()),
         _ => {
             return Err(RuntimeError::InvalidType(
                 "Argument 'buffer' must be bytes or a string"
@@ -190,13 +190,15 @@ fn mem_write(
 
     unsafe {
         std::ptr::copy_nonoverlapping(
-            bytes_to_write.as_ptr(),
+            bytes_to_write.as_arc().as_ptr(),
             ptr as usize as *mut u8,
-            bytes_to_write.len(),
+            bytes_to_write.value().len(),
         );
     }
 
-    Ok(OnionObject::IntegerValue(bytes_to_write.len() as i64).stabilize())
+    Ok(OnionIntegerValue::new_static(
+        bytes_to_write.value().len() as i64
+    ))
 }
 
 /// 复制内存
@@ -227,7 +229,7 @@ fn mem_copy(
         );
     }
 
-    Ok(OnionObject::Null.stabilize())
+    Ok(OnionUndefined::new_static(None))
 }
 
 pub fn build_module() -> OnionStaticObject {

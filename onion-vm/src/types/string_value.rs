@@ -20,8 +20,7 @@ use crate::{
     utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
 use arc_gc::{
-    arc::{GCArc, GCArcWeak},
-    traceable::GCTraceable,
+    arc::{GCArc, GCArcWeak}, gc::GC, traceable::GCTraceable
 };
 
 #[derive(Clone)]
@@ -61,6 +60,10 @@ impl OnionStringValue {
 impl OnionObjectProtocol for OnionStringValue {
     fn repr(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
         Ok(format!("{:?}", self.value))
+    }
+
+    fn display(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+        Ok(format!("{}", self.value))
     }
 
     fn type_of(&self) -> Result<String, RuntimeError> {
@@ -112,7 +115,10 @@ impl OnionObjectProtocol for OnionStringValue {
 
     fn apply(
         &self,
+        _this_object: &OnionObject,
+        _self_object: Option<&OnionObject>,
         value: &OnionObject,
+        _gc: &mut GC<OnionObjectCell>,
     ) -> Result<Result<StepResult, OnionStaticObject>, RuntimeError> {
         match value {
             OnionObject::IntegerValue(i) => {

@@ -29,8 +29,9 @@ use onion_vm::{
         scheduler::scheduler::Scheduler,
     },
     types::{
+        boolean_value::OnionBooleanValue,
         lambda::{
-            definition::{LambdaBody, LambdaType, OnionLambdaDefinition},
+            definition::{LambdaBody, LambdaType, OnionLambdaDefinitionInner},
             launcher::OnionLambdaRunnableLauncher,
             parameter::LambdaParameter,
             vm_instructions::{
@@ -41,6 +42,7 @@ use onion_vm::{
         },
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         tuple::OnionTuple,
+        undefined::OnionUndefined,
     },
     unwrap_object,
     utils::fastmap::{OnionFastMap, OnionKeyPool},
@@ -212,13 +214,18 @@ impl ComptimeSolver {
                         match argument.get("def") {
                             Some(v) => v.weak().with_data(|v| match v {
                                 OnionObject::Pair(pair) => {
-                                    let k = pair.get_key().to_string(&vec![])?;
+                                    let k = pair.get_key().with_data(|f| match f {
+                                        OnionObject::StringValue(s) => Ok(s.value().to_string()),
+                                        _ => Err(RuntimeError::InvalidType(
+                                            "Expect String for key".into(),
+                                        )),
+                                    })?;
                                     let v = pair.get_value().stabilize();
                                     let mut state = user_definitions_ref.write().map_err(|e| {
                                         RuntimeError::BorrowError(e.to_string().into())
                                     })?;
                                     state.insert(k, v);
-                                    Ok(OnionObject::Undefined(None).stabilize())
+                                    Ok(OnionUndefined::new_static(None))
                                 }
                                 _ => Err(RuntimeError::InvalidType("Expect Pair for 'def'".into())),
                             }),
@@ -249,8 +256,8 @@ impl ComptimeSolver {
                                     let mut state = user_definitions_ref.write().map_err(|e| {
                                         RuntimeError::BorrowError(e.to_string().into())
                                     })?;
-                                    state.remove(name.as_ref());
-                                    Ok(OnionObject::Undefined(None).stabilize())
+                                    state.remove(name.value());
+                                    Ok(OnionUndefined::new_static(None))
                                 }
                                 _ => Err(RuntimeError::InvalidType(
                                     "Expect String for 'name'".into(),
@@ -283,8 +290,9 @@ impl ComptimeSolver {
                                     let state = user_definitions_ref.read().map_err(|e| {
                                         RuntimeError::BorrowError(e.to_string().into())
                                     })?;
-                                    Ok(OnionObject::BooleanValue(state.contains_key(name.as_ref()))
-                                        .stabilize())
+                                    Ok(OnionBooleanValue::new_static(
+                                        state.contains_key(name.value()),
+                                    ))
                                 }
                                 _ => Err(RuntimeError::InvalidType(
                                     "Expect String for 'name'".into(),
@@ -312,13 +320,13 @@ impl ComptimeSolver {
                           -> Result<OnionStaticObject, RuntimeError> {
                         match argument.get("name") {
                             Some(v) => v.weak().with_data(|v| match v {
-                                OnionObject::StringValue(name) => Ok(OnionObject::Custom(Arc::new(
-                                    OnionASTObject::new(ASTNode {
-                                        node_type: ASTNodeType::Required(name.to_string()),
+                                OnionObject::StringValue(name) => Ok(OnionObject::Custom(
+                                    Arc::new(OnionASTObject::new(ASTNode {
+                                        node_type: ASTNodeType::Required(name.value().to_string()),
                                         source_location: None,
                                         children: vec![],
-                                    }),
-                                ))
+                                    })),
+                                )
                                 .stabilize()),
                                 _ => Err(RuntimeError::InvalidType(
                                     "Expect String for 'name'".into(),
@@ -352,7 +360,7 @@ impl ComptimeSolver {
                                         match import_cycle_detector.last() {
                                             Some(file) => {
                                                 let dir = file.parent().unwrap_or(file.as_path());
-                                                let mut target_path = PathBuf::from(path.as_ref());
+                                                let mut target_path = PathBuf::from(path.value());
                                                 if !target_path.is_absolute() {
                                                     target_path = dir.join(&target_path);
                                                 }
@@ -364,7 +372,7 @@ impl ComptimeSolver {
                                                 })?
                                             }
                                             None => {
-                                                let mut target_path = PathBuf::from(path.as_ref());
+                                                let mut target_path = PathBuf::from(path.value());
                                                 if !target_path.is_absolute() {
                                                     target_path =
                                                         std::env::current_dir()
@@ -499,10 +507,10 @@ impl ComptimeSolver {
                                         })?;
                                     collector.report(ComptimeDiagnostic::CustomError(
                                         None, // TODO: 可以从运行时上下文获取位置信息
-                                        message.to_string(),
+                                        message.value().to_string(),
                                     ));
                                     Err(RuntimeError::DetailedError(
-                                        format!("Comptime error: {}", message).into(),
+                                        format!("Comptime error: {}", message.value()).into(),
                                     ))
                                 }
                                 _ => Err(RuntimeError::InvalidType(
@@ -539,9 +547,9 @@ impl ComptimeSolver {
                                         })?;
                                     collector.report(ComptimeDiagnostic::CustomWarning(
                                         None, // TODO: 可以从运行时上下文获取位置信息
-                                        message.to_string(),
+                                        message.value().to_string(),
                                     ));
-                                    Ok(OnionObject::Undefined(None).stabilize())
+                                    Ok(OnionUndefined::new_static(None))
                                 }
                                 _ => Err(RuntimeError::InvalidType(
                                     "Expect String for 'message'".into(),
@@ -745,7 +753,7 @@ impl ComptimeSolver {
         self.state.inject_state(&mut capture)?;
 
         // Create Lambda definition
-        let lambda = OnionLambdaDefinition::new_static(
+        let lambda = OnionLambdaDefinitionInner::new_static(
             LambdaParameter::Multiple(Box::new([])),
             LambdaBody::Instruction(Arc::new(vm_instructions_package.clone())),
             capture,
@@ -758,7 +766,7 @@ impl ComptimeSolver {
         let mut scheduler: Box<dyn Runnable> = Box::new(Scheduler::new(vec![Box::new(
             OnionLambdaRunnableLauncher::new(
                 lambda.weak(),
-                OnionObject::Undefined(None).stabilize(),
+                OnionUndefined::new_static(None),
                 args,
                 Ok,
             )?,
@@ -790,13 +798,15 @@ impl ComptimeSolver {
                 StepResult::Return(ref result) => {
                     let result_borrowed = result.weak();
                     let result = unwrap_object!(result_borrowed, OnionObject::Pair)?;
-                    let success = *unwrap_object!(result.get_key(), OnionObject::BooleanValue)?;
-                    if !success {
+                    let success = unwrap_object!(result.get_key(), OnionObject::BooleanValue)?;
+                    if !success.value() {
                         let value_text = result.get_value().with_data(|data| match data {
-                            OnionObject::Undefined(Some(str)) => Ok(str.to_string()),
-                            _ => Ok(data.to_string(&vec![]).unwrap_or_else(|e| {
-                                format!("[Failed to convert value to string: {e}]")
-                            })),
+                            OnionObject::Undefined(v) if matches!(v.value(), Some(_)) => {
+                                Ok(v.value().unwrap().to_string())
+                            }
+                            _ => Ok(data
+                                .repr(&vec![])
+                                .unwrap_or_else(|e| format!("[Failed to represent value: {e}]"))),
                         })?;
 
                         let mut error_text =

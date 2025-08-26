@@ -16,7 +16,10 @@ use crate::{
             },
             parameter::LambdaParameter,
         },
-        object::{OnionObject, OnionObjectCell, OnionObjectProtocol, OnionObjectProtocolStatic, OnionStaticObject},
+        object::{
+            OnionObject, OnionObjectCell, OnionObjectProtocol, OnionObjectProtocolStatic,
+            OnionStaticObject,
+        },
     },
     utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
@@ -55,7 +58,11 @@ impl OnionIntegerValue {
 
 impl OnionObjectProtocol for OnionIntegerValue {
     fn repr(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
-        Ok(std::format!("{:?}", self))
+        Ok(std::format!("{:?}", self.value))
+    }
+
+    fn display(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+        Ok(std::format!("{}", self.value))
     }
 
     fn type_of(&self) -> Result<String, RuntimeError> {
@@ -291,8 +298,6 @@ impl OnionObjectProtocol for OnionIntegerValue {
         }
     }
 }
-
-
 
 impl OnionObjectProtocolStatic for OnionIntegerValue {
     fn with_attribute<F, R>(

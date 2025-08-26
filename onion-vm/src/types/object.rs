@@ -68,25 +68,12 @@ use std::{
 };
 
 use crate::{
-    lambda::{
-        runnable::{Runnable, RuntimeError, StepResult},
-        scheduler::{
-            async_scheduler::{AsyncScheduler, Task},
-            scheduler::Scheduler,
-        },
-    },
+    lambda::runnable::{RuntimeError, StepResult},
     types::{
-        async_handle::OnionAsyncHandle,
-        boolean_value::OnionBooleanValue,
-        bytes_value::OnionBytesValue,
-        float_value::OnionFloatValue,
-        instruction_package::OnionInstructionPackage,
-        integer_value::OnionIntegerValue,
-        lambda::{definition::LambdaType, launcher::OnionLambdaRunnableLauncher},
-        null::OnionNull,
-        range_value::OnionRange,
-        string_value::OnionStringValue,
-        undefined::OnionUndefined,
+        boolean_value::OnionBooleanValue, bytes_value::OnionBytesValue,
+        float_value::OnionFloatValue, instruction_package::OnionInstructionPackage,
+        integer_value::OnionIntegerValue, null::OnionNull, range_value::OnionRange,
+        string_value::OnionStringValue, undefined::OnionUndefined,
     },
 };
 use arc_gc::{
@@ -454,6 +441,7 @@ pub trait OnionObjectProtocol:
     // Debug and type information
     #[allow(unused_variables)]
     fn repr(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError>;
+    fn display(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError>;
     fn type_of(&self) -> Result<String, RuntimeError>;
 
     // Container operations
@@ -469,9 +457,13 @@ pub trait OnionObjectProtocol:
     }
 
     // f x or f(x) or f[x]
+    #[allow(unused_variables)]
     fn apply(
         &self,
+        this_object: &OnionObject,
+        self_object: Option<&OnionObject>,
         value: &OnionObject,
+        gc: &mut GC<OnionObjectCell>,
     ) -> Result<Result<StepResult, OnionStaticObject>, RuntimeError> {
         Err(RuntimeError::InvalidOperation(
             format!(
@@ -975,6 +967,35 @@ impl OnionObject {
         })
     }
 
+    pub fn display(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+        self.with_data(|obj| {
+            for ptr in ptrs {
+                if addr_eq(obj, *ptr) {
+                    return Ok("...".to_string());
+                }
+            }
+            let mut new_ptrs = ptrs.clone();
+            new_ptrs.push(obj);
+            match obj {
+                OnionObject::IntegerValue(v) => v.display(&new_ptrs),
+                OnionObject::FloatValue(v) => v.display(&new_ptrs),
+                OnionObject::StringValue(v) => v.display(&new_ptrs),
+                OnionObject::BytesValue(v) => v.display(&new_ptrs),
+                OnionObject::BooleanValue(v) => v.display(&new_ptrs),
+                OnionObject::Null(v) => v.display(&new_ptrs),
+                OnionObject::Undefined(v) => v.display(&new_ptrs),
+                OnionObject::Range(v) => v.display(&new_ptrs),
+                OnionObject::Tuple(v) => v.display(&new_ptrs),
+                OnionObject::Pair(v) => v.display(&new_ptrs),
+                OnionObject::LazySet(v) => v.display(&new_ptrs),
+                OnionObject::InstructionPackage(v) => v.display(&new_ptrs),
+                OnionObject::Lambda(v) => v.display(&new_ptrs),
+                OnionObject::Custom(custom) => custom.display(&new_ptrs),
+                OnionObject::Mut(_) => unreachable!(),
+            }
+        })
+    }
+
     pub fn binary_add(&self, other: &Self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| {
             other.with_data(|other_obj| match obj {
@@ -1374,151 +1395,22 @@ impl OnionObject {
         value: &OnionObject,
         gc: &mut GC<OnionObjectCell>,
     ) -> Result<Result<StepResult, OnionStaticObject>, RuntimeError> {
-        self.with_data(|obj| {
-            match obj {
-                OnionObject::Lambda((lambda_def, self_object)) => {
-                    let launcher = OnionLambdaRunnableLauncher::new(
-                        obj,
-                        match override_self_object {
-                            Some(override_self) => override_self.stabilize(),
-                            None => self_object.stabilize(),
-                        },
-                        value.stabilize(),
-                        |r| Ok(r),
-                    )?;
-                    let new_runnable: Box<dyn Runnable> = match lambda_def.lambda_type() {
-                        LambdaType::Atomic => Box::new(launcher),
-                        LambdaType::AsyncLauncher => {
-                            let new_task_handler = OnionAsyncHandle::new(gc);
-                            Box::new(AsyncScheduler::new(Task::new(
-                                Box::new(Scheduler::new(vec![Box::new(launcher)])),
-                                new_task_handler,
-                                0,
-                            )))
-                        }
-                        LambdaType::SyncLauncher => {
-                            Box::new(Scheduler::new(vec![Box::new(launcher)]))
-                        }
-                    };
-                    return Ok(Ok(StepResult::NewRunnable(new_runnable)));
-                }
-                OnionObject::Pair(pair) => {
-                    let override_self = Some(override_self_object.unwrap_or(pair.get_key()));
-                    pair.get_value().apply(override_self, value, gc)
-                }
-                OnionObject::Tuple(tuple) => {
-                    value.with_data(|value| match value {
-                        OnionObject::IntegerValue(i) => {
-                            // 单索引访问
-                            let elements = tuple.get_elements();
-                            if (*i as usize) < elements.len() {
-                                Ok(Err(OnionStaticObject::new(elements[*i as usize].clone())))
-                            } else {
-                                Err(RuntimeError::InvalidOperation(
-                                    "Index out of bounds for tuple".into(),
-                                ))
-                            }
-                        }
-                        OnionObject::Range(start, end) => {
-                            // 切片访问
-                            let elements = tuple.get_elements();
-                            let len = elements.len() as i64;
-                            let start_idx = (*start).max(0).min(len) as usize;
-                            let end_idx = (*end).max(0).min(len) as usize;
-
-                            if start_idx <= end_idx {
-                                let sliced: Vec<OnionObject> =
-                                    elements[start_idx..end_idx].to_vec();
-                                Ok(Err(OnionStaticObject::new(OnionObject::Tuple(
-                                    OnionTuple::new(sliced).into(),
-                                ))))
-                            } else {
-                                Ok(Err(OnionStaticObject::new(OnionObject::Tuple(
-                                    OnionTuple::new(vec![]).into(),
-                                ))))
-                            }
-                        }
-                        _ => Err(RuntimeError::InvalidType(
-                            "Tuple apply() expects Integer (index) or Range (slice)".into(),
-                        )),
-                    })
-                }
-                OnionObject::StringValue(s) => {
-                    value.with_data(|value| match value {
-                        OnionObject::IntegerValue(i) => {
-                            // 单字符访问
-                            if *i < 0 || *i >= s.chars().count() as i64 {
-                                return Err(RuntimeError::InvalidOperation(
-                                    format!("Index out of bounds for String: {}", s).into(),
-                                ));
-                            }
-                            Ok(Err(OnionStaticObject::new(OnionObject::StringValue(
-                                Arc::from(s.chars().nth(*i as usize).unwrap().to_string()),
-                            ))))
-                        }
-                        OnionObject::Range(start, end) => {
-                            // 字符串切片
-                            let chars: Vec<char> = s.chars().collect();
-                            let len = chars.len() as i64;
-                            let start_idx = (*start).max(0).min(len) as usize;
-                            let end_idx = (*end).max(0).min(len) as usize;
-
-                            if start_idx <= end_idx {
-                                let sliced: String = chars[start_idx..end_idx].iter().collect();
-                                Ok(Err(OnionStaticObject::new(OnionObject::StringValue(
-                                    Arc::from(sliced),
-                                ))))
-                            } else {
-                                Ok(Err(OnionStaticObject::new(OnionObject::StringValue(
-                                    Arc::from(""),
-                                ))))
-                            }
-                        }
-                        _ => Err(RuntimeError::InvalidType(
-                            "String apply() expects Integer (index) or Range (slice)".into(),
-                        )),
-                    })
-                }
-                OnionObject::BytesValue(b) => {
-                    value.with_data(|value| match value {
-                        OnionObject::IntegerValue(i) => {
-                            // 单字节访问
-                            if *i < 0 || *i >= b.len() as i64 {
-                                return Err(RuntimeError::InvalidOperation(
-                                    format!("Index out of bounds for Bytes: {:?}", b).into(),
-                                ));
-                            }
-                            Ok(Err(OnionStaticObject::new(OnionObject::BytesValue(
-                                Arc::from(vec![b[*i as usize]]),
-                            ))))
-                        }
-                        OnionObject::Range(start, end) => {
-                            // 字节切片
-                            let len = b.len() as i64;
-                            let start_idx = (*start).max(0).min(len) as usize;
-                            let end_idx = (*end).max(0).min(len) as usize;
-
-                            if start_idx <= end_idx {
-                                let sliced = &b[start_idx..end_idx];
-                                Ok(Err(OnionStaticObject::new(OnionObject::BytesValue(
-                                    Arc::from(sliced),
-                                ))))
-                            } else {
-                                Ok(Err(OnionStaticObject::new(OnionObject::BytesValue(
-                                    Arc::from(vec![]),
-                                ))))
-                            }
-                        }
-                        _ => Err(RuntimeError::InvalidType(
-                            "Bytes apply() expects Integer (index) or Range (slice)".into(),
-                        )),
-                    })
-                }
-                OnionObject::Custom(custom) => custom.apply(value),
-                _ => Err(RuntimeError::InvalidOperation(
-                    format!("apply() not supported for {:?}", obj).into(),
-                )),
-            }
+        self.with_data(|obj| match obj {
+            OnionObject::IntegerValue(v) => v.apply(obj, override_self_object, value, gc),
+            OnionObject::FloatValue(v) => v.apply(obj, override_self_object, value, gc),
+            OnionObject::BooleanValue(v) => v.apply(obj, override_self_object, value, gc),
+            OnionObject::StringValue(v) => v.apply(obj, override_self_object, value, gc),
+            OnionObject::BytesValue(v) => v.apply(obj, override_self_object, value, gc),
+            OnionObject::Range(v) => v.apply(obj, override_self_object, value, gc),
+            OnionObject::Null(v) => v.apply(obj, override_self_object, value, gc),
+            OnionObject::Undefined(v) => v.apply(obj, override_self_object, value, gc),
+            OnionObject::InstructionPackage(v) => v.apply(obj, override_self_object, value, gc),
+            OnionObject::Tuple(v) => v.apply(obj, override_self_object, value, gc),
+            OnionObject::Pair(v) => v.apply(obj, override_self_object, value, gc),
+            OnionObject::LazySet(v) => v.apply(obj, override_self_object, value, gc),
+            OnionObject::Lambda(v) => v.apply(obj, override_self_object, value, gc),
+            OnionObject::Custom(custom) => custom.apply(obj, override_self_object, value, gc),
+            OnionObject::Mut(_) => unreachable!(),
         })
     }
 

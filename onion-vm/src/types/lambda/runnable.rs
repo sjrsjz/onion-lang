@@ -67,7 +67,7 @@ static INSTRUCTION_TABLE: std::sync::LazyLock<Vec<InstructionHandler>> =
         instruction_table[VMInstruction::LoadString as usize] = vm_instructions::load_string;
         instruction_table[VMInstruction::LoadBytes as usize] = vm_instructions::load_bytes;
         instruction_table[VMInstruction::LoadBool as usize] = vm_instructions::load_bool;
-        instruction_table[VMInstruction::LoadLambda as usize] = vm_instructions::load_lambda;
+        instruction_table[VMInstruction::BuildLambda as usize] = vm_instructions::build_lambda;
         instruction_table[VMInstruction::LoadUndefined as usize] = vm_instructions::load_undefined;
 
         // 数据结构构建

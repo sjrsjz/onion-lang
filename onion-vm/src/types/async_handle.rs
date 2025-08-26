@@ -185,6 +185,10 @@ impl OnionObjectProtocol for OnionAsyncHandle {
             }
         }
     }
+
+    fn display(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+        self.repr(ptrs)
+    }
 }
 
 impl OnionObjectProtocolAny for OnionAsyncHandle {

@@ -257,7 +257,7 @@ impl IRTranslator {
                 IR::LoadLambda(signature, capture_vars) => {
                     self.code.push(
                         Opcode32::build_opcode(
-                            VMInstruction::LoadLambda as u8,
+                            VMInstruction::BuildLambda as u8,
                             OperandFlag::Valid | OperandFlag::ArgSize64 | OperandFlag::UseConstPool,
                             OperandFlag::Valid | OperandFlag::ArgSize64,
                             0,

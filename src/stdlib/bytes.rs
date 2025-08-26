@@ -3,8 +3,12 @@ use onion_vm::{
     GC,
     lambda::runnable::RuntimeError,
     types::{
+        boolean_value::OnionBooleanValue,
+        bytes_value::OnionBytesValue,
+        integer_value::OnionIntegerValue,
         lambda::parameter::LambdaParameter,
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
+        string_value::OnionStringValue,
         tuple::OnionTuple,
     },
     utils::fastmap::{OnionFastMap, OnionKeyPool},
@@ -26,7 +30,7 @@ fn get_bytes_arg<'a>(
         )
     })?;
     match obj.weak() {
-        OnionObject::BytesValue(b) => Ok(b.as_ref()),
+        OnionObject::BytesValue(b) => Ok(b.value()),
         _ => Err(RuntimeError::InvalidType(
             format!("Argument '{name}' must be bytes")
                 .to_string()
@@ -47,7 +51,7 @@ fn get_integer_arg(
         )
     })?;
     match obj.weak() {
-        OnionObject::IntegerValue(i) => Ok(*i),
+        OnionObject::IntegerValue(i) => Ok(i.value()),
         _ => Err(RuntimeError::InvalidType(
             format!("Argument '{name}' must be an integer")
                 .to_string()
@@ -72,7 +76,7 @@ fn get_integer_tuple_arg(
             .get_elements()
             .iter()
             .map(|item| match item {
-                OnionObject::IntegerValue(i) => Ok(*i),
+                OnionObject::IntegerValue(i) => Ok(i.value()),
                 _ => Err(RuntimeError::InvalidType(
                     "All elements in the list must be integers"
                         .to_string()
@@ -95,7 +99,7 @@ fn length(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
-    Ok(OnionObject::IntegerValue(bytes.len() as i64).stabilize())
+    Ok(OnionIntegerValue::new_static(bytes.len() as i64))
 }
 
 fn concat(
@@ -105,7 +109,7 @@ fn concat(
     let a = get_bytes_arg(argument, "a")?;
     let b = get_bytes_arg(argument, "b")?;
     let result = [a, b].concat();
-    Ok(OnionObject::BytesValue(result.into()).stabilize())
+    Ok(OnionBytesValue::new_static(&result))
 }
 
 fn slice(
@@ -130,7 +134,7 @@ fn slice(
     let start_idx_clamped = std::cmp::min(start_idx, bytes.len());
 
     let result = bytes[start_idx_clamped..end_idx].to_vec();
-    Ok(OnionObject::BytesValue(result.into()).stabilize())
+    Ok(OnionBytesValue::new_static(&result))
 }
 
 fn get_at(
@@ -146,7 +150,7 @@ fn get_at(
     }
     bytes
         .get(index as usize)
-        .map(|&byte| OnionObject::IntegerValue(byte as i64).stabilize())
+        .map(|&byte| OnionIntegerValue::new_static(byte as i64))
         .ok_or_else(|| RuntimeError::InvalidOperation("Index out of bounds".into()))
 }
 
@@ -176,7 +180,7 @@ fn set_at(
 
     let mut result = bytes.to_vec();
     result[idx] = value as u8;
-    Ok(OnionObject::BytesValue(result.into()).stabilize())
+    Ok(OnionBytesValue::new_static(&result))
 }
 
 fn index_of(
@@ -192,7 +196,7 @@ fn index_of(
         .map(|i| i as i64)
         .unwrap_or(-1);
 
-    Ok(OnionObject::IntegerValue(index).stabilize())
+    Ok(OnionIntegerValue::new_static(index))
 }
 
 fn contains(
@@ -201,10 +205,9 @@ fn contains(
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
     let pattern = get_bytes_arg(argument, "pattern")?;
-    Ok(
-        OnionObject::BooleanValue(bytes.windows(pattern.len()).any(|window| window == pattern))
-            .stabilize(),
-    )
+    Ok(OnionBooleanValue::new_static(
+        pattern.len() == 0 || bytes.windows(pattern.len()).any(|window| window == pattern),
+    ))
 }
 
 fn starts_with(
@@ -213,7 +216,7 @@ fn starts_with(
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
     let pattern = get_bytes_arg(argument, "pattern")?;
-    Ok(OnionObject::BooleanValue(bytes.starts_with(pattern)).stabilize())
+    Ok(OnionBooleanValue::new_static(bytes.starts_with(pattern)))
 }
 
 fn ends_with(
@@ -222,7 +225,7 @@ fn ends_with(
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
     let pattern = get_bytes_arg(argument, "pattern")?;
-    Ok(OnionObject::BooleanValue(bytes.ends_with(pattern)).stabilize())
+    Ok(OnionBooleanValue::new_static(bytes.ends_with(pattern)))
 }
 
 fn repeat(
@@ -238,7 +241,7 @@ fn repeat(
         ));
     }
 
-    Ok(OnionObject::BytesValue(bytes.repeat(count as usize).into()).stabilize())
+    Ok(OnionBytesValue::new_static(&bytes.repeat(count as usize)))
 }
 
 fn is_empty(
@@ -246,7 +249,7 @@ fn is_empty(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
-    Ok(OnionObject::BooleanValue(bytes.is_empty()).stabilize())
+    Ok(OnionBooleanValue::new_static(bytes.is_empty()))
 }
 
 fn reverse(
@@ -256,7 +259,7 @@ fn reverse(
     let bytes = get_bytes_arg(argument, "bytes")?;
     let mut result = bytes.to_vec();
     result.reverse();
-    Ok(OnionObject::BytesValue(result.into()).stabilize())
+    Ok(OnionBytesValue::new_static(&result))
 }
 
 fn to_string(
@@ -265,7 +268,7 @@ fn to_string(
 ) -> Result<OnionStaticObject, RuntimeError> {
     let bytes = get_bytes_arg(argument, "bytes")?;
     String::from_utf8(bytes.to_vec())
-        .map(|s| OnionObject::StringValue(s.into()).stabilize())
+        .map(|s| OnionStringValue::new_static(&s))
         .map_err(|_| RuntimeError::InvalidOperation("Bytes are not valid UTF-8".into()))
 }
 
@@ -277,7 +280,7 @@ fn from_string(
         RuntimeError::DetailedError("Function requires a 'string' argument".into())
     })?;
     match obj.weak() {
-        OnionObject::StringValue(s) => Ok(OnionObject::BytesValue(s.as_bytes().to_vec().into()).stabilize()),
+        OnionObject::StringValue(s) => Ok(OnionBytesValue::new_static(s.value().as_bytes())),
         _ => Err(RuntimeError::InvalidType(
             "Argument 'string' must be a string".into(),
         )),
@@ -305,13 +308,13 @@ fn pad_left(
 
     let target_len = length as usize;
     if bytes.len() >= target_len {
-        return Ok(OnionObject::BytesValue(bytes.to_vec().into()).stabilize());
+        return Ok(OnionBytesValue::new_static(bytes));
     }
 
     let pad_count = target_len - bytes.len();
     let mut result = vec![pad_byte_val as u8; pad_count];
     result.extend_from_slice(bytes);
-    Ok(OnionObject::BytesValue(result.into()).stabilize())
+    Ok(OnionBytesValue::new_static(&result))
 }
 
 fn pad_right(
@@ -335,13 +338,13 @@ fn pad_right(
 
     let target_len = length as usize;
     if bytes.len() >= target_len {
-        return Ok(OnionObject::BytesValue(bytes.to_vec().into()).stabilize());
+        return Ok(OnionBytesValue::new_static(bytes));
     }
 
     let pad_count = target_len - bytes.len();
     let mut result = bytes.to_vec();
     result.extend(vec![pad_byte_val as u8; pad_count]);
-    Ok(OnionObject::BytesValue(result.into()).stabilize())
+    Ok(OnionBytesValue::new_static(&result))
 }
 
 fn from_integers(
@@ -360,7 +363,7 @@ fn from_integers(
         }
         result.push(i as u8);
     }
-    Ok(OnionObject::BytesValue(result.into()).stabilize())
+    Ok(OnionBytesValue::new_static(&result))
 }
 
 fn to_integers(
@@ -370,7 +373,7 @@ fn to_integers(
     let bytes = get_bytes_arg(argument, "bytes")?;
     let integers: Vec<_> = bytes
         .iter()
-        .map(|&byte| OnionObject::IntegerValue(byte as i64))
+        .map(|&byte| OnionObject::IntegerValue(OnionIntegerValue::new(byte as i64)))
         .collect();
     Ok(OnionObject::Tuple(OnionTuple::new(integers).into()).stabilize())
 }

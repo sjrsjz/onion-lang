@@ -131,9 +131,17 @@ impl OnionObjectProtocol for OnionLazySet {
 
     fn repr(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
         Ok(format!(
-            "({:?} | {:?})",
-            self.get_container().repr(ptrs),
-            self.get_filter().repr(ptrs)
+            "({} | {})",
+            self.get_container().repr(ptrs)?,
+            self.get_filter().repr(ptrs)?
+        ))
+    }
+
+    fn display(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+        Ok(format!(
+            "({} | {})",
+            self.get_container().display(ptrs)?,
+            self.get_filter().display(ptrs)?
         ))
     }
 

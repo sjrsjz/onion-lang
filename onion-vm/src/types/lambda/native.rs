@@ -11,11 +11,16 @@ use arc_gc::gc::GC;
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
     types::{
+        boolean_value::OnionBooleanValue,
+        bytes_value::OnionBytesValue,
+        float_value::OnionFloatValue,
+        integer_value::OnionIntegerValue,
         lambda::{
-            definition::{LambdaBody, LambdaType, OnionLambdaDefinition},
+            definition::{LambdaBody, LambdaType, OnionLambdaDefinitionInner},
             parameter::LambdaParameter,
         },
-        object::{OnionObject, OnionObjectCell, OnionStaticObject},
+        object::{OnionObject, OnionObjectCell, OnionObjectProtocol, OnionStaticObject},
+        string_value::OnionStringValue,
         tuple::OnionTuple,
     },
     unwrap_step_result,
@@ -84,32 +89,33 @@ pub(crate) fn native_int_converter(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     self_object.weak().with_data(|obj: &OnionObject| match obj {
-        OnionObject::IntegerValue(v) => Ok(OnionObject::IntegerValue(*v).stabilize()),
-        OnionObject::FloatValue(v) => Ok(OnionObject::IntegerValue(*v as i64).stabilize()),
-        OnionObject::StringValue(s) => match s.parse::<i64>() {
-            Ok(parsed) => Ok(OnionObject::IntegerValue(parsed).stabilize()),
+        OnionObject::IntegerValue(v) => Ok(OnionIntegerValue::new_static(v.value())),
+        OnionObject::FloatValue(v) => Ok(OnionIntegerValue::new_static(v.value() as i64)),
+        OnionObject::StringValue(s) => match s.value().parse::<i64>() {
+            Ok(parsed) => Ok(OnionIntegerValue::new_static(parsed)),
             Err(_) => Err(RuntimeError::DetailedError(
-                format!("Cannot convert string '{}' to integer", s).into(),
+                format!("Cannot convert string '{}' to integer", s.value()).into(),
             )),
         },
-        OnionObject::BooleanValue(b) => Ok(OnionObject::IntegerValue(if *b { 1 } else { 0 }).stabilize()),
-        OnionObject::BytesValue(bytes) => match std::str::from_utf8(bytes) {
-            Ok(s) => match s.parse::<i64>() {
-                Ok(parsed) => Ok(OnionObject::IntegerValue(parsed).stabilize()),
-                Err(_) => Err(RuntimeError::DetailedError(
-                    format!("Cannot convert bytes to integer: invalid format").into(),
-                )),
-            },
-            Err(_) => Err(RuntimeError::DetailedError(
-                "Cannot convert non-UTF8 bytes to integer"
-                    .to_string()
-                    .into(),
-            )),
-        },
+        OnionObject::BooleanValue(b) => {
+            Ok(OnionIntegerValue::new_static(if b.value() { 1 } else { 0 }))
+        }
+        OnionObject::BytesValue(b) => {
+            if b.value().len() < 8 {
+                return Err(RuntimeError::DetailedError(
+                    "Cannot convert bytes to integer: insufficient length".into(),
+                ));
+            }
+            let mut arr = [0u8; 8];
+            let bytes = b.value();
+            let len = bytes.len().min(8);
+            arr[8 - len..].copy_from_slice(&bytes[..len]);
+            Ok(OnionIntegerValue::new_static(i64::from_be_bytes(arr)))
+        }
         _ => Err(RuntimeError::DetailedError(
             format!(
                 "Cannot convert {} to integer",
-                obj.type_of().unwrap_or("unknown".to_string())
+                obj.type_of().unwrap_or("<unknown>".to_string())
             )
             .into(),
         )),
@@ -126,30 +132,35 @@ pub(crate) fn native_float_converter(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     self_object.weak().with_data(|obj: &OnionObject| match obj {
-        OnionObject::FloatValue(v) => Ok(OnionObject::FloatValue(*v).stabilize()),
-        OnionObject::IntegerValue(v) => Ok(OnionObject::FloatValue(*v as f64).stabilize()),
-        OnionObject::StringValue(s) => match s.parse::<f64>() {
-            Ok(parsed) => Ok(OnionObject::FloatValue(parsed).stabilize()),
+        OnionObject::FloatValue(v) => Ok(OnionFloatValue::new_static(v.value())),
+        OnionObject::IntegerValue(v) => Ok(OnionFloatValue::new_static(v.value() as f64)),
+        OnionObject::StringValue(s) => match s.value().parse::<f64>() {
+            Ok(parsed) => Ok(OnionFloatValue::new_static(parsed)),
             Err(_) => Err(RuntimeError::DetailedError(
-                format!("Cannot convert string '{}' to float", s).into(),
+                format!("Cannot convert string '{}' to float", s.value()).into(),
             )),
         },
-        OnionObject::BooleanValue(b) => Ok(OnionObject::FloatValue(if *b { 1.0 } else { 0.0 }).stabilize()),
-        OnionObject::BytesValue(bytes) => match std::str::from_utf8(bytes) {
-            Ok(s) => match s.parse::<f64>() {
-                Ok(parsed) => Ok(OnionObject::FloatValue(parsed).stabilize()),
-                Err(_) => Err(RuntimeError::DetailedError(
-                    format!("Cannot convert bytes to float: invalid format").into(),
-                )),
-            },
-            Err(_) => Err(RuntimeError::DetailedError(
-                "Cannot convert non-UTF8 bytes to float".into(),
-            )),
-        },
+        OnionObject::BooleanValue(b) => Ok(OnionFloatValue::new_static(if b.value() {
+            1.0
+        } else {
+            0.0
+        })),
+        OnionObject::BytesValue(b) => {
+            if b.value().len() < 8 {
+                return Err(RuntimeError::DetailedError(
+                    "Cannot convert bytes to float: insufficient length".into(),
+                ));
+            }
+            let mut arr = [0u8; 8];
+            let bytes = b.value();
+            let len = bytes.len().min(8);
+            arr[8 - len..].copy_from_slice(&bytes[..len]);
+            Ok(OnionFloatValue::new_static(f64::from_be_bytes(arr)))
+        }
         _ => Err(RuntimeError::DetailedError(
             format!(
                 "Cannot convert {} to float",
-                obj.type_of().unwrap_or("unknown".to_string())
+                obj.type_of().unwrap_or("<unknown>".to_string())
             )
             .into(),
         )),
@@ -167,38 +178,36 @@ pub(crate) fn native_string_converter(
 ) -> Result<OnionStaticObject, RuntimeError> {
     self_object.weak().with_data(|obj: &OnionObject| {
         match obj {
-            OnionObject::StringValue(s) => Ok(OnionObject::StringValue(s.clone()).stabilize()),
-            OnionObject::IntegerValue(v) => {
-                Ok(OnionObject::StringValue(Arc::from(v.to_string())).stabilize())
-            }
-            OnionObject::FloatValue(v) => Ok(OnionObject::StringValue(Arc::from(v.to_string())).stabilize()),
-            OnionObject::BooleanValue(b) => {
-                Ok(OnionObject::StringValue(Arc::from(b.to_string())).stabilize())
-            }
+            OnionObject::StringValue(s) => Ok(OnionStringValue::new_static(s.value())),
+            OnionObject::IntegerValue(v) => Ok(OnionStringValue::new_static(v.value().to_string())),
+            OnionObject::FloatValue(v) => Ok(OnionStringValue::new_static(v.value().to_string())),
+            OnionObject::BooleanValue(b) => Ok(OnionStringValue::new_static(b.value().to_string())),
             OnionObject::BytesValue(bytes) => {
-                match std::str::from_utf8(bytes) {
-                    Ok(s) => Ok(OnionObject::StringValue(Arc::from(s.to_string())).stabilize()),
+                match std::str::from_utf8(&bytes.value()) {
+                    Ok(s) => Ok(OnionStringValue::new_static(s.to_string())),
                     Err(_) => {
                         // 如果不是有效UTF-8，使用lossy转换
-                        let s = String::from_utf8_lossy(bytes);
-                        Ok(OnionObject::StringValue(Arc::from(s.to_string())).stabilize())
+                        let s = String::from_utf8_lossy(&bytes.value());
+                        Ok(OnionStringValue::new_static(s.to_string()))
                     }
                 }
             }
-            OnionObject::Null => Ok(OnionObject::StringValue(Arc::from("null")).stabilize()),
-            OnionObject::Undefined(_) => {
-                Ok(OnionObject::StringValue(Arc::from("undefined")).stabilize())
-            }
-            OnionObject::Range(start, end) => {
-                Ok(OnionObject::StringValue(Arc::from(format!("{}..{}", start, end))).stabilize())
-            }
+            OnionObject::Null(_) => Ok(OnionStringValue::new_static("null")),
+            OnionObject::Undefined(_) => Ok(OnionStringValue::new_static("undefined")),
+            OnionObject::Range(range) => Ok(OnionStringValue::new_static(format!(
+                "{}..{}",
+                range.start(),
+                range.end()
+            ))),
             _ => {
                 // 对于复杂对象，使用 repr 方法
                 match obj.repr(&vec![]) {
-                    Ok(repr_str) => Ok(OnionObject::StringValue(Arc::from(repr_str)).stabilize()),
-                    Err(_) => Ok(OnionObject::StringValue(Arc::from(format!(
-                        "<{}>",
-                        obj.type_of().unwrap_or("object".to_string())
+                    Ok(repr_str) => Ok(OnionObject::StringValue(OnionStringValue::new(Arc::from(
+                        repr_str,
+                    )))
+                    .stabilize()),
+                    Err(_) => Ok(OnionObject::StringValue(OnionStringValue::new(Arc::from(
+                        format!("<{}>", obj.type_of().unwrap_or("object".to_string())),
                     )))
                     .stabilize()),
                 }
@@ -217,17 +226,19 @@ pub(crate) fn native_bool_converter(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     self_object.weak().with_data(|obj: &OnionObject| match obj {
-        OnionObject::BooleanValue(b) => Ok(OnionObject::BooleanValue(*b).stabilize()),
-        OnionObject::IntegerValue(v) => Ok(OnionObject::BooleanValue(*v != 0).stabilize()),
-        OnionObject::FloatValue(v) => Ok(OnionObject::BooleanValue(*v != 0.0).stabilize()),
-        OnionObject::StringValue(s) => Ok(OnionObject::BooleanValue(!s.is_empty()).stabilize()),
-        OnionObject::BytesValue(bytes) => Ok(OnionObject::BooleanValue(!bytes.is_empty()).stabilize()),
-        OnionObject::Null => Ok(OnionObject::BooleanValue(false).stabilize()),
-        OnionObject::Undefined(_) => Ok(OnionObject::BooleanValue(false).stabilize()),
-        OnionObject::Tuple(tuple) => {
-            Ok(OnionObject::BooleanValue(!tuple.get_elements().is_empty()).stabilize())
+        OnionObject::BooleanValue(b) => Ok(OnionBooleanValue::new_static(b.value())),
+        OnionObject::IntegerValue(v) => Ok(OnionBooleanValue::new_static(v.value() != 0)),
+        OnionObject::FloatValue(v) => Ok(OnionBooleanValue::new_static(v.value() != 0.0)),
+        OnionObject::StringValue(s) => Ok(OnionBooleanValue::new_static(!s.value().is_empty())),
+        OnionObject::BytesValue(bytes) => {
+            Ok(OnionBooleanValue::new_static(!bytes.value().is_empty()))
         }
-        _ => Ok(OnionObject::BooleanValue(true).stabilize()),
+        OnionObject::Null(_) => Ok(OnionBooleanValue::new_static(false)),
+        OnionObject::Undefined(_) => Ok(OnionBooleanValue::new_static(false)),
+        OnionObject::Tuple(tuple) => Ok(OnionBooleanValue::new_static(
+            !tuple.get_elements().is_empty(),
+        )),
+        _ => Ok(OnionBooleanValue::new_static(true)),
     })
 }
 
@@ -243,31 +254,34 @@ pub(crate) fn native_bytes_converter(
     self_object.weak().with_data(|obj: &OnionObject| {
         match obj {
             OnionObject::BytesValue(bytes) => {
-                Ok(OnionObject::BytesValue(bytes.clone()).stabilize())
+                Ok(OnionBytesValue::new_static(bytes.value()))
             }
             OnionObject::StringValue(s) => {
-                Ok(OnionObject::BytesValue(Arc::from(s.as_bytes().to_vec())).stabilize())
+                Ok(OnionBytesValue::new_static(s.value().as_bytes()))
             }
             OnionObject::IntegerValue(v) => {
-                Ok(OnionObject::BytesValue(Arc::from(v.to_be_bytes().to_vec())).stabilize())
+                let bytes = v.value().to_be_bytes();
+                Ok(OnionBytesValue::new_static(&bytes))
             }
             OnionObject::FloatValue(v) => {
                 // 浮点数转字节数组（大端序）
-                Ok(OnionObject::BytesValue(Arc::from(v.to_be_bytes().to_vec())).stabilize())
+                let bytes = v.value().to_be_bytes();
+                Ok(OnionBytesValue::new_static(&bytes))
             }
             OnionObject::BooleanValue(b) => {
-                Ok(OnionObject::BytesValue(Arc::from(vec![if *b { 1 } else { 0 }])).stabilize())
+                let byte_value = if b.value() { 1u8 } else { 0u8 };
+                Ok(OnionBytesValue::new_static(&[byte_value]))
             }
             OnionObject::Tuple(tuple) => {
                 let mut result = Vec::new();
                 for element in tuple.get_elements().iter() {
                     match element {
                         OnionObject::IntegerValue(v) => {
-                            if *v >= 0 && *v <= 255 {
-                                result.push(*v as u8);
+                            if v.value() >= 0 && v.value() <= 255 {
+                                result.push(v.value() as u8);
                             } else {
                                 return Err(RuntimeError::DetailedError(
-                                    format!("Integer {} is out of byte range (0-255)", v).into(),
+                                    format!("Integer {} is out of byte range (0-255)", v.value()).into(),
                                 ));
                             }
                         }
@@ -278,10 +292,10 @@ pub(crate) fn native_bytes_converter(
                         }
                     }
                 }
-                Ok(OnionObject::BytesValue(Arc::from(result)).stabilize())
+                Ok(OnionBytesValue::new_static(&result))
             }
             _ => Err(RuntimeError::DetailedError(
-                format!("Cannot convert {} to bytes", obj.type_of().unwrap_or("unknown".to_string())).into(),
+                format!("Cannot convert {} to bytes", obj.type_of().unwrap_or("<unknown>".to_string())).into(),
             )),
         }
     })
@@ -297,21 +311,21 @@ pub(crate) fn native_length_method(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     self_object.weak().with_data(|obj: &OnionObject| match obj {
-        OnionObject::StringValue(s) => Ok(OnionObject::IntegerValue(s.len() as i64).stabilize()),
-        OnionObject::BytesValue(b) => Ok(OnionObject::IntegerValue(b.len() as i64).stabilize()),
-        OnionObject::Range(start, end) => {
-            Ok(OnionObject::IntegerValue((end - start) as i64).stabilize())
-        }
-        OnionObject::Tuple(tuple) => {
-            Ok(OnionObject::IntegerValue(tuple.get_elements().len() as i64).stabilize())
-        }
-        _ => Err(RuntimeError::DetailedError(
-            format!(
-                "Object of type {} does not have a length",
-                obj.type_of().unwrap_or("unknown".to_string())
-            )
-            .into(),
-        )),
+        OnionObject::IntegerValue(v) => v.len(),
+        OnionObject::FloatValue(v) => v.len(),
+        OnionObject::StringValue(v) => v.len(),
+        OnionObject::BytesValue(v) => v.len(),
+        OnionObject::Range(v) => v.len(),
+        OnionObject::Tuple(v) => v.len(),
+        OnionObject::BooleanValue(v) => v.len(),
+        OnionObject::Null(v) => v.len(),
+        OnionObject::Undefined(v) => v.len(),
+        OnionObject::InstructionPackage(v) => v.len(),
+        OnionObject::Pair(v) => v.len(),
+        OnionObject::LazySet(v) => v.len(),
+        OnionObject::Lambda(v) => v.len(),
+        OnionObject::Custom(v) => v.len(),
+        OnionObject::Mut(_) => unreachable!(),
     })
 }
 
@@ -328,26 +342,26 @@ pub(crate) fn native_elements_method(
         match obj {
             OnionObject::StringValue(s) => {
                 let elements = OnionTuple::new_static_no_ref(
-                    &s.chars()
-                        .map(|c| {
-                            OnionStaticObject::new(OnionObject::StringValue(Arc::from(c.to_string())))
-                        })
+                    &s.value()
+                        .chars()
+                        .map(|c| OnionStringValue::new_static(c.to_string()))
                         .collect::<Vec<_>>(),
                 );
                 Ok(elements)
             }
             OnionObject::BytesValue(b) => {
                 let elements = OnionTuple::new_static_no_ref(
-                    &b.iter()
-                        .map(|byte| OnionStaticObject::new(OnionObject::IntegerValue(*byte as i64)))
+                    &b.value()
+                        .iter()
+                        .map(|byte| OnionIntegerValue::new_static(*byte as i64))
                         .collect::<Vec<_>>(),
                 );
                 Ok(elements)
             }
-            OnionObject::Range(start, end) => {
+            OnionObject::Range(range) => {
                 let elements = OnionTuple::new_static_no_ref(
-                    &(*start..*end)
-                        .map(|i| OnionStaticObject::new(OnionObject::IntegerValue(i as i64)))
+                    &(range.start()..range.end())
+                        .map(|i| OnionIntegerValue::new_static(i as i64))
                         .collect::<Vec<_>>(),
                 );
                 Ok(elements)
@@ -358,8 +372,8 @@ pub(crate) fn native_elements_method(
             }
             _ => Err(RuntimeError::DetailedError(
                 format!(
-                    "Object of type {} does not have elements",
-                    obj.type_of().unwrap_or("unknown".to_string())
+                    "Cannot get elements of {}",
+                    obj.type_of().unwrap_or("<unknown>".to_string())
                 )
                 .into(),
             )),
@@ -390,7 +404,7 @@ where
         + 'static,
 {
     let cloned_pool = string_pool.clone();
-    OnionLambdaDefinition::new_static_with_self(
+    OnionLambdaDefinitionInner::new_static_with_self(
         params,
         LambdaBody::NativeFunction((
             Arc::new(

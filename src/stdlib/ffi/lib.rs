@@ -12,7 +12,11 @@ use onion_vm::{
     lambda::runnable::RuntimeError,
     types::{
         lambda::parameter::LambdaParameter,
-        object::{OnionObject, OnionObjectCell, OnionObjectProtocol, OnionStaticObject},
+        object::{
+            OnionObject, OnionObjectCell, OnionObjectProtocol, OnionObjectProtocolAny,
+            OnionStaticObject,
+        },
+        string_value::OnionStringValue,
         tuple::OnionTuple,
     },
     utils::fastmap::{OnionFastMap, OnionKeyPool},
@@ -106,9 +110,15 @@ impl OnionObjectProtocol for CLib {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
+
     fn repr(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
         Ok(format!("CLib(path=\"{}\")", self.path))
     }
+
+    fn display(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+        self.repr(ptrs)
+    }
+
     fn equals(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
         if let OnionObject::Custom(other_custom) = other {
             if let Some(other_lib) = other_custom.as_any().downcast_ref::<CLib>() {
@@ -117,17 +127,25 @@ impl OnionObjectProtocol for CLib {
         }
         Ok(false)
     }
+
+    fn type_of(&self) -> Result<String, RuntimeError> {
+        Ok("CLib".into())
+    }
     fn upgrade(&self, _collected: &mut Vec<GCArc<OnionObjectCell>>) {}
+}
+
+impl OnionObjectProtocolAny for CLib {
     fn with_attribute(
         &self,
+        _self_object: &OnionObject,
         key: &OnionObject,
         f: &mut dyn FnMut(&OnionObject) -> Result<(), RuntimeError>,
     ) -> Result<(), RuntimeError> {
         if let OnionObject::StringValue(attr) = key {
-            match attr.as_ref() {
-                "path" => f(&OnionObject::StringValue(self.path.clone().into())),
+            match attr.value() {
+                "path" => f(&OnionObject::StringValue(OnionStringValue::new(&self.path))),
                 _ => Err(RuntimeError::InvalidOperation(
-                    format!("CLib has no attribute '{attr}'").into(),
+                    format!("CLib has no attribute {:?}", attr).into(),
                 )),
             }
         } else {
@@ -135,9 +153,6 @@ impl OnionObjectProtocol for CLib {
                 "Attribute key must be a string".into(),
             ))
         }
-    }
-    fn len(&self) -> Result<OnionStaticObject, RuntimeError> {
-        Err(RuntimeError::InvalidOperation("CLib has no length".into()))
     }
 }
 
@@ -311,6 +326,10 @@ impl GCTraceable<OnionObjectCell> for CFunctionHandle {
     fn collect(&self, _queue: &mut VecDeque<GCArcWeak<OnionObjectCell>>) {}
 }
 impl OnionObjectProtocol for CFunctionHandle {
+    fn type_of(&self) -> Result<String, RuntimeError> {
+        Ok("CFunctionHandle".into())
+    }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -320,6 +339,11 @@ impl OnionObjectProtocol for CFunctionHandle {
             self.library.path, self.function_name
         ))
     }
+
+    fn display(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+        self.repr(ptrs)
+    }
+
     fn equals(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
         if let OnionObject::Custom(other_custom) = other {
             if let Some(other_handle) = other_custom.as_any().downcast_ref::<CFunctionHandle>() {
@@ -332,28 +356,36 @@ impl OnionObjectProtocol for CFunctionHandle {
         Ok(false)
     }
     fn upgrade(&self, _collected: &mut Vec<GCArc<OnionObjectCell>>) {}
+}
+
+impl OnionObjectProtocolAny for CFunctionHandle {
     fn with_attribute(
         &self,
+        _self_object: &OnionObject,
         key: &OnionObject,
         f: &mut dyn FnMut(&OnionObject) -> Result<(), RuntimeError>,
     ) -> Result<(), RuntimeError> {
         if let OnionObject::StringValue(attr) = key {
-            match attr.as_ref() {
-                "name" => f(&OnionObject::StringValue(self.function_name.clone().into())),
+            match attr.value() {
+                "name" => f(&OnionObject::StringValue(OnionStringValue::new(
+                    &self.function_name,
+                ))),
                 "library" => f(&OnionObject::Custom(Arc::new(
                     self.library.as_ref().clone(),
                 ))),
-                "return_type" => f(&OnionObject::StringValue(self.return_type.clone().into())),
+                "return_type" => f(&OnionObject::StringValue(OnionStringValue::new(
+                    &self.return_type,
+                ))),
                 "param_types" => {
                     let types = self
                         .param_types
                         .iter()
-                        .map(|t| OnionObject::StringValue(t.clone().into()))
+                        .map(|t| OnionObject::StringValue(OnionStringValue::new(t)))
                         .collect();
                     f(&OnionObject::Tuple(OnionTuple::new(types).into()))
                 }
                 _ => Err(RuntimeError::InvalidOperation(
-                    format!("CFunctionHandle has no attribute '{attr}'").into(),
+                    format!("CFunctionHandle has no attribute {:?}", attr).into(),
                 )),
             }
         } else {
@@ -361,11 +393,6 @@ impl OnionObjectProtocol for CFunctionHandle {
                 "Attribute key must be a string".into(),
             ))
         }
-    }
-    fn len(&self) -> Result<OnionStaticObject, RuntimeError> {
-        Err(RuntimeError::InvalidOperation(
-            "CFunctionHandle has no length".into(),
-        ))
     }
 }
 
@@ -400,7 +427,7 @@ fn get_string_arg(
         RuntimeError::DetailedError(format!("Missing required argument: '{name}'").into())
     })?;
     match obj.weak() {
-        OnionObject::StringValue(s) => Ok(s.to_string()),
+        OnionObject::StringValue(s) => Ok(s.value().to_string()),
         _ => Err(RuntimeError::InvalidType(
             format!("Argument '{name}' must be a string").into(),
         )),
@@ -419,7 +446,7 @@ fn get_string_tuple_arg(
             .get_elements()
             .iter()
             .map(|item| match item {
-                OnionObject::StringValue(s) => Ok(s.to_string()),
+                OnionObject::StringValue(s) => Ok(s.value().to_string()),
                 _ => Err(RuntimeError::InvalidType(
                     "All elements in the parameter types tuple must be strings"
                         .to_string()

@@ -10,10 +10,11 @@ use onion_vm::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
     types::{
         lambda::{
-            definition::{LambdaBody, LambdaType, OnionLambdaDefinition},
+            definition::{LambdaBody, LambdaType, OnionLambdaDefinitionInner},
             parameter::LambdaParameter,
         },
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
+        string_value::OnionStringValue,
     },
     utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
@@ -33,7 +34,7 @@ fn get_string_arg(
             RuntimeError::DetailedError(format!("Missing required argument: '{name}'").into())
         })
         .and_then(|obj| match obj.weak() {
-            OnionObject::StringValue(s) => Ok(s.to_string()),
+            OnionObject::StringValue(s) => Ok(s.value().to_string()),
             _ => Err(RuntimeError::InvalidType(
                 format!("Argument '{name}' must be a string").into(),
             )),
@@ -46,8 +47,8 @@ fn get_optional_string_arg(
 ) -> Result<Option<String>, RuntimeError> {
     match arg_map.get(name) {
         Some(obj) => match obj.weak() {
-            OnionObject::StringValue(s) => Ok(Some(s.to_string())),
-            OnionObject::Null | OnionObject::Undefined(_) => Ok(None),
+            OnionObject::StringValue(s) => Ok(Some(s.value().to_string())),
+            OnionObject::Null(_) | OnionObject::Undefined(_) => Ok(None),
             _ => Err(RuntimeError::InvalidType(
                 format!("Argument '{name}' must be a string, null, or undefined").into(),
             )),
@@ -67,8 +68,16 @@ fn get_headers_arg(
                 for item in tuple.get_elements() {
                     match item {
                         OnionObject::Pair(p) => {
-                            let key = p.get_key().to_string(&vec![])?;
-                            let value = p.get_value().to_string(&vec![])?;
+                            fn get_string(arg: &OnionObject) -> Result<String, RuntimeError> {
+                                arg.with_data(|data| match data {
+                                    OnionObject::StringValue(s) => Ok(s.value().to_string()),
+                                    _ => Err(RuntimeError::InvalidType(
+                                        "Header keys and values must be strings".into(),
+                                    )),
+                                })
+                            }
+                            let key = get_string(p.get_key())?;
+                            let value = get_string(p.get_value())?;
                             headers.insert(key, value);
                         }
                         _ => {
@@ -80,7 +89,7 @@ fn get_headers_arg(
                 }
                 Ok(headers)
             }
-            OnionObject::Null | OnionObject::Undefined(_) => Ok(IndexMap::new()),
+            OnionObject::Null(_) | OnionObject::Undefined(_) => Ok(IndexMap::new()),
             _ => Err(RuntimeError::InvalidType(
                 format!("Argument '{name}' must be a tuple of pairs, null, or undefined").into(),
             )),
@@ -213,9 +222,7 @@ impl Runnable for AsyncHttpRequest {
             }
             RequestState::InProgress => StepResult::Continue,
             RequestState::Completed(result) => match result {
-                Ok(response) => {
-                    StepResult::Return(OnionObject::StringValue(response.into()).stabilize().into())
-                }
+                Ok(response) => StepResult::Return(OnionStringValue::new_static(response).into()),
                 Err(error) => {
                     let response_json = serde_json::json!({
                         "status_code": 500, // Generic server error
@@ -224,9 +231,7 @@ impl Runnable for AsyncHttpRequest {
                         "success": false,
                     });
                     StepResult::Return(
-                        OnionObject::StringValue(response_json.to_string().into())
-                            .stabilize()
-                            .into(),
+                        OnionStringValue::new_static(response_json.to_string()).into(),
                     )
                 }
             },
@@ -283,7 +288,7 @@ fn http_request(
         OnionKeyPool::create(vec![]),
     ));
 
-    Ok(OnionLambdaDefinition::new_static(
+    Ok(OnionLambdaDefinitionInner::new_static(
         LambdaParameter::Multiple([].into()),
         lambda_body,
         OnionFastMap::default(),
@@ -302,7 +307,7 @@ fn http_get(
         Arc::new(move |_, _, _, _| Box::new(request.clone())),
         OnionKeyPool::create(vec![]),
     ));
-    Ok(OnionLambdaDefinition::new_static(
+    Ok(OnionLambdaDefinitionInner::new_static(
         LambdaParameter::Multiple([].into()),
         lambda_body,
         OnionFastMap::default(),
@@ -322,7 +327,7 @@ fn http_post(
         Arc::new(move |_, _, _, _| Box::new(request.clone())),
         OnionKeyPool::create(vec![]),
     ));
-    Ok(OnionLambdaDefinition::new_static(
+    Ok(OnionLambdaDefinitionInner::new_static(
         LambdaParameter::Multiple([].into()),
         lambda_body,
         OnionFastMap::default(),
@@ -342,7 +347,7 @@ fn http_put(
         Arc::new(move |_, _, _, _| Box::new(request.clone())),
         OnionKeyPool::create(vec![]),
     ));
-    Ok(OnionLambdaDefinition::new_static(
+    Ok(OnionLambdaDefinitionInner::new_static(
         LambdaParameter::Multiple([].into()),
         lambda_body,
         OnionFastMap::default(),
@@ -361,7 +366,7 @@ fn http_delete(
         Arc::new(move |_, _, _, _| Box::new(request.clone())),
         OnionKeyPool::create(vec![]),
     ));
-    Ok(OnionLambdaDefinition::new_static(
+    Ok(OnionLambdaDefinitionInner::new_static(
         LambdaParameter::Multiple([].into()),
         lambda_body,
         OnionFastMap::default(),
@@ -381,33 +386,13 @@ fn http_patch(
         Arc::new(move |_, _, _, _| Box::new(request.clone())),
         OnionKeyPool::create(vec![]),
     ));
-    Ok(OnionLambdaDefinition::new_static(
+    Ok(OnionLambdaDefinitionInner::new_static(
         LambdaParameter::Multiple([].into()),
         lambda_body,
         OnionFastMap::default(),
         "http::async_patch".into(),
         LambdaType::Atomic,
     ))
-}
-
-fn http_get_sync(
-    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
-    _gc: &mut GC<OnionObjectCell>,
-) -> Result<OnionStaticObject, RuntimeError> {
-    let url = get_string_arg(argument, "url")?;
-    let result = AsyncHttpRequest::perform_http_request(&url, "GET", &IndexMap::new(), None);
-    Ok(OnionObject::StringValue(result.unwrap_or_else(|e| e).into()).stabilize())
-}
-
-fn http_post_sync(
-    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
-    _gc: &mut GC<OnionObjectCell>,
-) -> Result<OnionStaticObject, RuntimeError> {
-    let url = get_string_arg(argument, "url")?;
-    let body = get_optional_string_arg(argument, "body")?;
-    let result =
-        AsyncHttpRequest::perform_http_request(&url, "POST", &IndexMap::new(), body.as_deref());
-    Ok(OnionObject::StringValue(result.unwrap_or_else(|e| e).into()).stabilize())
 }
 
 /// 构建HTTP模块
@@ -469,30 +454,6 @@ pub fn build_module() -> OnionStaticObject {
             "http::patch",
             OnionKeyPool::create(vec!["url".into(), "body".into()]),
             &http_patch,
-        ),
-    );
-
-    // --- Sync Functions (for testing/simple cases) ---
-    module.insert(
-        "get_sync".to_string(),
-        wrap_native_function(
-            LambdaParameter::top("url"),
-            OnionFastMap::default(),
-            "http::get_sync",
-            OnionKeyPool::create(vec!["url".into()]),
-            &http_get_sync,
-        ),
-    );
-    module.insert(
-        "post_sync".to_string(),
-        wrap_native_function(
-            LambdaParameter::Multiple(
-                [LambdaParameter::top("url"), LambdaParameter::top("body")].into(),
-            ),
-            OnionFastMap::default(),
-            "http::post_sync",
-            OnionKeyPool::create(vec!["url".into(), "body".into()]),
-            &http_post_sync,
         ),
     );
 

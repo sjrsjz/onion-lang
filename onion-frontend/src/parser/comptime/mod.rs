@@ -24,8 +24,7 @@ use std::sync::Arc;
 
 use onion_vm::{
     lambda::runnable::{RuntimeError, StepResult}, types::{
-        object::{OnionObject, OnionObjectCell, OnionObjectProtocol, OnionStaticObject},
-        tuple::OnionTuple,
+        boolean_value::OnionBooleanValue, bytes_value::OnionBytesValue, integer_value::OnionIntegerValue, null::OnionNull, object::{OnionObject, OnionObjectCell, OnionObjectProtocol, OnionObjectProtocolAny, OnionStaticObject}, string_value::OnionStringValue, tuple::OnionTuple
     }, GCTraceable
 };
 
@@ -87,19 +86,25 @@ impl OnionObjectProtocol for OnionASTObject {
     }
 
     fn len(&self) -> Result<OnionStaticObject, RuntimeError> {
-        Ok(OnionObject::IntegerValue(self.ast.children.len() as i64).stabilize())
+        Ok(OnionIntegerValue::new_static(self.ast.children.len() as i64))
     }
 
-    fn apply(&self, value: &OnionObject) -> Result<Result<StepResult, OnionStaticObject>, RuntimeError> {
-        value.with_data(|data| match data {
+    fn apply(
+        &self,
+        _this_object: &OnionObject,
+        _self_object: Option<&OnionObject>,
+        value: &OnionObject,
+        _gc: &mut onion_vm::GC<OnionObjectCell>,
+    ) -> Result<Result<StepResult, OnionStaticObject>, RuntimeError> {
+            value.with_data(|data| match data {
             OnionObject::IntegerValue(i) => {
                 // 通过索引访问子节点
-                let index = if *i < 0 {
+                let index = if i.value() < 0 {
                     return Err(RuntimeError::InvalidOperation(
                         "Negative index is not allowed".into(),
                     ));
                 } else {
-                    *i as usize
+                    i.value() as usize
                 };
 
                 if index >= self.ast.children.len() {
@@ -120,12 +125,12 @@ impl OnionObjectProtocol for OnionASTObject {
                 // 通过 Pair 替换指定索引的子节点
                 let index = pair.get_key().with_data(|key_data| match key_data {
                     OnionObject::IntegerValue(i) => {
-                        if *i < 0 {
+                        if i.value() < 0 {
                             Err(RuntimeError::InvalidOperation(
                                 "Negative index is not allowed".into(),
                             ))
                         } else {
-                            Ok(*i as usize)
+                            Ok(i.value() as usize)
                         }
                     }
                     _ => Err(RuntimeError::InvalidType(
@@ -166,14 +171,52 @@ impl OnionObjectProtocol for OnionASTObject {
         })
     }
 
+
+
+    fn type_of(&self) -> Result<String, RuntimeError> {
+        Ok("OnionASTObject".to_string())
+    }
+
+    fn repr(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+        Ok(format!("AST({:?})", self.ast))
+    }
+
+    fn display(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+        self.repr(ptrs)
+    }
+
+    fn binary_shl(&self, other: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
+        // self << tuple 用来将自身的元组替换成另一个
+        other.with_data(|data| match data {
+            OnionObject::Tuple(tuple) => {
+                let mut children = vec![];
+                for elem in tuple.get_elements() {
+                    children.push(OnionASTObject::from_onion(elem)?);
+                }
+                let new_ast = ASTNode {
+                    node_type: self.ast.node_type.clone(),
+                    source_location: self.ast.source_location.clone(),
+                    children,
+                };
+                Ok(OnionObject::Custom(Arc::new(OnionASTObject { ast: new_ast })).stabilize())
+            }
+            _ => Err(RuntimeError::InvalidType(
+                "Expected a tuple for binary shift left".into(),
+            )),
+        })
+    }
+}
+
+impl OnionObjectProtocolAny for OnionASTObject {
     fn with_attribute(
-            &self,
-            key: &OnionObject,
-            f: &mut dyn FnMut(&OnionObject) -> Result<(), RuntimeError>,
-        ) -> Result<(), RuntimeError> {
+        &self,
+        _self_object: &OnionObject,
+        key: &OnionObject,
+        f: &mut dyn FnMut(&OnionObject) -> Result<(), RuntimeError>,
+    ) -> Result<(), RuntimeError> {
         key.with_data(|key_data| match key_data {
             OnionObject::StringValue(attr_name) => {
-                match attr_name.as_ref() {
+                match attr_name.value() {
                     "node_type" => {
                         // 返回节点类型的字符串表示
                         let type_name = match &self.ast.node_type {
@@ -213,7 +256,7 @@ impl OnionObjectProtocol for OnionASTObject {
                             ASTNodeType::Static => "Static",
                             ASTNodeType::Comptime => "Comptime",
                         };
-                        let type_obj = OnionObject::StringValue(type_name.into());
+                        let type_obj = OnionObject::StringValue(OnionStringValue::new(type_name));
                         f(&type_obj)
                     },
                     "has_data" => {
@@ -225,41 +268,44 @@ impl OnionObjectProtocol for OnionASTObject {
                             ASTNodeType::Let(_) | ASTNodeType::LambdaDef(_, _) | ASTNodeType::Operation(_) |
                             ASTNodeType::Modifier(_) | ASTNodeType::Namespace(_)
                         );
-                        let has_data_obj = OnionObject::BooleanValue(has_data);
+                        let has_data_obj = OnionObject::BooleanValue(OnionBooleanValue::new(has_data));
                         f(&has_data_obj)
                     },
                     "data" => {
                         // 返回节点类型携带的原始数据
                         match &self.ast.node_type {
                             ASTNodeType::String(s) => {
-                                let data_obj = OnionObject::StringValue(s.clone().into());
+                                let data_obj = OnionObject::StringValue(OnionStringValue::new(s));
                                 f(&data_obj)
                             },
                             ASTNodeType::Boolean(b) => {
-                                let data_obj = OnionObject::BooleanValue(*b);
+                                let data_obj = OnionObject::BooleanValue(OnionBooleanValue::new(*b));
                                 f(&data_obj)
                             },
                             ASTNodeType::Number(n) => {
-                                let data_obj = OnionObject::StringValue(n.clone().into());
+                                let data_obj = OnionObject::StringValue(OnionStringValue::new(n));
                                 f(&data_obj)
                             },
                             ASTNodeType::Base64(b64) => {
-                                let data_obj = OnionObject::StringValue(b64.clone().into());
+                                let decoded = base64::engine::general_purpose::STANDARD.decode(b64).map_err(|e| RuntimeError::InvalidOperation(
+                                    format!("Failed to decode base64: {}", e).into()
+                                ))?;
+                                let data_obj = OnionObject::BytesValue(OnionBytesValue::new(&decoded));
                                 f(&data_obj)
                             },
                             ASTNodeType::Variable(name) | ASTNodeType::Required(name) | 
                             ASTNodeType::Let(name) | ASTNodeType::Namespace(name) => {
-                                let data_obj = OnionObject::StringValue(name.clone().into());
+                                let data_obj = OnionObject::StringValue(OnionStringValue::new(name));
                                 f(&data_obj)
                             },
                             ASTNodeType::LambdaDef(is_dyn, captures) => {
                                 // 返回一个包含 is_dyn 和 captures 的元组
                                 let captures_vec: Vec<OnionObject> = captures.iter()
-                                    .map(|s| OnionObject::StringValue(s.clone().into()))
+                                    .map(|s| OnionObject::StringValue(OnionStringValue::new(s)))
                                     .collect();
                                 let captures_tuple = OnionObject::Tuple(OnionTuple::new(captures_vec).into());
                                 let data_tuple = OnionObject::Tuple(OnionTuple::new(vec![
-                                    OnionObject::BooleanValue(*is_dyn),
+                                    OnionObject::BooleanValue(OnionBooleanValue::new(*is_dyn)),
                                     captures_tuple
                                 ]).into());
                                 f(&data_tuple)
@@ -287,7 +333,7 @@ impl OnionObjectProtocol for OnionASTObject {
                                     crate::parser::ast::ASTNodeOperation::LeftShift => "<<",
                                     crate::parser::ast::ASTNodeOperation::RightShift => ">>",
                                 };
-                                let data_obj = OnionObject::StringValue(op_str.into());
+                                let data_obj = OnionObject::StringValue(OnionStringValue::new(op_str));
                                 f(&data_obj)
                             },
                             ASTNodeType::Modifier(mod_type) => {
@@ -306,12 +352,12 @@ impl OnionObjectProtocol for OnionASTObject {
                                     crate::parser::ast::ASTNodeModifier::Sync => "sync",
                                     crate::parser::ast::ASTNodeModifier::Atomic => "atomic",
                                 };
-                                let data_obj = OnionObject::StringValue(mod_str.into());
+                                let data_obj = OnionObject::StringValue(OnionStringValue::new(mod_str));
                                 f(&data_obj)
                             },
                             _ => {
                                 // 对于没有数据的节点类型，返回 null
-                                let null_obj = OnionObject::Null;
+                                let null_obj = OnionObject::Null(OnionNull::new());
                                 f(&null_obj)
                             }
                         }
@@ -320,11 +366,11 @@ impl OnionObjectProtocol for OnionASTObject {
                     "value" => {
                         match &self.ast.node_type {
                             ASTNodeType::String(s) | ASTNodeType::Number(s) | ASTNodeType::Base64(s) => {
-                                let value_obj = OnionObject::StringValue(s.clone().into());
+                                let value_obj = OnionObject::StringValue(OnionStringValue::new(s));
                                 f(&value_obj)
                             },
                             ASTNodeType::Boolean(b) => {
-                                let value_obj = OnionObject::BooleanValue(*b);
+                                let value_obj = OnionObject::BooleanValue(OnionBooleanValue::new(*b));
                                 f(&value_obj)
                             },
                             _ => Err(RuntimeError::InvalidOperation(
@@ -336,7 +382,7 @@ impl OnionObjectProtocol for OnionASTObject {
                         match &self.ast.node_type {
                             ASTNodeType::Variable(name) | ASTNodeType::Required(name) | 
                             ASTNodeType::Let(name) | ASTNodeType::Namespace(name) => {
-                                let name_obj = OnionObject::StringValue(name.clone().into());
+                                let name_obj = OnionObject::StringValue(OnionStringValue::new(name));
                                 f(&name_obj)
                             },
                             _ => Err(RuntimeError::InvalidOperation(
@@ -369,7 +415,7 @@ impl OnionObjectProtocol for OnionASTObject {
                                     crate::parser::ast::ASTNodeOperation::LeftShift => "<<",
                                     crate::parser::ast::ASTNodeOperation::RightShift => ">>",
                                 };
-                                let op_obj = OnionObject::StringValue(op_str.into());
+                                let op_obj = OnionObject::StringValue(OnionStringValue::new(op_str));
                                 f(&op_obj)
                             },
                             _ => Err(RuntimeError::InvalidOperation(
@@ -395,7 +441,7 @@ impl OnionObjectProtocol for OnionASTObject {
                                     crate::parser::ast::ASTNodeModifier::Sync => "sync",
                                     crate::parser::ast::ASTNodeModifier::Atomic => "atomic",
                                 };
-                                let mod_obj = OnionObject::StringValue(mod_str.into());
+                                let mod_obj = OnionObject::StringValue(OnionStringValue::new(mod_str));
                                 f(&mod_obj)
                             },
                             _ => Err(RuntimeError::InvalidOperation(
@@ -406,7 +452,7 @@ impl OnionObjectProtocol for OnionASTObject {
                     "is_dyn" | "dyn" => {
                         match &self.ast.node_type {
                             ASTNodeType::LambdaDef(is_dyn, _) => {
-                                let dyn_obj = OnionObject::BooleanValue(*is_dyn);
+                                let dyn_obj = OnionObject::BooleanValue(OnionBooleanValue::new(*is_dyn));
                                 f(&dyn_obj)
                             },
                             _ => Err(RuntimeError::InvalidOperation(
@@ -418,7 +464,7 @@ impl OnionObjectProtocol for OnionASTObject {
                         match &self.ast.node_type {
                             ASTNodeType::LambdaDef(_, captures) => {
                                 let captures_vec: Vec<OnionObject> = captures.iter()
-                                    .map(|s| OnionObject::StringValue(s.clone().into()))
+                                    .map(|s| OnionObject::StringValue(OnionStringValue::new(s)))
                                     .collect();
                                 let captures_obj = OnionObject::Tuple(OnionTuple::new(captures_vec).into());
                                 f(&captures_obj)
@@ -429,45 +475,13 @@ impl OnionObjectProtocol for OnionASTObject {
                         }
                     },
                     _ => Err(RuntimeError::InvalidOperation(
-                        format!("Unknown attribute '{}'. Available attributes: node_type, has_data, data, value (for String/Number/Base64/Boolean), name (for Variable/Required/Let/Namespace), op (for Operation), modifier (for Modifier), is_dyn/dyn (for LambdaDef), captures (for LambdaDef)", attr_name).into()
+                        format!("Unknown attribute {:?}. Available attributes: node_type, has_data, data, value (for String/Number/Base64/Boolean), name (for Variable/Required/Let/Namespace), op (for Operation), modifier (for Modifier), is_dyn/dyn (for LambdaDef), captures (for LambdaDef)", attr_name).into()
                     ))
                 }
             },
             _ => Err(RuntimeError::InvalidType(
                 "Attribute key must be a string".into()
             ))
-        })
-    }
-
-    fn type_of(&self) -> Result<String, RuntimeError> {
-        Ok("OnionASTObject".to_string())
-    }
-
-    fn to_string(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
-        Ok(format!("OnionASTObject: {:?}", self.ast))
-    }
-    fn repr(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
-        Ok(format!("OnionASTObject: {:?}", self.ast))
-    }
-
-    fn binary_shl(&self, other: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
-        // self << tuple 用来将自身的元组替换成另一个
-        other.with_data(|data| match data {
-            OnionObject::Tuple(tuple) => {
-                let mut children = vec![];
-                for elem in tuple.get_elements() {
-                    children.push(OnionASTObject::from_onion(elem)?);
-                }
-                let new_ast = ASTNode {
-                    node_type: self.ast.node_type.clone(),
-                    source_location: self.ast.source_location.clone(),
-                    children,
-                };
-                Ok(OnionObject::Custom(Arc::new(OnionASTObject { ast: new_ast })).stabilize())
-            }
-            _ => Err(RuntimeError::InvalidType(
-                "Expected a tuple for binary shift left".into(),
-            )),
         })
     }
 }
@@ -513,17 +527,17 @@ impl OnionASTObject {
                     .into(),
             )),
             OnionObject::BooleanValue(v) => Ok(ASTNode {
-                node_type: ASTNodeType::Boolean(*v),
+                node_type: ASTNodeType::Boolean(v.value()),
                 source_location: None,
                 children: vec![],
             }),
             OnionObject::StringValue(s) => Ok(ASTNode {
-                node_type: ASTNodeType::String(s.as_ref().into()),
+                node_type: ASTNodeType::String(s.value().into()),
                 source_location: None,
                 children: vec![],
             }),
             OnionObject::BytesValue(b) => {
-                let b64 = base64::engine::general_purpose::STANDARD.encode(b);
+                let b64 = base64::engine::general_purpose::STANDARD.encode(b.value());
                 Ok(ASTNode {
                     node_type: ASTNodeType::Base64(b64),
                     source_location: None,
@@ -531,16 +545,16 @@ impl OnionASTObject {
                 })
             }
             OnionObject::FloatValue(f) => Ok(ASTNode {
-                node_type: ASTNodeType::Number(f.to_string()),
+                node_type: ASTNodeType::Number(f.value().to_string()),
                 source_location: None,
                 children: vec![],
             }),
             OnionObject::IntegerValue(i) => Ok(ASTNode {
-                node_type: ASTNodeType::Number(i.to_string()),
+                node_type: ASTNodeType::Number(i.value().to_string()),
                 source_location: None,
                 children: vec![],
             }),
-            OnionObject::Null => Ok(ASTNode {
+            OnionObject::Null(_) => Ok(ASTNode {
                 node_type: ASTNodeType::Null,
                 source_location: None,
                 children: vec![],
@@ -562,17 +576,17 @@ impl OnionASTObject {
                     children,
                 })
             }
-            OnionObject::Range(start, end) => Ok(ASTNode {
+            OnionObject::Range(range) => Ok(ASTNode {
                 node_type: ASTNodeType::Range,
                 source_location: None,
                 children: vec![
                     ASTNode {
-                        node_type: ASTNodeType::Number(start.to_string()),
+                        node_type: ASTNodeType::Number(range.start().to_string()),
                         source_location: None,
                         children: vec![],
                     },
                     ASTNode {
-                        node_type: ASTNodeType::Number(end.to_string()),
+                        node_type: ASTNodeType::Number(range.end().to_string()),
                         source_location: None,
                         children: vec![],
                     },

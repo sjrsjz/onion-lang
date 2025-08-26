@@ -60,7 +60,11 @@ impl OnionRange {
 
 impl OnionObjectProtocol for OnionRange {
     fn repr(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
-        Ok(format!("{:?}", self))
+        Ok(format!("{}..{}", self.start, self.end))
+    }
+
+    fn display(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+        Ok(format!("{}..{}", self.start, self.end))
     }
 
     fn type_of(&self) -> Result<String, RuntimeError> {

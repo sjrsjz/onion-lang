@@ -4,10 +4,10 @@
 //! - `VMInstructionPackage`：封装指令流、常量池、调试信息等，支持序列化与反序列化。
 //! - 提供指令查找、常量池索引、包验证等辅助方法。
 
+use super::ir::DebugInfo;
+use crate::utils::fastmap::{OnionFastMap, OnionKeyPool};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
-use crate::utils::fastmap::{OnionFastMap, OnionKeyPool};
-use super::ir::DebugInfo;
 
 /// Onion 虚拟机指令集枚举。
 ///
@@ -24,10 +24,10 @@ pub enum VMInstruction {
     LoadString = 5,
     LoadBytes = 6,
     LoadBool = 7,
-    LoadLambda = 8,
-    LoadUndefined = 9, // 未定义值
+    LoadUndefined = 8, // 未定义值
 
     // ===== 数据结构构建 (10-19) =====
+    BuildLambda = 9,
     BuildTuple = 10,
     BuildKeyValue = 11,
     BuildNamed = 12,
@@ -123,10 +123,10 @@ impl VMInstruction {
             5 => Some(Self::LoadString),
             6 => Some(Self::LoadBytes),
             7 => Some(Self::LoadBool),
-            8 => Some(Self::LoadLambda),
-            9 => Some(Self::LoadUndefined),
+            8 => Some(Self::LoadUndefined),
 
             // ===== 数据结构构建 (10-19) =====
+            9 => Some(Self::BuildLambda),
             10 => Some(Self::BuildTuple),
             11 => Some(Self::BuildKeyValue),
             12 => Some(Self::BuildNamed),

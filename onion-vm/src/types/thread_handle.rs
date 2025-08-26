@@ -111,6 +111,10 @@ impl OnionObjectProtocol for OnionThreadHandle {
         Ok(format!("ThreadHandle(finished: {})", self.is_finished()))
     }
 
+    fn display(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+        Ok(format!("ThreadHandle(finished: {})", self.is_finished()))
+    }
+
     fn equals(&self, _other: &OnionObject) -> Result<bool, RuntimeError> {
         Ok(false)
     }

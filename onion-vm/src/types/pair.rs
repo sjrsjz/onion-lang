@@ -118,7 +118,15 @@ impl OnionObjectProtocol for OnionPair {
 
     fn repr(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
         Ok(format!(
-            "{:?} : {:?}",
+            "{} : {}",
+            self.value.0.repr(ptrs)?,
+            self.value.1.repr(ptrs)?
+        ))
+    }
+
+    fn display(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+        Ok(format!(
+            "{} : {}",
             self.value.0.repr(ptrs)?,
             self.value.1.repr(ptrs)?
         ))
@@ -126,6 +134,17 @@ impl OnionObjectProtocol for OnionPair {
 
     fn type_of(&self) -> Result<String, RuntimeError> {
         Ok("Pair".into())
+    }
+
+    fn apply(
+        &self,
+        _this_object: &OnionObject,
+        self_object: Option<&OnionObject>,
+        value: &OnionObject,
+        gc: &mut arc_gc::gc::GC<OnionObjectCell>,
+    ) -> Result<Result<crate::lambda::runnable::StepResult, OnionStaticObject>, RuntimeError> {
+        self.get_value()
+            .apply(Some(self_object.unwrap_or(self.get_key())), value, gc)
     }
 }
 

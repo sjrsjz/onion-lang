@@ -11,7 +11,7 @@ use onion_vm::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
     types::{
         lambda::{
-            definition::{LambdaBody, LambdaType, OnionLambdaDefinition},
+            definition::{LambdaBody, LambdaType, OnionLambdaDefinitionInner},
             parameter::LambdaParameter,
         },
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
@@ -98,7 +98,7 @@ where
         + 'static,
 {
     let cloned_pool = string_pool.clone();
-    OnionLambdaDefinition::new_static(
+    OnionLambdaDefinitionInner::new_static(
         params,
         LambdaBody::NativeFunction((
             Arc::new(

@@ -65,6 +65,13 @@ impl OnionObjectProtocol for OnionUndefined {
         }
     }
 
+    fn display(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+        match &self.value {
+            Some(value) => Ok(format!("undefined({:?})", value.to_string())),
+            None => Ok("undefined".into()),
+        }
+    }
+
     fn type_of(&self) -> Result<String, RuntimeError> {
         Ok("Undefined".into())
     }

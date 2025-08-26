@@ -1,36 +1,31 @@
-
 //! 通用调度器（Scheduler）实现：用于管理和调度一组可运行对象（Runnable）。
-//! 
+//!
 //! 该模块实现了基于栈的调度机制，支持嵌套任务、协作式执行和错误处理。
 //! Scheduler 作为 Onion 虚拟机的基础调度单元，负责推进任务栈、处理返回值、错误和新任务的生成。
-use std::sync::Arc;
-
 use arc_gc::gc::GC;
 
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
     types::{
-        object::{OnionObject, OnionObjectCell},
-        pair::OnionPair,
+        boolean_value::OnionBooleanValue, object::OnionObjectCell, pair::OnionPair,
+        string_value::OnionStringValue, undefined::OnionUndefined,
     },
 };
 
-
 /// 表示一个基于栈的调度器。
-/// 
+///
 /// - `runnable_stack`：任务栈，栈顶为当前活跃任务。
 pub struct Scheduler {
     /// 任务栈，存储所有待调度的 Runnable 对象，栈顶为当前活跃任务
     runnable_stack: Vec<Box<dyn Runnable>>,
 }
 
-
 impl Scheduler {
     /// 创建一个新的调度器实例。
-    /// 
+    ///
     /// # 参数
     /// * `runnable_stack` - 初始任务栈
-    /// 
+    ///
     /// # 返回值
     /// 返回新创建的 Scheduler 实例
     pub fn new(runnable_stack: Vec<Box<dyn Runnable>>) -> Self {
@@ -40,14 +35,14 @@ impl Scheduler {
 
 impl Runnable for Scheduler {
     /// 推进调度器的执行，处理栈顶任务并根据结果调整任务栈。
-    /// 
+    ///
     /// # 调度逻辑
     /// - 若栈顶任务返回 Continue，则继续等待
     /// - 若返回 NewRunnable，则将新任务压栈
     /// - 若返回 ReplaceRunnable，则替换栈顶任务
     /// - 若返回 Return，则弹栈并将结果传递给新的栈顶任务
     /// - 若返回 Error，则根据错误类型返回错误或包装为 Pair
-    /// 
+    ///
     /// # 返回值
     /// * StepResult::Continue - 还有任务需要继续执行
     /// * StepResult::Return - 所有任务完成，返回最终结果
@@ -73,7 +68,7 @@ impl Runnable for Scheduler {
                             Err(RuntimeError::CustomValue(ref e)) => {
                                 return StepResult::Return(
                                     OnionPair::new_static(
-                                        &OnionObject::BooleanValue(false).stabilize(),
+                                        &OnionBooleanValue::new_static(false),
                                         &e,
                                     )
                                     .into(),
@@ -82,8 +77,8 @@ impl Runnable for Scheduler {
                             Err(e) => {
                                 return StepResult::Return(
                                     OnionPair::new_static(
-                                        &OnionObject::BooleanValue(false).stabilize(),
-                                        &OnionObject::StringValue(Arc::from(e.to_string())).stabilize(),
+                                        &OnionBooleanValue::new_static(false),
+                                        &OnionStringValue::new_static(e.to_string()),
                                     )
                                     .into(),
                                 );
@@ -94,7 +89,7 @@ impl Runnable for Scheduler {
                         // 所有任务都已完成，返回最终结果
                         StepResult::Return(
                             OnionPair::new_static(
-                                &OnionObject::BooleanValue(true).stabilize(),
+                                &OnionBooleanValue::new_static(true),
                                 result.as_ref(),
                             )
                             .into(),
@@ -108,11 +103,10 @@ impl Runnable for Scheduler {
                     }
                     return StepResult::Return(
                         OnionPair::new_static(
-                            &OnionObject::BooleanValue(false).stabilize(),
+                            &OnionBooleanValue::new_static(false),
                             &match error {
                                 RuntimeError::CustomValue(v) => v.as_ref().clone(),
-                                _ => OnionObject::Undefined(Some(error.to_string().into()))
-                                    .stabilize(),
+                                _ => OnionUndefined::new_static(Some(&error.to_string())),
                             },
                         )
                         .into(),
@@ -120,18 +114,16 @@ impl Runnable for Scheduler {
                 }
             }
         } else {
-            StepResult::Error(RuntimeError::DetailedError(
-                "No runnable in stack".into(),
-            ))
+            StepResult::Error(RuntimeError::DetailedError("No runnable in stack".into()))
         }
     }
 
     /// 向栈顶任务传递结果。
-    /// 
+    ///
     /// # 参数
     /// * `step_result` - 要传递的结果
     /// * `gc` - 垃圾收集器引用
-    /// 
+    ///
     /// # 返回值
     /// * Ok(()) - 成功传递
     /// * Err(RuntimeError) - 栈为空或传递失败
@@ -143,16 +135,14 @@ impl Runnable for Scheduler {
         if let Some(runnable) = self.runnable_stack.last_mut() {
             runnable.receive(&step_result, gc)
         } else {
-            Err(RuntimeError::DetailedError(
-                "No runnable in stack".into(),
-            ))
+            Err(RuntimeError::DetailedError("No runnable in stack".into()))
         }
     }
 
     /// 格式化调度器的当前上下文信息。
-    /// 
+    ///
     /// 以栈帧形式输出所有活跃任务的上下文，便于调试。
-    /// 
+    ///
     /// # 返回值
     /// 返回格式化的多行字符串，展示任务栈的状态。
     fn format_context(&self) -> String {

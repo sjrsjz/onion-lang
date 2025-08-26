@@ -100,16 +100,16 @@ impl Runnable for Mapping {
                     if let Some(element) = tuple.get_elements().get(self.current_index) {
                         let element_clone = element.clone();
                         self.mapper.weak().with_data(|mapper_obj| match mapper_obj {
-                            OnionObject::Lambda((_, self_object)) => {
+                            OnionObject::Lambda(lambda_def) => {
                                 let runnable = Box::new(OnionLambdaRunnableLauncher::new(
                                     mapper_obj,
-                                    self_object.stabilize(),
+                                    lambda_def.temp_self_object().stabilize(),
                                     element.stabilize(),
                                     &|r| Ok(r),
                                 )?);
                                 Ok(StepResult::NewRunnable(runnable))
                             }
-                            OnionObject::BooleanValue(false) => Ok(StepResult::Continue),
+                            OnionObject::BooleanValue(v) if !v.value() => Ok(StepResult::Continue),
                             _ => {
                                 self.collected.push(element_clone.stabilize());
                                 Ok(StepResult::Continue)

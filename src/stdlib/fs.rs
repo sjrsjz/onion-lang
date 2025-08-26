@@ -3,9 +3,14 @@ use onion_vm::{
     GC,
     lambda::runnable::RuntimeError,
     types::{
+        boolean_value::OnionBooleanValue,
+        bytes_value::OnionBytesValue,
+        integer_value::OnionIntegerValue,
         lambda::parameter::LambdaParameter,
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
+        string_value::OnionStringValue,
         tuple::OnionTuple,
+        undefined::OnionUndefined,
     },
     utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
@@ -14,26 +19,62 @@ use std::{fs, io::Write, path::Path};
 // 引入所需的辅助函数
 use super::{build_dict, wrap_native_function};
 
+// --- Helper functions for robust argument parsing ---
+fn get_string_arg<'a>(
+    argument: &'a OnionFastMap<Box<str>, OnionStaticObject>,
+    name: &str,
+) -> Result<&'a str, RuntimeError> {
+    let obj = argument.get(name).ok_or_else(|| {
+        RuntimeError::DetailedError(
+            format!("Function requires a '{name}' argument")
+                .to_string()
+                .into(),
+        )
+    })?;
+    match obj.weak() {
+        OnionObject::StringValue(s) => Ok(s.value()),
+        _ => Err(RuntimeError::InvalidType(
+            format!("Argument '{name}' must be a string")
+                .to_string()
+                .into(),
+        )),
+    }
+}
+
+fn get_content_arg(
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
+    name: &str,
+) -> Result<Vec<u8>, RuntimeError> {
+    let obj = argument.get(name).ok_or_else(|| {
+        RuntimeError::DetailedError(
+            format!("Function requires a '{name}' argument")
+                .to_string()
+                .into(),
+        )
+    })?;
+    match obj.weak() {
+        OnionObject::BytesValue(b) => Ok(b.value().to_vec()),
+        OnionObject::StringValue(s) => Ok(s.value().as_bytes().to_vec()),
+        _ => Err(RuntimeError::InvalidType(
+            format!("Argument '{name}' must be bytes or a string")
+                .to_string()
+                .into(),
+        )),
+    }
+}
+
 /// 读取文件内容作为字节
 fn read_file(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get("path") else {
-        return Err(RuntimeError::DetailedError(
-            "read_file requires a 'path' argument".into(),
-        ));
-    };
-
-    path_obj.weak().with_data(|path_data| match path_data {
-        OnionObject::StringValue(path_str) => match fs::read(path_str.as_ref()) {
-            Ok(content) => Ok(OnionObject::BytesValue(content.into()).stabilize()),
-            Err(e) => Err(RuntimeError::DetailedError(
-                format!("Failed to read file '{path_str}': {e}").into(),
-            )),
-        },
-        _ => Err(RuntimeError::InvalidType("Path must be a string".into())),
-    })
+    let path = get_string_arg(argument, "path")?;
+    match fs::read(path) {
+        Ok(content) => Ok(OnionBytesValue::new_static(&content)),
+        Err(e) => Err(RuntimeError::DetailedError(
+            format!("Failed to read file '{path}': {e}").into(),
+        )),
+    }
 }
 
 /// 写入文件内容作为字节
@@ -41,40 +82,13 @@ fn write_file(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get("path") else {
-        return Err(RuntimeError::DetailedError(
-            "write_file requires a 'path' argument".into(),
-        ));
-    };
-    let Some(content_obj) = argument.get("content") else {
-        return Err(RuntimeError::DetailedError(
-            "write_file requires a 'content' argument"
-                .to_string()
-                .into(),
-        ));
-    };
+    let path = get_string_arg(argument, "path")?;
+    let content = get_content_arg(argument, "content")?;
 
-    let path_str = match path_obj.weak() {
-        OnionObject::StringValue(s) => s.clone(),
-        _ => {
-            return Err(RuntimeError::InvalidType("Path must be a string".into()));
-        }
-    };
-
-    let content_bytes = match content_obj.weak() {
-        OnionObject::BytesValue(b) => b.as_ref().to_vec(),
-        OnionObject::StringValue(s) => s.as_bytes().to_vec(),
-        _ => {
-            return Err(RuntimeError::InvalidType(
-                "Content must be bytes or a string".into(),
-            ));
-        }
-    };
-
-    match fs::write(path_str.as_ref(), &content_bytes) {
-        Ok(_) => Ok(OnionObject::Null.stabilize()),
+    match fs::write(path, &content) {
+        Ok(_) => Ok(OnionUndefined::new_static(None)),
         Err(e) => Err(RuntimeError::DetailedError(
-            format!("Failed to write file '{path_str}': {e}").into(),
+            format!("Failed to write file '{path}': {e}").into(),
         )),
     }
 }
@@ -84,49 +98,18 @@ fn append_file(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get("path") else {
-        return Err(RuntimeError::DetailedError(
-            "append_file requires a 'path' argument".into(),
-        ));
-    };
-    let Some(content_obj) = argument.get("content") else {
-        return Err(RuntimeError::DetailedError(
-            "append_file requires a 'content' argument"
-                .to_string()
-                .into(),
-        ));
-    };
+    let path = get_string_arg(argument, "path")?;
+    let content = get_content_arg(argument, "content")?;
 
-    let path_str = match path_obj.weak() {
-        OnionObject::StringValue(s) => s.clone(),
-        _ => {
-            return Err(RuntimeError::InvalidType("Path must be a string".into()));
-        }
-    };
-
-    let bytes_to_append = match content_obj.weak() {
-        OnionObject::BytesValue(b) => b.as_ref().to_vec(),
-        OnionObject::StringValue(s) => s.as_bytes().to_vec(),
-        _ => {
-            return Err(RuntimeError::InvalidType(
-                "Content must be bytes or a string".into(),
-            ));
-        }
-    };
-
-    match fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path_str.as_ref())
-    {
-        Ok(mut file) => match file.write_all(&bytes_to_append) {
-            Ok(_) => Ok(OnionObject::Null.stabilize()),
+    match fs::OpenOptions::new().create(true).append(true).open(path) {
+        Ok(mut file) => match file.write_all(&content) {
+            Ok(_) => Ok(OnionUndefined::new_static(None)),
             Err(e) => Err(RuntimeError::DetailedError(
-                format!("Failed to append to file '{path_str}': {e}").into(),
+                format!("Failed to append to file '{path}': {e}").into(),
             )),
         },
         Err(e) => Err(RuntimeError::DetailedError(
-            format!("Failed to open file '{path_str}' for appending: {e}").into(),
+            format!("Failed to open file '{path}' for appending: {e}").into(),
         )),
     }
 }
@@ -136,20 +119,12 @@ fn remove_file(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(path_obj) = argument.get("path") else {
-        return Err(RuntimeError::DetailedError(
-            "remove_file requires a 'path' argument".into(),
-        ));
-    };
-
-    match path_obj.weak() {
-        OnionObject::StringValue(path_str) => match fs::remove_file(path_str.as_ref()) {
-            Ok(_) => Ok(OnionObject::Null.stabilize()),
-            Err(e) => Err(RuntimeError::DetailedError(
-                format!("Failed to remove file '{path_str}': {e}").into(),
-            )),
-        },
-        _ => Err(RuntimeError::InvalidType("Path must be a string".into())),
+    let path = get_string_arg(argument, "path")?;
+    match fs::remove_file(path) {
+        Ok(_) => Ok(OnionUndefined::new_static(None)),
+        Err(e) => Err(RuntimeError::DetailedError(
+            format!("Failed to remove file '{path}': {e}").into(),
+        )),
     }
 }
 
@@ -158,30 +133,13 @@ fn copy_file(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let Some(src_obj) = argument.get("src") else {
-        return Err(RuntimeError::DetailedError(
-            "copy_file requires a 'src' argument".into(),
-        ));
-    };
-    let Some(dest_obj) = argument.get("dest") else {
-        return Err(RuntimeError::DetailedError(
-            "copy_file requires a 'dest' argument".into(),
-        ));
-    };
+    let src = get_string_arg(argument, "src")?;
+    let dest = get_string_arg(argument, "dest")?;
 
-    let (src_str, dest_str) = match (src_obj.weak(), dest_obj.weak()) {
-        (OnionObject::StringValue(s), OnionObject::StringValue(d)) => (s, d),
-        _ => {
-            return Err(RuntimeError::InvalidType(
-                "Source and destination must be strings".into(),
-            ));
-        }
-    };
-
-    match fs::copy(src_str.as_ref(), dest_str.as_ref()) {
-        Ok(_) => Ok(OnionObject::Null.stabilize()),
+    match fs::copy(src, dest) {
+        Ok(_) => Ok(OnionUndefined::new_static(None)),
         Err(e) => Err(RuntimeError::DetailedError(
-            format!("Failed to copy file from '{src_str}' to '{dest_str}': {e}").into(),
+            format!("Failed to copy file from '{src}' to '{dest}': {e}").into(),
         )),
     }
 }
@@ -211,10 +169,15 @@ fn rename_file(
         }
     };
 
-    match fs::rename(src_str.as_ref(), dest_str.as_ref()) {
-        Ok(_) => Ok(OnionObject::Null.stabilize()),
+    match fs::rename(src_str.value(), dest_str.value()) {
+        Ok(_) => Ok(OnionUndefined::new_static(None)),
         Err(e) => Err(RuntimeError::DetailedError(
-            format!("Failed to rename file from '{src_str}' to '{dest_str}': {e}").into(),
+            format!(
+                "Failed to rename file from '{}' to '{}': {e}",
+                src_str.value(),
+                dest_str.value()
+            )
+            .into(),
         )),
     }
 }
@@ -231,10 +194,10 @@ fn create_dir(
     };
 
     match path_obj.weak() {
-        OnionObject::StringValue(path_str) => match fs::create_dir(path_str.as_ref()) {
-            Ok(_) => Ok(OnionObject::Null.stabilize()),
+        OnionObject::StringValue(path_str) => match fs::create_dir(path_str.value()) {
+            Ok(_) => Ok(OnionUndefined::new_static(None)),
             Err(e) => Err(RuntimeError::DetailedError(
-                format!("Failed to create directory '{path_str}': {e}").into(),
+                format!("Failed to create directory '{}': {e}", path_str.value()).into(),
             )),
         },
         _ => Err(RuntimeError::InvalidType("Path must be a string".into())),
@@ -255,10 +218,10 @@ fn create_dir_all(
     };
 
     match path_obj.weak() {
-        OnionObject::StringValue(path_str) => match fs::create_dir_all(path_str.as_ref()) {
-            Ok(_) => Ok(OnionObject::Null.stabilize()),
+        OnionObject::StringValue(path_str) => match fs::create_dir_all(path_str.value()) {
+            Ok(_) => Ok(OnionUndefined::new_static(None)),
             Err(e) => Err(RuntimeError::DetailedError(
-                format!("Failed to create directories '{path_str}': {e}").into(),
+                format!("Failed to create directories '{}': {e}", path_str.value()).into(),
             )),
         },
         _ => Err(RuntimeError::InvalidType("Path must be a string".into())),
@@ -277,10 +240,10 @@ fn remove_dir(
     };
 
     match path_obj.weak() {
-        OnionObject::StringValue(path_str) => match fs::remove_dir(path_str.as_ref()) {
-            Ok(_) => Ok(OnionObject::Null.stabilize()),
+        OnionObject::StringValue(path_str) => match fs::remove_dir(path_str.value()) {
+            Ok(_) => Ok(OnionUndefined::new_static(None)),
             Err(e) => Err(RuntimeError::DetailedError(
-                format!("Failed to remove directory '{path_str}': {e}").into(),
+                format!("Failed to remove directory '{}': {e}", path_str.value()).into(),
             )),
         },
         _ => Err(RuntimeError::InvalidType("Path must be a string".into())),
@@ -301,10 +264,14 @@ fn remove_dir_all(
     };
 
     match path_obj.weak() {
-        OnionObject::StringValue(path_str) => match fs::remove_dir_all(path_str.as_ref()) {
-            Ok(_) => Ok(OnionObject::Null.stabilize()),
+        OnionObject::StringValue(path_str) => match fs::remove_dir_all(path_str.value()) {
+            Ok(_) => Ok(OnionUndefined::new_static(None)),
             Err(e) => Err(RuntimeError::DetailedError(
-                format!("Failed to remove directory and its contents '{path_str}': {e}").into(),
+                format!(
+                    "Failed to remove directory and its contents '{}': {e}",
+                    path_str.value()
+                )
+                .into(),
             )),
         },
         _ => Err(RuntimeError::InvalidType("Path must be a string".into())),
@@ -323,19 +290,22 @@ fn read_dir(
     };
 
     match path_obj.weak() {
-        OnionObject::StringValue(path_str) => match fs::read_dir(path_str.as_ref()) {
+        OnionObject::StringValue(path_str) => match fs::read_dir(path_str.value()) {
             Ok(entries) => {
                 let mut files = Vec::new();
                 for entry in entries {
                     match entry {
                         Ok(entry) => {
                             let file_name = entry.file_name().to_string_lossy().to_string();
-                            files.push(OnionObject::StringValue(file_name.into()));
+                            files.push(OnionObject::StringValue(OnionStringValue::new(file_name)));
                         }
                         Err(e) => {
                             return Err(RuntimeError::DetailedError(
-                                format!("Error reading directory entry in '{path_str}': {e}")
-                                    .into(),
+                                format!(
+                                    "Error reading directory entry in '{}': {e}",
+                                    path_str.value()
+                                )
+                                .into(),
                             ));
                         }
                     }
@@ -343,7 +313,7 @@ fn read_dir(
                 Ok(OnionObject::Tuple(OnionTuple::new(files).into()).stabilize())
             }
             Err(e) => Err(RuntimeError::DetailedError(
-                format!("Failed to read directory '{path_str}': {e}").into(),
+                format!("Failed to read directory '{}': {e}", path_str.value()).into(),
             )),
         },
         _ => Err(RuntimeError::InvalidType("Path must be a string".into())),
@@ -364,38 +334,38 @@ fn file_metadata(
     };
 
     match path_obj.weak() {
-        OnionObject::StringValue(path_str) => match fs::metadata(path_str.as_ref()) {
+        OnionObject::StringValue(path_str) => match fs::metadata(path_str.value()) {
             Ok(metadata) => {
                 let mut meta = IndexMap::new();
                 meta.insert(
                     "size".to_string(),
-                    OnionObject::IntegerValue(metadata.len() as i64).stabilize(),
+                    OnionIntegerValue::new_static(metadata.len() as i64),
                 );
                 meta.insert(
                     "is_file".to_string(),
-                    OnionObject::BooleanValue(metadata.is_file()).stabilize(),
+                    OnionBooleanValue::new_static(metadata.is_file()),
                 );
                 meta.insert(
                     "is_dir".to_string(),
-                    OnionObject::BooleanValue(metadata.is_dir()).stabilize(),
+                    OnionBooleanValue::new_static(metadata.is_dir()),
                 );
                 meta.insert(
                     "readonly".to_string(),
-                    OnionObject::BooleanValue(metadata.permissions().readonly()).stabilize(),
+                    OnionBooleanValue::new_static(metadata.permissions().readonly()),
                 );
 
                 if let Ok(modified) = metadata.modified() {
                     if let Ok(duration) = modified.duration_since(std::time::UNIX_EPOCH) {
                         meta.insert(
                             "modified".to_string(),
-                            OnionObject::IntegerValue(duration.as_secs() as i64).stabilize(),
+                            OnionIntegerValue::new_static(duration.as_secs() as i64),
                         );
                     }
                 }
                 Ok(build_dict(meta))
             }
             Err(e) => Err(RuntimeError::DetailedError(
-                format!("Failed to get metadata for '{path_str}': {e}").into(),
+                format!("Failed to get metadata for '{}': {e}", path_str.value()).into(),
             )),
         },
         _ => Err(RuntimeError::InvalidType("Path must be a string".into())),
@@ -415,8 +385,8 @@ fn exists(
 
     match path_obj.weak() {
         OnionObject::StringValue(path_str) => {
-            let exists = Path::new(path_str.as_ref()).exists();
-            Ok(OnionObject::BooleanValue(exists).stabilize())
+            let exists = Path::new(path_str.value()).exists();
+            Ok(OnionBooleanValue::new_static(exists))
         }
         _ => Err(RuntimeError::InvalidType("Path must be a string".into())),
     }
@@ -440,15 +410,15 @@ fn read_text(
         }
     };
 
-    match fs::read(path_str.as_ref()) {
+    match fs::read(path_str.value()) {
         Ok(bytes) => match String::from_utf8(bytes) {
-            Ok(text) => Ok(OnionObject::StringValue(text.into()).stabilize()),
+            Ok(text) => Ok(OnionStringValue::new_static(&text)),
             Err(e) => Err(RuntimeError::DetailedError(
-                format!("Failed to decode file '{path_str}' as UTF-8: {e}").into(),
+                format!("Failed to decode file '{}': {e}", path_str.value()).into(),
             )),
         },
         Err(e) => Err(RuntimeError::DetailedError(
-            format!("Failed to read file '{path_str}': {e}").into(),
+            format!("Failed to read file '{}': {e}", path_str.value()).into(),
         )),
     }
 }
@@ -480,10 +450,10 @@ fn write_text(
         }
     };
 
-    match fs::write(path_str.as_ref(), content_str.as_bytes()) {
-        Ok(_) => Ok(OnionObject::Null.stabilize()),
+    match fs::write(path_str.value(), content_str.value().as_bytes()) {
+        Ok(_) => Ok(OnionUndefined::new_static(None)),
         Err(e) => Err(RuntimeError::DetailedError(
-            format!("Failed to write text file '{path_str}': {e}").into(),
+            format!("Failed to write text file '{}': {e}", path_str.value()).into(),
         )),
     }
 }
@@ -518,16 +488,16 @@ fn append_text(
     match fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open(path_str.as_ref())
+        .open(path_str.value())
     {
-        Ok(mut file) => match file.write_all(content_str.as_bytes()) {
-            Ok(_) => Ok(OnionObject::Null.stabilize()),
+        Ok(mut file) => match file.write_all(content_str.value().as_bytes()) {
+            Ok(_) => Ok(OnionUndefined::new_static(None)),
             Err(e) => Err(RuntimeError::DetailedError(
-                format!("Failed to append to text file '{path_str}': {e}").into(),
+                format!("Failed to append to text file '{}': {e}", path_str.value()).into(),
             )),
         },
         Err(e) => Err(RuntimeError::DetailedError(
-            format!("Failed to open text file '{path_str}' for appending: {e}").into(),
+            format!("Failed to open text file '{}': {e}", path_str.value()).into(),
         )),
     }
 }

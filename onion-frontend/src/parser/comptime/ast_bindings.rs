@@ -17,9 +17,11 @@ use onion_vm::{
     GC,
     lambda::runnable::RuntimeError,
     types::{
+        bytes_value::OnionBytesValue,
         lambda::parameter::LambdaParameter,
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         pair::OnionPair,
+        string_value::OnionStringValue,
         tuple::OnionTuple,
     },
     utils::fastmap::{OnionFastMap, OnionKeyPool},
@@ -36,7 +38,7 @@ fn build_dict(dict: IndexMap<String, OnionStaticObject>) -> OnionStaticObject {
     let mut pairs = vec![];
     for (key, value) in dict {
         pairs.push(OnionPair::new_static(
-            &OnionObject::StringValue(key.into()).stabilize(),
+            &OnionStringValue::new_static(key),
             &value,
         ));
     }
@@ -60,7 +62,7 @@ fn string(
     })?;
     value.weak().with_data(|data| match data {
         OnionObject::StringValue(s) => Ok(ast_wrapper(ASTNode {
-            node_type: ASTNodeType::String(s.to_string()),
+            node_type: ASTNodeType::String(s.value().to_string()),
             children: vec![],
             source_location: None,
         })),
@@ -80,7 +82,9 @@ fn bytes(
     })?;
     value.weak().with_data(|data| match data {
         OnionObject::BytesValue(s) => Ok(ast_wrapper(ASTNode {
-            node_type: ASTNodeType::Base64(base64::engine::general_purpose::STANDARD.encode(s)),
+            node_type: ASTNodeType::Base64(
+                base64::engine::general_purpose::STANDARD.encode(s.value()),
+            ),
             children: vec![],
             source_location: None,
         })),
@@ -101,7 +105,7 @@ fn deserialize_ast(
     value.weak().with_data(|data| match data {
         OnionObject::BytesValue(data) => {
             let deserialized: Result<ASTNode, _> =
-                bincode::serde::decode_from_slice(data.as_ref(), bincode::config::standard())
+                bincode::serde::decode_from_slice(data.value(), bincode::config::standard())
                     .map(|(result, _)| result);
             match deserialized {
                 Ok(node) => Ok(ast_wrapper(node)),
@@ -137,7 +141,7 @@ fn serialize_ast(
             .map_err(|err| {
                 RuntimeError::InvalidType(format!("Failed to serialize AST: {}", err).into())
             })?;
-            Ok(OnionObject::BytesValue(serialized.into()).stabilize())
+            Ok(OnionBytesValue::new_static(&serialized))
         }
         _ => Err(RuntimeError::InvalidType(
             "Argument 'value' for serialize() must be an ASTNode".into(),
@@ -155,7 +159,7 @@ fn boolean(
     })?;
     value.weak().with_data(|data| match data {
         OnionObject::BooleanValue(b) => Ok(ast_wrapper(ASTNode {
-            node_type: ASTNodeType::Boolean(*b),
+            node_type: ASTNodeType::Boolean(b.value()),
             children: vec![],
             source_location: None,
         })),
@@ -175,12 +179,12 @@ fn number(
     })?;
     value.weak().with_data(|data| match data {
         OnionObject::IntegerValue(n) => Ok(ast_wrapper(ASTNode {
-            node_type: ASTNodeType::Number(n.to_string()),
+            node_type: ASTNodeType::Number(n.value().to_string()),
             children: vec![],
             source_location: None,
         })),
         OnionObject::FloatValue(f) => Ok(ast_wrapper(ASTNode {
-            node_type: ASTNodeType::Number(f.to_string()),
+            node_type: ASTNodeType::Number(f.value().to_string()),
             children: vec![],
             source_location: None,
         })),
@@ -200,7 +204,7 @@ fn variable(
     })?;
     name.weak().with_data(|data| match data {
         OnionObject::StringValue(s) => Ok(ast_wrapper(ASTNode {
-            node_type: ASTNodeType::Variable(s.to_string()),
+            node_type: ASTNodeType::Variable(s.value().to_string()),
             children: vec![],
             source_location: None,
         })),
@@ -220,7 +224,7 @@ fn let_var(
     })?;
     name.weak().with_data(|data| match data {
         OnionObject::StringValue(s) => Ok(ast_wrapper(ASTNode {
-            node_type: ASTNodeType::Let(s.to_string()),
+            node_type: ASTNodeType::Let(s.value().to_string()),
             children: vec![],
             source_location: None,
         })),
@@ -240,7 +244,7 @@ fn operation(
     })?;
     op.weak().with_data(|data| match data {
         OnionObject::StringValue(s) => {
-            let op_type = match s.as_ref() {
+            let op_type = match s.value() {
                 "+" => ASTNodeOperation::Add,
                 "abs" => ASTNodeOperation::Abs,
                 "-" => ASTNodeOperation::Subtract,
@@ -263,7 +267,7 @@ fn operation(
                 ">>" => ASTNodeOperation::RightShift,
                 _ => {
                     return Err(RuntimeError::InvalidOperation(
-                        format!("Unsupported operation: {}", s).into(),
+                        format!("Unsupported operation: {}", s.value()).into(),
                     ));
                 }
             };
@@ -289,7 +293,7 @@ fn modifier(
     })?;
     name.weak().with_data(|data| match data {
         OnionObject::StringValue(s) => {
-            let mod_type = match s.as_ref() {
+            let mod_type = match s.value() {
                 "mut" => ASTNodeModifier::Mut,
                 "const" => ASTNodeModifier::Const,
                 "keyof" => ASTNodeModifier::KeyOf,
@@ -305,7 +309,7 @@ fn modifier(
                 "atomic" => ASTNodeModifier::Atomic,
                 _ => {
                     return Err(RuntimeError::InvalidOperation(
-                        format!("Unsupported modifier: {}", s).into(),
+                        format!("Unsupported modifier: {}", s.value()).into(),
                     ));
                 }
             };
@@ -341,7 +345,7 @@ fn lambda_def(
                         let mut captures = HashSet::new();
                         for v in captured.get_elements() {
                             let key = v.with_data(|data| match data {
-                                OnionObject::StringValue(s) => Ok(s.to_string()),
+                                OnionObject::StringValue(s) => Ok(s.value().to_string()),
                                 _ => Err(RuntimeError::InvalidType(
                                     "Capture variable must be a string".into(),
                                 )),
@@ -349,7 +353,7 @@ fn lambda_def(
                             captures.insert(key);
                         }
                         Ok(ast_wrapper(ASTNode {
-                            node_type: ASTNodeType::LambdaDef(*is_dyn, captures),
+                            node_type: ASTNodeType::LambdaDef(is_dyn.value(), captures),
                             children: vec![],
                             source_location: None,
                         }))

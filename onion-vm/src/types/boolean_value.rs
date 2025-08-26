@@ -54,7 +54,11 @@ impl OnionBooleanValue {
 
 impl OnionObjectProtocol for OnionBooleanValue {
     fn repr(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
-        Ok(format!("{:?}", self))
+        Ok(format!("{:?}", self.value))
+    }
+
+    fn display(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+        Ok(format!("{}", self.value))
     }
 
     fn type_of(&self) -> Result<String, RuntimeError> {

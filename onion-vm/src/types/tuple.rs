@@ -12,8 +12,7 @@
 use std::{collections::VecDeque, fmt::Debug, sync::Arc};
 
 use arc_gc::{
-    arc::{GCArc, GCArcWeak},
-    traceable::GCTraceable,
+    arc::{GCArc, GCArcWeak}, gc::GC, traceable::GCTraceable
 };
 
 use crate::{
@@ -239,7 +238,10 @@ impl OnionObjectProtocol for OnionTuple {
 
     fn apply(
         &self,
+        _this_object: &OnionObject,
+        _self_object: Option<&OnionObject>,
         value: &OnionObject,
+        _gc: &mut GC<OnionObjectCell>,
     ) -> Result<Result<StepResult, OnionStaticObject>, RuntimeError> {
         match value {
             OnionObject::IntegerValue(i) => {
@@ -323,6 +325,10 @@ impl OnionObjectProtocol for OnionTuple {
         }
         repr.push(')');
         Ok(repr)
+    }
+
+    fn display(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+        self.repr(ptrs)
     }
 
     fn type_of(&self) -> Result<String, RuntimeError> {

@@ -54,7 +54,11 @@ impl OnionFloatValue {
 
 impl OnionObjectProtocol for OnionFloatValue {
     fn repr(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
-        Ok(std::format!("{:?}", self))
+        Ok(std::format!("{:?}", self.value))
+    }
+
+    fn display(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+        Ok(std::format!("{}", self.value))
     }
 
     fn type_of(&self) -> Result<String, RuntimeError> {

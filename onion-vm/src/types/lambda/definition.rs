@@ -19,10 +19,18 @@ use arc_gc::{
 };
 
 use crate::{
-    lambda::runnable::{Runnable, RuntimeError},
+    lambda::{
+        runnable::{Runnable, RuntimeError, StepResult},
+        scheduler::{
+            async_scheduler::{AsyncScheduler, Task},
+            scheduler::Scheduler,
+        },
+    },
     types::{
+        async_handle::OnionAsyncHandle,
         lambda::{
-            parameter::LambdaParameter, vm_instructions::instruction_set::VMInstructionPackage,
+            launcher::OnionLambdaRunnableLauncher, parameter::LambdaParameter,
+            vm_instructions::instruction_set::VMInstructionPackage,
         },
         object::{
             OnionObject, OnionObjectCell, OnionObjectProtocol, OnionObjectProtocolStatic,
@@ -143,6 +151,14 @@ impl OnionLambdaDefinition {
     #[inline(always)]
     pub fn temp_self_object(&self) -> &OnionObject {
         &self.temp_self_object
+    }
+
+    #[inline(always)]
+    pub fn bind_self_object(&self, self_object: OnionObject) -> OnionLambdaDefinition {
+        OnionLambdaDefinition {
+            inner: self.inner.clone(),
+            temp_self_object: Arc::new(self_object),
+        }
     }
 }
 
@@ -326,10 +342,14 @@ impl OnionObjectProtocol for OnionLambdaDefinition {
 
     fn repr(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
         Ok(format!(
-            "({:?}) -> &{:?})",
+            "({:?}) -> &{:?}",
             self.parameter,
             self.capture.keys()
         ))
+    }
+
+    fn display(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+        self.repr(ptrs)
     }
 
     fn type_of(&self) -> Result<String, RuntimeError> {
@@ -338,6 +358,37 @@ impl OnionObjectProtocol for OnionLambdaDefinition {
 
     fn equals(&self, _other: &OnionObject) -> Result<bool, RuntimeError> {
         Ok(false)
+    }
+
+    fn apply(
+        &self,
+        this_object: &OnionObject,
+        override_self_object: Option<&OnionObject>,
+        value: &OnionObject,
+        gc: &mut GC<OnionObjectCell>,
+    ) -> Result<Result<StepResult, OnionStaticObject>, RuntimeError> {
+        let launcher = OnionLambdaRunnableLauncher::new(
+            this_object,
+            match override_self_object {
+                Some(override_self) => override_self.stabilize(),
+                None => self.temp_self_object.stabilize(),
+            },
+            value.stabilize(),
+            |r| Ok(r),
+        )?;
+        let new_runnable: Box<dyn Runnable> = match self.lambda_type() {
+            LambdaType::Atomic => Box::new(launcher),
+            LambdaType::AsyncLauncher => {
+                let new_task_handler = OnionAsyncHandle::new(gc);
+                Box::new(AsyncScheduler::new(Task::new(
+                    Box::new(Scheduler::new(vec![Box::new(launcher)])),
+                    new_task_handler,
+                    0,
+                )))
+            }
+            LambdaType::SyncLauncher => Box::new(Scheduler::new(vec![Box::new(launcher)])),
+        };
+        return Ok(Ok(StepResult::NewRunnable(new_runnable)));
     }
 }
 
