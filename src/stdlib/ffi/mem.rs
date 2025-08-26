@@ -31,7 +31,7 @@ fn get_integer_arg(
         )
     })?;
     match obj.weak() {
-        OnionObject::Integer(i) => Ok(*i),
+        OnionObject::IntegerValue(i) => Ok(*i),
         _ => Err(RuntimeError::InvalidType(
             format!("Argument '{name}' must be an integer")
                 .to_string()
@@ -64,7 +64,7 @@ fn mem_alloc(
                 "Memory allocation failed".into(),
             ))
         } else {
-            Ok(OnionObject::Integer(ptr as usize as i64).stabilize())
+            Ok(OnionObject::IntegerValue(ptr as usize as i64).stabilize())
         }
     }
 }
@@ -130,7 +130,7 @@ fn mem_calloc(
             ))
         } else {
             std::ptr::write_bytes(ptr, 0, total_size);
-            Ok(OnionObject::Integer(ptr as usize as i64).stabilize())
+            Ok(OnionObject::IntegerValue(ptr as usize as i64).stabilize())
         }
     }
 }
@@ -156,7 +156,7 @@ fn mem_read(
 
     unsafe {
         let slice = std::slice::from_raw_parts(ptr as usize as *const u8, size as usize);
-        Ok(OnionObject::Bytes(Arc::from(slice)).stabilize())
+        Ok(OnionObject::BytesValue(Arc::from(slice)).stabilize())
     }
 }
 
@@ -177,8 +177,8 @@ fn mem_write(
     }
 
     let bytes_to_write = match buffer_obj.weak() {
-        OnionObject::Bytes(b) => b.clone(),
-        OnionObject::String(s) => Arc::from(s.as_bytes()),
+        OnionObject::BytesValue(b) => b.clone(),
+        OnionObject::StringValue(s) => Arc::from(s.as_bytes()),
         _ => {
             return Err(RuntimeError::InvalidType(
                 "Argument 'buffer' must be bytes or a string"
@@ -196,7 +196,7 @@ fn mem_write(
         );
     }
 
-    Ok(OnionObject::Integer(bytes_to_write.len() as i64).stabilize())
+    Ok(OnionObject::IntegerValue(bytes_to_write.len() as i64).stabilize())
 }
 
 /// 复制内存

@@ -19,15 +19,20 @@ use arc_gc::{
 
 use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
-    types::lambda::{
-        definition::LambdaType, launcher::OnionLambdaRunnableLauncher, parameter::LambdaParameter,
+    types::{
+        lambda::{
+            definition::{LambdaType, OnionLambdaDefinitionInner},
+            launcher::OnionLambdaRunnableLauncher,
+            parameter::LambdaParameter,
+        },
+        object::{OnionObjectProtocol, OnionObjectProtocolStatic},
     },
     unwrap_step_result,
     utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
 
 use super::{
-    lambda::definition::{LambdaBody, OnionLambdaDefinition},
+    lambda::definition::LambdaBody,
     object::{OnionObject, OnionObjectCell, OnionStaticObject},
     tuple::OnionTuple,
 };
@@ -38,23 +43,28 @@ use super::{
 /// 适用于大规模数据的延迟求值与高效遍历。
 ///
 /// # 字段
-/// - `container`: 集合的底层容器对象（如元组、数组等）
-/// - `filter`: 用于筛选元素的过滤器对象（如 Lambda 表达式）
+/// - `value.0 (container)`: 集合的底层容器对象（如元组、数组等）
+/// - `value.1 (filter)`: 用于筛选元素的过滤器对象（如 Lambda 表达式）
+#[derive(Clone)]
 pub struct OnionLazySet {
-    container: OnionObject,
-    filter: OnionObject,
+    value: Arc<(OnionObject, OnionObject)>,
 }
 
 impl GCTraceable<OnionObjectCell> for OnionLazySet {
     fn collect(&self, queue: &mut VecDeque<GCArcWeak<OnionObjectCell>>) {
-        self.container.collect(queue);
-        self.filter.collect(queue);
+        self.get_container().collect(queue);
+        self.get_filter().collect(queue);
     }
 }
 
 impl Debug for OnionLazySet {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "LazySet({:?}, {:?})", self.container, self.filter)
+        write!(
+            f,
+            "LazySet({:?}, {:?})",
+            self.get_container(),
+            self.get_filter()
+        )
     }
 }
 
@@ -69,8 +79,7 @@ impl OnionLazySet {
     /// 新的惰性集合实例
     pub fn new(container: OnionObject, filter: OnionObject) -> Self {
         OnionLazySet {
-            container: container.into(),
-            filter: filter.into(),
+            value: Arc::new((container.into(), filter.into())),
         }
     }
 
@@ -86,36 +95,64 @@ impl OnionLazySet {
         container: &OnionStaticObject,
         filter: &OnionStaticObject,
     ) -> OnionStaticObject {
-        OnionObject::LazySet(
-            OnionLazySet {
-                container: container.weak().clone(),
-                filter: filter.weak().clone(),
-            }
-            .into(),
-        )
-        .stabilize()
+        OnionObject::LazySet(Self::new(container.weak().clone(), filter.weak().clone())).stabilize()
     }
 
     /// 获取底层容器对象的引用。
     #[inline(always)]
     pub fn get_container(&self) -> &OnionObject {
-        &self.container
+        &self.value.0
     }
 
     /// 获取过滤器对象的引用。
     #[inline(always)]
     pub fn get_filter(&self) -> &OnionObject {
-        &self.filter
+        &self.value.1
     }
 
     /// 升级集合中的所有对象引用。
     ///
     /// 用于 GC 跟踪，防止集合中的对象被提前回收。
     pub fn upgrade(&self, collected: &mut Vec<GCArc<OnionObjectCell>>) {
-        self.container.upgrade(collected);
-        self.filter.upgrade(collected)
+        self.get_container().upgrade(collected);
+        self.get_filter().upgrade(collected)
+    }
+}
+
+impl OnionObjectProtocol for OnionLazySet {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
+    fn upgrade(&self, collected: &mut Vec<GCArc<OnionObjectCell>>) {
+        self.get_container().upgrade(collected);
+        self.get_filter().upgrade(collected);
+    }
+
+    fn repr(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+        Ok(format!(
+            "({:?} | {:?})",
+            self.get_container().repr(ptrs),
+            self.get_filter().repr(ptrs)
+        ))
+    }
+
+    fn type_of(&self) -> Result<String, RuntimeError> {
+        Ok("LazySet".into())
+    }
+
+    fn equals(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
+        match other {
+            OnionObject::LazySet(other) => {
+                Ok(self.get_container().equals(other.get_container())?
+                    && self.get_filter().equals(other.get_filter())?)
+            }
+            _ => Ok(false),
+        }
+    }
+}
+
+impl OnionObjectProtocolStatic for OnionLazySet {
     /// 按属性名访问集合的内部成员或操作。
     ///
     /// 支持访问 "container"、"filter"、"collect" 三个属性：
@@ -130,22 +167,27 @@ impl OnionLazySet {
     /// # 返回
     /// - `Ok(R)`: 访问成功，返回处理函数结果
     /// - `Err(RuntimeError)`: 属性不存在或访问失败
-    pub fn with_attribute<F, R>(&self, key: &OnionObject, f: &F) -> Result<R, RuntimeError>
+    fn with_attribute<F, R>(
+        &self,
+        _self_object: &OnionObject,
+        key: &OnionObject,
+        f: &F,
+    ) -> Result<R, RuntimeError>
     where
         F: Fn(&OnionObject) -> Result<R, RuntimeError>,
     {
         match key {
-            OnionObject::String(s) if s.as_ref() == "container" => f(&self.container),
-            OnionObject::String(s) if s.as_ref() == "filter" => f(&self.filter),
-            OnionObject::String(s) if s.as_ref() == "collect" => {
+            OnionObject::StringValue(s) if s.value() == "container" => f(self.get_container()),
+            OnionObject::StringValue(s) if s.value() == "filter" => f(self.get_filter()),
+            OnionObject::StringValue(s) if s.value() == "collect" => {
                 let empty_pool = OnionKeyPool::create(vec![]);
                 let collector = OnionLazySetCollector {
-                    container: self.container.stabilize(),
-                    filter: self.filter.stabilize(),
+                    container: self.get_container().stabilize(),
+                    filter: self.get_filter().stabilize(),
                     collected: Vec::new(),
                     current_index: 0,
                 };
-                let collector = OnionLambdaDefinition::new_static(
+                let collector = OnionLambdaDefinitionInner::new_static(
                     LambdaParameter::Multiple(Box::new([])),
                     LambdaBody::NativeFunction((
                         Arc::new({
@@ -199,7 +241,7 @@ impl Runnable for OnionLazySetCollector {
         match step_result {
             StepResult::Return(result) => {
                 match result.weak() {
-                    OnionObject::Boolean(true) => {
+                    OnionObject::BooleanValue(v) if v.value() => {
                         match self.container.weak() {
                             OnionObject::Tuple(tuple) => {
                                 // 如果是布尔值 true，表示需要收集当前元素
@@ -242,21 +284,24 @@ impl Runnable for OnionLazySetCollector {
                             self.filter
                                 .weak()
                                 .with_data(|filter: &OnionObject| match filter {
-                                    OnionObject::Lambda((_, self_object)) => {
+                                    OnionObject::Lambda(lambda) => {
                                         let runnable = Box::new(OnionLambdaRunnableLauncher::new(
                                             filter,
-                                            self_object.stabilize(),
+                                            lambda.temp_self_object().stabilize(),
                                             item.stabilize(),
                                             &|r| Ok(r),
                                         )?);
                                         Ok(StepResult::NewRunnable(runnable))
                                     }
-                                    v => {
-                                        if v.to_boolean()? {
+                                    OnionObject::BooleanValue(v) => {
+                                        if v.value() {
                                             self.collected.push(item.stabilize());
                                         }
                                         Ok(StepResult::Continue)
                                     }
+                                    _ => Err(RuntimeError::InvalidType(
+                                        "Filter must be a lambda or boolean".into(),
+                                    )),
                                 })
                         } else {
                             // 所有元素都处理完了

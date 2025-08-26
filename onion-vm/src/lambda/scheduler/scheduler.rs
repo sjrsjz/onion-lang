@@ -73,7 +73,7 @@ impl Runnable for Scheduler {
                             Err(RuntimeError::CustomValue(ref e)) => {
                                 return StepResult::Return(
                                     OnionPair::new_static(
-                                        &OnionObject::Boolean(false).stabilize(),
+                                        &OnionObject::BooleanValue(false).stabilize(),
                                         &e,
                                     )
                                     .into(),
@@ -82,8 +82,8 @@ impl Runnable for Scheduler {
                             Err(e) => {
                                 return StepResult::Return(
                                     OnionPair::new_static(
-                                        &OnionObject::Boolean(false).stabilize(),
-                                        &OnionObject::String(Arc::from(e.to_string())).stabilize(),
+                                        &OnionObject::BooleanValue(false).stabilize(),
+                                        &OnionObject::StringValue(Arc::from(e.to_string())).stabilize(),
                                     )
                                     .into(),
                                 );
@@ -94,7 +94,7 @@ impl Runnable for Scheduler {
                         // 所有任务都已完成，返回最终结果
                         StepResult::Return(
                             OnionPair::new_static(
-                                &OnionObject::Boolean(true).stabilize(),
+                                &OnionObject::BooleanValue(true).stabilize(),
                                 result.as_ref(),
                             )
                             .into(),
@@ -108,7 +108,7 @@ impl Runnable for Scheduler {
                     }
                     return StepResult::Return(
                         OnionPair::new_static(
-                            &OnionObject::Boolean(false).stabilize(),
+                            &OnionObject::BooleanValue(false).stabilize(),
                             &match error {
                                 RuntimeError::CustomValue(v) => v.as_ref().clone(),
                                 _ => OnionObject::Undefined(Some(error.to_string().into()))

@@ -430,7 +430,7 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
                 let result_borrowed = result.weak();
                 let result = unwrap_object!(result_borrowed, OnionObject::Pair)
                     .map_err(|e| format!("Failed to unwrap result: {e:?}"))?;
-                let success = *unwrap_object!(result.get_key(), OnionObject::Boolean)
+                let success = *unwrap_object!(result.get_key(), OnionObject::BooleanValue)
                     .map_err(|e| format!("Failed to get success key: {e:?}"))?;
                 if !success {
                     // 这是程序逻辑上的失败（例如，断言失败），而不是 VM 崩溃

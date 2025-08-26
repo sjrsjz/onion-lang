@@ -24,10 +24,14 @@ use arc_gc::{
 
 use crate::{
     lambda::runnable::RuntimeError,
-    types::object::{GCArcStorage, OnionStaticObject},
+    types::{
+        boolean_value::OnionBooleanValue,
+        object::{GCArcStorage, OnionObjectProtocolAny, OnionStaticObject},
+        undefined::OnionUndefined,
+    },
 };
 
-use super::object::{OnionObject, OnionObjectCell, OnionObjectExt};
+use super::object::{OnionObject, OnionObjectCell, OnionObjectProtocol};
 
 /// Onion 异步任务句柄。
 ///
@@ -49,7 +53,9 @@ impl OnionAsyncHandle {
     /// # 返回
     /// - `(Arc<Self>, GCArcStorage)`: 新的异步句柄和对应的 GC 存储
     pub fn new(gc: &mut GC<OnionObjectCell>) -> (Arc<Self>, GCArcStorage) {
-        let tmp = gc.create(OnionObjectCell::from(OnionObject::Undefined(None)));
+        let tmp = gc.create(OnionObjectCell::from(OnionObject::Undefined(
+            OnionUndefined::new(None),
+        )));
         (
             Arc::new(Self {
                 inner: Mutex::new((tmp.as_weak(), false)),
@@ -119,15 +125,10 @@ impl GCTraceable<OnionObjectCell> for OnionAsyncHandle {
     }
 }
 
-impl OnionObjectExt for OnionAsyncHandle {
+impl OnionObjectProtocol for OnionAsyncHandle {
     fn as_any(&self) -> &dyn Any {
         self
     }
-
-    fn repr(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
-        Ok(format!("AsyncHandle(finished: {})", self.is_finished()))
-    }
-
     fn equals(&self, _other: &OnionObject) -> Result<bool, RuntimeError> {
         // Async handles are only equal if they're the exact same handle
         Ok(false)
@@ -139,12 +140,6 @@ impl OnionObjectExt for OnionAsyncHandle {
             collected.push(strong_ref);
         }
     }
-
-    fn to_boolean(&self) -> Result<bool, RuntimeError> {
-        // A async handle is "truthy" if it hasn't finished yet
-        Ok(!self.is_finished())
-    }
-
     fn type_of(&self) -> Result<String, RuntimeError> {
         Ok("AsyncHandle".to_string())
     }
@@ -165,13 +160,13 @@ impl OnionObjectExt for OnionAsyncHandle {
         }
     }
 
-    fn to_string(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+    fn repr(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
         let finished = self.is_finished();
         if finished {
             match self.value_of() {
                 Ok(val) => Ok(format!(
                     "AsyncHandle(finished: true, result: {})",
-                    val.weak().to_string(ptrs)?
+                    val.weak().repr(ptrs)?
                 )),
                 Err(RuntimeError::BrokenReference) => {
                     Ok("AsyncHandle(finished: true, result: <broken reference>)".to_string())
@@ -183,29 +178,36 @@ impl OnionObjectExt for OnionAsyncHandle {
             let (ref weak_result, _) = *guard;
             match weak_result.upgrade() {
                 Some(v) => Ok(format!(
-                    "AsyncHandle(finished: false, result: {:?})",
-                    v.as_ref().0.read().unwrap().to_string(ptrs)
+                    "AsyncHandle(finished: false, result: {})",
+                    v.as_ref().0.read().unwrap().repr(ptrs)?
                 )),
                 None => Ok("AsyncHandle(finished: false, result: <broken reference>)".to_string()),
             }
         }
     }
+}
 
+impl OnionObjectProtocolAny for OnionAsyncHandle {
     fn with_attribute(
         &self,
+        _self_object: &OnionObject,
         key: &OnionObject,
         f: &mut dyn FnMut(&OnionObject) -> Result<(), RuntimeError>,
     ) -> Result<(), RuntimeError> {
         match key {
-            OnionObject::String(s) => match s.as_ref() {
-                "is_finished" => f(&OnionObject::Boolean(self.is_finished())),
+            OnionObject::StringValue(s) => match s.value() {
+                "is_finished" => f(&OnionObject::BooleanValue(OnionBooleanValue::new(
+                    self.is_finished(),
+                ))),
                 "has_result" => {
                     let guard = self.inner.lock().unwrap();
                     let has_result = guard.0.upgrade().is_some();
-                    f(&OnionObject::Boolean(has_result))
+                    f(&OnionObject::BooleanValue(OnionBooleanValue::new(
+                        has_result,
+                    )))
                 }
                 _ => Err(RuntimeError::InvalidOperation(
-                    format!("Attribute '{}' not found in AsyncHandle", s).into(),
+                    format!("Attribute '{}' not found in AsyncHandle", s.repr(&vec![])?).into(),
                 )),
             },
             _ => Err(RuntimeError::InvalidOperation(

@@ -36,7 +36,7 @@ fn build_dict(dict: IndexMap<String, OnionStaticObject>) -> OnionStaticObject {
     let mut pairs = vec![];
     for (key, value) in dict {
         pairs.push(OnionPair::new_static(
-            &OnionObject::String(key.into()).stabilize(),
+            &OnionObject::StringValue(key.into()).stabilize(),
             &value,
         ));
     }
@@ -59,7 +59,7 @@ fn string(
         RuntimeError::InvalidOperation("string() requires a 'value' argument".into())
     })?;
     value.weak().with_data(|data| match data {
-        OnionObject::String(s) => Ok(ast_wrapper(ASTNode {
+        OnionObject::StringValue(s) => Ok(ast_wrapper(ASTNode {
             node_type: ASTNodeType::String(s.to_string()),
             children: vec![],
             source_location: None,
@@ -79,7 +79,7 @@ fn bytes(
         RuntimeError::InvalidOperation("bytes() requires a 'value' argument".into())
     })?;
     value.weak().with_data(|data| match data {
-        OnionObject::Bytes(s) => Ok(ast_wrapper(ASTNode {
+        OnionObject::BytesValue(s) => Ok(ast_wrapper(ASTNode {
             node_type: ASTNodeType::Base64(base64::engine::general_purpose::STANDARD.encode(s)),
             children: vec![],
             source_location: None,
@@ -99,7 +99,7 @@ fn deserialize_ast(
         RuntimeError::InvalidOperation("deserialize() requires a 'value' argument".into())
     })?;
     value.weak().with_data(|data| match data {
-        OnionObject::Bytes(data) => {
+        OnionObject::BytesValue(data) => {
             let deserialized: Result<ASTNode, _> =
                 bincode::serde::decode_from_slice(data.as_ref(), bincode::config::standard())
                     .map(|(result, _)| result);
@@ -137,7 +137,7 @@ fn serialize_ast(
             .map_err(|err| {
                 RuntimeError::InvalidType(format!("Failed to serialize AST: {}", err).into())
             })?;
-            Ok(OnionObject::Bytes(serialized.into()).stabilize())
+            Ok(OnionObject::BytesValue(serialized.into()).stabilize())
         }
         _ => Err(RuntimeError::InvalidType(
             "Argument 'value' for serialize() must be an ASTNode".into(),
@@ -154,7 +154,7 @@ fn boolean(
         RuntimeError::InvalidOperation("boolean() requires a 'value' argument".into())
     })?;
     value.weak().with_data(|data| match data {
-        OnionObject::Boolean(b) => Ok(ast_wrapper(ASTNode {
+        OnionObject::BooleanValue(b) => Ok(ast_wrapper(ASTNode {
             node_type: ASTNodeType::Boolean(*b),
             children: vec![],
             source_location: None,
@@ -174,12 +174,12 @@ fn number(
         RuntimeError::InvalidOperation("number() requires a 'value' argument".into())
     })?;
     value.weak().with_data(|data| match data {
-        OnionObject::Integer(n) => Ok(ast_wrapper(ASTNode {
+        OnionObject::IntegerValue(n) => Ok(ast_wrapper(ASTNode {
             node_type: ASTNodeType::Number(n.to_string()),
             children: vec![],
             source_location: None,
         })),
-        OnionObject::Float(f) => Ok(ast_wrapper(ASTNode {
+        OnionObject::FloatValue(f) => Ok(ast_wrapper(ASTNode {
             node_type: ASTNodeType::Number(f.to_string()),
             children: vec![],
             source_location: None,
@@ -199,7 +199,7 @@ fn variable(
         RuntimeError::InvalidOperation("variable() requires a 'name' argument".into())
     })?;
     name.weak().with_data(|data| match data {
-        OnionObject::String(s) => Ok(ast_wrapper(ASTNode {
+        OnionObject::StringValue(s) => Ok(ast_wrapper(ASTNode {
             node_type: ASTNodeType::Variable(s.to_string()),
             children: vec![],
             source_location: None,
@@ -219,7 +219,7 @@ fn let_var(
         RuntimeError::InvalidOperation("let_var() requires a 'name' argument".into())
     })?;
     name.weak().with_data(|data| match data {
-        OnionObject::String(s) => Ok(ast_wrapper(ASTNode {
+        OnionObject::StringValue(s) => Ok(ast_wrapper(ASTNode {
             node_type: ASTNodeType::Let(s.to_string()),
             children: vec![],
             source_location: None,
@@ -239,7 +239,7 @@ fn operation(
         RuntimeError::InvalidOperation("operation() requires an 'op' argument".into())
     })?;
     op.weak().with_data(|data| match data {
-        OnionObject::String(s) => {
+        OnionObject::StringValue(s) => {
             let op_type = match s.as_ref() {
                 "+" => ASTNodeOperation::Add,
                 "abs" => ASTNodeOperation::Abs,
@@ -288,7 +288,7 @@ fn modifier(
         RuntimeError::InvalidOperation("modifier() requires a 'name' argument".into())
     })?;
     name.weak().with_data(|data| match data {
-        OnionObject::String(s) => {
+        OnionObject::StringValue(s) => {
             let mod_type = match s.as_ref() {
                 "mut" => ASTNodeModifier::Mut,
                 "const" => ASTNodeModifier::Const,
@@ -333,7 +333,7 @@ fn lambda_def(
         RuntimeError::InvalidOperation("lambda_def() requires a 'captures' argument".into())
     })?;
     is_dyn.weak().with_data(|data| match data {
-        OnionObject::Boolean(is_dyn) => {
+        OnionObject::BooleanValue(is_dyn) => {
             captures
                 .weak()
                 .with_data(|captures_data| match captures_data {
@@ -341,7 +341,7 @@ fn lambda_def(
                         let mut captures = HashSet::new();
                         for v in captured.get_elements() {
                             let key = v.with_data(|data| match data {
-                                OnionObject::String(s) => Ok(s.to_string()),
+                                OnionObject::StringValue(s) => Ok(s.to_string()),
                                 _ => Err(RuntimeError::InvalidType(
                                     "Capture variable must be a string".into(),
                                 )),

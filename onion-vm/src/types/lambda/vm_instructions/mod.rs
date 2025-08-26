@@ -47,7 +47,7 @@ pub fn load_int(
         unwrap_step_result!(
             runnable
                 .context
-                .push_object(OnionObject::Integer(value).consume_and_stabilize())
+                .push_object(OnionObject::IntegerValue(value).consume_and_stabilize())
         );
         StepResult::Continue
     } else {
@@ -96,7 +96,7 @@ pub fn load_float(
         unwrap_step_result!(
             runnable
                 .context
-                .push_object(OnionObject::Float(value).consume_and_stabilize())
+                .push_object(OnionObject::FloatValue(value).consume_and_stabilize())
         );
         StepResult::Continue
     } else {
@@ -116,7 +116,7 @@ pub fn load_string(
     _gc: &mut GC<OnionObjectCell>,
 ) -> StepResult {
     if let OpcodeArgument::String(value) = opcode.operand1 {
-        let string = OnionObject::String(Arc::from(
+        let string = OnionObject::StringValue(Arc::from(
             runnable.instruction.get_string_pool()[value as usize].as_ref(),
         ))
         .consume_and_stabilize();
@@ -139,7 +139,7 @@ pub fn load_bytes(
     _gc: &mut GC<OnionObjectCell>,
 ) -> StepResult {
     if let OpcodeArgument::ByteArray(value) = opcode.operand1 {
-        let bytes = OnionObject::Bytes(Arc::from(
+        let bytes = OnionObject::BytesValue(Arc::from(
             runnable.instruction.get_bytes_pool()[value as usize].as_slice(),
         ))
         .consume_and_stabilize();
@@ -165,7 +165,7 @@ pub fn load_bool(
         unwrap_step_result!(
             runnable
                 .context
-                .push_object(OnionObject::Boolean(value != 0).consume_and_stabilize())
+                .push_object(OnionObject::BooleanValue(value != 0).consume_and_stabilize())
         );
         StepResult::Continue
     } else {
@@ -571,7 +571,7 @@ pub fn type_of(
     let type_name = unwrap_step_result!(obj.weak().type_of());
     Context::replace_last_object(
         stack,
-        OnionObject::String(Arc::from(type_name)).consume_and_stabilize(),
+        OnionObject::StringValue(Arc::from(type_name)).consume_and_stabilize(),
     );
     StepResult::Continue
 }
@@ -588,7 +588,7 @@ pub fn check_is_same_object(
     unwrap_step_result!(
         runnable
             .context
-            .push_object(OnionObject::Boolean(is_same).consume_and_stabilize())
+            .push_object(OnionObject::BooleanValue(is_same).consume_and_stabilize())
     );
     StepResult::Continue
 }
@@ -769,7 +769,7 @@ pub fn binary_equal(
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
     let result = unwrap_step_result!(left.weak().binary_eq(right.weak()));
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
-    Context::push_to_stack(stack, OnionObject::Boolean(result).consume_and_stabilize());
+    Context::push_to_stack(stack, OnionObject::BooleanValue(result).consume_and_stabilize());
     StepResult::Continue
 }
 
@@ -784,7 +784,7 @@ pub fn binary_not_equal(
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
     let result = unwrap_step_result!(left.weak().binary_eq(right.weak()));
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
-    Context::push_to_stack(stack, OnionObject::Boolean(!result).consume_and_stabilize());
+    Context::push_to_stack(stack, OnionObject::BooleanValue(!result).consume_and_stabilize());
     StepResult::Continue
 }
 
@@ -799,7 +799,7 @@ pub fn binary_greater(
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
     let result = unwrap_step_result!(left.weak().binary_gt(right.weak()));
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
-    Context::push_to_stack(stack, OnionObject::Boolean(result).consume_and_stabilize());
+    Context::push_to_stack(stack, OnionObject::BooleanValue(result).consume_and_stabilize());
     StepResult::Continue
 }
 
@@ -814,7 +814,7 @@ pub fn binary_greater_equal(
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
     let result = unwrap_step_result!(left.weak().binary_lt(right.weak()));
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
-    Context::push_to_stack(stack, OnionObject::Boolean(!result).consume_and_stabilize());
+    Context::push_to_stack(stack, OnionObject::BooleanValue(!result).consume_and_stabilize());
     StepResult::Continue
 }
 
@@ -829,7 +829,7 @@ pub fn binary_less(
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
     let result = unwrap_step_result!(left.weak().binary_lt(right.weak()));
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
-    Context::push_to_stack(stack, OnionObject::Boolean(result).consume_and_stabilize());
+    Context::push_to_stack(stack, OnionObject::BooleanValue(result).consume_and_stabilize());
     StepResult::Continue
 }
 
@@ -844,7 +844,7 @@ pub fn binary_less_equal(
     let left = unwrap_step_result!(Context::get_object_from_stack(stack, 1));
     let result = unwrap_step_result!(left.weak().binary_gt(right.weak()));
     unwrap_step_result!(Context::discard_from_stack(stack, 2));
-    Context::push_to_stack(stack, OnionObject::Boolean(!result).consume_and_stabilize());
+    Context::push_to_stack(stack, OnionObject::BooleanValue(!result).consume_and_stabilize());
     StepResult::Continue
 }
 
@@ -1014,7 +1014,7 @@ pub fn is_in(
         unwrap_step_result!(
             runnable
                 .context
-                .push_object(OnionObject::Boolean(false).consume_and_stabilize())
+                .push_object(OnionObject::BooleanValue(false).consume_and_stabilize())
         );
         return StepResult::Continue;
     }
@@ -1125,7 +1125,7 @@ pub fn import(
     let path = unwrap_step_result!(runnable.context.get_object_rev(0));
 
     let package = unwrap_step_result!(path.weak().with_data(|path_ref| {
-        let OnionObject::String(path) = path_ref else {
+        let OnionObject::StringValue(path) = path_ref else {
             return Err(RuntimeError::DetailedError(
                 format!("Invalid path type for 'import': {}", path).into(),
             ));

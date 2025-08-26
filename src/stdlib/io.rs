@@ -65,7 +65,7 @@ fn input(
         }
         buffer.trim().to_string()
     };
-    Ok(OnionObject::String(input.into()).stabilize())
+    Ok(OnionObject::StringValue(input.into()).stabilize())
 }
 
 pub fn build_module() -> OnionStaticObject {

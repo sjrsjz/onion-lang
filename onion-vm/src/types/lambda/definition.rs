@@ -8,6 +8,7 @@
 use std::{
     collections::VecDeque,
     fmt::{Debug, Display},
+    ops::Deref,
     sync::Arc,
 };
 
@@ -23,7 +24,12 @@ use crate::{
         lambda::{
             parameter::LambdaParameter, vm_instructions::instruction_set::VMInstructionPackage,
         },
-        object::{OnionObject, OnionObjectCell, OnionStaticObject},
+        object::{
+            OnionObject, OnionObjectCell, OnionObjectProtocol, OnionObjectProtocolStatic,
+            OnionStaticObject,
+        },
+        string_value::OnionStringValue,
+        undefined::OnionUndefined,
     },
     utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
@@ -105,7 +111,50 @@ pub enum LambdaType {
 /// Onion 虚拟机 Lambda 定义。
 ///
 /// 封装参数、捕获、Lambda 体、签名、类型等。
+#[derive(Clone)]
 pub struct OnionLambdaDefinition {
+    inner: Arc<OnionLambdaDefinitionInner>,
+    temp_self_object: Arc<OnionObject>, // 临时 self 对象
+}
+
+impl OnionLambdaDefinition {
+    pub fn new(inner: OnionLambdaDefinitionInner, temp_self_object: &OnionObject) -> Self {
+        Self {
+            inner: Arc::new(inner),
+            temp_self_object: Arc::new(temp_self_object.clone()),
+        }
+    }
+
+    pub fn with_lambda_type(&self, lambda_type: LambdaType) -> OnionLambdaDefinition {
+        OnionLambdaDefinition::new(
+            OnionLambdaDefinitionInner {
+                parameter: self.inner.parameter.clone(),
+                flatten_param_keys: self.inner.flatten_param_keys.clone(),
+                flatten_param_constraints: self.inner.flatten_param_constraints.clone(),
+                body: self.inner.body.clone(),
+                capture: self.inner.capture.clone(),
+                signature: self.inner.signature.clone(),
+                lambda_type,
+            },
+            &self.temp_self_object,
+        )
+    }
+
+    #[inline(always)]
+    pub fn temp_self_object(&self) -> &OnionObject {
+        &self.temp_self_object
+    }
+}
+
+impl Deref for OnionLambdaDefinition {
+    type Target = OnionLambdaDefinitionInner;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+pub struct OnionLambdaDefinitionInner {
     /// 参数定义
     parameter: LambdaParameter,
     /// 展平后的参数名
@@ -122,7 +171,7 @@ pub struct OnionLambdaDefinition {
     lambda_type: LambdaType,
 }
 
-impl OnionLambdaDefinition {
+impl OnionLambdaDefinitionInner {
     pub fn new_static(
         parameter: LambdaParameter,
         body: LambdaBody,
@@ -132,8 +181,8 @@ impl OnionLambdaDefinition {
     ) -> OnionStaticObject {
         let flatten_param_keys = parameter.flatten_keys();
         let flatten_param_constraints = parameter.flatten_constraints();
-        OnionObject::Lambda((
-            OnionLambdaDefinition {
+        OnionObject::Lambda(OnionLambdaDefinition::new(
+            OnionLambdaDefinitionInner {
                 parameter,
                 flatten_param_keys,
                 flatten_param_constraints,
@@ -141,9 +190,8 @@ impl OnionLambdaDefinition {
                 capture,
                 signature,
                 lambda_type,
-            }
-            .into(),
-            OnionObject::Undefined(None).into(),
+            },
+            &OnionObject::Undefined(OnionUndefined::new(None)),
         ))
         .consume_and_stabilize()
     }
@@ -158,8 +206,8 @@ impl OnionLambdaDefinition {
     ) -> OnionStaticObject {
         let flatten_param_keys = parameter.flatten_keys();
         let flatten_param_constraints = parameter.flatten_constraints();
-        OnionObject::Lambda((
-            OnionLambdaDefinition {
+        OnionObject::Lambda(OnionLambdaDefinition::new(
+            OnionLambdaDefinitionInner {
                 parameter,
                 flatten_param_keys,
                 flatten_param_constraints,
@@ -167,9 +215,8 @@ impl OnionLambdaDefinition {
                 capture,
                 signature,
                 lambda_type,
-            }
-            .into(),
-            self_object.clone().into(),
+            },
+            self_object,
         ))
         .consume_and_stabilize()
     }
@@ -178,19 +225,6 @@ impl OnionLambdaDefinition {
     pub fn create_key_pool(&self) -> OnionKeyPool<Box<str>> {
         self.body.create_string_pool()
     }
-
-    pub fn with_lambda_type(&self, lambda_type: LambdaType) -> Self {
-        OnionLambdaDefinition {
-            parameter: self.parameter.clone(),
-            flatten_param_keys: self.flatten_param_keys.clone(),
-            flatten_param_constraints: self.flatten_param_constraints.clone(),
-            body: self.body.clone(),
-            capture: self.capture.clone(),
-            signature: self.signature.clone(),
-            lambda_type,
-        }
-    }
-
     pub fn lambda_type(&self) -> &LambdaType {
         &self.lambda_type
     }
@@ -255,44 +289,11 @@ impl OnionLambdaDefinition {
     pub fn get_body(&self) -> &LambdaBody {
         &self.body
     }
-
-    pub fn upgrade(&self, collected: &mut Vec<GCArc<OnionObjectCell>>) {
-        self.parameter.upgrade(collected);
-        for (_, obj) in self.capture.pairs() {
-            obj.upgrade(collected);
-        }
-    }
-
-    pub fn with_attribute<F, R>(&self, key: &OnionObject, f: &F) -> Result<R, RuntimeError>
-    where
-        F: Fn(&OnionObject) -> Result<R, RuntimeError>,
-    {
-        match key {
-            OnionObject::String(s) if s.as_ref() == "$parameter" => {
-                let parameter = self.parameter.to_onion();
-                f(parameter.weak())
-            }
-            OnionObject::String(s) if s.as_ref() == "$signature" => {
-                f(&OnionObject::String(Arc::from(self.signature.clone())))
-            }
-            OnionObject::String(s) => {
-                if let Some(value) = self.capture.get(s.as_ref()) {
-                    f(value)
-                } else {
-                    Err(RuntimeError::InvalidOperation(
-                        format!("Attribute '{:?}' not found in lambda definition", key).into(),
-                    ))
-                }
-            }
-            _ => Err(RuntimeError::InvalidOperation(
-                format!("Attribute '{:?}' not found in lambda definition", key).into(),
-            )),
-        }
-    }
 }
 
 impl GCTraceable<OnionObjectCell> for OnionLambdaDefinition {
     fn collect(&self, queue: &mut VecDeque<GCArcWeak<OnionObjectCell>>) {
+        self.temp_self_object.collect(queue);
         self.parameter.collect(queue);
         for (_, obj) in self.capture.pairs() {
             obj.collect(queue);
@@ -307,5 +308,69 @@ impl Debug for OnionLambdaDefinition {
             "OnionLambdaDefinition {{ parameter: {:?}, body: {:?}, capture: {:?} }}",
             self.parameter, self.body, self.capture
         )
+    }
+}
+
+impl OnionObjectProtocol for OnionLambdaDefinition {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn upgrade(&self, collected: &mut Vec<GCArc<OnionObjectCell>>) {
+        self.temp_self_object.upgrade(collected);
+        self.parameter.upgrade(collected);
+        for (_, obj) in self.capture.pairs() {
+            obj.upgrade(collected);
+        }
+    }
+
+    fn repr(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+        Ok(format!(
+            "({:?}) -> &{:?})",
+            self.parameter,
+            self.capture.keys()
+        ))
+    }
+
+    fn type_of(&self) -> Result<String, RuntimeError> {
+        Ok("Lambda".into())
+    }
+
+    fn equals(&self, _other: &OnionObject) -> Result<bool, RuntimeError> {
+        Ok(false)
+    }
+}
+
+impl OnionObjectProtocolStatic for OnionLambdaDefinition {
+    fn with_attribute<F, R>(
+        &self,
+        _self_object: &OnionObject,
+        key: &OnionObject,
+        f: &F,
+    ) -> Result<R, RuntimeError>
+    where
+        F: Fn(&OnionObject) -> Result<R, RuntimeError>,
+    {
+        match key {
+            OnionObject::StringValue(s) if s.value() == "$parameter" => {
+                let parameter = self.parameter.to_onion();
+                f(parameter.weak())
+            }
+            OnionObject::StringValue(s) if s.value() == "$signature" => f(
+                &OnionObject::StringValue(OnionStringValue::new(&self.signature)),
+            ),
+            OnionObject::StringValue(s) => {
+                if let Some(value) = self.capture.get(s.value()) {
+                    f(value)
+                } else {
+                    Err(RuntimeError::InvalidOperation(
+                        format!("Attribute {:?} not found in lambda definition", key).into(),
+                    ))
+                }
+            }
+            _ => Err(RuntimeError::InvalidOperation(
+                format!("Attribute {:?} not found in lambda definition", key).into(),
+            )),
+        }
     }
 }

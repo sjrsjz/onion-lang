@@ -24,7 +24,7 @@ use std::sync::Arc;
 
 use onion_vm::{
     lambda::runnable::{RuntimeError, StepResult}, types::{
-        object::{OnionObject, OnionObjectCell, OnionObjectExt, OnionStaticObject},
+        object::{OnionObject, OnionObjectCell, OnionObjectProtocol, OnionStaticObject},
         tuple::OnionTuple,
     }, GCTraceable
 };
@@ -45,7 +45,7 @@ impl GCTraceable<OnionObjectCell> for OnionASTObject {
     fn collect(&self, _: &mut std::collections::VecDeque<onion_vm::GCArcWeak<OnionObjectCell>>) {}
 }
 
-impl OnionObjectExt for OnionASTObject {
+impl OnionObjectProtocol for OnionASTObject {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -87,12 +87,12 @@ impl OnionObjectExt for OnionASTObject {
     }
 
     fn len(&self) -> Result<OnionStaticObject, RuntimeError> {
-        Ok(OnionObject::Integer(self.ast.children.len() as i64).stabilize())
+        Ok(OnionObject::IntegerValue(self.ast.children.len() as i64).stabilize())
     }
 
     fn apply(&self, value: &OnionObject) -> Result<Result<StepResult, OnionStaticObject>, RuntimeError> {
         value.with_data(|data| match data {
-            OnionObject::Integer(i) => {
+            OnionObject::IntegerValue(i) => {
                 // 通过索引访问子节点
                 let index = if *i < 0 {
                     return Err(RuntimeError::InvalidOperation(
@@ -119,7 +119,7 @@ impl OnionObjectExt for OnionASTObject {
             OnionObject::Pair(pair) => {
                 // 通过 Pair 替换指定索引的子节点
                 let index = pair.get_key().with_data(|key_data| match key_data {
-                    OnionObject::Integer(i) => {
+                    OnionObject::IntegerValue(i) => {
                         if *i < 0 {
                             Err(RuntimeError::InvalidOperation(
                                 "Negative index is not allowed".into(),
@@ -172,7 +172,7 @@ impl OnionObjectExt for OnionASTObject {
             f: &mut dyn FnMut(&OnionObject) -> Result<(), RuntimeError>,
         ) -> Result<(), RuntimeError> {
         key.with_data(|key_data| match key_data {
-            OnionObject::String(attr_name) => {
+            OnionObject::StringValue(attr_name) => {
                 match attr_name.as_ref() {
                     "node_type" => {
                         // 返回节点类型的字符串表示
@@ -213,7 +213,7 @@ impl OnionObjectExt for OnionASTObject {
                             ASTNodeType::Static => "Static",
                             ASTNodeType::Comptime => "Comptime",
                         };
-                        let type_obj = OnionObject::String(type_name.into());
+                        let type_obj = OnionObject::StringValue(type_name.into());
                         f(&type_obj)
                     },
                     "has_data" => {
@@ -225,41 +225,41 @@ impl OnionObjectExt for OnionASTObject {
                             ASTNodeType::Let(_) | ASTNodeType::LambdaDef(_, _) | ASTNodeType::Operation(_) |
                             ASTNodeType::Modifier(_) | ASTNodeType::Namespace(_)
                         );
-                        let has_data_obj = OnionObject::Boolean(has_data);
+                        let has_data_obj = OnionObject::BooleanValue(has_data);
                         f(&has_data_obj)
                     },
                     "data" => {
                         // 返回节点类型携带的原始数据
                         match &self.ast.node_type {
                             ASTNodeType::String(s) => {
-                                let data_obj = OnionObject::String(s.clone().into());
+                                let data_obj = OnionObject::StringValue(s.clone().into());
                                 f(&data_obj)
                             },
                             ASTNodeType::Boolean(b) => {
-                                let data_obj = OnionObject::Boolean(*b);
+                                let data_obj = OnionObject::BooleanValue(*b);
                                 f(&data_obj)
                             },
                             ASTNodeType::Number(n) => {
-                                let data_obj = OnionObject::String(n.clone().into());
+                                let data_obj = OnionObject::StringValue(n.clone().into());
                                 f(&data_obj)
                             },
                             ASTNodeType::Base64(b64) => {
-                                let data_obj = OnionObject::String(b64.clone().into());
+                                let data_obj = OnionObject::StringValue(b64.clone().into());
                                 f(&data_obj)
                             },
                             ASTNodeType::Variable(name) | ASTNodeType::Required(name) | 
                             ASTNodeType::Let(name) | ASTNodeType::Namespace(name) => {
-                                let data_obj = OnionObject::String(name.clone().into());
+                                let data_obj = OnionObject::StringValue(name.clone().into());
                                 f(&data_obj)
                             },
                             ASTNodeType::LambdaDef(is_dyn, captures) => {
                                 // 返回一个包含 is_dyn 和 captures 的元组
                                 let captures_vec: Vec<OnionObject> = captures.iter()
-                                    .map(|s| OnionObject::String(s.clone().into()))
+                                    .map(|s| OnionObject::StringValue(s.clone().into()))
                                     .collect();
                                 let captures_tuple = OnionObject::Tuple(OnionTuple::new(captures_vec).into());
                                 let data_tuple = OnionObject::Tuple(OnionTuple::new(vec![
-                                    OnionObject::Boolean(*is_dyn),
+                                    OnionObject::BooleanValue(*is_dyn),
                                     captures_tuple
                                 ]).into());
                                 f(&data_tuple)
@@ -287,7 +287,7 @@ impl OnionObjectExt for OnionASTObject {
                                     crate::parser::ast::ASTNodeOperation::LeftShift => "<<",
                                     crate::parser::ast::ASTNodeOperation::RightShift => ">>",
                                 };
-                                let data_obj = OnionObject::String(op_str.into());
+                                let data_obj = OnionObject::StringValue(op_str.into());
                                 f(&data_obj)
                             },
                             ASTNodeType::Modifier(mod_type) => {
@@ -306,7 +306,7 @@ impl OnionObjectExt for OnionASTObject {
                                     crate::parser::ast::ASTNodeModifier::Sync => "sync",
                                     crate::parser::ast::ASTNodeModifier::Atomic => "atomic",
                                 };
-                                let data_obj = OnionObject::String(mod_str.into());
+                                let data_obj = OnionObject::StringValue(mod_str.into());
                                 f(&data_obj)
                             },
                             _ => {
@@ -320,11 +320,11 @@ impl OnionObjectExt for OnionASTObject {
                     "value" => {
                         match &self.ast.node_type {
                             ASTNodeType::String(s) | ASTNodeType::Number(s) | ASTNodeType::Base64(s) => {
-                                let value_obj = OnionObject::String(s.clone().into());
+                                let value_obj = OnionObject::StringValue(s.clone().into());
                                 f(&value_obj)
                             },
                             ASTNodeType::Boolean(b) => {
-                                let value_obj = OnionObject::Boolean(*b);
+                                let value_obj = OnionObject::BooleanValue(*b);
                                 f(&value_obj)
                             },
                             _ => Err(RuntimeError::InvalidOperation(
@@ -336,7 +336,7 @@ impl OnionObjectExt for OnionASTObject {
                         match &self.ast.node_type {
                             ASTNodeType::Variable(name) | ASTNodeType::Required(name) | 
                             ASTNodeType::Let(name) | ASTNodeType::Namespace(name) => {
-                                let name_obj = OnionObject::String(name.clone().into());
+                                let name_obj = OnionObject::StringValue(name.clone().into());
                                 f(&name_obj)
                             },
                             _ => Err(RuntimeError::InvalidOperation(
@@ -369,7 +369,7 @@ impl OnionObjectExt for OnionASTObject {
                                     crate::parser::ast::ASTNodeOperation::LeftShift => "<<",
                                     crate::parser::ast::ASTNodeOperation::RightShift => ">>",
                                 };
-                                let op_obj = OnionObject::String(op_str.into());
+                                let op_obj = OnionObject::StringValue(op_str.into());
                                 f(&op_obj)
                             },
                             _ => Err(RuntimeError::InvalidOperation(
@@ -395,7 +395,7 @@ impl OnionObjectExt for OnionASTObject {
                                     crate::parser::ast::ASTNodeModifier::Sync => "sync",
                                     crate::parser::ast::ASTNodeModifier::Atomic => "atomic",
                                 };
-                                let mod_obj = OnionObject::String(mod_str.into());
+                                let mod_obj = OnionObject::StringValue(mod_str.into());
                                 f(&mod_obj)
                             },
                             _ => Err(RuntimeError::InvalidOperation(
@@ -406,7 +406,7 @@ impl OnionObjectExt for OnionASTObject {
                     "is_dyn" | "dyn" => {
                         match &self.ast.node_type {
                             ASTNodeType::LambdaDef(is_dyn, _) => {
-                                let dyn_obj = OnionObject::Boolean(*is_dyn);
+                                let dyn_obj = OnionObject::BooleanValue(*is_dyn);
                                 f(&dyn_obj)
                             },
                             _ => Err(RuntimeError::InvalidOperation(
@@ -418,7 +418,7 @@ impl OnionObjectExt for OnionASTObject {
                         match &self.ast.node_type {
                             ASTNodeType::LambdaDef(_, captures) => {
                                 let captures_vec: Vec<OnionObject> = captures.iter()
-                                    .map(|s| OnionObject::String(s.clone().into()))
+                                    .map(|s| OnionObject::StringValue(s.clone().into()))
                                     .collect();
                                 let captures_obj = OnionObject::Tuple(OnionTuple::new(captures_vec).into());
                                 f(&captures_obj)
@@ -512,17 +512,17 @@ impl OnionASTObject {
                     + "which cannot be safely or deterministically converted to AST objects")
                     .into(),
             )),
-            OnionObject::Boolean(v) => Ok(ASTNode {
+            OnionObject::BooleanValue(v) => Ok(ASTNode {
                 node_type: ASTNodeType::Boolean(*v),
                 source_location: None,
                 children: vec![],
             }),
-            OnionObject::String(s) => Ok(ASTNode {
+            OnionObject::StringValue(s) => Ok(ASTNode {
                 node_type: ASTNodeType::String(s.as_ref().into()),
                 source_location: None,
                 children: vec![],
             }),
-            OnionObject::Bytes(b) => {
+            OnionObject::BytesValue(b) => {
                 let b64 = base64::engine::general_purpose::STANDARD.encode(b);
                 Ok(ASTNode {
                     node_type: ASTNodeType::Base64(b64),
@@ -530,12 +530,12 @@ impl OnionASTObject {
                     children: vec![],
                 })
             }
-            OnionObject::Float(f) => Ok(ASTNode {
+            OnionObject::FloatValue(f) => Ok(ASTNode {
                 node_type: ASTNodeType::Number(f.to_string()),
                 source_location: None,
                 children: vec![],
             }),
-            OnionObject::Integer(i) => Ok(ASTNode {
+            OnionObject::IntegerValue(i) => Ok(ASTNode {
                 node_type: ASTNodeType::Number(i.to_string()),
                 source_location: None,
                 children: vec![],

@@ -14,10 +14,10 @@ use serde_json::Value;
 fn to_json(obj: OnionObject) -> Result<Value, RuntimeError> {
     obj.with_data(|data| {
         match data {
-            OnionObject::String(s) => Ok(Value::String(s.to_string())),
-            OnionObject::Integer(n) => Ok(Value::Number(serde_json::Number::from(*n))),
-            OnionObject::Float(f) => Ok(Value::Number(serde_json::Number::from_f64(*f).unwrap())),
-            OnionObject::Boolean(b) => Ok(Value::Bool(*b)),
+            OnionObject::StringValue(s) => Ok(Value::String(s.to_string())),
+            OnionObject::IntegerValue(n) => Ok(Value::Number(serde_json::Number::from(*n))),
+            OnionObject::FloatValue(f) => Ok(Value::Number(serde_json::Number::from_f64(*f).unwrap())),
+            OnionObject::BooleanValue(b) => Ok(Value::Bool(*b)),
             OnionObject::Null => Ok(Value::Null),
             OnionObject::Pair(p) => {
                 // 将 Pair 转换为只有一个键值对的 JSON 对象
@@ -60,19 +60,19 @@ fn to_json(obj: OnionObject) -> Result<Value, RuntimeError> {
 fn from_json(value: Value) -> Result<OnionStaticObject, RuntimeError> {
     match value {
         Value::Null => Ok(OnionObject::Null.stabilize()),
-        Value::Bool(b) => Ok(OnionObject::Boolean(b).stabilize()),
+        Value::Bool(b) => Ok(OnionObject::BooleanValue(b).stabilize()),
         Value::Number(n) => {
             if let Some(i) = n.as_i64() {
-                Ok(OnionObject::Integer(i).stabilize())
+                Ok(OnionObject::IntegerValue(i).stabilize())
             } else if let Some(f) = n.as_f64() {
-                Ok(OnionObject::Float(f).stabilize())
+                Ok(OnionObject::FloatValue(f).stabilize())
             } else {
                 Err(RuntimeError::InvalidType(
                     "Invalid JSON number format".into(),
                 ))
             }
         }
-        Value::String(s) => Ok(OnionObject::String(s.into()).stabilize()),
+        Value::String(s) => Ok(OnionObject::StringValue(s.into()).stabilize()),
         Value::Array(arr) => {
             let elements: Result<Vec<_>, _> = arr
                 .into_iter()
@@ -84,7 +84,7 @@ fn from_json(value: Value) -> Result<OnionStaticObject, RuntimeError> {
             let pairs: Result<Vec<_>, _> = obj
                 .into_iter()
                 .map(|(k, v)| {
-                    let key_obj = OnionObject::String(k.into());
+                    let key_obj = OnionObject::StringValue(k.into());
                     let value_obj = from_json(v)?.weak().clone();
                     Ok(OnionObject::Pair(OnionPair::new(key_obj, value_obj).into()))
                 })
@@ -130,7 +130,7 @@ fn json_parse(
     };
 
     json_string_obj.weak().with_data(|data| match data {
-        OnionObject::String(s) => parse_json(s),
+        OnionObject::StringValue(s) => parse_json(s),
         _ => Err(RuntimeError::InvalidType(
             "Argument 'json_string' must be a string".into(),
         )),
@@ -150,7 +150,7 @@ fn json_stringify(
     };
 
     let json_str = stringify_json(object_to_stringify.weak().clone())?;
-    Ok(OnionObject::String(json_str.into()).stabilize())
+    Ok(OnionObject::StringValue(json_str.into()).stabilize())
 }
 
 fn json_stringify_pretty(
@@ -166,7 +166,7 @@ fn json_stringify_pretty(
     };
 
     let json_str = stringify_json_pretty(object_to_stringify.weak().clone())?;
-    Ok(OnionObject::String(json_str.into()).stabilize())
+    Ok(OnionObject::StringValue(json_str.into()).stabilize())
 }
 pub fn build_module() -> OnionStaticObject {
     let mut module = IndexMap::new();

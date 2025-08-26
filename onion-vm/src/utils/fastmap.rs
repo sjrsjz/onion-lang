@@ -1,4 +1,3 @@
-
 //! Onion 高性能键池与映射（FastMap）模块。
 //!
 //! 提供高效的键池（OnionKeyPool）与稀疏映射（OnionFastMap）实现，
@@ -13,7 +12,6 @@
 use std::{hash::Hash, sync::Arc};
 
 use rustc_hash::FxHashMap;
-
 
 /// Onion 键池。
 ///
@@ -54,7 +52,6 @@ impl<K: PartialEq + Eq + Hash + Clone> OnionKeyPool<K> {
         &self.key_to_index
     }
 }
-
 
 /// Onion 高性能稀疏映射。
 ///
@@ -159,6 +156,16 @@ impl<K: PartialEq + Eq + Hash + Clone, V> OnionFastMap<K, V> {
             .iter()
             .rfind(|(id, _)| *id == target_index)
             .map(|(_, v)| v)
+    }
+
+    pub fn keys(&self) -> Vec<&K> {
+        let mut keys = Vec::new();
+        for (id, _) in &self.pairs {
+            if let Some(key) = self.pool.keys().get(*id) {
+                keys.push(key);
+            }
+        }
+        keys
     }
 }
 

@@ -109,7 +109,7 @@ impl Runnable for Mapping {
                                 )?);
                                 Ok(StepResult::NewRunnable(runnable))
                             }
-                            OnionObject::Boolean(false) => Ok(StepResult::Continue),
+                            OnionObject::BooleanValue(false) => Ok(StepResult::Continue),
                             _ => {
                                 self.collected.push(element_clone.stabilize());
                                 Ok(StepResult::Continue)

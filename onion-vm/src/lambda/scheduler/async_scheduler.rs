@@ -9,7 +9,7 @@ use crate::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
     types::{
         async_handle::OnionAsyncHandle,
-        object::{GCArcStorage, OnionObjectCell, OnionObjectExt},
+        object::{GCArcStorage, OnionObjectCell, OnionObjectProtocol},
     },
     unwrap_step_result,
 };

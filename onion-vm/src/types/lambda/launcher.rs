@@ -192,7 +192,7 @@ impl Runnable for OnionLambdaRunnableLauncher {
         let mut index = self.current_argument_index;
         while index < self.lambda_ref.get_flatten_param_keys().len() {
             match &self.lambda_ref.get_flatten_param_constraints()[index] {
-                OnionObject::Boolean(v) => {
+                OnionObject::BooleanValue(v) => {
                     if !*v {
                         self.current_argument_index = index + 1;
                         return StepResult::Error(RuntimeError::InvalidOperation(

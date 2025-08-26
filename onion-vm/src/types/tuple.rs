@@ -16,7 +16,14 @@ use arc_gc::{
     traceable::GCTraceable,
 };
 
-use crate::lambda::runnable::RuntimeError;
+use crate::{
+    lambda::runnable::{RuntimeError, StepResult},
+    types::{
+        integer_value::OnionIntegerValue,
+        object::{OnionObjectProtocol, OnionObjectProtocolStatic},
+        undefined::OnionUndefined,
+    },
+};
 
 use super::object::{OnionObject, OnionObjectCell, OnionStaticObject};
 
@@ -157,9 +164,7 @@ impl OnionTuple {
     /// # 返回
     /// 元组长度的静态整数对象
     pub fn len(&self) -> Result<OnionStaticObject, RuntimeError> {
-        Ok(OnionStaticObject::new(OnionObject::Integer(
-            self.elements.len() as i64,
-        )))
+        Ok(OnionIntegerValue::new_static(self.elements.len() as i64))
     }
 
     /// 按索引访问元组元素。
@@ -206,7 +211,126 @@ impl OnionTuple {
         let borrowed = &self.elements[index as usize];
         f(borrowed)
     }
+}
 
+impl OnionObjectProtocol for OnionTuple {
+    fn binary_add(&self, other: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
+        match other {
+            OnionObject::Tuple(other_tuple) => {
+                let new_elements: Arc<[OnionObject]> = self
+                    .elements
+                    .iter()
+                    .chain(other_tuple.elements.iter())
+                    .cloned()
+                    .collect();
+                Ok(OnionStaticObject::new(OnionObject::Tuple(
+                    OnionTuple {
+                        elements: new_elements,
+                    }
+                    .into(),
+                )))
+            }
+            _ => Ok(OnionUndefined::new_static(Some(&format!(
+                "Cannot add tuple with {:?}",
+                other
+            )))),
+        }
+    }
+
+    fn apply(
+        &self,
+        value: &OnionObject,
+    ) -> Result<Result<StepResult, OnionStaticObject>, RuntimeError> {
+        match value {
+            OnionObject::IntegerValue(i) => {
+                let idx = i.value();
+                let len = self.elements.len();
+
+                if len == 0 {
+                    return Err(RuntimeError::InvalidOperation(
+                        format!("Index {} out of bounds for empty Tuple", idx,).into(),
+                    ));
+                }
+
+                let wrapped_idx = ((idx % len as i64) + len as i64) % len as i64;
+
+                Ok(Err(self.elements[wrapped_idx as usize].stabilize()))
+            }
+            OnionObject::Range(range) => {
+                let start = range.start();
+                let end = range.end();
+                let len = self.elements.len();
+                if start < 0 || end < 0 || start >= len as i64 || end >= len as i64 {
+                    return Err(RuntimeError::InvalidOperation(
+                        format!("Range {}..{} out of bounds for Tuple", start, end).into(),
+                    ));
+                }
+
+                Ok(Err(OnionObject::Tuple(
+                    OnionTuple {
+                        elements: self.elements[start as usize..end as usize].into(),
+                    }
+                    .into(),
+                )
+                .stabilize()))
+            }
+            _ => Err(RuntimeError::InvalidOperation(
+                format!("Cannot apply {} to Tuple", value.repr(&vec![])?).into(),
+            )),
+        }
+    }
+
+    fn contains(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
+        for element in self.elements.as_ref() {
+            if element.equals(other)? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    fn equals(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
+        match other {
+            OnionObject::Tuple(other_tuple) => {
+                if self.elements.len() != other_tuple.elements.len() {
+                    return Ok(false);
+                }
+                for (a, b) in self.elements.iter().zip(other_tuple.elements.as_ref()) {
+                    if a.equals(b)? {
+                        return Ok(false);
+                    }
+                }
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn upgrade(&self, collected: &mut Vec<GCArc<OnionObjectCell>>) {
+        self.elements.iter().for_each(|e| e.upgrade(collected));
+    }
+
+    fn repr(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+        let mut repr = String::new();
+        repr.push('(');
+        for element in self.elements.iter() {
+            repr.push_str(&element.repr(ptrs)?);
+            repr.push_str(", ");
+        }
+        repr.push(')');
+        Ok(repr)
+    }
+
+    fn type_of(&self) -> Result<String, RuntimeError> {
+        todo!()
+    }
+}
+
+impl OnionObjectProtocolStatic for OnionTuple {
     /// 按属性名查找元组中的键值对元素。
     ///
     /// # 参数
@@ -216,7 +340,13 @@ impl OnionTuple {
     /// # 返回
     /// - `Ok(R)`: 查找成功，返回处理函数结果
     /// - `Err(RuntimeError)`: 未找到属性
-    pub fn with_attribute<F, R>(&self, key: &OnionObject, f: &F) -> Result<R, RuntimeError>
+
+    fn with_attribute<F, R>(
+        &self,
+        _self_object: &OnionObject,
+        key: &OnionObject,
+        f: &F,
+    ) -> Result<R, RuntimeError>
     where
         F: Fn(&OnionObject) -> Result<R, RuntimeError>,
     {
@@ -233,70 +363,5 @@ impl OnionTuple {
         Err(RuntimeError::InvalidOperation(
             format!("Attribute {:?} not found in tuple", key).into(),
         ))
-    }
-
-    /// 元组拼接（二元加法）。
-    ///
-    /// # 参数
-    /// - `other`: 另一个元组对象
-    ///
-    /// # 返回
-    /// 拼接后的新元组对象
-    pub fn binary_add(&self, other: &OnionObject) -> Result<OnionStaticObject, RuntimeError> {
-        match other {
-            OnionObject::Tuple(other_tuple) => {
-                let new_elements: Arc<[OnionObject]> = self
-                    .elements
-                    .iter()
-                    .chain(other_tuple.elements.iter())
-                    .cloned()
-                    .collect();
-                Ok(OnionStaticObject::new(OnionObject::Tuple(
-                    OnionTuple {
-                        elements: new_elements,
-                    }
-                    .into(),
-                )))
-            }
-            _ => Ok(OnionStaticObject::new(OnionObject::Undefined(Some(
-                format!("Cannot add tuple with {:?}", other).into(),
-            )))),
-        }
-    }
-
-    /// 判断元组是否包含指定对象。
-    ///
-    /// # 参数
-    /// - `other`: 要查找的对象
-    ///
-    /// # 返回
-    /// - `true`: 包含
-    /// - `false`: 不包含
-    pub fn contains(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
-        for element in self.elements.as_ref() {
-            if element.equals(other)? {
-                return Ok(true);
-            }
-        }
-        Ok(false)
-    }
-}
-
-impl OnionTuple {
-    pub fn equals(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
-        match other {
-            OnionObject::Tuple(other_tuple) => {
-                if self.elements.len() != other_tuple.elements.len() {
-                    return Ok(false);
-                }
-                for (a, b) in self.elements.iter().zip(other_tuple.elements.as_ref()) {
-                    if a.equals(b)? {
-                        return Ok(false);
-                    }
-                }
-                Ok(true)
-            }
-            _ => Ok(false),
-        }
     }
 }

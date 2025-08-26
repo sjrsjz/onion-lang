@@ -10,8 +10,10 @@ use arc_gc::{arc::GCArc, traceable::GCTraceable};
 use crate::{
     lambda::runnable::RuntimeError,
     types::{
+        boolean_value::OnionBooleanValue,
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         pair::OnionPair,
+        string_value::OnionStringValue,
         tuple::OnionTuple,
     },
 };
@@ -83,12 +85,18 @@ impl Display for LambdaParameter {
 impl LambdaParameter {
     /// 创建 top 参数（约束为 true，顶类型）。
     pub fn top(key: &str) -> Self {
-        Self::Single((key.into(), OnionObject::Boolean(true)))
+        Self::Single((
+            key.into(),
+            OnionObject::BooleanValue(OnionBooleanValue::new(true)),
+        ))
     }
 
     /// 创建 bottom 参数（约束为 false，底类型）。
     pub fn bottom(key: &str) -> Self {
-        Self::Single((key.into(), OnionObject::Boolean(false)))
+        Self::Single((
+            key.into(),
+            OnionObject::BooleanValue(OnionBooleanValue::new(false)),
+        ))
     }
 }
 
@@ -198,7 +206,11 @@ impl LambdaParameter {
         fn inner(param: &LambdaParameter) -> OnionObject {
             match param {
                 LambdaParameter::Single((key, obj)) => OnionObject::Pair(
-                    OnionPair::new(OnionObject::String(key.clone().into()), obj.clone()).into(),
+                    OnionPair::new(
+                        OnionObject::StringValue(OnionStringValue::new(key)),
+                        obj.clone(),
+                    )
+                    .into(),
                 ),
                 LambdaParameter::Multiple(params) => {
                     let mut pairs = vec![];
@@ -226,7 +238,7 @@ impl LambdaParameter {
             match obj {
                 OnionObject::Pair(pair) => {
                     let key = match pair.get_key() {
-                        OnionObject::String(s) => s.as_ref(),
+                        OnionObject::StringValue(s) => s.value(),
                         _ => {
                             return Err(RuntimeError::InvalidType(
                                 format!("Expected string key, found: {:?}", obj).into(),
@@ -243,11 +255,11 @@ impl LambdaParameter {
                     }
                     Ok(LambdaParameter::Multiple(params.into_boxed_slice()))
                 }
-                OnionObject::String(s) => {
+                OnionObject::StringValue(s) => {
                     // 处理单个字符串参数
                     Ok(LambdaParameter::Single((
-                        Box::from(s.as_ref()),
-                        OnionObject::Boolean(true),
+                        Box::from(s.value()),
+                        OnionObject::BooleanValue(OnionBooleanValue::new(true)),
                     )))
                 }
                 _ => Err(RuntimeError::InvalidType(

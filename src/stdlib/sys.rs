@@ -28,7 +28,7 @@ fn get_string_arg<'a>(
         )
     })?;
     match obj.weak() {
-        OnionObject::String(s) => Ok(s.as_ref()),
+        OnionObject::StringValue(s) => Ok(s.as_ref()),
         _ => Err(RuntimeError::InvalidType(
             format!("Argument '{name}' must be a string")
                 .to_string()
@@ -50,7 +50,7 @@ fn get_integer_arg(
         )
     })?;
     match obj.weak() {
-        OnionObject::Integer(i) => Ok(*i),
+        OnionObject::IntegerValue(i) => Ok(*i),
         _ => Err(RuntimeError::InvalidType(
             format!("Argument '{name}' must be an integer")
                 .to_string()
@@ -65,7 +65,7 @@ fn argv(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let args: Vec<_> = env::args()
-        .map(|arg| OnionObject::String(arg.into()))
+        .map(|arg| OnionObject::StringValue(arg.into()))
         .collect();
     Ok(OnionObject::Tuple(OnionTuple::new(args).into()).stabilize())
 }
@@ -77,7 +77,7 @@ fn getenv(
 ) -> Result<OnionStaticObject, RuntimeError> {
     let key_str = get_string_arg(argument, "key")?;
     match env::var(key_str) {
-        Ok(value) => Ok(OnionObject::String(value.into()).stabilize()),
+        Ok(value) => Ok(OnionObject::StringValue(value.into()).stabilize()),
         Err(_) => Ok(OnionObject::Null.stabilize()),
     }
 }
@@ -110,8 +110,8 @@ fn environ(
 ) -> Result<OnionStaticObject, RuntimeError> {
     let env_vars: Vec<_> = env::vars()
         .map(|(key, value)| {
-            let key_obj = OnionObject::String(key.into());
-            let value_obj = OnionObject::String(value.into());
+            let key_obj = OnionObject::StringValue(key.into());
+            let value_obj = OnionObject::StringValue(value.into());
             OnionObject::Pair(OnionPair::new(key_obj, value_obj).into())
         })
         .collect();
@@ -124,7 +124,7 @@ fn getcwd(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     match env::current_dir() {
-        Ok(path) => Ok(OnionObject::String(path.to_string_lossy().into()).stabilize()),
+        Ok(path) => Ok(OnionObject::StringValue(path.to_string_lossy().into()).stabilize()),
         Err(e) => Err(RuntimeError::DetailedError(
             format!("Failed to get current directory: {e}").into(),
         )),
@@ -154,7 +154,7 @@ fn platform(
     } else {
         "unknown"
     };
-    Ok(OnionObject::String(platform.into()).stabilize())
+    Ok(OnionObject::StringValue(platform.into()).stabilize())
 }
 
 /// 获取系统架构信息
@@ -173,7 +173,7 @@ fn arch(
     } else {
         "unknown"
     };
-    Ok(OnionObject::String(arch.into()).stabilize())
+    Ok(OnionObject::StringValue(arch.into()).stabilize())
 }
 
 /// 获取程序执行路径
@@ -182,7 +182,7 @@ fn executable(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     match env::current_exe() {
-        Ok(path) => Ok(OnionObject::String(path.to_string_lossy().into()).stabilize()),
+        Ok(path) => Ok(OnionObject::StringValue(path.to_string_lossy().into()).stabilize()),
         Err(e) => Err(RuntimeError::DetailedError(
             format!("Failed to get executable path: {e}").into(),
         )),

@@ -77,32 +77,26 @@ use crate::{
     },
     types::{
         async_handle::OnionAsyncHandle,
-        lambda::{
-            definition::LambdaType,
-            launcher::OnionLambdaRunnableLauncher,
-            native::{
-                native_bool_converter, native_bytes_converter, native_elements_method,
-                native_float_converter, native_int_converter, native_length_method,
-                native_string_converter, wrap_native_function,
-            },
-            parameter::LambdaParameter,
-        },
+        boolean_value::OnionBooleanValue,
+        bytes_value::OnionBytesValue,
+        float_value::OnionFloatValue,
+        instruction_package::OnionInstructionPackage,
+        integer_value::OnionIntegerValue,
+        lambda::{definition::LambdaType, launcher::OnionLambdaRunnableLauncher},
+        null::OnionNull,
+        range_value::OnionRange,
+        string_value::OnionStringValue,
+        undefined::OnionUndefined,
     },
-    utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
 use arc_gc::{
     arc::{GCArc, GCArcWeak},
     gc::GC,
     traceable::GCTraceable,
 };
-use base64::{Engine as _, engine::general_purpose};
 
 use super::{
-    lambda::{
-        definition::OnionLambdaDefinition, vm_instructions::instruction_set::VMInstructionPackage,
-    },
-    lazy_set::OnionLazySet,
-    pair::OnionPair,
+    lambda::definition::OnionLambdaDefinition, lazy_set::OnionLazySet, pair::OnionPair,
     tuple::OnionTuple,
 };
 
@@ -207,7 +201,12 @@ impl OnionObjectCell {
     /// - `key`: 属性键对象
     /// - `f`: 处理属性值的闭包
     #[inline(always)]
-    pub fn with_attribute<T, F>(&self, key: &OnionObject, f: &F) -> Result<T, RuntimeError>
+    pub fn with_attribute<T, F>(
+        &self,
+        self_object: &OnionObject,
+        key: &OnionObject,
+        f: &F,
+    ) -> Result<T, RuntimeError>
     where
         F: Fn(&OnionObject) -> Result<T, RuntimeError>,
     {
@@ -220,7 +219,7 @@ impl OnionObjectCell {
                         .into(),
                 )
             })?
-            .with_attribute(key, f)
+            .with_attribute(self_object, key, f)
     }
 
     /// 升级对象的弱引用为强引用。
@@ -371,29 +370,29 @@ pub enum OnionObject {
     // So all types defined in OnionObject do not implement 'Clone', because deep cloning an object is volition of the immutability principle.
 
     // immutable basic types
-    Integer(i64),
-    Float(f64),
-    String(Arc<str>),
-    Bytes(Arc<[u8]>),
-    Boolean(bool),
-    Range(i64, i64),
-    Null,
-    Undefined(Option<Arc<str>>),
-    InstructionPackage(Arc<VMInstructionPackage>),
+    IntegerValue(OnionIntegerValue),
+    FloatValue(OnionFloatValue),
+    StringValue(OnionStringValue),
+    BytesValue(OnionBytesValue),
+    BooleanValue(OnionBooleanValue),
+    Range(OnionRange),
+    Null(OnionNull),
+    Undefined(OnionUndefined),
+    InstructionPackage(OnionInstructionPackage),
 
     // immutable container types
-    Tuple(OnionTuple), // Arc<[OnionObject]> is used inside OnionTuple
-    Pair(Arc<OnionPair>),
-    LazySet(Arc<OnionLazySet>),
-    Lambda((Arc<OnionLambdaDefinition>, Arc<OnionObject>)), // (definition, self_object)
-    Custom(Arc<dyn OnionObjectExt>),
+    Tuple(OnionTuple),
+    Pair(OnionPair),
+    LazySet(OnionLazySet),
+    Lambda(OnionLambdaDefinition),
+    Custom(Arc<dyn OnionObjectProtocolAny>),
 
     // mutable? types, DO NOT USE THIS TYPE DIRECTLY, use 'mutablize' instead
     // 'Mut' is just a container for a weak reference to an OnionObjectCell,
     Mut(GCArcWeak<OnionObjectCell>),
 }
 
-/// Onion 对象扩展 trait。
+/// Onion 对象 trait。
 ///
 /// 定义了所有自定义对象类型必须实现的接口，提供完整的对象行为规范。
 /// 支持类型内省、GC 管理、类型转换、运算操作等功能。
@@ -404,9 +403,7 @@ pub enum OnionObject {
 /// - `as_any()`: 类型向下转换支持
 /// - `upgrade()`: GC 弱引用升级
 ///
-/// ## 基础类型转换
-/// - `to_integer()`, `to_float()`, `to_string()` 等
-/// - `to_boolean()`: 布尔值转换
+/// ## 基础类型操作
 /// - `repr()`: 调试表示
 /// - `type_of()`: 类型名称
 ///
@@ -445,49 +442,19 @@ pub enum OnionObject {
 /// # 错误处理
 /// 大部分方法默认返回 `InvalidType` 或 `InvalidOperation` 错误，
 /// 具体类型应该重写相关方法提供正确的实现。
-pub trait OnionObjectExt: GCTraceable<OnionObjectCell> + Debug + Send + Sync + 'static {
+pub trait OnionObjectProtocol:
+    GCTraceable<OnionObjectCell> + Debug + Send + Sync + 'static
+{
     // Type introspection for downcasting
     fn as_any(&self) -> &dyn std::any::Any;
 
     // GC and memory management
     fn upgrade(&self, collected: &mut Vec<GCArc<OnionObjectCell>>);
 
-    // Basic type conversions
-    fn to_integer(&self) -> Result<i64, RuntimeError> {
-        Err(RuntimeError::InvalidType(
-            format!("Cannot convert {:?} to Integer", self).into(),
-        ))
-    }
-    fn to_float(&self) -> Result<f64, RuntimeError> {
-        Err(RuntimeError::InvalidType(
-            format!("Cannot convert {:?} to Float", self).into(),
-        ))
-    }
+    // Debug and type information
     #[allow(unused_variables)]
-    fn to_string(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
-        Err(RuntimeError::InvalidType(
-            format!("Cannot convert {:?} to String", self).into(),
-        ))
-    }
-    fn to_bytes(&self) -> Result<Box<[u8]>, RuntimeError> {
-        Err(RuntimeError::InvalidType(
-            format!("Cannot convert {:?} to Bytes", self).into(),
-        ))
-    }
-    fn to_boolean(&self) -> Result<bool, RuntimeError> {
-        Err(RuntimeError::InvalidType(
-            format!("Cannot convert {:?} to Boolean", self).into(),
-        ))
-    }
-    #[allow(unused_variables)]
-    fn repr(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
-        Ok(format!("{:?}", self))
-    }
-    fn type_of(&self) -> Result<String, RuntimeError> {
-        Err(RuntimeError::InvalidType(
-            format!("Cannot get type of {:?}", self).into(),
-        ))
-    }
+    fn repr(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError>;
+    fn type_of(&self) -> Result<String, RuntimeError>;
 
     // Container operations
     fn len(&self) -> Result<OnionStaticObject, RuntimeError> {
@@ -500,6 +467,8 @@ pub trait OnionObjectExt: GCTraceable<OnionObjectCell> + Debug + Send + Sync + '
             format!("contains() not supported for {:?} and {:?}", self, other).into(),
         ))
     }
+
+    // f x or f(x) or f[x]
     fn apply(
         &self,
         value: &OnionObject,
@@ -522,20 +491,6 @@ pub trait OnionObjectExt: GCTraceable<OnionObjectCell> + Debug + Send + Sync + '
     fn value_of(&self) -> Result<OnionStaticObject, RuntimeError> {
         Err(RuntimeError::InvalidOperation(
             format!("value_of() not supported for {:?}", self).into(),
-        ))
-    }
-    #[allow(unused_variables)]
-    fn with_attribute(
-        &self,
-        key: &OnionObject,
-        f: &mut dyn FnMut(&OnionObject) -> Result<(), RuntimeError>,
-    ) -> Result<(), RuntimeError> {
-        Err(RuntimeError::InvalidOperation(
-            format!(
-                "with_attribute() not supported for {:?} with key {:?}",
-                self, key
-            )
-            .into(),
         ))
     }
 
@@ -636,6 +591,45 @@ pub trait OnionObjectExt: GCTraceable<OnionObjectCell> + Debug + Send + Sync + '
     }
 }
 
+pub trait OnionObjectProtocolStatic: OnionObjectProtocol {
+    #[allow(unused_variables)]
+    fn with_attribute<F, R>(
+        &self,
+        self_object: &OnionObject,
+        key: &OnionObject,
+        f: &F,
+    ) -> Result<R, RuntimeError>
+    where
+        F: Fn(&OnionObject) -> Result<R, RuntimeError>,
+    {
+        Err(RuntimeError::InvalidOperation(
+            format!(
+                "with_attribute() not supported for {:?} with key {:?}",
+                self, key
+            )
+            .into(),
+        ))
+    }
+}
+
+pub trait OnionObjectProtocolAny: OnionObjectProtocol {
+    #[allow(unused_variables)]
+    fn with_attribute(
+        &self,
+        self_object: &OnionObject,
+        key: &OnionObject,
+        f: &mut dyn FnMut(&OnionObject) -> Result<(), RuntimeError>,
+    ) -> Result<(), RuntimeError> {
+        Err(RuntimeError::InvalidOperation(
+            format!(
+                "with_attribute() not supported for {:?} with key {:?}",
+                self, key
+            )
+            .into(),
+        ))
+    }
+}
+
 impl Debug for OnionObject {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // 使用 repr
@@ -658,12 +652,20 @@ impl GCTraceable<OnionObjectCell> for OnionObject {
             OnionObject::Pair(pair) => pair.collect(queue),
             OnionObject::LazySet(lazy_set) => lazy_set.collect(queue),
             OnionObject::Lambda(lambda) => {
-                lambda.0.collect(queue);
-                lambda.1.collect(queue);
+                lambda.collect(queue);
             }
             OnionObject::Custom(custom) => custom.collect(queue),
-
-            _ => {}
+            OnionObject::IntegerValue(integer_value) => integer_value.collect(queue),
+            OnionObject::FloatValue(float_value) => float_value.collect(queue),
+            OnionObject::StringValue(string_value) => string_value.collect(queue),
+            OnionObject::BytesValue(bytes_value) => bytes_value.collect(queue),
+            OnionObject::BooleanValue(boolean_value) => boolean_value.collect(queue),
+            OnionObject::Range(range) => range.collect(queue),
+            OnionObject::Null(null_value) => null_value.collect(queue),
+            OnionObject::Undefined(undefined_value) => undefined_value.collect(queue),
+            OnionObject::InstructionPackage(vminstruction_package) => {
+                vminstruction_package.collect(queue)
+            }
         }
     }
 }
@@ -685,11 +687,20 @@ impl OnionObject {
             OnionObject::Pair(pair) => pair.upgrade(collected),
             OnionObject::LazySet(lazy_set) => lazy_set.upgrade(collected),
             OnionObject::Lambda(lambda) => {
-                lambda.0.upgrade(collected);
-                lambda.1.upgrade(collected);
+                lambda.upgrade(collected);
             }
             OnionObject::Custom(custom) => custom.upgrade(collected),
-            _ => {}
+            OnionObject::IntegerValue(integer_value) => integer_value.upgrade(collected),
+            OnionObject::FloatValue(float_value) => float_value.upgrade(collected),
+            OnionObject::StringValue(string_value) => string_value.upgrade(collected),
+            OnionObject::BytesValue(bytes_value) => bytes_value.upgrade(collected),
+            OnionObject::BooleanValue(boolean_value) => boolean_value.upgrade(collected),
+            OnionObject::Range(range) => range.upgrade(collected),
+            OnionObject::Null(null_value) => null_value.upgrade(collected),
+            OnionObject::Undefined(undefined_value) => undefined_value.upgrade(collected),
+            OnionObject::InstructionPackage(vminstruction_package) => {
+                vminstruction_package.upgrade(collected)
+            }
         }
     }
 
@@ -849,25 +860,23 @@ impl OnionObject {
     pub fn equals(&self, other: &Self) -> Result<bool, RuntimeError> {
         self.with_data(|left| {
             other.with_data(|right| {
-                match (left, right) {
-                    (OnionObject::Integer(i1), OnionObject::Integer(i2)) => Ok(i1 == i2),
-                    (OnionObject::Float(f1), OnionObject::Float(f2)) => Ok(f1 == f2),
-                    (OnionObject::Integer(i1), OnionObject::Float(f2)) => Ok(*i1 as f64 == *f2),
-                    (OnionObject::Float(f1), OnionObject::Integer(i2)) => Ok(*f1 == *i2 as f64),
-                    (OnionObject::String(s1), OnionObject::String(s2)) => Ok(s1 == s2),
-                    (OnionObject::Bytes(b1), OnionObject::Bytes(b2)) => Ok(b1 == b2),
-                    (OnionObject::Boolean(b1), OnionObject::Boolean(b2)) => Ok(b1 == b2),
-                    (OnionObject::Range(start1, end1), OnionObject::Range(start2, end2)) => {
-                        Ok(start1 == start2 && end1 == end2)
-                    }
-                    (OnionObject::Null, OnionObject::Null) => Ok(true),
-                    (OnionObject::Undefined(_), OnionObject::Undefined(_)) => Ok(true),
-                    (OnionObject::Tuple(t1), _) => t1.equals(other),
-                    (OnionObject::Pair(p1), _) => p1.equals(other),
-                    (OnionObject::Custom(c1), _) => c1.equals(other),
-
-                    // 理论上Mut类型不应该出现在这里
-                    _ => Ok(false),
+                // 分派
+                match left {
+                    OnionObject::IntegerValue(left) => left.equals(right),
+                    OnionObject::FloatValue(left) => left.equals(right),
+                    OnionObject::StringValue(left) => left.equals(right),
+                    OnionObject::BytesValue(left) => left.equals(right),
+                    OnionObject::BooleanValue(left) => left.equals(right),
+                    OnionObject::Range(left) => left.equals(right),
+                    OnionObject::Null(left) => left.equals(right),
+                    OnionObject::Undefined(left) => left.equals(right),
+                    OnionObject::Tuple(left) => left.equals(right),
+                    OnionObject::Pair(left) => left.equals(right),
+                    OnionObject::Custom(left) => left.equals(right),
+                    OnionObject::InstructionPackage(left) => left.equals(right),
+                    OnionObject::LazySet(left) => left.equals(right),
+                    OnionObject::Lambda(left) => left.equals(right),
+                    OnionObject::Mut(_) => unreachable!(),
                 }
             })
         })
@@ -891,170 +900,49 @@ impl OnionObject {
 
     /// 获取对象的长度。
     ///
-    /// 支持多种容器类型的长度计算：
-    /// - Tuple: 元素数量
-    /// - String: 字符串长度
-    /// - Bytes: 字节数组长度
-    /// - Range: 范围大小
-    ///
     /// # 返回
     /// 包含长度值的静态整数对象
     pub fn len(&self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| match obj {
-            OnionObject::Tuple(tuple) => tuple.len(),
-            OnionObject::String(s) => {
-                Ok(OnionStaticObject::new(OnionObject::Integer(s.len() as i64)))
-            }
-            OnionObject::Bytes(b) => {
-                Ok(OnionStaticObject::new(OnionObject::Integer(b.len() as i64)))
-            }
-            OnionObject::Range(start, end) => Ok(OnionStaticObject::new(OnionObject::Integer(
-                (end - start) as i64,
-            ))),
+            OnionObject::IntegerValue(v) => v.len(),
+            OnionObject::FloatValue(v) => v.len(),
+            OnionObject::StringValue(v) => v.len(),
+            OnionObject::BytesValue(v) => v.len(),
+            OnionObject::BooleanValue(v) => v.len(),
+            OnionObject::Null(v) => v.len(),
+            OnionObject::Undefined(v) => v.len(),
+            OnionObject::Range(v) => v.len(),
+            OnionObject::Tuple(v) => v.len(),
+            OnionObject::InstructionPackage(v) => v.len(),
+            OnionObject::Pair(v) => v.len(),
+            OnionObject::LazySet(v) => v.len(),
+            OnionObject::Lambda(v) => v.len(),
+
             OnionObject::Custom(custom) => custom.len(),
-            _ => Err(RuntimeError::InvalidOperation(
-                format!("len() not supported for {:?}", self).into(),
-            )),
+            OnionObject::Mut(_) => unreachable!(),
         })
     }
 
     pub fn contains(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
         self.with_data(|obj| {
-            other.with_data(|other_obj| match (obj, other_obj) {
-                (OnionObject::Tuple(tuple), _) => tuple.contains(other_obj),
-                (OnionObject::String(s), OnionObject::String(other_s)) => {
-                    Ok(s.contains(other_s.as_ref()))
-                }
-                (OnionObject::Bytes(b), OnionObject::Bytes(other_b)) => Ok(b
-                    .windows(other_b.len())
-                    .any(|window| window.eq(other_b.as_ref()))),
-                (OnionObject::Range(l, r), OnionObject::Integer(i)) => Ok(*i >= *l && *i < *r),
-                (OnionObject::Range(start, end), OnionObject::Float(f)) => {
-                    Ok(*f >= *start as f64 && *f < *end as f64)
-                }
-                (OnionObject::Range(start, end), OnionObject::Range(other_start, other_end)) => {
-                    Ok(*other_start >= *start && *other_end <= *end)
-                }
-                (OnionObject::Custom(custom), _) => custom.contains(other_obj),
-                _ => Err(RuntimeError::InvalidOperation(
-                    format!("contains() not supported for {:?}", obj).into(),
-                )),
+            other.with_data(|other_obj| match obj {
+                // 分派
+                OnionObject::IntegerValue(left) => left.contains(other_obj),
+                OnionObject::FloatValue(left) => left.contains(other_obj),
+                OnionObject::StringValue(left) => left.contains(other_obj),
+                OnionObject::BytesValue(left) => left.contains(other_obj),
+                OnionObject::BooleanValue(left) => left.contains(other_obj),
+                OnionObject::Range(left) => left.contains(other_obj),
+                OnionObject::Null(left) => left.contains(other_obj),
+                OnionObject::Undefined(left) => left.contains(other_obj),
+                OnionObject::InstructionPackage(left) => left.contains(other_obj),
+                OnionObject::LazySet(left) => left.contains(other_obj),
+                OnionObject::Lambda(left) => left.contains(other_obj),
+                OnionObject::Tuple(left) => left.contains(other_obj),
+                OnionObject::Pair(left) => left.contains(other_obj),
+                OnionObject::Custom(left) => left.contains(other_obj),
+                OnionObject::Mut(_) => unreachable!(),
             })
-        })
-    }
-
-    /// 将对象转换为整数。
-    ///
-    /// 支持多种类型的整数转换：
-    /// - Integer: 直接返回
-    /// - Float: 截断为整数
-    /// - String: 尝试解析为整数
-    /// - Boolean: true=1, false=0
-    /// - Custom: 调用自定义转换逻辑
-    ///
-    /// # 返回
-    /// 转换后的整数值
-    ///
-    /// # 错误
-    /// - `InvalidType`: 无法转换的类型或格式错误
-    pub fn to_integer(&self) -> Result<i64, RuntimeError> {
-        self.with_data(|obj| match obj {
-            OnionObject::Integer(i) => Ok(*i),
-            OnionObject::Float(f) => Ok(*f as i64),
-            OnionObject::String(s) => s
-                .parse::<i64>()
-                .map_err(|e| RuntimeError::InvalidType(e.to_string().into())),
-            OnionObject::Boolean(b) => Ok(if *b { 1 } else { 0 }),
-            OnionObject::Custom(custom) => custom.to_integer(),
-            _ => Err(RuntimeError::InvalidType(
-                format!("Cannot convert {:?} to Integer", obj).into(),
-            )),
-        })
-    }
-    pub fn to_float(&self) -> Result<f64, RuntimeError> {
-        self.with_data(|obj| match obj {
-            OnionObject::Integer(i) => Ok(*i as f64),
-            OnionObject::Float(f) => Ok(*f),
-            OnionObject::String(s) => s
-                .parse::<f64>()
-                .map_err(|e| RuntimeError::InvalidType(e.to_string().into())),
-            OnionObject::Boolean(b) => Ok(if *b { 1.0 } else { 0.0 }),
-            OnionObject::Custom(custom) => custom.to_float(),
-            _ => Err(RuntimeError::InvalidType(
-                format!("Cannot convert {:?} to Float", obj).into(),
-            )),
-        })
-    }
-
-    pub fn to_string(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
-        self.with_data(|obj| {
-            for ptr in ptrs {
-                if addr_eq(obj, *ptr) {
-                    return Ok("...".to_string());
-                }
-            }
-            let mut new_ptrs = ptrs.clone();
-            new_ptrs.push(obj);
-            match obj {
-                OnionObject::Integer(i) => Ok(i.to_string()),
-                OnionObject::Float(f) => Ok(f.to_string()),
-                OnionObject::String(s) => Ok(s.to_string()),
-                OnionObject::Bytes(b) => Ok(format!(
-                    "$\"{}\"",
-                    general_purpose::STANDARD.encode(b.as_ref())
-                )),
-                OnionObject::Boolean(b) => Ok(if *b {
-                    "true".to_string()
-                } else {
-                    "false".to_string()
-                }),
-                OnionObject::Null => Ok("null".to_string()),
-                OnionObject::Undefined(s) => Ok(match s {
-                    Some(s) => format!("undefined({:?})", s),
-                    None => "undefined".to_string(),
-                }),
-                OnionObject::Range(start, end) => Ok(format!("{}..{}", start, end)),
-                OnionObject::Tuple(tuple) => match tuple.get_elements().len() {
-                    0 => Ok("()".to_string()),
-                    1 => {
-                        let first = tuple.get_elements().first().unwrap();
-                        Ok(format!("({},)", first.repr(&new_ptrs)?))
-                    }
-                    _ => {
-                        let elements: Result<Vec<String>, RuntimeError> = tuple
-                            .get_elements()
-                            .iter()
-                            .map(|e| e.repr(&new_ptrs))
-                            .collect();
-                        Ok(format!("({})", elements?.join(", ")))
-                    }
-                },
-                OnionObject::Pair(pair) => {
-                    let left = pair.get_key().repr(&new_ptrs)?;
-                    let right = pair.get_value().repr(&new_ptrs)?;
-                    Ok(format!("{} : {}", left, right))
-                }
-                OnionObject::LazySet(lazy_set) => {
-                    let container = lazy_set.get_container().repr(&new_ptrs)?;
-                    let filter = lazy_set.get_filter().repr(&new_ptrs)?;
-                    Ok(format!("[{} | {}]", container, filter))
-                }
-                OnionObject::InstructionPackage(_) => Ok("InstructionPackage(...)".to_string()),
-                OnionObject::Lambda(lambda) => {
-                    let body = lambda.0.get_body().to_string();
-                    Ok(format!(
-                        "{}::{} -> {}",
-                        lambda.0.get_signature(),
-                        lambda.0.get_parameter(),
-                        body
-                    ))
-                }
-                OnionObject::Custom(custom) => custom.to_string(&new_ptrs),
-                _ => {
-                    // 使用 Debug trait来处理其他类型的转换
-                    Ok(format!("{:?}", obj))
-                }
-            }
         })
     }
 
@@ -1068,384 +956,263 @@ impl OnionObject {
             let mut new_ptrs = ptrs.clone();
             new_ptrs.push(obj);
             match obj {
-                OnionObject::Integer(i) => Ok(format!("{}", i)),
-                OnionObject::Float(f) => Ok(format!("{}", f)),
-                OnionObject::String(s) => Ok(format!("{:?}", s)),
-                OnionObject::Bytes(b) => Ok(format!(
-                    "$\"{}\"",
-                    general_purpose::STANDARD.encode(b.as_ref())
-                )),
-                OnionObject::Boolean(b) => Ok(format!("{}", b)),
-                OnionObject::Null => Ok("null".to_string()),
-                OnionObject::Undefined(s) => Ok(match s {
-                    Some(s) => format!("undefined({:?})", s),
-                    None => "undefined".to_string(),
-                }),
-                OnionObject::Range(start, end) => Ok(format!("{}..{}", start, end)),
-                OnionObject::Tuple(tuple) => match tuple.get_elements().len() {
-                    0 => Ok("()".to_string()),
-                    1 => {
-                        let first = tuple.get_elements().first().unwrap();
-                        Ok(format!("({},)", first.repr(&new_ptrs)?))
-                    }
-                    _ => {
-                        let elements: Result<Vec<String>, RuntimeError> = tuple
-                            .get_elements()
-                            .iter()
-                            .map(|e| e.repr(&new_ptrs))
-                            .collect();
-                        Ok(format!("({})", elements?.join(", ")))
-                    }
-                },
-                OnionObject::Pair(pair) => {
-                    let left = pair.get_key().repr(&new_ptrs)?;
-                    let right = pair.get_value().repr(&new_ptrs)?;
-                    Ok(format!("{} : {}", left, right))
-                }
-                OnionObject::LazySet(lazy_set) => {
-                    let container = lazy_set.get_container().repr(&new_ptrs)?;
-                    let filter = lazy_set.get_filter().repr(&new_ptrs)?;
-                    Ok(format!("[{} | {}]", container, filter))
-                }
-                OnionObject::InstructionPackage(_) => Ok("InstructionPackage(...)".to_string()),
-                OnionObject::Lambda(lambda) => Ok(format!(
-                    "{}::{} -> {}",
-                    lambda.0.get_signature(),
-                    lambda.0.get_parameter(),
-                    lambda.0.get_body()
-                )),
-                OnionObject::Mut(weak) => {
-                    if let Some(strong) = weak.upgrade() {
-                        let inner_repr = strong
-                            .as_ref()
-                            .try_borrow()
-                            .map_err(|_| {
-                                RuntimeError::BorrowError(
-                                    "Failed to borrow Mut object at 'repr'".into(),
-                                )
-                            })?
-                            .repr(&new_ptrs)?;
-                        Ok(format!("mut ({})", inner_repr))
-                    } else {
-                        Ok("Mut(BrokenReference)".to_string())
-                    }
-                }
-                OnionObject::Custom(custom) => {
-                    let custom_repr = custom.repr(&new_ptrs)?;
-                    Ok(format!("Custom({})", custom_repr))
-                }
+                OnionObject::IntegerValue(v) => v.repr(&new_ptrs),
+                OnionObject::FloatValue(v) => v.repr(&new_ptrs),
+                OnionObject::StringValue(v) => v.repr(&new_ptrs),
+                OnionObject::BytesValue(v) => v.repr(&new_ptrs),
+                OnionObject::BooleanValue(v) => v.repr(&new_ptrs),
+                OnionObject::Null(v) => v.repr(&new_ptrs),
+                OnionObject::Undefined(v) => v.repr(&new_ptrs),
+                OnionObject::Range(v) => v.repr(&new_ptrs),
+                OnionObject::Tuple(v) => v.repr(&new_ptrs),
+                OnionObject::Pair(v) => v.repr(&new_ptrs),
+                OnionObject::LazySet(v) => v.repr(&new_ptrs),
+                OnionObject::InstructionPackage(v) => v.repr(&new_ptrs),
+                OnionObject::Lambda(v) => v.repr(&new_ptrs),
+                OnionObject::Custom(custom) => custom.repr(&new_ptrs),
+                OnionObject::Mut(_) => unreachable!(),
             }
-        })
-    }
-    pub fn to_bytes(&self) -> Result<Box<[u8]>, RuntimeError> {
-        self.with_data(|obj| match obj {
-            OnionObject::Integer(i) => Ok(i.to_string().into_bytes().into_boxed_slice()),
-            OnionObject::Float(f) => Ok(f.to_string().into_bytes().into_boxed_slice()),
-            OnionObject::String(s) => Ok(s.as_bytes().to_vec().into_boxed_slice()),
-            OnionObject::Bytes(b) => Ok(b.as_ref().to_vec().into_boxed_slice()),
-            OnionObject::Boolean(b) => Ok(if *b {
-                b"true".to_vec().into_boxed_slice()
-            } else {
-                b"false".to_vec().into_boxed_slice()
-            }),
-            OnionObject::Custom(custom) => custom.to_bytes(),
-            _ => Err(RuntimeError::InvalidType(
-                format!("Cannot convert {:?} to Bytes", obj).into(),
-            )),
-        })
-    }
-
-    pub fn to_boolean(&self) -> Result<bool, RuntimeError> {
-        self.with_data(|obj| match obj {
-            OnionObject::Integer(i) => Ok(*i != 0),
-            OnionObject::Float(f) => Ok(*f != 0.0),
-            OnionObject::String(s) => Ok(!s.is_empty()),
-            OnionObject::Bytes(b) => Ok(!b.is_empty()),
-            OnionObject::Boolean(b) => Ok(*b),
-            OnionObject::Null => Ok(false),
-            OnionObject::Undefined(_) => Ok(false),
-            OnionObject::Custom(custom) => custom.to_boolean(),
-            _ => Err(RuntimeError::InvalidType(
-                format!("Cannot convert {:?} to Boolean", obj).into(),
-            )),
         })
     }
 
     pub fn binary_add(&self, other: &Self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| {
-            other.with_data(|other_obj| match (obj, other_obj) {
-                (OnionObject::Integer(i1), OnionObject::Integer(i2)) => {
-                    Ok(OnionStaticObject::new(OnionObject::Integer(i1 + i2)))
-                }
-                (OnionObject::Float(f1), OnionObject::Float(f2)) => {
-                    Ok(OnionStaticObject::new(OnionObject::Float(f1 + f2)))
-                }
-                (OnionObject::Integer(i1), OnionObject::Float(f2)) => {
-                    Ok(OnionStaticObject::new(OnionObject::Float(*i1 as f64 + f2)))
-                }
-                (OnionObject::Float(f1), OnionObject::Integer(i2)) => {
-                    Ok(OnionStaticObject::new(OnionObject::Float(f1 + *i2 as f64)))
-                }
-                (OnionObject::String(s1), OnionObject::String(s2)) => Ok(OnionStaticObject::new(
-                    OnionObject::String(Arc::from(format!("{}{}", s1, s2))),
-                )),
-                (OnionObject::Bytes(b1), OnionObject::Bytes(b2)) => {
-                    let mut new_bytes = Vec::with_capacity(b1.len() + b2.len());
-                    new_bytes.extend_from_slice(b1.as_ref());
-                    new_bytes.extend_from_slice(b2.as_ref());
-                    Ok(OnionStaticObject::new(OnionObject::Bytes(Arc::from(
-                        new_bytes,
-                    ))))
-                }
-                (OnionObject::Range(start1, end1), OnionObject::Range(start2, end2)) => Ok(
-                    OnionStaticObject::new(OnionObject::Range(start1 + start2, end1 + end2)),
-                ),
-                (OnionObject::Tuple(t1), _) => t1.binary_add(other_obj),
-                (OnionObject::Custom(c1), _) => c1.binary_add(other_obj),
-                _ => Err(RuntimeError::InvalidOperation(
-                    format!(
-                        "Invalid binary add operation for {:?} and {:?}",
-                        obj, other_obj
-                    )
-                    .into(),
-                )),
+            other.with_data(|other_obj| match obj {
+                OnionObject::IntegerValue(left) => left.binary_add(other_obj),
+                OnionObject::FloatValue(left) => left.binary_add(other_obj),
+                OnionObject::StringValue(left) => left.binary_add(other_obj),
+                OnionObject::BytesValue(left) => left.binary_add(other_obj),
+                OnionObject::BooleanValue(left) => left.binary_add(other_obj),
+                OnionObject::Range(left) => left.binary_add(other_obj),
+                OnionObject::Null(left) => left.binary_add(other_obj),
+                OnionObject::Undefined(left) => left.binary_add(other_obj),
+                OnionObject::InstructionPackage(left) => left.binary_add(other_obj),
+                OnionObject::Tuple(left) => left.binary_add(other_obj),
+                OnionObject::Pair(left) => left.binary_add(other_obj),
+                OnionObject::LazySet(left) => left.binary_add(other_obj),
+                OnionObject::Lambda(left) => left.binary_add(other_obj),
+                OnionObject::Custom(left) => left.binary_add(other_obj),
+                OnionObject::Mut(_) => unreachable!(),
             })
         })
     }
 
     pub fn binary_sub(&self, other: &Self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| {
-            other.with_data(|other_obj| match (obj, other_obj) {
-                (OnionObject::Integer(i1), OnionObject::Integer(i2)) => {
-                    Ok(OnionStaticObject::new(OnionObject::Integer(i1 - i2)))
-                }
-                (OnionObject::Float(f1), OnionObject::Float(f2)) => {
-                    Ok(OnionStaticObject::new(OnionObject::Float(f1 - f2)))
-                }
-                (OnionObject::Integer(i1), OnionObject::Float(f2)) => {
-                    Ok(OnionStaticObject::new(OnionObject::Float(*i1 as f64 - f2)))
-                }
-                (OnionObject::Float(f1), OnionObject::Integer(i2)) => {
-                    Ok(OnionStaticObject::new(OnionObject::Float(f1 - *i2 as f64)))
-                }
-                (OnionObject::Custom(c1), _) => c1.binary_sub(other_obj),
-                _ => Err(RuntimeError::InvalidOperation(
-                    format!(
-                        "Invalid binary sub operation for {:?} and {:?}",
-                        obj, other_obj
-                    )
-                    .into(),
-                )),
+            other.with_data(|other_obj| match obj {
+                OnionObject::IntegerValue(left) => left.binary_sub(other_obj),
+                OnionObject::FloatValue(left) => left.binary_sub(other_obj),
+                OnionObject::StringValue(left) => left.binary_sub(other_obj),
+                OnionObject::BytesValue(left) => left.binary_sub(other_obj),
+                OnionObject::BooleanValue(left) => left.binary_sub(other_obj),
+                OnionObject::Range(left) => left.binary_sub(other_obj),
+                OnionObject::Null(left) => left.binary_sub(other_obj),
+                OnionObject::Undefined(left) => left.binary_sub(other_obj),
+                OnionObject::InstructionPackage(left) => left.binary_sub(other_obj),
+                OnionObject::Tuple(left) => left.binary_sub(other_obj),
+                OnionObject::Pair(left) => left.binary_sub(other_obj),
+                OnionObject::LazySet(left) => left.binary_sub(other_obj),
+                OnionObject::Lambda(left) => left.binary_sub(other_obj),
+                OnionObject::Custom(left) => left.binary_sub(other_obj),
+                OnionObject::Mut(_) => unreachable!(),
             })
         })
     }
 
     pub fn binary_mul(&self, other: &Self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| {
-            other.with_data(|other_obj| match (obj, other_obj) {
-                (OnionObject::Integer(i1), OnionObject::Integer(i2)) => {
-                    Ok(OnionStaticObject::new(OnionObject::Integer(i1 * i2)))
-                }
-                (OnionObject::Float(f1), OnionObject::Float(f2)) => {
-                    Ok(OnionStaticObject::new(OnionObject::Float(f1 * f2)))
-                }
-                (OnionObject::Integer(i1), OnionObject::Float(f2)) => {
-                    Ok(OnionStaticObject::new(OnionObject::Float(*i1 as f64 * f2)))
-                }
-                (OnionObject::Float(f1), OnionObject::Integer(i2)) => {
-                    Ok(OnionStaticObject::new(OnionObject::Float(f1 * *i2 as f64)))
-                }
-                (OnionObject::Custom(c1), _) => c1.binary_mul(other_obj),
-                _ => Err(RuntimeError::InvalidOperation(
-                    format!(
-                        "Invalid binary mul operation for {:?} and {:?}",
-                        obj, other_obj
-                    )
-                    .into(),
-                )),
+            other.with_data(|other_obj| match obj {
+                OnionObject::IntegerValue(left) => left.binary_mul(other_obj),
+                OnionObject::FloatValue(left) => left.binary_mul(other_obj),
+                OnionObject::StringValue(left) => left.binary_mul(other_obj),
+                OnionObject::BytesValue(left) => left.binary_mul(other_obj),
+                OnionObject::BooleanValue(left) => left.binary_mul(other_obj),
+                OnionObject::Range(left) => left.binary_mul(other_obj),
+                OnionObject::Null(left) => left.binary_mul(other_obj),
+                OnionObject::Undefined(left) => left.binary_mul(other_obj),
+                OnionObject::InstructionPackage(left) => left.binary_mul(other_obj),
+                OnionObject::Tuple(left) => left.binary_mul(other_obj),
+                OnionObject::Pair(left) => left.binary_mul(other_obj),
+                OnionObject::LazySet(left) => left.binary_mul(other_obj),
+                OnionObject::Lambda(left) => left.binary_mul(other_obj),
+                OnionObject::Custom(left) => left.binary_mul(other_obj),
+                OnionObject::Mut(_) => unreachable!(),
             })
         })
     }
 
     pub fn binary_div(&self, other: &Self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| {
-            other.with_data(|other_obj| match (obj, other_obj) {
-                (OnionObject::Integer(i1), OnionObject::Integer(i2)) => {
-                    if *i2 == 0 {
-                        return Err(RuntimeError::InvalidOperation("Division by zero".into()));
-                    }
-                    Ok(OnionStaticObject::new(OnionObject::Integer(i1 / i2)))
-                }
-                (OnionObject::Float(f1), OnionObject::Float(f2)) => {
-                    Ok(OnionStaticObject::new(OnionObject::Float(f1 / f2)))
-                }
-                (OnionObject::Integer(i1), OnionObject::Float(f2)) => {
-                    Ok(OnionStaticObject::new(OnionObject::Float(*i1 as f64 / f2)))
-                }
-                (OnionObject::Float(f1), OnionObject::Integer(i2)) => {
-                    Ok(OnionStaticObject::new(OnionObject::Float(f1 / *i2 as f64)))
-                }
-                (OnionObject::Custom(c1), _) => c1.binary_div(other_obj),
-                _ => Err(RuntimeError::InvalidOperation(
-                    format!(
-                        "Invalid binary div operation for {:?} and {:?}",
-                        obj, other_obj
-                    )
-                    .into(),
-                )),
+            other.with_data(|other_obj| match obj {
+                OnionObject::IntegerValue(left) => left.binary_div(other_obj),
+                OnionObject::FloatValue(left) => left.binary_div(other_obj),
+                OnionObject::StringValue(left) => left.binary_div(other_obj),
+                OnionObject::BytesValue(left) => left.binary_div(other_obj),
+                OnionObject::BooleanValue(left) => left.binary_div(other_obj),
+                OnionObject::Range(left) => left.binary_div(other_obj),
+                OnionObject::Null(left) => left.binary_div(other_obj),
+                OnionObject::Undefined(left) => left.binary_div(other_obj),
+                OnionObject::InstructionPackage(left) => left.binary_div(other_obj),
+                OnionObject::Tuple(left) => left.binary_div(other_obj),
+                OnionObject::Pair(left) => left.binary_div(other_obj),
+                OnionObject::LazySet(left) => left.binary_div(other_obj),
+                OnionObject::Lambda(left) => left.binary_div(other_obj),
+                OnionObject::Custom(left) => left.binary_div(other_obj),
+                OnionObject::Mut(_) => unreachable!(),
             })
         })
     }
 
     pub fn binary_mod(&self, other: &Self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| {
-            other.with_data(|other_obj| match (obj, other_obj) {
-                (OnionObject::Integer(i1), OnionObject::Integer(i2)) => {
-                    if *i2 == 0 {
-                        return Err(RuntimeError::InvalidOperation("Division by zero".into()));
-                    }
-                    Ok(OnionStaticObject::new(OnionObject::Integer(i1 % i2)))
-                }
-                (OnionObject::Float(f1), OnionObject::Float(f2)) => {
-                    Ok(OnionStaticObject::new(OnionObject::Float(f1 % f2)))
-                }
-                (OnionObject::Integer(i1), OnionObject::Float(f2)) => {
-                    Ok(OnionStaticObject::new(OnionObject::Float(*i1 as f64 % f2)))
-                }
-                (OnionObject::Float(f1), OnionObject::Integer(i2)) => {
-                    Ok(OnionStaticObject::new(OnionObject::Float(f1 % *i2 as f64)))
-                }
-                (OnionObject::Custom(c1), _) => c1.binary_mod(other_obj),
-                _ => Err(RuntimeError::InvalidOperation(
-                    format!(
-                        "Invalid binary mod operation for {:?} and {:?}",
-                        obj, other_obj
-                    )
-                    .into(),
-                )),
+            other.with_data(|other_obj| match obj {
+                OnionObject::IntegerValue(left) => left.binary_mod(other_obj),
+                OnionObject::FloatValue(left) => left.binary_mod(other_obj),
+                OnionObject::StringValue(left) => left.binary_mod(other_obj),
+                OnionObject::BytesValue(left) => left.binary_mod(other_obj),
+                OnionObject::BooleanValue(left) => left.binary_mod(other_obj),
+                OnionObject::Range(left) => left.binary_mod(other_obj),
+                OnionObject::Null(left) => left.binary_mod(other_obj),
+                OnionObject::Undefined(left) => left.binary_mod(other_obj),
+                OnionObject::InstructionPackage(left) => left.binary_mod(other_obj),
+                OnionObject::Tuple(left) => left.binary_mod(other_obj),
+                OnionObject::Pair(left) => left.binary_mod(other_obj),
+                OnionObject::LazySet(left) => left.binary_mod(other_obj),
+                OnionObject::Lambda(left) => left.binary_mod(other_obj),
+                OnionObject::Custom(left) => left.binary_mod(other_obj),
+                OnionObject::Mut(_) => unreachable!(),
             })
         })
     }
 
     pub fn binary_pow(&self, other: &Self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| {
-            other.with_data(|other_obj| match (obj, other_obj) {
-                (OnionObject::Integer(i1), OnionObject::Integer(i2)) => Ok(OnionStaticObject::new(
-                    OnionObject::Integer(i1.pow(*i2 as u32)),
-                )),
-                (OnionObject::Float(f1), OnionObject::Float(f2)) => {
-                    Ok(OnionStaticObject::new(OnionObject::Float(f1.powf(*f2))))
-                }
-                (OnionObject::Integer(i1), OnionObject::Float(f2)) => Ok(OnionStaticObject::new(
-                    OnionObject::Float((*i1 as f64).powf(*f2)),
-                )),
-                (OnionObject::Float(f1), OnionObject::Integer(i2)) => Ok(OnionStaticObject::new(
-                    OnionObject::Float(f1.powi(*i2 as i32)),
-                )),
-                (OnionObject::Custom(c1), _) => c1.binary_pow(other_obj),
-                _ => Err(RuntimeError::InvalidOperation(
-                    format!(
-                        "Invalid binary pow operation for {:?} and {:?}",
-                        obj, other_obj
-                    )
-                    .into(),
-                )),
+            other.with_data(|other_obj| match obj {
+                OnionObject::IntegerValue(left) => left.binary_pow(other_obj),
+                OnionObject::FloatValue(left) => left.binary_pow(other_obj),
+                OnionObject::StringValue(left) => left.binary_pow(other_obj),
+                OnionObject::BytesValue(left) => left.binary_pow(other_obj),
+                OnionObject::BooleanValue(left) => left.binary_pow(other_obj),
+                OnionObject::Range(left) => left.binary_pow(other_obj),
+                OnionObject::Null(left) => left.binary_pow(other_obj),
+                OnionObject::Undefined(left) => left.binary_pow(other_obj),
+                OnionObject::InstructionPackage(left) => left.binary_pow(other_obj),
+                OnionObject::Tuple(left) => left.binary_pow(other_obj),
+                OnionObject::Pair(left) => left.binary_pow(other_obj),
+                OnionObject::LazySet(left) => left.binary_pow(other_obj),
+                OnionObject::Lambda(left) => left.binary_pow(other_obj),
+                OnionObject::Custom(left) => left.binary_pow(other_obj),
+                OnionObject::Mut(_) => unreachable!(),
             })
         })
     }
 
     pub fn binary_and(&self, other: &Self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| {
-            other.with_data(|other_obj| match (obj, other_obj) {
-                (OnionObject::Integer(i1), OnionObject::Integer(i2)) => {
-                    Ok(OnionStaticObject::new(OnionObject::Integer(i1 & i2)))
-                }
-                (OnionObject::Boolean(f1), OnionObject::Boolean(f2)) => {
-                    Ok(OnionStaticObject::new(OnionObject::Boolean(*f1 && *f2)))
-                }
-                (OnionObject::Custom(c1), _) => c1.binary_and(other_obj),
-                _ => Err(RuntimeError::InvalidOperation(
-                    format!(
-                        "Invalid binary and operation for {:?} and {:?}",
-                        obj, other_obj
-                    )
-                    .into(),
-                )),
+            other.with_data(|other_obj| match obj {
+                OnionObject::IntegerValue(left) => left.binary_and(other_obj),
+                OnionObject::FloatValue(left) => left.binary_and(other_obj),
+                OnionObject::StringValue(left) => left.binary_and(other_obj),
+                OnionObject::BytesValue(left) => left.binary_and(other_obj),
+                OnionObject::BooleanValue(left) => left.binary_and(other_obj),
+                OnionObject::Range(left) => left.binary_and(other_obj),
+                OnionObject::Null(left) => left.binary_and(other_obj),
+                OnionObject::Undefined(left) => left.binary_and(other_obj),
+                OnionObject::InstructionPackage(left) => left.binary_and(other_obj),
+                OnionObject::Tuple(left) => left.binary_and(other_obj),
+                OnionObject::Pair(left) => left.binary_and(other_obj),
+                OnionObject::LazySet(left) => left.binary_and(other_obj),
+                OnionObject::Lambda(left) => left.binary_and(other_obj),
+                OnionObject::Custom(left) => left.binary_and(other_obj),
+                OnionObject::Mut(_) => unreachable!(),
             })
         })
     }
 
     pub fn binary_or(&self, other: &Self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| {
-            other.with_data(|other_obj| match (obj, other_obj) {
-                (OnionObject::Integer(i1), OnionObject::Integer(i2)) => {
-                    Ok(OnionStaticObject::new(OnionObject::Integer(i1 | i2)))
-                }
-                (OnionObject::Boolean(f1), OnionObject::Boolean(f2)) => {
-                    Ok(OnionStaticObject::new(OnionObject::Boolean(*f1 || *f2)))
-                }
-                (OnionObject::Custom(c1), _) => c1.binary_or(other_obj),
-                _ => Err(RuntimeError::InvalidOperation(
-                    format!(
-                        "Invalid binary or operation for {:?} and {:?}",
-                        obj, other_obj
-                    )
-                    .into(),
-                )),
+            other.with_data(|other_obj| match obj {
+                OnionObject::IntegerValue(left) => left.binary_or(other_obj),
+                OnionObject::FloatValue(left) => left.binary_or(other_obj),
+                OnionObject::StringValue(left) => left.binary_or(other_obj),
+                OnionObject::BytesValue(left) => left.binary_or(other_obj),
+                OnionObject::BooleanValue(left) => left.binary_or(other_obj),
+                OnionObject::Range(left) => left.binary_or(other_obj),
+                OnionObject::Null(left) => left.binary_or(other_obj),
+                OnionObject::Undefined(left) => left.binary_or(other_obj),
+                OnionObject::InstructionPackage(left) => left.binary_or(other_obj),
+                OnionObject::Tuple(left) => left.binary_or(other_obj),
+                OnionObject::Pair(left) => left.binary_or(other_obj),
+                OnionObject::LazySet(left) => left.binary_or(other_obj),
+                OnionObject::Lambda(left) => left.binary_or(other_obj),
+                OnionObject::Custom(left) => left.binary_or(other_obj),
+                OnionObject::Mut(_) => unreachable!(),
             })
         })
     }
 
     pub fn binary_xor(&self, other: &Self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| {
-            other.with_data(|other_obj| match (obj, other_obj) {
-                (OnionObject::Integer(i1), OnionObject::Integer(i2)) => {
-                    Ok(OnionStaticObject::new(OnionObject::Integer(i1 ^ i2)))
-                }
-                (OnionObject::Custom(c1), _) => c1.binary_xor(other_obj),
-                _ => Err(RuntimeError::InvalidOperation(
-                    format!(
-                        "Invalid binary xor operation for {:?} and {:?}",
-                        obj, other_obj
-                    )
-                    .into(),
-                )),
+            other.with_data(|other_obj| match obj {
+                OnionObject::IntegerValue(left) => left.binary_xor(other_obj),
+                OnionObject::FloatValue(left) => left.binary_xor(other_obj),
+                OnionObject::StringValue(left) => left.binary_xor(other_obj),
+                OnionObject::BytesValue(left) => left.binary_xor(other_obj),
+                OnionObject::BooleanValue(left) => left.binary_xor(other_obj),
+                OnionObject::Range(left) => left.binary_xor(other_obj),
+                OnionObject::Null(left) => left.binary_xor(other_obj),
+                OnionObject::Undefined(left) => left.binary_xor(other_obj),
+                OnionObject::InstructionPackage(left) => left.binary_xor(other_obj),
+                OnionObject::Tuple(left) => left.binary_xor(other_obj),
+                OnionObject::Pair(left) => left.binary_xor(other_obj),
+                OnionObject::LazySet(left) => left.binary_xor(other_obj),
+                OnionObject::Lambda(left) => left.binary_xor(other_obj),
+                OnionObject::Custom(left) => left.binary_xor(other_obj),
+                OnionObject::Mut(_) => unreachable!(),
             })
         })
     }
 
     pub fn binary_shl(&self, other: &Self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| {
-            other.with_data(|other_obj| match (obj, other_obj) {
-                (OnionObject::Integer(i1), OnionObject::Integer(i2)) => {
-                    Ok(OnionStaticObject::new(OnionObject::Integer(i1 << i2)))
-                }
-                (OnionObject::Custom(c1), _) => c1.binary_shl(other_obj),
-                _ => Err(RuntimeError::InvalidOperation(
-                    format!(
-                        "Invalid binary shl operation for {:?} and {:?}",
-                        obj, other_obj
-                    )
-                    .into(),
-                )),
+            other.with_data(|other_obj| match obj {
+                OnionObject::IntegerValue(left) => left.binary_shl(other_obj),
+                OnionObject::FloatValue(left) => left.binary_shl(other_obj),
+                OnionObject::StringValue(left) => left.binary_shl(other_obj),
+                OnionObject::BytesValue(left) => left.binary_shl(other_obj),
+                OnionObject::BooleanValue(left) => left.binary_shl(other_obj),
+                OnionObject::Range(left) => left.binary_shl(other_obj),
+                OnionObject::Null(left) => left.binary_shl(other_obj),
+                OnionObject::Undefined(left) => left.binary_shl(other_obj),
+                OnionObject::InstructionPackage(left) => left.binary_shl(other_obj),
+                OnionObject::Tuple(left) => left.binary_shl(other_obj),
+                OnionObject::Pair(left) => left.binary_shl(other_obj),
+                OnionObject::LazySet(left) => left.binary_shl(other_obj),
+                OnionObject::Lambda(left) => left.binary_shl(other_obj),
+                OnionObject::Custom(left) => left.binary_shl(other_obj),
+                OnionObject::Mut(_) => unreachable!(),
             })
         })
     }
 
     pub fn binary_shr(&self, other: &Self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| {
-            other.with_data(|other_obj| match (obj, other_obj) {
-                (OnionObject::Integer(i1), OnionObject::Integer(i2)) => {
-                    Ok(OnionStaticObject::new(OnionObject::Integer(i1 >> i2)))
-                }
-                (OnionObject::Custom(c1), _) => c1.binary_shr(other_obj),
-                _ => Err(RuntimeError::InvalidOperation(
-                    format!(
-                        "Invalid binary shr operation for {:?} and {:?}",
-                        obj, other_obj
-                    )
-                    .into(),
-                )),
+            other.with_data(|other_obj| match obj {
+                OnionObject::IntegerValue(left) => left.binary_shr(other_obj),
+                OnionObject::FloatValue(left) => left.binary_shr(other_obj),
+                OnionObject::StringValue(left) => left.binary_shr(other_obj),
+                OnionObject::BytesValue(left) => left.binary_shr(other_obj),
+                OnionObject::BooleanValue(left) => left.binary_shr(other_obj),
+                OnionObject::Range(left) => left.binary_shr(other_obj),
+                OnionObject::Null(left) => left.binary_shr(other_obj),
+                OnionObject::Undefined(left) => left.binary_shr(other_obj),
+                OnionObject::InstructionPackage(left) => left.binary_shr(other_obj),
+                OnionObject::Tuple(left) => left.binary_shr(other_obj),
+                OnionObject::Pair(left) => left.binary_shr(other_obj),
+                OnionObject::LazySet(left) => left.binary_shr(other_obj),
+                OnionObject::Lambda(left) => left.binary_shr(other_obj),
+                OnionObject::Custom(left) => left.binary_shr(other_obj),
+                OnionObject::Mut(_) => unreachable!(),
             })
         })
     }
@@ -1456,773 +1223,148 @@ impl OnionObject {
 
     pub fn binary_lt(&self, other: &Self) -> Result<bool, RuntimeError> {
         self.with_data(|obj| {
-            other.with_data(|other_obj| match (obj, other_obj) {
-                (OnionObject::Integer(i1), OnionObject::Integer(i2)) => Ok(i1 < i2),
-                (OnionObject::Float(f1), OnionObject::Float(f2)) => Ok(f1 < f2),
-                (OnionObject::Integer(i1), OnionObject::Float(f2)) => Ok((*i1 as f64) < *f2),
-                (OnionObject::Float(f1), OnionObject::Integer(i2)) => Ok(*f1 < *i2 as f64),
-                (OnionObject::Custom(c1), _) => c1.binary_lt(other_obj),
-                _ => Err(RuntimeError::InvalidOperation(
-                    format!(
-                        "Invalid binary lt operation for {:?} and {:?}",
-                        obj, other_obj
-                    )
-                    .into(),
-                )),
+            other.with_data(|other_obj| match obj {
+                OnionObject::IntegerValue(left) => left.binary_lt(other_obj),
+                OnionObject::FloatValue(left) => left.binary_lt(other_obj),
+                OnionObject::StringValue(left) => left.binary_lt(other_obj),
+                OnionObject::BytesValue(left) => left.binary_lt(other_obj),
+                OnionObject::BooleanValue(left) => left.binary_lt(other_obj),
+                OnionObject::Range(left) => left.binary_lt(other_obj),
+                OnionObject::Null(left) => left.binary_lt(other_obj),
+                OnionObject::Undefined(left) => left.binary_lt(other_obj),
+                OnionObject::InstructionPackage(left) => left.binary_lt(other_obj),
+                OnionObject::Tuple(left) => left.binary_lt(other_obj),
+                OnionObject::Pair(left) => left.binary_lt(other_obj),
+                OnionObject::LazySet(left) => left.binary_lt(other_obj),
+                OnionObject::Lambda(left) => left.binary_lt(other_obj),
+                OnionObject::Custom(left) => left.binary_lt(other_obj),
+                OnionObject::Mut(_) => unreachable!(),
             })
         })
     }
 
     pub fn binary_gt(&self, other: &Self) -> Result<bool, RuntimeError> {
         self.with_data(|obj| {
-            other.with_data(|other_obj| match (obj, other_obj) {
-                (OnionObject::Integer(i1), OnionObject::Integer(i2)) => Ok(i1 > i2),
-                (OnionObject::Float(f1), OnionObject::Float(f2)) => Ok(f1 > f2),
-                (OnionObject::Integer(i1), OnionObject::Float(f2)) => Ok((*i1 as f64) > *f2),
-                (OnionObject::Float(f1), OnionObject::Integer(i2)) => Ok(*f1 > *i2 as f64),
-                (OnionObject::Custom(c1), _) => c1.binary_gt(other_obj),
-                _ => Err(RuntimeError::InvalidOperation(
-                    format!(
-                        "Invalid binary gt operation for {:?} and {:?}",
-                        obj, other_obj
-                    )
-                    .into(),
-                )),
+            other.with_data(|other_obj| match obj {
+                OnionObject::IntegerValue(left) => left.binary_gt(other_obj),
+                OnionObject::FloatValue(left) => left.binary_gt(other_obj),
+                OnionObject::StringValue(left) => left.binary_gt(other_obj),
+                OnionObject::BytesValue(left) => left.binary_gt(other_obj),
+                OnionObject::BooleanValue(left) => left.binary_gt(other_obj),
+                OnionObject::Range(left) => left.binary_gt(other_obj),
+                OnionObject::Null(left) => left.binary_gt(other_obj),
+                OnionObject::Undefined(left) => left.binary_gt(other_obj),
+                OnionObject::InstructionPackage(left) => left.binary_gt(other_obj),
+                OnionObject::Tuple(left) => left.binary_gt(other_obj),
+                OnionObject::Pair(left) => left.binary_gt(other_obj),
+                OnionObject::LazySet(left) => left.binary_gt(other_obj),
+                OnionObject::Lambda(left) => left.binary_gt(other_obj),
+                OnionObject::Custom(left) => left.binary_gt(other_obj),
+                OnionObject::Mut(_) => unreachable!(),
             })
         })
     }
 
     pub fn unary_neg(&self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| match obj {
-            OnionObject::Integer(i) => Ok(OnionStaticObject::new(OnionObject::Integer(-i))),
-            OnionObject::Float(f) => Ok(OnionStaticObject::new(OnionObject::Float(-f))),
+            OnionObject::IntegerValue(v) => v.unary_neg(),
+            OnionObject::FloatValue(v) => v.unary_neg(),
+            OnionObject::StringValue(v) => v.unary_neg(),
+            OnionObject::BytesValue(v) => v.unary_neg(),
+            OnionObject::BooleanValue(v) => v.unary_neg(),
+            OnionObject::Range(v) => v.unary_neg(),
+            OnionObject::Null(v) => v.unary_neg(),
+            OnionObject::Undefined(v) => v.unary_neg(),
+            OnionObject::InstructionPackage(v) => v.unary_neg(),
+            OnionObject::Tuple(v) => v.unary_neg(),
+            OnionObject::Pair(v) => v.unary_neg(),
+            OnionObject::LazySet(v) => v.unary_neg(),
+            OnionObject::Lambda(v) => v.unary_neg(),
             OnionObject::Custom(custom) => custom.unary_neg(),
-            _ => Err(RuntimeError::InvalidOperation(
-                format!("Invalid unary neg operation for {:?}", obj).into(),
-            )),
+            OnionObject::Mut(_) => unreachable!(),
         })
     }
 
     pub fn unary_plus(&self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| match obj {
-            OnionObject::Integer(i) => Ok(OnionStaticObject::new(OnionObject::Integer(i.abs()))),
-            OnionObject::Float(f) => Ok(OnionStaticObject::new(OnionObject::Float(f.abs()))),
+            OnionObject::IntegerValue(v) => v.unary_plus(),
+            OnionObject::FloatValue(v) => v.unary_plus(),
+            OnionObject::StringValue(v) => v.unary_plus(),
+            OnionObject::BytesValue(v) => v.unary_plus(),
+            OnionObject::BooleanValue(v) => v.unary_plus(),
+            OnionObject::Range(v) => v.unary_plus(),
+            OnionObject::Null(v) => v.unary_plus(),
+            OnionObject::Undefined(v) => v.unary_plus(),
+            OnionObject::InstructionPackage(v) => v.unary_plus(),
+            OnionObject::Tuple(v) => v.unary_plus(),
+            OnionObject::Pair(v) => v.unary_plus(),
+            OnionObject::LazySet(v) => v.unary_plus(),
+            OnionObject::Lambda(v) => v.unary_plus(),
             OnionObject::Custom(custom) => custom.unary_plus(),
-            _ => Err(RuntimeError::InvalidOperation(
-                format!("Invalid unary plus operation for {:?}", obj).into(),
-            )),
+            OnionObject::Mut(_) => unreachable!(),
         })
     }
 
     pub fn unary_not(&self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| match obj {
-            OnionObject::Boolean(b) => Ok(OnionStaticObject::new(OnionObject::Boolean(!b))),
-            OnionObject::Integer(i) => Ok(OnionStaticObject::new(OnionObject::Integer(!i))),
+            OnionObject::IntegerValue(v) => v.unary_not(),
+            OnionObject::FloatValue(v) => v.unary_not(),
+            OnionObject::StringValue(v) => v.unary_not(),
+            OnionObject::BytesValue(v) => v.unary_not(),
+            OnionObject::BooleanValue(v) => v.unary_not(),
+            OnionObject::Range(v) => v.unary_not(),
+            OnionObject::Null(v) => v.unary_not(),
+            OnionObject::Undefined(v) => v.unary_not(),
+            OnionObject::InstructionPackage(v) => v.unary_not(),
+            OnionObject::Tuple(v) => v.unary_not(),
+            OnionObject::Pair(v) => v.unary_not(),
+            OnionObject::LazySet(v) => v.unary_not(),
+            OnionObject::Lambda(v) => v.unary_not(),
             OnionObject::Custom(custom) => custom.unary_not(),
-            _ => Err(RuntimeError::InvalidOperation(
-                format!("Invalid unary not operation for {:?}", obj).into(),
-            )),
+            OnionObject::Mut(_) => unreachable!(),
         })
     }
 
-    pub fn with_attribute<F, R>(&self, key: &OnionObject, f: &F) -> Result<R, RuntimeError>
+    pub fn with_attribute<F, R>(
+        &self,
+        self_object: &OnionObject,
+        key: &OnionObject,
+        f: &F,
+    ) -> Result<R, RuntimeError>
     where
         F: Fn(&OnionObject) -> Result<R, RuntimeError>,
     {
         self.with_data(|obj| match obj {
-            OnionObject::Integer(_) => {
-                if let OnionObject::String(key_str) = key {
-                    match key_str.as_ref() {
-                        "int" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::int",
-                                OnionKeyPool::create(vec![]),
-                                &native_int_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "float" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::float",
-                                OnionKeyPool::create(vec![]),
-                                &native_float_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "string" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::string",
-                                OnionKeyPool::create(vec![]),
-                                &native_string_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "bool" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::bool",
-                                OnionKeyPool::create(vec![]),
-                                &native_bool_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "bytes" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::bytes",
-                                OnionKeyPool::create(vec![]),
-                                &native_bytes_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        _ => {}
-                    }
-                }
-                Err(RuntimeError::InvalidOperation(
-                    format!(
-                        "Attribute '{}' not found for Integer",
-                        match key {
-                            OnionObject::String(s) => s.as_ref(),
-                            _ => "<non-string>",
-                        }
-                    )
-                    .into(),
-                ))
-            }
-            OnionObject::Float(_) => {
-                if let OnionObject::String(key_str) = key {
-                    match key_str.as_ref() {
-                        "int" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::int",
-                                OnionKeyPool::create(vec![]),
-                                &native_int_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "float" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::float",
-                                OnionKeyPool::create(vec![]),
-                                &native_float_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "string" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::string",
-                                OnionKeyPool::create(vec![]),
-                                &native_string_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "bool" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::bool",
-                                OnionKeyPool::create(vec![]),
-                                &native_bool_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "bytes" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::bytes",
-                                OnionKeyPool::create(vec![]),
-                                &native_bytes_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        _ => {}
-                    }
-                }
-                Err(RuntimeError::InvalidOperation(
-                    format!(
-                        "Attribute '{}' not found for Float",
-                        match key {
-                            OnionObject::String(s) => s.as_ref(),
-                            _ => "<non-string>",
-                        }
-                    )
-                    .into(),
-                ))
-            }
-            OnionObject::Boolean(_) => {
-                if let OnionObject::String(key_str) = key {
-                    match key_str.as_ref() {
-                        "int" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::int",
-                                OnionKeyPool::create(vec![]),
-                                &native_int_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "float" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::float",
-                                OnionKeyPool::create(vec![]),
-                                &native_float_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "string" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::string",
-                                OnionKeyPool::create(vec![]),
-                                &native_string_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "bool" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::bool",
-                                OnionKeyPool::create(vec![]),
-                                &native_bool_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "bytes" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::bytes",
-                                OnionKeyPool::create(vec![]),
-                                &native_bytes_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        _ => {}
-                    }
-                }
-                Err(RuntimeError::InvalidOperation(
-                    format!(
-                        "Attribute '{}' not found for Boolean",
-                        match key {
-                            OnionObject::String(s) => s.as_ref(),
-                            _ => "<non-string>",
-                        }
-                    )
-                    .into(),
-                ))
-            }
-            OnionObject::Tuple(tuple) => {
-                // 先检查原型链/自定义属性
-                if let Ok(result) = tuple.with_attribute(key, f) {
-                    return Ok(result);
-                }
+            OnionObject::IntegerValue(v) => v.with_attribute(self_object, key, f),
+            OnionObject::FloatValue(v) => v.with_attribute(self_object, key, f),
+            OnionObject::BooleanValue(v) => v.with_attribute(self_object, key, f),
 
-                // 再检查native方法
-                if let OnionObject::String(key_str) = key {
-                    match key_str.as_ref() {
-                        "int" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::int",
-                                OnionKeyPool::create(vec![]),
-                                &native_int_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "float" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::float",
-                                OnionKeyPool::create(vec![]),
-                                &native_float_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "string" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::string",
-                                OnionKeyPool::create(vec![]),
-                                &native_string_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "bool" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::bool",
-                                OnionKeyPool::create(vec![]),
-                                &native_bool_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "bytes" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::bytes",
-                                OnionKeyPool::create(vec![]),
-                                &native_bytes_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "length" => {
-                            let length_method = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "builtin::length",
-                                OnionKeyPool::create(vec![]),
-                                &native_length_method,
-                            );
-                            return f(length_method.weak());
-                        }
-                        "elements" => {
-                            let elements_method = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "builtin::elements",
-                                OnionKeyPool::create(vec![]),
-                                &native_elements_method,
-                            );
-                            return f(elements_method.weak());
-                        }
-                        _ => {}
-                    }
-                }
-                Err(RuntimeError::InvalidOperation(
-                    format!(
-                        "Attribute '{}' not found for Tuple",
-                        match key {
-                            OnionObject::String(s) => s.as_ref(),
-                            _ => "<non-string>",
-                        }
-                    )
-                    .into(),
-                ))
-            }
-            OnionObject::Pair(pair) => pair.with_attribute(key, f),
-            OnionObject::Lambda(lambda) => lambda.0.with_attribute(key, f),
-            OnionObject::LazySet(lazy_set) => lazy_set.with_attribute(key, f),
-            OnionObject::String(_) => {
-                if let OnionObject::String(key_str) = key {
-                    match key_str.as_ref() {
-                        "int" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::int",
-                                OnionKeyPool::create(vec![]),
-                                &native_int_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "float" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::float",
-                                OnionKeyPool::create(vec![]),
-                                &native_float_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "string" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::string",
-                                OnionKeyPool::create(vec![]),
-                                &native_string_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "bool" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::bool",
-                                OnionKeyPool::create(vec![]),
-                                &native_bool_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "bytes" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::bytes",
-                                OnionKeyPool::create(vec![]),
-                                &native_bytes_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "length" => {
-                            let length_method = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "builtin::length",
-                                OnionKeyPool::create(vec![]),
-                                &native_length_method,
-                            );
-                            return f(length_method.weak());
-                        }
-                        "elements" => {
-                            let elements_method = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "builtin::elements",
-                                OnionKeyPool::create(vec![]),
-                                &native_elements_method,
-                            );
-                            return f(elements_method.weak());
-                        }
-                        _ => {}
-                    }
-                }
-                Err(RuntimeError::InvalidOperation(
-                    format!(
-                        "Attribute '{}' not found for String",
-                        match key {
-                            OnionObject::String(s) => s.as_ref(),
-                            _ => "<non-string>",
-                        }
-                    )
-                    .into(),
-                ))
-            }
-            OnionObject::Bytes(_) => {
-                if let OnionObject::String(key_str) = key {
-                    match key_str.as_ref() {
-                        "int" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::int",
-                                OnionKeyPool::create(vec![]),
-                                &native_int_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "float" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::float",
-                                OnionKeyPool::create(vec![]),
-                                &native_float_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "string" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::string",
-                                OnionKeyPool::create(vec![]),
-                                &native_string_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "bool" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::bool",
-                                OnionKeyPool::create(vec![]),
-                                &native_bool_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "bytes" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::bytes",
-                                OnionKeyPool::create(vec![]),
-                                &native_bytes_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "length" => {
-                            let length_method = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "builtin::length",
-                                OnionKeyPool::create(vec![]),
-                                &native_length_method,
-                            );
-                            return f(length_method.weak());
-                        }
-                        "elements" => {
-                            let elements_method = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "builtin::elements",
-                                OnionKeyPool::create(vec![]),
-                                &native_elements_method,
-                            );
-                            return f(elements_method.weak());
-                        }
-                        _ => {}
-                    }
-                }
-                Err(RuntimeError::InvalidOperation(
-                    format!(
-                        "Attribute '{}' not found for Bytes",
-                        match key {
-                            OnionObject::String(s) => s.as_ref(),
-                            _ => "<non-string>",
-                        }
-                    )
-                    .into(),
-                ))
-            }
-            OnionObject::Range(_, _) => {
-                if let OnionObject::String(key_str) = key {
-                    match key_str.as_ref() {
-                        "int" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::int",
-                                OnionKeyPool::create(vec![]),
-                                &native_int_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "float" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::float",
-                                OnionKeyPool::create(vec![]),
-                                &native_float_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "string" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::string",
-                                OnionKeyPool::create(vec![]),
-                                &native_string_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "bool" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::bool",
-                                OnionKeyPool::create(vec![]),
-                                &native_bool_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "bytes" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::bytes",
-                                OnionKeyPool::create(vec![]),
-                                &native_bytes_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "length" => {
-                            let length_method = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "builtin::length",
-                                OnionKeyPool::create(vec![]),
-                                &native_length_method,
-                            );
-                            return f(length_method.weak());
-                        }
-                        "elements" => {
-                            let elements_method = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "builtin::elements",
-                                OnionKeyPool::create(vec![]),
-                                &native_elements_method,
-                            );
-                            return f(elements_method.weak());
-                        }
-                        _ => {}
-                    }
-                }
-                Err(RuntimeError::InvalidOperation(
-                    format!(
-                        "Attribute '{}' not found for Range",
-                        match key {
-                            OnionObject::String(s) => s.as_ref(),
-                            _ => "<non-string>",
-                        }
-                    )
-                    .into(),
-                ))
-            }
-            OnionObject::Null => {
-                if let OnionObject::String(key_str) = key {
-                    match key_str.as_ref() {
-                        "string" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::string",
-                                OnionKeyPool::create(vec![]),
-                                &native_string_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "bool" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::bool",
-                                OnionKeyPool::create(vec![]),
-                                &native_bool_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        _ => {}
-                    }
-                }
-                Err(RuntimeError::InvalidOperation(
-                    format!(
-                        "Attribute '{}' not found for null",
-                        match key {
-                            OnionObject::String(s) => s.as_ref(),
-                            _ => "<non-string>",
-                        }
-                    )
-                    .into(),
-                ))
-            }
-            OnionObject::Undefined(_) => {
-                if let OnionObject::String(key_str) = key {
-                    match key_str.as_ref() {
-                        "string" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::string",
-                                OnionKeyPool::create(vec![]),
-                                &native_string_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        "bool" => {
-                            let converter = wrap_native_function(
-                                LambdaParameter::Multiple(Box::new([])),
-                                OnionFastMap::new(OnionKeyPool::create(vec![])),
-                                obj,
-                                "converter::bool",
-                                OnionKeyPool::create(vec![]),
-                                &native_bool_converter,
-                            );
-                            return f(converter.weak());
-                        }
-                        _ => {}
-                    }
-                }
-                Err(RuntimeError::InvalidOperation(
-                    format!(
-                        "Attribute '{}' not found for undefined",
-                        match key {
-                            OnionObject::String(s) => s.as_ref(),
-                            _ => "<non-string>",
-                        }
-                    )
-                    .into(),
-                ))
-            }
+            OnionObject::StringValue(v) => v.with_attribute(self_object, key, f),
+            OnionObject::BytesValue(v) => v.with_attribute(self_object, key, f),
+            OnionObject::Range(v) => v.with_attribute(self_object, key, f),
+            OnionObject::Null(v) => v.with_attribute(self_object, key, f),
+            OnionObject::Undefined(v) => v.with_attribute(self_object, key, f),
+            OnionObject::InstructionPackage(v) => v.with_attribute(self_object, key, f),
+            OnionObject::Tuple(v) => v.with_attribute(self_object, key, f),
+            OnionObject::Pair(v) => v.with_attribute(self_object, key, f),
+            OnionObject::LazySet(v) => v.with_attribute(self_object, key, f),
+
+            OnionObject::Lambda(lambda_def) => lambda_def.with_attribute(self_object, key, f),
             OnionObject::Custom(custom) => {
                 let mut result: Result<R, RuntimeError> = Err(RuntimeError::InvalidOperation(
                     "Custom with_attribute not called".into(),
                 ));
-                let mut closure = |obj: &OnionObject| -> Result<(), RuntimeError> {
-                    result = f(obj);
-                    Ok(())
-                };
-                custom.with_attribute(key, &mut closure)?;
+                custom.with_attribute(
+                    self_object,
+                    key,
+                    &mut |obj: &OnionObject| -> Result<(), RuntimeError> {
+                        result = f(obj);
+                        Ok(())
+                    },
+                )?;
                 result
             }
-            _ => Err(RuntimeError::InvalidOperation(
-                format!("with_attribute() not supported for {:?}", self).into(),
-            )),
+            OnionObject::Mut(_) => unreachable!(),
         })
     }
 
@@ -2266,7 +1408,7 @@ impl OnionObject {
                 }
                 OnionObject::Tuple(tuple) => {
                     value.with_data(|value| match value {
-                        OnionObject::Integer(i) => {
+                        OnionObject::IntegerValue(i) => {
                             // 单索引访问
                             let elements = tuple.get_elements();
                             if (*i as usize) < elements.len() {
@@ -2301,18 +1443,18 @@ impl OnionObject {
                         )),
                     })
                 }
-                OnionObject::String(s) => {
+                OnionObject::StringValue(s) => {
                     value.with_data(|value| match value {
-                        OnionObject::Integer(i) => {
+                        OnionObject::IntegerValue(i) => {
                             // 单字符访问
                             if *i < 0 || *i >= s.chars().count() as i64 {
                                 return Err(RuntimeError::InvalidOperation(
                                     format!("Index out of bounds for String: {}", s).into(),
                                 ));
                             }
-                            Ok(Err(OnionStaticObject::new(OnionObject::String(Arc::from(
-                                s.chars().nth(*i as usize).unwrap().to_string(),
-                            )))))
+                            Ok(Err(OnionStaticObject::new(OnionObject::StringValue(
+                                Arc::from(s.chars().nth(*i as usize).unwrap().to_string()),
+                            ))))
                         }
                         OnionObject::Range(start, end) => {
                             // 字符串切片
@@ -2323,13 +1465,13 @@ impl OnionObject {
 
                             if start_idx <= end_idx {
                                 let sliced: String = chars[start_idx..end_idx].iter().collect();
-                                Ok(Err(OnionStaticObject::new(OnionObject::String(Arc::from(
-                                    sliced,
-                                )))))
+                                Ok(Err(OnionStaticObject::new(OnionObject::StringValue(
+                                    Arc::from(sliced),
+                                ))))
                             } else {
-                                Ok(Err(OnionStaticObject::new(OnionObject::String(Arc::from(
-                                    "",
-                                )))))
+                                Ok(Err(OnionStaticObject::new(OnionObject::StringValue(
+                                    Arc::from(""),
+                                ))))
                             }
                         }
                         _ => Err(RuntimeError::InvalidType(
@@ -2337,18 +1479,18 @@ impl OnionObject {
                         )),
                     })
                 }
-                OnionObject::Bytes(b) => {
+                OnionObject::BytesValue(b) => {
                     value.with_data(|value| match value {
-                        OnionObject::Integer(i) => {
+                        OnionObject::IntegerValue(i) => {
                             // 单字节访问
                             if *i < 0 || *i >= b.len() as i64 {
                                 return Err(RuntimeError::InvalidOperation(
                                     format!("Index out of bounds for Bytes: {:?}", b).into(),
                                 ));
                             }
-                            Ok(Err(OnionStaticObject::new(OnionObject::Bytes(Arc::from(
-                                vec![b[*i as usize]],
-                            )))))
+                            Ok(Err(OnionStaticObject::new(OnionObject::BytesValue(
+                                Arc::from(vec![b[*i as usize]]),
+                            ))))
                         }
                         OnionObject::Range(start, end) => {
                             // 字节切片
@@ -2358,13 +1500,13 @@ impl OnionObject {
 
                             if start_idx <= end_idx {
                                 let sliced = &b[start_idx..end_idx];
-                                Ok(Err(OnionStaticObject::new(OnionObject::Bytes(Arc::from(
-                                    sliced,
-                                )))))
+                                Ok(Err(OnionStaticObject::new(OnionObject::BytesValue(
+                                    Arc::from(sliced),
+                                ))))
                             } else {
-                                Ok(Err(OnionStaticObject::new(OnionObject::Bytes(Arc::from(
-                                    vec![],
-                                )))))
+                                Ok(Err(OnionStaticObject::new(OnionObject::BytesValue(
+                                    Arc::from(vec![]),
+                                ))))
                             }
                         }
                         _ => Err(RuntimeError::InvalidType(
@@ -2382,48 +1524,61 @@ impl OnionObject {
 
     pub fn key_of(&self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| match obj {
-            OnionObject::Pair(pair) => Ok(pair.get_key().stabilize()),
-            OnionObject::Lambda(lambda) => Ok(lambda.0.get_parameter().to_onion()),
-            OnionObject::LazySet(set) => Ok(set.get_container().stabilize()),
+            OnionObject::IntegerValue(v) => v.key_of(),
+            OnionObject::FloatValue(v) => v.key_of(),
+            OnionObject::StringValue(v) => v.key_of(),
+            OnionObject::BytesValue(v) => v.key_of(),
+            OnionObject::BooleanValue(v) => v.key_of(),
+            OnionObject::Range(v) => v.key_of(),
+            OnionObject::Null(v) => v.key_of(),
+            OnionObject::Undefined(v) => v.key_of(),
+            OnionObject::InstructionPackage(v) => v.key_of(),
+            OnionObject::Tuple(v) => v.key_of(),
+            OnionObject::Pair(v) => v.key_of(),
+            OnionObject::LazySet(v) => v.key_of(),
+            OnionObject::Lambda(v) => v.key_of(),
             OnionObject::Custom(custom) => custom.key_of(),
-            _ => Err(RuntimeError::InvalidOperation(
-                format!("key_of() not supported for {:?}", obj).into(),
-            )),
+            OnionObject::Mut(_) => unreachable!(),
         })
     }
 
     pub fn value_of(&self) -> Result<OnionStaticObject, RuntimeError> {
         self.with_data(|obj| match obj {
-            OnionObject::Pair(pair) => Ok(pair.get_value().stabilize()),
-            OnionObject::LazySet(set) => Ok(set.get_filter().stabilize()),
-            OnionObject::Undefined(s) => Ok(OnionStaticObject::new(OnionObject::String(
-                Arc::from(s.as_ref().map(|o| o.as_ref()).unwrap_or_else(|| "")),
-            ))),
+            OnionObject::IntegerValue(v) => v.value_of(),
+            OnionObject::FloatValue(v) => v.value_of(),
+            OnionObject::StringValue(v) => v.value_of(),
+            OnionObject::BytesValue(v) => v.value_of(),
+            OnionObject::BooleanValue(v) => v.value_of(),
+            OnionObject::Range(v) => v.value_of(),
+            OnionObject::Null(v) => v.value_of(),
+            OnionObject::Undefined(v) => v.value_of(),
+            OnionObject::InstructionPackage(v) => v.value_of(),
+            OnionObject::Tuple(v) => v.value_of(),
+            OnionObject::Pair(v) => v.value_of(),
+            OnionObject::LazySet(v) => v.value_of(),
+            OnionObject::Lambda(v) => v.value_of(),
             OnionObject::Custom(custom) => custom.value_of(),
-            _ => Err(RuntimeError::InvalidOperation(
-                format!("value_of() not supported for {:?}", obj).into(),
-            )),
+            OnionObject::Mut(_) => unreachable!(),
         })
     }
 
     pub fn type_of(&self) -> Result<String, RuntimeError> {
         self.with_data(|obj| match obj {
-            OnionObject::Integer(_) => Ok("Integer".to_string()),
-            OnionObject::Float(_) => Ok("Float".to_string()),
-            OnionObject::String(_) => Ok("String".to_string()),
-            OnionObject::Bytes(_) => Ok("Bytes".to_string()),
-            OnionObject::Boolean(_) => Ok("Boolean".to_string()),
-            OnionObject::Null => Ok("Null".to_string()),
-            OnionObject::Undefined(_) => Ok("Undefined".to_string()),
-            OnionObject::Tuple(_) => Ok("Tuple".to_string()),
-            OnionObject::Pair(_) => Ok("Pair".to_string()),
-            OnionObject::LazySet(_) => Ok("LazySet".to_string()),
-            OnionObject::InstructionPackage(_) => Ok("InstructionPackage".to_string()),
-            OnionObject::Lambda(_) => Ok("Lambda".to_string()),
+            OnionObject::IntegerValue(v) => v.type_of(),
+            OnionObject::FloatValue(v) => v.type_of(),
+            OnionObject::StringValue(v) => v.type_of(),
+            OnionObject::BytesValue(v) => v.type_of(),
+            OnionObject::BooleanValue(v) => v.type_of(),
+            OnionObject::Range(v) => v.type_of(),
+            OnionObject::Null(v) => v.type_of(),
+            OnionObject::Undefined(v) => v.type_of(),
+            OnionObject::InstructionPackage(v) => v.type_of(),
+            OnionObject::Tuple(v) => v.type_of(),
+            OnionObject::Pair(v) => v.type_of(),
+            OnionObject::LazySet(v) => v.type_of(),
+            OnionObject::Lambda(v) => v.type_of(),
             OnionObject::Custom(custom) => custom.type_of(),
-            _ => Err(RuntimeError::InvalidOperation(
-                format!("type_of() not supported for {:?}", obj).into(),
-            )),
+            OnionObject::Mut(_) => unreachable!(),
         })
     }
 
@@ -2498,7 +1653,7 @@ pub struct OnionStaticObject {
 impl Default for OnionStaticObject {
     fn default() -> Self {
         OnionStaticObject {
-            obj: OnionObject::Undefined(None),
+            obj: OnionObject::Undefined(OnionUndefined::new(None)),
             _arcs: GCArcStorage::None,
         }
     }
@@ -2524,15 +1679,6 @@ impl OnionStaticObject {
                 None => GCArcStorage::None,
                 Some(arc) => GCArcStorage::Single(arc),
             },
-            OnionObject::Boolean(_)
-            | OnionObject::Integer(_)
-            | OnionObject::Float(_)
-            | OnionObject::String(_)
-            | OnionObject::Bytes(_)
-            | OnionObject::Null
-            | OnionObject::Undefined(_)
-            | OnionObject::Range(_, _)
-            | OnionObject::InstructionPackage(_) => GCArcStorage::None,
             _ => {
                 let mut arcs = vec![];
                 obj.upgrade(&mut arcs);
@@ -2637,181 +1783,13 @@ mod tests {
     }
 
     #[test]
-    fn benchmark_realistic_vm_operations() {
-        println!("真实VM操作性能测试 (使用OnionStaticObject + clone):");
-
-        // 模拟VM中的整数运算
-        let start = Instant::now();
-        let mut result_sum = 0i64;
-
-        for i in 0..5_000_000 {
-            // 创建OnionStaticObject（模拟从栈或常量池加载）
-            let obj1 = OnionObject::Integer(i).stabilize();
-            let obj2 = OnionObject::Integer(i + 1).stabilize();
-
-            // 通过with_data访问（模拟VM的实际访问模式）
-            let result = obj1.weak().with_data(|data1| {
-                obj2.weak().with_data(|data2| {
-                    // 模拟binary_add操作
-                    match (data1, data2) {
-                        (OnionObject::Integer(a), OnionObject::Integer(b)) => {
-                            Ok(OnionObject::Integer(a + b).stabilize())
-                        }
-                        _ => Err(RuntimeError::InvalidOperation("Type error".into())),
-                    }
-                })
-            });
-
-            if let Ok(sum) = result {
-                // 提取结果值（模拟VM获取计算结果）
-                if let Ok(val) = sum.weak().with_data(|data| match data {
-                    OnionObject::Integer(v) => Ok(*v),
-                    _ => Err(RuntimeError::InvalidType("Not integer".into())),
-                }) {
-                    result_sum += val;
-                }
-            }
-        }
-
-        let duration = start.elapsed();
-        println!("500万次VM风格整数运算: {:.2}s", duration.as_secs_f64());
-        println!("每秒操作数: {:.0}", 5_000_000.0 / duration.as_secs_f64());
-        println!("结果校验: {}", result_sum);
-    }
-
-    #[test]
-    fn benchmark_vm_style_arithmetic() {
-        println!("VM风格算术运算性能测试:");
-
-        let start = Instant::now();
-        let mut final_result = 0i64;
-
-        for i in 0..2_000_000 {
-            // 创建操作数
-            let left = OnionObject::Integer(i).stabilize();
-            let right = OnionObject::Integer(i + 1).stabilize();
-
-            // 使用实际的binary_add方法
-            if let Ok(result) = left
-                .weak()
-                .with_data(|l_data| right.weak().with_data(|r_data| l_data.binary_add(r_data)))
-            {
-                // 继续进行乘法运算
-                let multiplier = OnionObject::Integer(2).stabilize();
-                if let Ok(mul_result) = result.weak().with_data(|add_data| {
-                    multiplier
-                        .weak()
-                        .with_data(|mul_data| add_data.binary_mul(mul_data))
-                }) {
-                    // 提取最终结果
-                    if let Ok(val) = mul_result.weak().with_data(|data| data.to_integer()) {
-                        final_result += val;
-                    }
-                }
-            }
-        }
-
-        let duration = start.elapsed();
-        println!("200万次复合运算: {:.2}s", duration.as_secs_f64());
-        println!("每秒操作数: {:.0}", 2_000_000.0 / duration.as_secs_f64());
-        println!("最终结果: {}", final_result);
-    }
-
-    #[test]
-    fn benchmark_object_creation_overhead() {
-        println!("对象创建开销测试:");
-
-        // 测试OnionStaticObject创建性能
-        let start = Instant::now();
-        let mut objects = Vec::with_capacity(1_000_000);
-
-        for i in 0..1_000_000 {
-            let obj = OnionObject::Integer(i).stabilize();
-            objects.push(obj);
-        }
-
-        let creation_time = start.elapsed();
-        println!(
-            "100万个OnionStaticObject创建: {:.2}s",
-            creation_time.as_secs_f64()
-        );
-
-        // 测试访问性能
-        let start = Instant::now();
-        let mut sum = 0i64;
-
-        for obj in &objects {
-            if let Ok(val) = obj.weak().with_data(|data| data.to_integer()) {
-                sum += val;
-            }
-        }
-
-        let access_time = start.elapsed();
-        println!("100万次对象访问: {:.2}s", access_time.as_secs_f64());
-        println!("访问校验和: {}", sum);
-
-        // 测试克隆性能
-        let start = Instant::now();
-        let mut cloned_objects = Vec::with_capacity(objects.len());
-
-        for obj in &objects[..100_000] {
-            // 只测试10万个避免内存不足
-            cloned_objects.push(obj.clone());
-        }
-
-        let clone_time = start.elapsed();
-        println!("10万个对象克隆: {:.2}s", clone_time.as_secs_f64());
-    }
-
-    #[test]
-    fn benchmark_string_operations_realistic() {
-        println!("真实字符串操作性能测试:");
-
-        let start = Instant::now();
-        let mut total_length = 0usize;
-
-        for i in 0..500_000 {
-            // 创建字符串对象
-            let str_obj = OnionObject::String(Arc::from(format!("string_{}", i))).stabilize();
-
-            // 获取字符串长度（模拟len()操作）
-            if let Ok(len_obj) = str_obj.weak().with_data(|data| data.len()) {
-                if let Ok(length) = len_obj.weak().with_data(|data| data.to_integer()) {
-                    total_length += length as usize;
-                }
-            }
-
-            // 字符串拼接操作
-            let suffix = OnionObject::String(Arc::from("_suffix".to_string())).stabilize();
-            if let Ok(concat_result) = str_obj.weak().with_data(|str_data| {
-                suffix
-                    .weak()
-                    .with_data(|suffix_data| str_data.binary_add(suffix_data))
-            }) {
-                // 模拟使用拼接结果
-                if let Ok(concat_str) = concat_result
-                    .weak()
-                    .with_data(|data| data.to_string(&mut vec![]))
-                {
-                    total_length += concat_str.len();
-                }
-            }
-        }
-
-        let duration = start.elapsed();
-        println!("50万次字符串操作: {:.2}s", duration.as_secs_f64());
-        println!("每秒操作数: {:.0}", 500_000.0 / duration.as_secs_f64());
-        println!("总字符串长度: {}", total_length);
-    }
-
-    #[test]
     fn benchmark_refcell_overhead() {
         println!("RefCell开销分析:");
 
         // 测试直接访问vs RefCell访问的性能差异
         let direct_integers: Vec<i64> = (0..1_000_000).collect();
         let wrapped_integers: Vec<OnionStaticObject> = (0..1_000_000)
-            .map(|i| OnionObject::Integer(i).stabilize())
+            .map(|i| OnionIntegerValue::new_static(i))
             .collect();
 
         // 直接访问基准
@@ -2827,7 +1805,7 @@ mod tests {
         let mut sum2 = 0i64;
         for obj in &wrapped_integers {
             if let Ok(val) = obj.weak().with_data(|data| match data {
-                OnionObject::Integer(i) => Ok(*i),
+                OnionObject::IntegerValue(i) => Ok(i.value()),
                 _ => Err(RuntimeError::InvalidType("Not integer".into())),
             }) {
                 sum2 += val * 2;

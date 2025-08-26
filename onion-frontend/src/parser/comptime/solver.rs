@@ -245,7 +245,7 @@ impl ComptimeSolver {
                           -> Result<OnionStaticObject, RuntimeError> {
                         match argument.get("name") {
                             Some(v) => v.weak().with_data(|v| match v {
-                                OnionObject::String(name) => {
+                                OnionObject::StringValue(name) => {
                                     let mut state = user_definitions_ref.write().map_err(|e| {
                                         RuntimeError::BorrowError(e.to_string().into())
                                     })?;
@@ -279,11 +279,11 @@ impl ComptimeSolver {
                           -> Result<OnionStaticObject, RuntimeError> {
                         match argument.get("name") {
                             Some(v) => v.weak().with_data(|v| match v {
-                                OnionObject::String(name) => {
+                                OnionObject::StringValue(name) => {
                                     let state = user_definitions_ref.read().map_err(|e| {
                                         RuntimeError::BorrowError(e.to_string().into())
                                     })?;
-                                    Ok(OnionObject::Boolean(state.contains_key(name.as_ref()))
+                                    Ok(OnionObject::BooleanValue(state.contains_key(name.as_ref()))
                                         .stabilize())
                                 }
                                 _ => Err(RuntimeError::InvalidType(
@@ -312,7 +312,7 @@ impl ComptimeSolver {
                           -> Result<OnionStaticObject, RuntimeError> {
                         match argument.get("name") {
                             Some(v) => v.weak().with_data(|v| match v {
-                                OnionObject::String(name) => Ok(OnionObject::Custom(Arc::new(
+                                OnionObject::StringValue(name) => Ok(OnionObject::Custom(Arc::new(
                                     OnionASTObject::new(ASTNode {
                                         node_type: ASTNodeType::Required(name.to_string()),
                                         source_location: None,
@@ -347,7 +347,7 @@ impl ComptimeSolver {
                           -> Result<OnionStaticObject, RuntimeError> {
                         match argument.get("path") {
                             Some(v) => v.weak().with_data(|v| match v {
-                                OnionObject::String(path) => {
+                                OnionObject::StringValue(path) => {
                                     let abs_path =
                                         match import_cycle_detector.last() {
                                             Some(file) => {
@@ -492,7 +492,7 @@ impl ComptimeSolver {
                           -> Result<OnionStaticObject, RuntimeError> {
                         match argument.get("message") {
                             Some(v) => v.weak().with_data(|v| match v {
-                                OnionObject::String(message) => {
+                                OnionObject::StringValue(message) => {
                                     let mut collector =
                                         diagnostics_ref_for_error.write().map_err(|e| {
                                             RuntimeError::BorrowError(e.to_string().into())
@@ -532,7 +532,7 @@ impl ComptimeSolver {
                           -> Result<OnionStaticObject, RuntimeError> {
                         match argument.get("message") {
                             Some(v) => v.weak().with_data(|v| match v {
-                                OnionObject::String(message) => {
+                                OnionObject::StringValue(message) => {
                                     let mut collector =
                                         diagnostics_ref_for_warning.write().map_err(|e| {
                                             RuntimeError::BorrowError(e.to_string().into())
@@ -790,7 +790,7 @@ impl ComptimeSolver {
                 StepResult::Return(ref result) => {
                     let result_borrowed = result.weak();
                     let result = unwrap_object!(result_borrowed, OnionObject::Pair)?;
-                    let success = *unwrap_object!(result.get_key(), OnionObject::Boolean)?;
+                    let success = *unwrap_object!(result.get_key(), OnionObject::BooleanValue)?;
                     if !success {
                         let value_text = result.get_value().with_data(|data| match data {
                             OnionObject::Undefined(Some(str)) => Ok(str.to_string()),

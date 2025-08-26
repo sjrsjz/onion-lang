@@ -35,7 +35,7 @@ fn get_integer_arg(
         )
     })?;
     match obj.weak() {
-        OnionObject::Integer(i) => Ok(*i),
+        OnionObject::IntegerValue(i) => Ok(*i),
         _ => Err(RuntimeError::InvalidType(
             format!("Argument '{name}' must be an integer")
                 .to_string()
@@ -51,7 +51,7 @@ fn timestamp(
 ) -> Result<OnionStaticObject, RuntimeError> {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| OnionObject::Integer(d.as_secs() as i64).stabilize())
+        .map(|d| OnionObject::IntegerValue(d.as_secs() as i64).stabilize())
         .map_err(|e| RuntimeError::DetailedError(format!("Failed to get timestamp: {e}").into()))
 }
 
@@ -62,7 +62,7 @@ fn timestamp_millis(
 ) -> Result<OnionStaticObject, RuntimeError> {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| OnionObject::Integer(d.as_millis() as i64).stabilize())
+        .map(|d| OnionObject::IntegerValue(d.as_millis() as i64).stabilize())
         .map_err(|e| RuntimeError::DetailedError(format!("Failed to get timestamp: {e}").into()))
 }
 
@@ -73,7 +73,7 @@ fn timestamp_nanos(
 ) -> Result<OnionStaticObject, RuntimeError> {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| OnionObject::Integer(d.as_nanos() as i64).stabilize()) // Note: might overflow on 32-bit systems in the future
+        .map(|d| OnionObject::IntegerValue(d.as_nanos() as i64).stabilize()) // Note: might overflow on 32-bit systems in the future
         .map_err(|e| RuntimeError::DetailedError(format!("Failed to get timestamp: {e}").into()))
 }
 
@@ -146,7 +146,7 @@ fn now_utc(
         RuntimeError::DetailedError(format!("Failed to get current time: {e}").into())
     })?;
     let datetime = format_timestamp(duration.as_secs());
-    Ok(OnionObject::String(datetime.into()).stabilize())
+    Ok(OnionObject::StringValue(datetime.into()).stabilize())
 }
 
 /// 从时间戳格式化时间字符串
@@ -161,7 +161,7 @@ fn format_time(
         ));
     }
     let datetime = format_timestamp(timestamp as u64);
-    Ok(OnionObject::String(datetime.into()).stabilize())
+    Ok(OnionObject::StringValue(datetime.into()).stabilize())
 }
 
 /// 计算两个时间戳之间的差值（秒）
@@ -171,7 +171,7 @@ fn time_diff(
 ) -> Result<OnionStaticObject, RuntimeError> {
     let start = get_integer_arg(argument, "start")?;
     let end = get_integer_arg(argument, "end")?;
-    Ok(OnionObject::Integer(end - start).stabilize())
+    Ok(OnionObject::IntegerValue(end - start).stabilize())
 }
 
 #[derive(Clone)]

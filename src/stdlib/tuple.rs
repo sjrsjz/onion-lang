@@ -96,7 +96,7 @@ fn insert(
     container.weak().with_data(|data| match data {
         OnionObject::Tuple(tuple) => {
             let index = match index_obj.weak() {
-                OnionObject::Integer(i) => *i,
+                OnionObject::IntegerValue(i) => *i,
                 _ => {
                     return Err(RuntimeError::InvalidType(
                         "Argument 'index' must be an integer".into(),
@@ -141,7 +141,7 @@ fn remove(
     container.weak().with_data(|data| match data {
         OnionObject::Tuple(tuple) => {
             let index = match index_obj.weak() {
-                OnionObject::Integer(i) => *i,
+                OnionObject::IntegerValue(i) => *i,
                 _ => {
                     return Err(RuntimeError::InvalidType(
                         "Argument 'index' must be an integer".into(),

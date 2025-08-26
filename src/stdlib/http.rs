@@ -33,7 +33,7 @@ fn get_string_arg(
             RuntimeError::DetailedError(format!("Missing required argument: '{name}'").into())
         })
         .and_then(|obj| match obj.weak() {
-            OnionObject::String(s) => Ok(s.to_string()),
+            OnionObject::StringValue(s) => Ok(s.to_string()),
             _ => Err(RuntimeError::InvalidType(
                 format!("Argument '{name}' must be a string").into(),
             )),
@@ -46,7 +46,7 @@ fn get_optional_string_arg(
 ) -> Result<Option<String>, RuntimeError> {
     match arg_map.get(name) {
         Some(obj) => match obj.weak() {
-            OnionObject::String(s) => Ok(Some(s.to_string())),
+            OnionObject::StringValue(s) => Ok(Some(s.to_string())),
             OnionObject::Null | OnionObject::Undefined(_) => Ok(None),
             _ => Err(RuntimeError::InvalidType(
                 format!("Argument '{name}' must be a string, null, or undefined").into(),
@@ -214,7 +214,7 @@ impl Runnable for AsyncHttpRequest {
             RequestState::InProgress => StepResult::Continue,
             RequestState::Completed(result) => match result {
                 Ok(response) => {
-                    StepResult::Return(OnionObject::String(response.into()).stabilize().into())
+                    StepResult::Return(OnionObject::StringValue(response.into()).stabilize().into())
                 }
                 Err(error) => {
                     let response_json = serde_json::json!({
@@ -224,7 +224,7 @@ impl Runnable for AsyncHttpRequest {
                         "success": false,
                     });
                     StepResult::Return(
-                        OnionObject::String(response_json.to_string().into())
+                        OnionObject::StringValue(response_json.to_string().into())
                             .stabilize()
                             .into(),
                     )
@@ -396,7 +396,7 @@ fn http_get_sync(
 ) -> Result<OnionStaticObject, RuntimeError> {
     let url = get_string_arg(argument, "url")?;
     let result = AsyncHttpRequest::perform_http_request(&url, "GET", &IndexMap::new(), None);
-    Ok(OnionObject::String(result.unwrap_or_else(|e| e).into()).stabilize())
+    Ok(OnionObject::StringValue(result.unwrap_or_else(|e| e).into()).stabilize())
 }
 
 fn http_post_sync(
@@ -407,7 +407,7 @@ fn http_post_sync(
     let body = get_optional_string_arg(argument, "body")?;
     let result =
         AsyncHttpRequest::perform_http_request(&url, "POST", &IndexMap::new(), body.as_deref());
-    Ok(OnionObject::String(result.unwrap_or_else(|e| e).into()).stabilize())
+    Ok(OnionObject::StringValue(result.unwrap_or_else(|e| e).into()).stabilize())
 }
 
 /// 构建HTTP模块

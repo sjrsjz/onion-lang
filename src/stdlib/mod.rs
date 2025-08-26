@@ -90,7 +90,7 @@ pub fn build_dict(dict: IndexMap<String, OnionStaticObject>) -> OnionStaticObjec
     let mut pairs = vec![];
     for (key, value) in dict {
         pairs.push(OnionPair::new_static(
-            &OnionObject::String(key.into()).stabilize(),
+            &OnionObject::StringValue(key.into()).stabilize(),
             &value,
         ));
     }

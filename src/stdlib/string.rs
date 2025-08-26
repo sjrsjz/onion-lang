@@ -25,7 +25,7 @@ fn get_string_arg<'a>(
         )
     })?;
     match obj.weak() {
-        OnionObject::String(s) => Ok(s.as_ref()),
+        OnionObject::StringValue(s) => Ok(s.as_ref()),
         _ => Err(RuntimeError::InvalidType(
             format!("Argument '{name}' must be a string")
                 .to_string()
@@ -46,7 +46,7 @@ fn get_integer_arg(
         )
     })?;
     match obj.weak() {
-        OnionObject::Integer(i) => Ok(*i),
+        OnionObject::IntegerValue(i) => Ok(*i),
         _ => Err(RuntimeError::InvalidType(
             format!("Argument '{name}' must be an integer")
                 .to_string()
@@ -60,7 +60,7 @@ fn length(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let s = get_string_arg(argument, "string")?;
-    Ok(OnionObject::Integer(s.chars().count() as i64).stabilize())
+    Ok(OnionObject::IntegerValue(s.chars().count() as i64).stabilize())
 }
 
 fn trim(
@@ -68,7 +68,7 @@ fn trim(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let s = get_string_arg(argument, "string")?;
-    Ok(OnionObject::String(s.trim().into()).stabilize())
+    Ok(OnionObject::StringValue(s.trim().into()).stabilize())
 }
 
 fn uppercase(
@@ -76,7 +76,7 @@ fn uppercase(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let s = get_string_arg(argument, "string")?;
-    Ok(OnionObject::String(s.to_uppercase().into()).stabilize())
+    Ok(OnionObject::StringValue(s.to_uppercase().into()).stabilize())
 }
 
 fn lowercase(
@@ -84,7 +84,7 @@ fn lowercase(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let s = get_string_arg(argument, "string")?;
-    Ok(OnionObject::String(s.to_lowercase().into()).stabilize())
+    Ok(OnionObject::StringValue(s.to_lowercase().into()).stabilize())
 }
 
 fn contains(
@@ -93,7 +93,7 @@ fn contains(
 ) -> Result<OnionStaticObject, RuntimeError> {
     let string = get_string_arg(argument, "string")?;
     let substring = get_string_arg(argument, "substring")?;
-    Ok(OnionObject::Boolean(string.contains(substring)).stabilize())
+    Ok(OnionObject::BooleanValue(string.contains(substring)).stabilize())
 }
 
 fn concat(
@@ -103,7 +103,7 @@ fn concat(
     let s1 = get_string_arg(argument, "a")?;
     let s2 = get_string_arg(argument, "b")?;
     let result = [s1, s2].concat();
-    Ok(OnionObject::String(result.into()).stabilize())
+    Ok(OnionObject::StringValue(result.into()).stabilize())
 }
 
 fn split(
@@ -114,7 +114,7 @@ fn split(
     let delimiter = get_string_arg(argument, "delimiter")?;
     let parts: Vec<_> = string
         .split(delimiter)
-        .map(|part| OnionObject::String(part.into()))
+        .map(|part| OnionObject::StringValue(part.into()))
         .collect();
     Ok(OnionObject::Tuple(OnionTuple::new(parts).into()).stabilize())
 }
@@ -127,7 +127,7 @@ fn replace(
     let from = get_string_arg(argument, "from")?;
     let to = get_string_arg(argument, "to")?;
     let result = string.replace(from, to);
-    Ok(OnionObject::String(result.into()).stabilize())
+    Ok(OnionObject::StringValue(result.into()).stabilize())
 }
 
 fn substr(
@@ -149,7 +149,7 @@ fn substr(
     let len = length as usize;
 
     let result: String = string.chars().skip(start_idx).take(len).collect();
-    Ok(OnionObject::String(result.into()).stabilize())
+    Ok(OnionObject::StringValue(result.into()).stabilize())
 }
 
 fn index_of(
@@ -159,7 +159,7 @@ fn index_of(
     let string = get_string_arg(argument, "string")?;
     let substring = get_string_arg(argument, "substring")?;
     let index = string.find(substring).map(|i| i as i64).unwrap_or(-1);
-    Ok(OnionObject::Integer(index).stabilize())
+    Ok(OnionObject::IntegerValue(index).stabilize())
 }
 
 fn starts_with(
@@ -168,7 +168,7 @@ fn starts_with(
 ) -> Result<OnionStaticObject, RuntimeError> {
     let string = get_string_arg(argument, "string")?;
     let prefix = get_string_arg(argument, "prefix")?;
-    Ok(OnionObject::Boolean(string.starts_with(prefix)).stabilize())
+    Ok(OnionObject::BooleanValue(string.starts_with(prefix)).stabilize())
 }
 
 fn ends_with(
@@ -177,7 +177,7 @@ fn ends_with(
 ) -> Result<OnionStaticObject, RuntimeError> {
     let string = get_string_arg(argument, "string")?;
     let suffix = get_string_arg(argument, "suffix")?;
-    Ok(OnionObject::Boolean(string.ends_with(suffix)).stabilize())
+    Ok(OnionObject::BooleanValue(string.ends_with(suffix)).stabilize())
 }
 
 fn repeat(
@@ -193,7 +193,7 @@ fn repeat(
         ));
     }
     let result = string.repeat(count as usize);
-    Ok(OnionObject::String(result.into()).stabilize())
+    Ok(OnionObject::StringValue(result.into()).stabilize())
 }
 
 fn pad_left(
@@ -213,13 +213,13 @@ fn pad_left(
     let s_char_len = string.chars().count();
 
     if s_char_len >= target_len {
-        return Ok(OnionObject::String(string.into()).stabilize());
+        return Ok(OnionObject::StringValue(string.into()).stabilize());
     }
 
     let pad_char = pad_char_str.chars().next().unwrap_or(' ');
     let pad_count = target_len - s_char_len;
     let padded = format!("{}{}", pad_char.to_string().repeat(pad_count), string);
-    Ok(OnionObject::String(padded.into()).stabilize())
+    Ok(OnionObject::StringValue(padded.into()).stabilize())
 }
 
 fn pad_right(
@@ -239,13 +239,13 @@ fn pad_right(
     let s_char_len = string.chars().count();
 
     if s_char_len >= target_len {
-        return Ok(OnionObject::String(string.into()).stabilize());
+        return Ok(OnionObject::StringValue(string.into()).stabilize());
     }
 
     let pad_char = pad_char_str.chars().next().unwrap_or(' ');
     let pad_count = target_len - s_char_len;
     let padded = format!("{}{}", string, pad_char.to_string().repeat(pad_count));
-    Ok(OnionObject::String(padded.into()).stabilize())
+    Ok(OnionObject::StringValue(padded.into()).stabilize())
 }
 
 fn is_empty(
@@ -253,7 +253,7 @@ fn is_empty(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let s = get_string_arg(argument, "string")?;
-    Ok(OnionObject::Boolean(s.is_empty()).stabilize())
+    Ok(OnionObject::BooleanValue(s.is_empty()).stabilize())
 }
 
 fn reverse(
@@ -262,7 +262,7 @@ fn reverse(
 ) -> Result<OnionStaticObject, RuntimeError> {
     let s = get_string_arg(argument, "string")?;
     let reversed: String = s.chars().rev().collect();
-    Ok(OnionObject::String(reversed.into()).stabilize())
+    Ok(OnionObject::StringValue(reversed.into()).stabilize())
 }
 
 pub fn build_module() -> OnionStaticObject {

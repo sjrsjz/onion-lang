@@ -27,7 +27,7 @@ fn to_string(
         ));
     };
     let string_representation = value.weak().to_string(&vec![])?;
-    Ok(OnionObject::String(string_representation.into()).stabilize())
+    Ok(OnionObject::StringValue(string_representation.into()).stabilize())
 }
 
 /// Convert object to integer
@@ -43,15 +43,15 @@ fn to_int(
     };
 
     value.weak().with_data(|data| match data {
-        OnionObject::String(s) => match s.trim().parse::<i64>() {
-            Ok(i) => Ok(OnionObject::Integer(i).stabilize()),
+        OnionObject::StringValue(s) => match s.trim().parse::<i64>() {
+            Ok(i) => Ok(OnionObject::IntegerValue(i).stabilize()),
             Err(e) => Err(RuntimeError::InvalidOperation(
                 format!("Cannot convert string '{s}' to integer: {e}").into(),
             )),
         },
-        OnionObject::Float(f) => Ok(OnionObject::Integer(*f as i64).stabilize()),
-        OnionObject::Integer(i) => Ok(OnionObject::Integer(*i).stabilize()),
-        OnionObject::Boolean(b) => Ok(OnionObject::Integer(if *b { 1 } else { 0 }).stabilize()),
+        OnionObject::FloatValue(f) => Ok(OnionObject::IntegerValue(*f as i64).stabilize()),
+        OnionObject::IntegerValue(i) => Ok(OnionObject::IntegerValue(*i).stabilize()),
+        OnionObject::BooleanValue(b) => Ok(OnionObject::IntegerValue(if *b { 1 } else { 0 }).stabilize()),
         _ => Err(RuntimeError::InvalidOperation(
             format!("Cannot convert {data:?} to integer").into(),
         )),
@@ -71,15 +71,15 @@ fn to_float(
     };
 
     value.weak().with_data(|data| match data {
-        OnionObject::String(s) => match s.trim().parse::<f64>() {
-            Ok(f) => Ok(OnionObject::Float(f).stabilize()),
+        OnionObject::StringValue(s) => match s.trim().parse::<f64>() {
+            Ok(f) => Ok(OnionObject::FloatValue(f).stabilize()),
             Err(e) => Err(RuntimeError::InvalidOperation(
                 format!("Cannot convert string '{s}' to float: {e}").into(),
             )),
         },
-        OnionObject::Integer(i) => Ok(OnionObject::Float(*i as f64).stabilize()),
-        OnionObject::Float(f) => Ok(OnionObject::Float(*f).stabilize()),
-        OnionObject::Boolean(b) => Ok(OnionObject::Float(if *b { 1.0 } else { 0.0 }).stabilize()),
+        OnionObject::IntegerValue(i) => Ok(OnionObject::FloatValue(*i as f64).stabilize()),
+        OnionObject::FloatValue(f) => Ok(OnionObject::FloatValue(*f).stabilize()),
+        OnionObject::BooleanValue(b) => Ok(OnionObject::FloatValue(if *b { 1.0 } else { 0.0 }).stabilize()),
         _ => Err(RuntimeError::InvalidOperation(
             format!("Cannot convert {data:?} to float").into(),
         )),
@@ -99,24 +99,24 @@ fn to_bool(
     };
 
     value.weak().with_data(|data| match data {
-        OnionObject::String(s) => {
+        OnionObject::StringValue(s) => {
             let s = s.trim().to_lowercase();
             if s == "true" || s == "1" || s == "yes" || s == "y" {
-                Ok(OnionObject::Boolean(true).stabilize())
+                Ok(OnionObject::BooleanValue(true).stabilize())
             } else if s == "false" || s == "0" || s == "no" || s == "n" || s.is_empty() {
-                Ok(OnionObject::Boolean(false).stabilize())
+                Ok(OnionObject::BooleanValue(false).stabilize())
             } else {
                 Err(RuntimeError::InvalidOperation(
                     format!("Cannot convert string '{s}' to boolean").into(),
                 ))
             }
         }
-        OnionObject::Integer(i) => Ok(OnionObject::Boolean(*i != 0).stabilize()),
-        OnionObject::Float(f) => Ok(OnionObject::Boolean(*f != 0.0).stabilize()),
-        OnionObject::Boolean(b) => Ok(OnionObject::Boolean(*b).stabilize()),
-        OnionObject::Undefined(_) => Ok(OnionObject::Boolean(false).stabilize()),
-        OnionObject::Null => Ok(OnionObject::Boolean(false).stabilize()),
-        _ => Ok(OnionObject::Boolean(true).stabilize()), // Other object types default to true
+        OnionObject::IntegerValue(i) => Ok(OnionObject::BooleanValue(*i != 0).stabilize()),
+        OnionObject::FloatValue(f) => Ok(OnionObject::BooleanValue(*f != 0.0).stabilize()),
+        OnionObject::BooleanValue(b) => Ok(OnionObject::BooleanValue(*b).stabilize()),
+        OnionObject::Undefined(_) => Ok(OnionObject::BooleanValue(false).stabilize()),
+        OnionObject::Null => Ok(OnionObject::BooleanValue(false).stabilize()),
+        _ => Ok(OnionObject::BooleanValue(true).stabilize()), // Other object types default to true
     })
 }
 
@@ -134,7 +134,7 @@ fn type_of(
 
     value.weak().with_data(|data| {
         let type_name = data.type_of()?;
-        Ok(OnionObject::String(type_name.into()).stabilize())
+        Ok(OnionObject::StringValue(type_name.into()).stabilize())
     })
 }
 
@@ -151,8 +151,8 @@ fn is_int(
     };
 
     value.weak().with_data(|data| match data {
-        OnionObject::Integer(_) => Ok(OnionObject::Boolean(true).stabilize()),
-        _ => Ok(OnionObject::Boolean(false).stabilize()),
+        OnionObject::IntegerValue(_) => Ok(OnionObject::BooleanValue(true).stabilize()),
+        _ => Ok(OnionObject::BooleanValue(false).stabilize()),
     })
 }
 
@@ -169,8 +169,8 @@ fn is_float(
     };
 
     value.weak().with_data(|data| match data {
-        OnionObject::Float(_) => Ok(OnionObject::Boolean(true).stabilize()),
-        _ => Ok(OnionObject::Boolean(false).stabilize()),
+        OnionObject::FloatValue(_) => Ok(OnionObject::BooleanValue(true).stabilize()),
+        _ => Ok(OnionObject::BooleanValue(false).stabilize()),
     })
 }
 
@@ -187,8 +187,8 @@ fn is_string(
     };
 
     value.weak().with_data(|data| match data {
-        OnionObject::String(_) => Ok(OnionObject::Boolean(true).stabilize()),
-        _ => Ok(OnionObject::Boolean(false).stabilize()),
+        OnionObject::StringValue(_) => Ok(OnionObject::BooleanValue(true).stabilize()),
+        _ => Ok(OnionObject::BooleanValue(false).stabilize()),
     })
 }
 
@@ -205,8 +205,8 @@ fn is_bool(
     };
 
     value.weak().with_data(|data| match data {
-        OnionObject::Boolean(_) => Ok(OnionObject::Boolean(true).stabilize()),
-        _ => Ok(OnionObject::Boolean(false).stabilize()),
+        OnionObject::BooleanValue(_) => Ok(OnionObject::BooleanValue(true).stabilize()),
+        _ => Ok(OnionObject::BooleanValue(false).stabilize()),
     })
 }
 
@@ -223,8 +223,8 @@ fn is_bytes(
     };
 
     value.weak().with_data(|data| match data {
-        OnionObject::Bytes(_) => Ok(OnionObject::Boolean(true).stabilize()),
-        _ => Ok(OnionObject::Boolean(false).stabilize()),
+        OnionObject::BytesValue(_) => Ok(OnionObject::BooleanValue(true).stabilize()),
+        _ => Ok(OnionObject::BooleanValue(false).stabilize()),
     })
 }
 
@@ -241,15 +241,15 @@ fn to_bytes(
     };
 
     value.weak().with_data(|data| match data {
-        OnionObject::String(s) => Ok(OnionObject::Bytes(s.as_bytes().to_vec().into()).stabilize()),
-        OnionObject::Bytes(b) => Ok(OnionObject::Bytes(b.clone()).stabilize()),
-        OnionObject::Integer(i) => {
-            Ok(OnionObject::Bytes(i.to_string().into_bytes().into()).stabilize())
+        OnionObject::StringValue(s) => Ok(OnionObject::BytesValue(s.as_bytes().to_vec().into()).stabilize()),
+        OnionObject::BytesValue(b) => Ok(OnionObject::BytesValue(b.clone()).stabilize()),
+        OnionObject::IntegerValue(i) => {
+            Ok(OnionObject::BytesValue(i.to_string().into_bytes().into()).stabilize())
         }
-        OnionObject::Float(f) => {
-            Ok(OnionObject::Bytes(f.to_string().into_bytes().into()).stabilize())
+        OnionObject::FloatValue(f) => {
+            Ok(OnionObject::BytesValue(f.to_string().into_bytes().into()).stabilize())
         }
-        OnionObject::Boolean(b) => Ok(OnionObject::Bytes(if *b {
+        OnionObject::BooleanValue(b) => Ok(OnionObject::BytesValue(if *b {
             vec![1u8].into()
         } else {
             vec![0u8].into()

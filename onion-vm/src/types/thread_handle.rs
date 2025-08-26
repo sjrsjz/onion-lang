@@ -25,10 +25,14 @@ use arc_gc::{
 
 use crate::{
     lambda::runnable::RuntimeError,
-    types::object::{GCArcStorage, OnionStaticObject},
+    types::{
+        boolean_value::OnionBooleanValue,
+        object::{GCArcStorage, OnionObjectProtocolAny, OnionStaticObject},
+        undefined::OnionUndefined,
+    },
 };
 
-use super::object::{OnionObject, OnionObjectCell, OnionObjectExt};
+use super::object::{OnionObject, OnionObjectCell, OnionObjectProtocol};
 
 /// Onion 线程句柄类型。
 ///
@@ -57,7 +61,9 @@ impl OnionThreadHandle {
         handle: JoinHandle<Result<Box<OnionStaticObject>, RuntimeError>>,
         gc: &mut GC<OnionObjectCell>,
     ) -> (Self, GCArcStorage) {
-        let tmp = gc.create(OnionObjectCell::from(OnionObject::Undefined(None)));
+        let tmp = gc.create(OnionObjectCell::from(OnionObject::Undefined(
+            OnionUndefined::new(None),
+        )));
         (
             Self {
                 inner: Mutex::new((Some(handle), false, tmp.as_weak())),
@@ -96,7 +102,7 @@ impl GCTraceable<OnionObjectCell> for OnionThreadHandle {
     }
 }
 
-impl OnionObjectExt for OnionThreadHandle {
+impl OnionObjectProtocol for OnionThreadHandle {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -114,11 +120,6 @@ impl OnionObjectExt for OnionThreadHandle {
         if let Some(strong) = guard.2.upgrade() {
             collected.push(strong);
         }
-    }
-    
-    fn to_boolean(&self) -> Result<bool, RuntimeError> {
-        // A thread handle is "truthy" if it hasn't finished yet
-        Ok(!self.is_finished())
     }
 
     fn type_of(&self) -> Result<String, RuntimeError> {
@@ -186,27 +187,36 @@ impl OnionObjectExt for OnionThreadHandle {
             ))
         }
     }
+}
 
+impl OnionObjectProtocolAny for OnionThreadHandle {
     fn with_attribute(
         &self,
+        _self_object: &OnionObject,
         key: &OnionObject,
         f: &mut dyn FnMut(&OnionObject) -> Result<(), RuntimeError>,
     ) -> Result<(), RuntimeError> {
         match key {
-            OnionObject::String(s) => match s.as_ref() {
-                "is_finished" => f(&OnionObject::Boolean(self.is_finished())),
+            OnionObject::StringValue(s) => match s.value() {
+                "is_finished" => f(&OnionObject::BooleanValue(OnionBooleanValue::new(
+                    self.is_finished(),
+                ))),
                 "has_handle" => {
                     let guard = self.inner.lock().unwrap();
                     let has_handle = guard.0.is_some();
-                    f(&OnionObject::Boolean(has_handle))
+                    f(&OnionObject::BooleanValue(OnionBooleanValue::new(
+                        has_handle,
+                    )))
                 }
                 "has_result" => {
                     let guard = self.inner.lock().unwrap();
                     let has_result = guard.2.upgrade().is_some();
-                    f(&OnionObject::Boolean(has_result))
+                    f(&OnionObject::BooleanValue(OnionBooleanValue::new(
+                        has_result,
+                    )))
                 }
                 _ => Err(RuntimeError::InvalidOperation(
-                    format!("Attribute '{}' not found in ThreadHandle", s).into(),
+                    format!("Attribute {} not found in ThreadHandle", s.repr(&vec![])?).into(),
                 )),
             },
             _ => Err(RuntimeError::InvalidOperation(
