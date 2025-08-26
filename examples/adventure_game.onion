@@ -118,8 +118,8 @@ events := {
 display_status := () -> {
     stdlib.io.println(colorize("═══ Player Status ═══", "bright_yellow", "bg_black"));
     stdlib.io.println(colorize("Name: " + player.name, "bright_green", "bg_black"));
-    stdlib.io.println(colorize("Health: " + stdlib.types.to_string(player.health) + "/100", "bright_red", "bg_black"));
-    stdlib.io.println(colorize("Magic: " + stdlib.types.to_string(player.magic) + "/100", "bright_blue", "bg_black"));
+    stdlib.io.println(colorize("Health: " + stdlib.types.display(player.health) + "/100", "bright_red", "bg_black"));
+    stdlib.io.println(colorize("Magic: " + stdlib.types.display(player.magic) + "/100", "bright_blue", "bg_black"));
       items_str := mut "Items: ";
     i := mut 0;
     while (i < lengthof player.items) {
@@ -182,12 +182,12 @@ handle_event := (event_name?) -> {
     while (i < lengthof event.options) {
         option := event.options[i];
         choice_text := keyof option;
-        stdlib.io.println(colorize(stdlib.types.to_string(i + 1) + ". " + choice_text, "bright_green", "bg_black"));
+        stdlib.io.println(colorize(stdlib.types.display(i + 1) + ". " + choice_text, "bright_green", "bg_black"));
         i = i + 1;
     };
     // Simulate player choice (random selection here)
     choice := stdlib.math.floor(random() * lengthof event.options);
-    selected_option := event.options[choice];
+    selected_option := event.options[choice.int()];
     action := valueof selected_option;
     
     stdlib.io.println("");

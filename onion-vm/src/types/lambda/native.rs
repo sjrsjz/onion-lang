@@ -170,50 +170,15 @@ pub(crate) fn native_float_converter(
 /// string 类型转换器。
 ///
 /// 支持从字符串、整数、浮点、布尔、字节数组、null、undefined、range、复杂对象等多种类型转换为字符串。
-/// 对于复杂对象，优先使用 repr，否则输出类型名。
 pub(crate) fn native_string_converter(
     self_object: &OnionStaticObject,
     _argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    self_object.weak().with_data(|obj: &OnionObject| {
-        match obj {
-            OnionObject::StringValue(s) => Ok(OnionStringValue::new_static(s.value())),
-            OnionObject::IntegerValue(v) => Ok(OnionStringValue::new_static(v.value().to_string())),
-            OnionObject::FloatValue(v) => Ok(OnionStringValue::new_static(v.value().to_string())),
-            OnionObject::BooleanValue(b) => Ok(OnionStringValue::new_static(b.value().to_string())),
-            OnionObject::BytesValue(bytes) => {
-                match std::str::from_utf8(&bytes.value()) {
-                    Ok(s) => Ok(OnionStringValue::new_static(s.to_string())),
-                    Err(_) => {
-                        // 如果不是有效UTF-8，使用lossy转换
-                        let s = String::from_utf8_lossy(&bytes.value());
-                        Ok(OnionStringValue::new_static(s.to_string()))
-                    }
-                }
-            }
-            OnionObject::Null(_) => Ok(OnionStringValue::new_static("null")),
-            OnionObject::Undefined(_) => Ok(OnionStringValue::new_static("undefined")),
-            OnionObject::Range(range) => Ok(OnionStringValue::new_static(format!(
-                "{}..{}",
-                range.start(),
-                range.end()
-            ))),
-            _ => {
-                // 对于复杂对象，使用 repr 方法
-                match obj.repr(&vec![]) {
-                    Ok(repr_str) => Ok(OnionObject::StringValue(OnionStringValue::new(Arc::from(
-                        repr_str,
-                    )))
-                    .stabilize()),
-                    Err(_) => Ok(OnionObject::StringValue(OnionStringValue::new(Arc::from(
-                        format!("<{}>", obj.type_of().unwrap_or("object".to_string())),
-                    )))
-                    .stabilize()),
-                }
-            }
-        }
-    })
+    self_object
+        .weak()
+        .display(&vec![])
+        .map(|s| OnionStringValue::new_static(s))
 }
 
 /// bool 类型转换器。

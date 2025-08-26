@@ -96,7 +96,7 @@ impl OnionObjectProtocol for OnionASTObject {
         value: &OnionObject,
         _gc: &mut onion_vm::GC<OnionObjectCell>,
     ) -> Result<Result<StepResult, OnionStaticObject>, RuntimeError> {
-            value.with_data(|data| match data {
+        value.with_data(|data| match data {
             OnionObject::IntegerValue(i) => {
                 // 通过索引访问子节点
                 let index = if i.value() < 0 {
@@ -166,7 +166,7 @@ impl OnionObjectProtocol for OnionASTObject {
                 Ok(Err(OnionObject::Custom(Arc::new(OnionASTObject { ast: new_ast })).stabilize()))
             }
             _ => Err(RuntimeError::InvalidType(
-                "Apply argument must be an integer (for access) or a pair (for replacement)".into()
+                format!("Apply argument must be an integer (for access) or a pair (for replacement), but got {:?}", data).into()
             )),
         })
     }
@@ -210,9 +210,9 @@ impl OnionObjectProtocol for OnionASTObject {
 impl OnionObjectProtocolAny for OnionASTObject {
     fn with_attribute(
         &self,
-        _self_object: &OnionObject,
+        self_object: &OnionObject,
         key: &OnionObject,
-        f: &mut dyn FnMut(&OnionObject) -> Result<(), RuntimeError>,
+        f: &mut dyn FnMut(&OnionObject, &OnionObject) -> Result<(), RuntimeError>,
     ) -> Result<(), RuntimeError> {
         key.with_data(|key_data| match key_data {
             OnionObject::StringValue(attr_name) => {
@@ -257,7 +257,7 @@ impl OnionObjectProtocolAny for OnionASTObject {
                             ASTNodeType::Comptime => "Comptime",
                         };
                         let type_obj = OnionObject::StringValue(OnionStringValue::new(type_name));
-                        f(&type_obj)
+                        f(self_object, &type_obj)
                     },
                     "has_data" => {
                         // 返回是否携带数据
@@ -269,34 +269,34 @@ impl OnionObjectProtocolAny for OnionASTObject {
                             ASTNodeType::Modifier(_) | ASTNodeType::Namespace(_)
                         );
                         let has_data_obj = OnionObject::BooleanValue(OnionBooleanValue::new(has_data));
-                        f(&has_data_obj)
+                        f(self_object, &has_data_obj)
                     },
                     "data" => {
                         // 返回节点类型携带的原始数据
                         match &self.ast.node_type {
                             ASTNodeType::String(s) => {
                                 let data_obj = OnionObject::StringValue(OnionStringValue::new(s));
-                                f(&data_obj)
+                                f(self_object, &data_obj)
                             },
                             ASTNodeType::Boolean(b) => {
                                 let data_obj = OnionObject::BooleanValue(OnionBooleanValue::new(*b));
-                                f(&data_obj)
+                                f(self_object, &data_obj)
                             },
                             ASTNodeType::Number(n) => {
                                 let data_obj = OnionObject::StringValue(OnionStringValue::new(n));
-                                f(&data_obj)
+                                f(self_object, &data_obj)
                             },
                             ASTNodeType::Base64(b64) => {
                                 let decoded = base64::engine::general_purpose::STANDARD.decode(b64).map_err(|e| RuntimeError::InvalidOperation(
                                     format!("Failed to decode base64: {}", e).into()
                                 ))?;
                                 let data_obj = OnionObject::BytesValue(OnionBytesValue::new(&decoded));
-                                f(&data_obj)
+                                f(self_object, &data_obj)
                             },
                             ASTNodeType::Variable(name) | ASTNodeType::Required(name) | 
                             ASTNodeType::Let(name) | ASTNodeType::Namespace(name) => {
                                 let data_obj = OnionObject::StringValue(OnionStringValue::new(name));
-                                f(&data_obj)
+                                f(self_object, &data_obj)
                             },
                             ASTNodeType::LambdaDef(is_dyn, captures) => {
                                 // 返回一个包含 is_dyn 和 captures 的元组
@@ -308,7 +308,7 @@ impl OnionObjectProtocolAny for OnionASTObject {
                                     OnionObject::BooleanValue(OnionBooleanValue::new(*is_dyn)),
                                     captures_tuple
                                 ]).into());
-                                f(&data_tuple)
+                                f(self_object, &data_tuple)
                             },
                             ASTNodeType::Operation(op) => {
                                 let op_str = match op {
@@ -334,7 +334,7 @@ impl OnionObjectProtocolAny for OnionASTObject {
                                     crate::parser::ast::ASTNodeOperation::RightShift => ">>",
                                 };
                                 let data_obj = OnionObject::StringValue(OnionStringValue::new(op_str));
-                                f(&data_obj)
+                                f(self_object, &data_obj)
                             },
                             ASTNodeType::Modifier(mod_type) => {
                                 let mod_str = match mod_type {
@@ -353,12 +353,12 @@ impl OnionObjectProtocolAny for OnionASTObject {
                                     crate::parser::ast::ASTNodeModifier::Atomic => "atomic",
                                 };
                                 let data_obj = OnionObject::StringValue(OnionStringValue::new(mod_str));
-                                f(&data_obj)
+                                f(self_object, &data_obj)
                             },
                             _ => {
                                 // 对于没有数据的节点类型，返回 null
                                 let null_obj = OnionObject::Null(OnionNull::new());
-                                f(&null_obj)
+                                f(self_object, &null_obj)
                             }
                         }
                     },
@@ -367,11 +367,11 @@ impl OnionObjectProtocolAny for OnionASTObject {
                         match &self.ast.node_type {
                             ASTNodeType::String(s) | ASTNodeType::Number(s) | ASTNodeType::Base64(s) => {
                                 let value_obj = OnionObject::StringValue(OnionStringValue::new(s));
-                                f(&value_obj)
+                                f(self_object, &value_obj)
                             },
                             ASTNodeType::Boolean(b) => {
                                 let value_obj = OnionObject::BooleanValue(OnionBooleanValue::new(*b));
-                                f(&value_obj)
+                                f(self_object, &value_obj)
                             },
                             _ => Err(RuntimeError::InvalidOperation(
                                 "Attribute 'value' is only supported for String, Number, Base64, and Boolean node types".into()
@@ -383,7 +383,7 @@ impl OnionObjectProtocolAny for OnionASTObject {
                             ASTNodeType::Variable(name) | ASTNodeType::Required(name) | 
                             ASTNodeType::Let(name) | ASTNodeType::Namespace(name) => {
                                 let name_obj = OnionObject::StringValue(OnionStringValue::new(name));
-                                f(&name_obj)
+                                f(self_object, &name_obj)
                             },
                             _ => Err(RuntimeError::InvalidOperation(
                                 "Attribute 'name' is only supported for Variable, Required, Let, and Namespace node types".into()
@@ -416,7 +416,7 @@ impl OnionObjectProtocolAny for OnionASTObject {
                                     crate::parser::ast::ASTNodeOperation::RightShift => ">>",
                                 };
                                 let op_obj = OnionObject::StringValue(OnionStringValue::new(op_str));
-                                f(&op_obj)
+                                f(self_object, &op_obj)
                             },
                             _ => Err(RuntimeError::InvalidOperation(
                                 "Attribute 'op' is only supported for Operation node type".into()
@@ -442,7 +442,7 @@ impl OnionObjectProtocolAny for OnionASTObject {
                                     crate::parser::ast::ASTNodeModifier::Atomic => "atomic",
                                 };
                                 let mod_obj = OnionObject::StringValue(OnionStringValue::new(mod_str));
-                                f(&mod_obj)
+                                f(self_object, &mod_obj)
                             },
                             _ => Err(RuntimeError::InvalidOperation(
                                 "Attribute 'modifier' is only supported for Modifier node type".into()
@@ -453,7 +453,7 @@ impl OnionObjectProtocolAny for OnionASTObject {
                         match &self.ast.node_type {
                             ASTNodeType::LambdaDef(is_dyn, _) => {
                                 let dyn_obj = OnionObject::BooleanValue(OnionBooleanValue::new(*is_dyn));
-                                f(&dyn_obj)
+                                f(self_object, &dyn_obj)
                             },
                             _ => Err(RuntimeError::InvalidOperation(
                                 "Attribute 'is_dyn'/'dyn' is only supported for LambdaDef node type".into()
@@ -467,7 +467,7 @@ impl OnionObjectProtocolAny for OnionASTObject {
                                     .map(|s| OnionObject::StringValue(OnionStringValue::new(s)))
                                     .collect();
                                 let captures_obj = OnionObject::Tuple(OnionTuple::new(captures_vec).into());
-                                f(&captures_obj)
+                                f(self_object, &captures_obj)
                             },
                             _ => Err(RuntimeError::InvalidOperation(
                                 "Attribute 'captures' is only supported for LambdaDef node type".into()

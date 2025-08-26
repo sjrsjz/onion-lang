@@ -3,8 +3,12 @@ use onion_vm::{
     GC,
     lambda::runnable::RuntimeError,
     types::{
+        boolean_value::OnionBooleanValue,
+        integer_value::OnionIntegerValue,
         lambda::parameter::LambdaParameter,
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
+        string_value::OnionStringValue,
+        undefined::OnionUndefined,
     },
     utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
@@ -25,7 +29,7 @@ fn get_string_arg<'a>(
         )
     })?;
     match obj.weak() {
-        OnionObject::StringValue(s) => Ok(s.as_ref()),
+        OnionObject::StringValue(s) => Ok(s.value()),
         _ => Err(RuntimeError::InvalidType(
             format!("Argument '{name}' must be a string")
                 .to_string()
@@ -69,21 +73,15 @@ fn system(
             let status = output.status.code().unwrap_or(-1);
 
             let mut result = IndexMap::new();
-            result.insert(
-                "stdout".to_string(),
-                OnionObject::StringValue(stdout.into()).stabilize(),
-            );
-            result.insert(
-                "stderr".to_string(),
-                OnionObject::StringValue(stderr.into()).stabilize(),
-            );
+            result.insert("stdout".to_string(), OnionStringValue::new_static(stdout));
+            result.insert("stderr".to_string(), OnionStringValue::new_static(stderr));
             result.insert(
                 "status".to_string(),
-                OnionObject::IntegerValue(status as i64).stabilize(),
+                OnionIntegerValue::new_static(status as i64),
             );
             result.insert(
                 "success".to_string(),
-                OnionObject::BooleanValue(output.status.success()).stabilize(),
+                OnionBooleanValue::new_static(output.status.success()),
             );
 
             Ok(build_dict(result))
@@ -109,7 +107,7 @@ fn system_code(
     match Command::new(shell).arg(flag).arg(cmd_str).status() {
         Ok(status) => {
             let code = status.code().unwrap_or(-1);
-            Ok(OnionObject::IntegerValue(code as i64).stabilize())
+            Ok(OnionIntegerValue::new_static(code as i64))
         }
         Err(e) => Err(RuntimeError::DetailedError(
             format!("Failed to execute command: {e}").into(),
@@ -124,7 +122,7 @@ fn chdir(
 ) -> Result<OnionStaticObject, RuntimeError> {
     let path_str = get_string_arg(argument, "path")?;
     match env::set_current_dir(path_str) {
-        Ok(_) => Ok(OnionObject::Null.stabilize()),
+        Ok(_) => Ok(OnionUndefined::new_static(None)),
         Err(e) => Err(RuntimeError::DetailedError(
             format!("Failed to change directory to '{path_str}': {e}").into(),
         )),
@@ -137,8 +135,8 @@ fn username(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     match env::var("USERNAME").or_else(|_| env::var("USER")) {
-        Ok(user) => Ok(OnionObject::StringValue(user.into()).stabilize()),
-        Err(_) => Ok(OnionObject::StringValue("unknown".into()).stabilize()),
+        Ok(user) => Ok(OnionStringValue::new_static(user)),
+        Err(_) => Ok(OnionStringValue::new_static("<unknown>")),
     }
 }
 
@@ -148,7 +146,7 @@ fn home_dir(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     match dirs::home_dir() {
-        Some(path) => Ok(OnionObject::StringValue(path.to_string_lossy().into()).stabilize()),
+        Some(path) => Ok(OnionStringValue::new_static(path.to_string_lossy())),
         None => Err(RuntimeError::DetailedError(
             "Could not determine home directory".into(),
         )),
@@ -161,7 +159,7 @@ fn temp_dir(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let temp_path = env::temp_dir();
-    Ok(OnionObject::StringValue(temp_path.to_string_lossy().into()).stabilize())
+    Ok(OnionStringValue::new_static(temp_path.to_string_lossy()))
 }
 
 /// 检查文件或目录是否存在
@@ -171,7 +169,7 @@ fn path_exists(
 ) -> Result<OnionStaticObject, RuntimeError> {
     let path_str = get_string_arg(argument, "path")?;
     let exists = std::path::Path::new(path_str).exists();
-    Ok(OnionObject::BooleanValue(exists).stabilize())
+    Ok(OnionBooleanValue::new_static(exists))
 }
 
 /// 检查路径是否是目录
@@ -181,7 +179,7 @@ fn is_dir(
 ) -> Result<OnionStaticObject, RuntimeError> {
     let path_str = get_string_arg(argument, "path")?;
     let is_directory = std::path::Path::new(path_str).is_dir();
-    Ok(OnionObject::BooleanValue(is_directory).stabilize())
+    Ok(OnionBooleanValue::new_static(is_directory))
 }
 
 /// 检查路径是否是文件
@@ -191,7 +189,7 @@ fn is_file(
 ) -> Result<OnionStaticObject, RuntimeError> {
     let path_str = get_string_arg(argument, "path")?;
     let is_file = std::path::Path::new(path_str).is_file();
-    Ok(OnionObject::BooleanValue(is_file).stabilize())
+    Ok(OnionBooleanValue::new_static(is_file))
 }
 
 /// 连接路径
@@ -202,7 +200,7 @@ fn path_join(
     let base_str = get_string_arg(argument, "base")?;
     let path_str = get_string_arg(argument, "path")?;
     let joined = std::path::Path::new(base_str).join(path_str);
-    Ok(OnionObject::StringValue(joined.to_string_lossy().into()).stabilize())
+    Ok(OnionStringValue::new_static(joined.to_string_lossy()))
 }
 
 /// 构建操作系统模块

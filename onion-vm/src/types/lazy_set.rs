@@ -158,6 +158,14 @@ impl OnionObjectProtocol for OnionLazySet {
             _ => Ok(false),
         }
     }
+
+    fn key_of(&self) -> Result<OnionStaticObject, RuntimeError> {
+        Ok(self.get_container().stabilize())
+    }
+
+    fn value_of(&self) -> Result<OnionStaticObject, RuntimeError> {
+        Ok(self.get_filter().stabilize())
+    }
 }
 
 impl OnionObjectProtocolStatic for OnionLazySet {
@@ -177,16 +185,20 @@ impl OnionObjectProtocolStatic for OnionLazySet {
     /// - `Err(RuntimeError)`: 属性不存在或访问失败
     fn with_attribute<F, R>(
         &self,
-        _self_object: &OnionObject,
+        self_object: &OnionObject,
         key: &OnionObject,
         f: &F,
     ) -> Result<R, RuntimeError>
     where
-        F: Fn(&OnionObject) -> Result<R, RuntimeError>,
+        F: Fn(&OnionObject, &OnionObject) -> Result<R, RuntimeError>,
     {
         match key {
-            OnionObject::StringValue(s) if s.value() == "container" => f(self.get_container()),
-            OnionObject::StringValue(s) if s.value() == "filter" => f(self.get_filter()),
+            OnionObject::StringValue(s) if s.value() == "container" => {
+                f(self_object, self.get_container())
+            }
+            OnionObject::StringValue(s) if s.value() == "filter" => {
+                f(self_object, self.get_filter())
+            }
             OnionObject::StringValue(s) if s.value() == "collect" => {
                 let empty_pool = OnionKeyPool::create(vec![]);
                 let collector = OnionLazySetCollector {
@@ -211,7 +223,7 @@ impl OnionObjectProtocolStatic for OnionLazySet {
                 // 保证 collector 生命周期直到 weak 被用完
                 let result = {
                     let collector_weak = collector.weak();
-                    f(collector_weak)
+                    f(self_object, collector_weak)
                 };
                 result
             }

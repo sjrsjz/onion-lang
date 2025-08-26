@@ -7,7 +7,7 @@ use onion_vm::{
     },
     types::{
         lambda::{
-            definition::{LambdaBody, LambdaType, OnionLambdaDefinition},
+            definition::{LambdaBody, LambdaType, OnionLambdaDefinitionInner},
             launcher::OnionLambdaRunnableLauncher,
             parameter::LambdaParameter,
             vm_instructions::{
@@ -16,6 +16,7 @@ use onion_vm::{
         },
         object::{OnionObject, OnionStaticObject},
         tuple::OnionTuple,
+        undefined::OnionUndefined,
     },
     unwrap_object,
     utils::fastmap::OnionFastMap,
@@ -99,7 +100,7 @@ impl ReplExecutor {
         capture.push("Out", self.out_tuple.weak().clone());
 
         // 创建Lambda定义，包含stdlib和Out两个参数
-        let lambda = OnionLambdaDefinition::new_static(
+        let lambda = OnionLambdaDefinitionInner::new_static(
             LambdaParameter::Multiple(Box::new([])),
             LambdaBody::Instruction(Arc::new(vm_instructions_package.clone())),
             capture,
@@ -111,7 +112,7 @@ impl ReplExecutor {
         let mut scheduler: Box<dyn Runnable> = Box::new(Scheduler::new(vec![Box::new(
             OnionLambdaRunnableLauncher::new(
                 lambda.weak(),
-                OnionObject::Undefined(None).stabilize(),
+                OnionUndefined::new_static(None),
                 args,
                 Ok,
             )
@@ -172,46 +173,67 @@ impl ReplExecutor {
                     unreachable!()
                 }
                 StepResult::Return(ref result) => {
-                    let result_borrowed = result.weak();
-                    let result = unwrap_object!(result_borrowed, OnionObject::Pair)
-                        .map_err(|e| format!("Failed to unwrap result: {e:?}"))?;
-                    let key = result.get_key();
-                    let success = *unwrap_object!(key, OnionObject::BooleanValue)
-                        .map_err(|e| format!("Failed to get success key: {e:?}"))?;
+                    // 在 with_data 闭包内提取所有需要的数据
+                    let result_data = result
+                        .weak()
+                        .with_data(|obj| {
+                            // 解包 Pair
+                            let pair = unwrap_object!(obj, OnionObject::Pair)?;
+
+                            // 提取 success 标志
+                            let success = pair.get_key().with_data(|key_obj| {
+                                let bool_val = unwrap_object!(key_obj, OnionObject::BooleanValue)?;
+                                Ok(bool_val.value())
+                            })?;
+
+                            // 提取错误消息（如果失败的话）
+                            let error_message = if !success {
+                                Some(pair.get_value().display(&vec![])?)
+                            } else {
+                                None
+                            };
+
+                            // 提取结果值
+                            let result_value = pair.get_value().clone();
+
+                            // 检查是否是 Undefined
+                            let is_undefined = pair.get_value().with_data(|value_obj| {
+                                Ok(unwrap_object!(value_obj, OnionObject::Undefined).is_ok())
+                            })?;
+
+                            // 获取要打印的内容（如果需要打印的话）
+                            let print_content = if success && !is_undefined {
+                                Some(pair.get_value().display(&vec![])?)
+                            } else {
+                                None
+                            };
+
+                            Ok((success, error_message, result_value, print_content))
+                        })
+                        .map_err(|e| format!("Failed to process return value: {e:?}"))?;
+
+                    let (success, error_message, result_value, print_content) = result_data;
 
                     if !success {
-                        let error_msg = result
-                            .get_value()
-                            .to_string(&vec![])
-                            .map_err(|e| format!("Failed to get error message: {e:?}"))?;
-
-                        eprintln!("{} {}", "Error:".red().bold(), error_msg);
-
+                        // 处理失败情况
+                        if let Some(error_msg) = error_message {
+                            eprintln!("{} {}", "Error:".red().bold(), error_msg);
+                        }
                         eprintln!(
                             "\n{}",
                             "Context at Time of Failure Return:".yellow().underline()
                         );
                         eprintln!("{}", scheduler.format_context());
-
                         return Err("Execution returned a failure value.".to_string());
                     }
 
-                    // 获取执行结果并存储到Out元组中
-                    let result_value = result.get_value();
-
                     // 将结果添加到Out元组中
-                    self.add_result_to_out(result_value.clone());
-                    let is_undefined = result_value
-                        .with_data(|data| Ok(unwrap_object!(data, OnionObject::Undefined).is_ok()))
-                        .map_err(|e| format!("Failed to check if result is Undefined: {e:?}"))?;
-                    if is_undefined {
-                        break; // 如果结果是Undefined，则不需要打印
+                    self.add_result_to_out(result_value);
+
+                    // 打印结果（如果需要的话）
+                    if let Some(result_str) = print_content {
+                        println!("{} {}", "Result:".cyan(), result_str);
                     }
-                    // 打印结果
-                    let result_str = result_value
-                        .to_string(&vec![])
-                        .map_err(|e| format!("Failed to get result value: {e:?}"))?;
-                    println!("{} {}", "Result:".cyan(), result_str);
                     break;
                 }
             }

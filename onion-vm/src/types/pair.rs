@@ -146,21 +146,29 @@ impl OnionObjectProtocol for OnionPair {
         self.get_value()
             .apply(Some(self_object.unwrap_or(self.get_key())), value, gc)
     }
+
+    fn key_of(&self) -> Result<OnionStaticObject, RuntimeError> {
+        Ok(self.get_key().stabilize())
+    }
+
+    fn value_of(&self) -> Result<OnionStaticObject, RuntimeError> {
+        Ok(self.get_value().stabilize())
+    }
 }
 
 impl OnionObjectProtocolStatic for OnionPair {
     fn with_attribute<F, R>(
         &self,
-        self_object: &OnionObject,
+        _self_object: &OnionObject,
         key: &OnionObject,
         f: &F,
     ) -> Result<R, RuntimeError>
     where
-        F: Fn(&OnionObject) -> Result<R, RuntimeError>,
+        F: Fn(&OnionObject, &OnionObject) -> Result<R, RuntimeError>,
     {
         self.value
             .1
-            .with_attribute(self_object, key, &f)
-            .or_else(|_| self.value.0.with_attribute(self_object, key, &f))
+            .with_attribute(key, f)
+            .or_else(|_| self.value.0.with_attribute(key, f))
     }
 }

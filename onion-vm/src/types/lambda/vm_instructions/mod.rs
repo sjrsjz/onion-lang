@@ -513,18 +513,14 @@ pub fn get_attr(
     let obj = unwrap_step_result!(runnable.context.get_object_rev(1));
     let element =
         unwrap_step_result!(obj.weak().with_data(|inner| attr.weak().with_data(|attr| {
-            Ok(inner.with_attribute(
-                &OnionObject::Undefined(OnionUndefined::new(None)),
-                attr,
-                &|attr| {
-                    Ok(match inner {
-                        OnionObject::Lambda(lambda) => {
-                            OnionObject::Lambda(lambda.bind_self_object(attr.clone()))
-                        }
-                        _ => attr.clone(),
-                    })
-                },
-            )?)
+            Ok(inner.with_attribute(attr, &|super_object, attr| {
+                Ok(match attr {
+                    OnionObject::Lambda(lambda) => {
+                        OnionObject::Lambda(lambda.bind_self_object(super_object.clone()))
+                    }
+                    _ => attr.clone(),
+                })
+            })?)
         })))
         .consume_and_stabilize();
 

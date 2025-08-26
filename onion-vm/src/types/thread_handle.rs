@@ -196,28 +196,31 @@ impl OnionObjectProtocol for OnionThreadHandle {
 impl OnionObjectProtocolAny for OnionThreadHandle {
     fn with_attribute(
         &self,
-        _self_object: &OnionObject,
+        self_object: &OnionObject,
         key: &OnionObject,
-        f: &mut dyn FnMut(&OnionObject) -> Result<(), RuntimeError>,
+        f: &mut dyn FnMut(&OnionObject, &OnionObject) -> Result<(), RuntimeError>,
     ) -> Result<(), RuntimeError> {
         match key {
             OnionObject::StringValue(s) => match s.value() {
-                "is_finished" => f(&OnionObject::BooleanValue(OnionBooleanValue::new(
-                    self.is_finished(),
-                ))),
+                "is_finished" => f(
+                    self_object,
+                    &OnionObject::BooleanValue(OnionBooleanValue::new(self.is_finished())),
+                ),
                 "has_handle" => {
                     let guard = self.inner.lock().unwrap();
                     let has_handle = guard.0.is_some();
-                    f(&OnionObject::BooleanValue(OnionBooleanValue::new(
-                        has_handle,
-                    )))
+                    f(
+                        self_object,
+                        &OnionObject::BooleanValue(OnionBooleanValue::new(has_handle)),
+                    )
                 }
                 "has_result" => {
                     let guard = self.inner.lock().unwrap();
                     let has_result = guard.2.upgrade().is_some();
-                    f(&OnionObject::BooleanValue(OnionBooleanValue::new(
-                        has_result,
-                    )))
+                    f(
+                        self_object,
+                        &OnionObject::BooleanValue(OnionBooleanValue::new(has_result)),
+                    )
                 }
                 _ => Err(RuntimeError::InvalidOperation(
                     format!("Attribute {} not found in ThreadHandle", s.repr(&vec![])?).into(),

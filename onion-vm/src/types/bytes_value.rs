@@ -145,7 +145,7 @@ impl OnionObjectProtocol for OnionBytesValue {
         value: &OnionObject,
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<Result<StepResult, OnionStaticObject>, RuntimeError> {
-        match value {
+        value.with_data(|value| match value {
             OnionObject::IntegerValue(i) => {
                 let idx = i.value();
                 let len = self.value.len();
@@ -179,7 +179,7 @@ impl OnionObjectProtocol for OnionBytesValue {
             _ => Err(RuntimeError::InvalidOperation(
                 format!("Cannot apply {} to Bytes", value.repr(&vec![])?).into(),
             )),
-        }
+        })
     }
 }
 
@@ -191,7 +191,7 @@ impl OnionObjectProtocolStatic for OnionBytesValue {
         f: &F,
     ) -> Result<R, RuntimeError>
     where
-        F: Fn(&OnionObject) -> Result<R, RuntimeError>,
+        F: Fn(&OnionObject, &OnionObject) -> Result<R, RuntimeError>,
     {
         if let OnionObject::StringValue(key_str) = key {
             match key_str.value() {
@@ -204,7 +204,7 @@ impl OnionObjectProtocolStatic for OnionBytesValue {
                         OnionKeyPool::create(vec![]),
                         &native_int_converter,
                     );
-                    return f(converter.weak());
+                    return f(self_object, converter.weak());
                 }
                 "float" => {
                     let converter = wrap_native_function(
@@ -215,7 +215,7 @@ impl OnionObjectProtocolStatic for OnionBytesValue {
                         OnionKeyPool::create(vec![]),
                         &native_float_converter,
                     );
-                    return f(converter.weak());
+                    return f(self_object, converter.weak());
                 }
                 "string" => {
                     let converter = wrap_native_function(
@@ -226,7 +226,7 @@ impl OnionObjectProtocolStatic for OnionBytesValue {
                         OnionKeyPool::create(vec![]),
                         &native_string_converter,
                     );
-                    return f(converter.weak());
+                    return f(self_object, converter.weak());
                 }
                 "bool" => {
                     let converter = wrap_native_function(
@@ -237,7 +237,7 @@ impl OnionObjectProtocolStatic for OnionBytesValue {
                         OnionKeyPool::create(vec![]),
                         &native_bool_converter,
                     );
-                    return f(converter.weak());
+                    return f(self_object, converter.weak());
                 }
                 "bytes" => {
                     let converter = wrap_native_function(
@@ -248,7 +248,7 @@ impl OnionObjectProtocolStatic for OnionBytesValue {
                         OnionKeyPool::create(vec![]),
                         &native_bytes_converter,
                     );
-                    return f(converter.weak());
+                    return f(self_object, converter.weak());
                 }
                 "length" => {
                     let length_method = wrap_native_function(
@@ -259,7 +259,7 @@ impl OnionObjectProtocolStatic for OnionBytesValue {
                         OnionKeyPool::create(vec![]),
                         &native_length_method,
                     );
-                    return f(length_method.weak());
+                    return f(self_object, length_method.weak());
                 }
                 "elements" => {
                     let elements_method = wrap_native_function(
@@ -270,7 +270,7 @@ impl OnionObjectProtocolStatic for OnionBytesValue {
                         OnionKeyPool::create(vec![]),
                         &native_elements_method,
                     );
-                    return f(elements_method.weak());
+                    return f(self_object, elements_method.weak());
                 }
                 _ => {}
             }

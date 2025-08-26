@@ -9,7 +9,7 @@
 //! - 支持索引与键的双向访问
 //! - 线性插入、查找与覆盖
 
-use std::{hash::Hash, sync::Arc};
+use std::{fmt::Debug, hash::Hash, sync::Arc};
 
 use rustc_hash::FxHashMap;
 
@@ -62,10 +62,24 @@ impl<K: PartialEq + Eq + Hash + Clone> OnionKeyPool<K> {
 /// # 字段
 /// - `pairs`: (索引, 值) 对列表
 /// - `pool`: 关联的键池
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct OnionFastMap<K: PartialEq + Eq + Hash + Clone, V> {
     pairs: Vec<(usize, V)>,
     pool: OnionKeyPool<K>,
+}
+
+impl<K: PartialEq + Eq + Hash + Clone + Debug, V: Debug> Debug for OnionFastMap<K, V> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut map = f.debug_map();
+        for (index, value) in &self.pairs {
+            if let Some(key) = self.pool.keys().get(*index) {
+                map.entry(&key, &value);
+            } else {
+                map.entry(&format!("<invalid index {}>", index), &value);
+            }
+        }
+        map.finish()
+    }
 }
 
 impl<K: PartialEq + Eq + Hash + Clone, V> OnionFastMap<K, V> {

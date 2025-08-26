@@ -3,6 +3,8 @@ use onion_vm::{
     GC,
     lambda::runnable::RuntimeError,
     types::{
+        float_value::OnionFloatValue,
+        integer_value::OnionIntegerValue,
         lambda::parameter::LambdaParameter,
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
     },
@@ -23,8 +25,8 @@ fn abs(
     };
 
     value.weak().with_data(|value_data| match value_data {
-        OnionObject::IntegerValue(n) => Ok(OnionObject::IntegerValue(n.abs()).stabilize()),
-        OnionObject::FloatValue(f) => Ok(OnionObject::FloatValue(f.abs()).stabilize()),
+        OnionObject::IntegerValue(n) => Ok(OnionIntegerValue::new_static(n.value().abs())),
+        OnionObject::FloatValue(f) => Ok(OnionFloatValue::new_static(f.value().abs())),
         _ => Err(RuntimeError::InvalidType(
             "abs requires a numeric value".into(),
         )),
@@ -42,8 +44,8 @@ fn sin(
     };
 
     value.weak().with_data(|value_data| match value_data {
-        OnionObject::IntegerValue(n) => Ok(OnionObject::FloatValue((*n as f64).sin()).stabilize()),
-        OnionObject::FloatValue(f) => Ok(OnionObject::FloatValue(f.sin()).stabilize()),
+        OnionObject::IntegerValue(n) => Ok(OnionFloatValue::new_static((n.value() as f64).sin())),
+        OnionObject::FloatValue(f) => Ok(OnionFloatValue::new_static(f.value().sin())),
         _ => Err(RuntimeError::InvalidType(
             "sin requires a numeric value".into(),
         )),
@@ -61,8 +63,8 @@ fn cos(
     };
 
     value.weak().with_data(|value_data| match value_data {
-        OnionObject::IntegerValue(n) => Ok(OnionObject::FloatValue((*n as f64).cos()).stabilize()),
-        OnionObject::FloatValue(f) => Ok(OnionObject::FloatValue(f.cos()).stabilize()),
+        OnionObject::IntegerValue(n) => Ok(OnionFloatValue::new_static((n.value() as f64).cos())),
+        OnionObject::FloatValue(f) => Ok(OnionFloatValue::new_static(f.value().cos())),
         _ => Err(RuntimeError::InvalidType(
             "cos requires a numeric value".into(),
         )),
@@ -80,8 +82,8 @@ fn tan(
     };
 
     value.weak().with_data(|value_data| match value_data {
-        OnionObject::IntegerValue(n) => Ok(OnionObject::FloatValue((*n as f64).tan()).stabilize()),
-        OnionObject::FloatValue(f) => Ok(OnionObject::FloatValue(f.tan()).stabilize()),
+        OnionObject::IntegerValue(n) => Ok(OnionFloatValue::new_static((n.value() as f64).tan())),
+        OnionObject::FloatValue(f) => Ok(OnionFloatValue::new_static(f.value().tan())),
         _ => Err(RuntimeError::InvalidType(
             "tan requires a numeric value".into(),
         )),
@@ -100,21 +102,21 @@ fn log(
 
     value.weak().with_data(|value_data| match value_data {
         OnionObject::IntegerValue(n) => {
-            if *n <= 0 {
+            if n.value() <= 0 {
                 Err(RuntimeError::InvalidOperation(
                     "log requires a positive value".into(),
                 ))
             } else {
-                Ok(OnionObject::FloatValue((*n as f64).ln()).stabilize())
+                Ok(OnionFloatValue::new_static((n.value() as f64).ln()))
             }
         }
         OnionObject::FloatValue(f) => {
-            if *f <= 0.0 {
+            if f.value() <= 0.0 {
                 Err(RuntimeError::InvalidOperation(
                     "log requires a positive value".into(),
                 ))
             } else {
-                Ok(OnionObject::FloatValue(f.ln()).stabilize())
+                Ok(OnionFloatValue::new_static(f.value().ln()))
             }
         }
         _ => Err(RuntimeError::InvalidType(
@@ -135,25 +137,25 @@ fn sqrt(
 
     value.weak().with_data(|value_data| match value_data {
         OnionObject::IntegerValue(n) => {
-            if *n < 0 {
+            if n.value() < 0 {
                 Err(RuntimeError::InvalidOperation(
                     "Cannot take square root of a negative number"
                         .to_string()
                         .into(),
                 ))
             } else {
-                Ok(OnionObject::FloatValue((*n as f64).sqrt()).stabilize())
+                Ok(OnionFloatValue::new_static((n.value() as f64).sqrt()))
             }
         }
         OnionObject::FloatValue(f) => {
-            if *f < 0.0 {
+            if f.value() < 0.0 {
                 Err(RuntimeError::InvalidOperation(
                     "Cannot take square root of a negative number"
                         .to_string()
                         .into(),
                 ))
             } else {
-                Ok(OnionObject::FloatValue(f.sqrt()).stabilize())
+                Ok(OnionFloatValue::new_static(f.value().sqrt()))
             }
         }
         _ => Err(RuntimeError::InvalidType(
@@ -182,21 +184,25 @@ fn pow(
             .weak()
             .with_data(|exp_data| match (base_data, exp_data) {
                 (OnionObject::IntegerValue(base), OnionObject::IntegerValue(exp)) => {
-                    if *exp >= 0 {
-                        Ok(OnionObject::IntegerValue(base.pow(*exp as u32)).stabilize())
+                    if exp.value() >= 0 {
+                        Ok(OnionIntegerValue::new_static(
+                            base.value().pow(exp.value() as u32),
+                        ))
                     } else {
-                        Ok(OnionObject::FloatValue((*base as f64).powf(*exp as f64)).stabilize())
+                        Ok(OnionFloatValue::new_static(
+                            (base.value() as f64).powf(exp.value() as f64),
+                        ))
                     }
                 }
                 (OnionObject::FloatValue(base), OnionObject::FloatValue(exp)) => {
-                    Ok(OnionObject::FloatValue(base.powf(*exp)).stabilize())
+                    Ok(OnionFloatValue::new_static(base.value().powf(exp.value())))
                 }
-                (OnionObject::IntegerValue(base), OnionObject::FloatValue(exp)) => {
-                    Ok(OnionObject::FloatValue((*base as f64).powf(*exp)).stabilize())
-                }
-                (OnionObject::FloatValue(base), OnionObject::IntegerValue(exp)) => {
-                    Ok(OnionObject::FloatValue(base.powf(*exp as f64)).stabilize())
-                }
+                (OnionObject::IntegerValue(base), OnionObject::FloatValue(exp)) => Ok(
+                    OnionFloatValue::new_static((base.value() as f64).powf(exp.value())),
+                ),
+                (OnionObject::FloatValue(base), OnionObject::IntegerValue(exp)) => Ok(
+                    OnionFloatValue::new_static(base.value().powf(exp.value() as f64)),
+                ),
                 _ => Err(RuntimeError::InvalidType(
                     "pow requires numeric values for base and exponent"
                         .to_string()
@@ -217,8 +223,8 @@ fn exp(
     };
 
     value.weak().with_data(|value_data| match value_data {
-        OnionObject::IntegerValue(n) => Ok(OnionObject::FloatValue((*n as f64).exp()).stabilize()),
-        OnionObject::FloatValue(f) => Ok(OnionObject::FloatValue(f.exp()).stabilize()),
+        OnionObject::IntegerValue(n) => Ok(OnionFloatValue::new_static((n.value() as f64).exp())),
+        OnionObject::FloatValue(f) => Ok(OnionFloatValue::new_static(f.value().exp())),
         _ => Err(RuntimeError::InvalidType(
             "exp requires a numeric value".into(),
         )),
@@ -236,8 +242,8 @@ fn floor(
     };
 
     value.weak().with_data(|value_data| match value_data {
-        OnionObject::IntegerValue(n) => Ok(OnionObject::IntegerValue(*n).stabilize()),
-        OnionObject::FloatValue(f) => Ok(OnionObject::IntegerValue(f.floor() as i64).stabilize()),
+        OnionObject::IntegerValue(n) => Ok(OnionIntegerValue::new_static(n.value())),
+        OnionObject::FloatValue(f) => Ok(OnionFloatValue::new_static(f.value().floor())),
         _ => Err(RuntimeError::InvalidType(
             "floor requires a numeric value".into(),
         )),
@@ -255,8 +261,8 @@ fn ceil(
     };
 
     value.weak().with_data(|value_data| match value_data {
-        OnionObject::IntegerValue(n) => Ok(OnionObject::IntegerValue(*n).stabilize()),
-        OnionObject::FloatValue(f) => Ok(OnionObject::IntegerValue(f.ceil() as i64).stabilize()),
+        OnionObject::IntegerValue(n) => Ok(OnionIntegerValue::new_static(n.value())),
+        OnionObject::FloatValue(f) => Ok(OnionIntegerValue::new_static(f.value().ceil() as i64)),
         _ => Err(RuntimeError::InvalidType(
             "ceil requires a numeric value".into(),
         )),
@@ -274,8 +280,8 @@ fn round(
     };
 
     value.weak().with_data(|value_data| match value_data {
-        OnionObject::IntegerValue(n) => Ok(OnionObject::IntegerValue(*n).stabilize()),
-        OnionObject::FloatValue(f) => Ok(OnionObject::IntegerValue(f.round() as i64).stabilize()),
+        OnionObject::IntegerValue(n) => Ok(OnionIntegerValue::new_static(n.value())),
+        OnionObject::FloatValue(f) => Ok(OnionIntegerValue::new_static(f.value().round() as i64)),
         _ => Err(RuntimeError::InvalidType(
             "round requires a numeric value".into(),
         )),
@@ -294,8 +300,8 @@ fn asin(
 
     value.weak().with_data(|value_data| {
         let val_f64 = match value_data {
-            OnionObject::IntegerValue(n) => *n as f64,
-            OnionObject::FloatValue(f) => *f,
+            OnionObject::IntegerValue(n) => n.value() as f64,
+            OnionObject::FloatValue(f) => f.value(),
             _ => {
                 return Err(RuntimeError::InvalidType(
                     "asin requires a numeric value".into(),
@@ -307,7 +313,7 @@ fn asin(
                 "asin requires a value between -1 and 1".into(),
             ))
         } else {
-            Ok(OnionObject::FloatValue(val_f64.asin()).stabilize())
+            Ok(OnionFloatValue::new_static(val_f64.asin()))
         }
     })
 }
@@ -324,8 +330,8 @@ fn acos(
 
     value.weak().with_data(|value_data| {
         let val_f64 = match value_data {
-            OnionObject::IntegerValue(n) => *n as f64,
-            OnionObject::FloatValue(f) => *f,
+            OnionObject::IntegerValue(n) => n.value() as f64,
+            OnionObject::FloatValue(f) => f.value(),
             _ => {
                 return Err(RuntimeError::InvalidType(
                     "acos requires a numeric value".into(),
@@ -337,7 +343,7 @@ fn acos(
                 "acos requires a value between -1 and 1".into(),
             ))
         } else {
-            Ok(OnionObject::FloatValue(val_f64.acos()).stabilize())
+            Ok(OnionFloatValue::new_static(val_f64.acos()))
         }
     })
 }
@@ -353,8 +359,8 @@ fn atan(
     };
 
     value.weak().with_data(|value_data| match value_data {
-        OnionObject::IntegerValue(n) => Ok(OnionObject::FloatValue((*n as f64).atan()).stabilize()),
-        OnionObject::FloatValue(f) => Ok(OnionObject::FloatValue(f.atan()).stabilize()),
+        OnionObject::IntegerValue(n) => Ok(OnionFloatValue::new_static((n.value() as f64).atan())),
+        OnionObject::FloatValue(f) => Ok(OnionFloatValue::new_static(f.value().atan())),
         _ => Err(RuntimeError::InvalidType(
             "atan requires a numeric value".into(),
         )),
@@ -367,11 +373,11 @@ pub fn build_module() -> OnionStaticObject {
     // --- Constants ---
     module.insert(
         "PI".to_string(),
-        OnionObject::FloatValue(std::f64::consts::PI).stabilize(),
+        OnionFloatValue::new_static(std::f64::consts::PI),
     );
     module.insert(
         "E".to_string(),
-        OnionObject::FloatValue(std::f64::consts::E).stabilize(),
+        OnionFloatValue::new_static(std::f64::consts::E),
     );
 
     // --- Single-argument functions (all take "value") ---

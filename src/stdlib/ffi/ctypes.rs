@@ -143,15 +143,15 @@ impl OnionObjectProtocol for CTypes {
 impl OnionObjectProtocolAny for CTypes {
     fn with_attribute(
         &self,
-        _self_object: &OnionObject,
+        self_object: &OnionObject,
         key: &OnionObject,
-        f: &mut dyn FnMut(&OnionObject) -> Result<(), RuntimeError>,
+        f: &mut dyn FnMut(&OnionObject, &OnionObject) -> Result<(), RuntimeError>,
     ) -> Result<(), RuntimeError> {
         if let OnionObject::StringValue(attr) = key {
             match attr.value() {
                 "value" => {
                     let v = self.value_of()?;
-                    f(v.weak())
+                    f(self_object, v.weak())
                 }
                 _ => Err(RuntimeError::InvalidOperation(
                     format!("Attribute {attr:?} not found on CTypes object").into(),

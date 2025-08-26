@@ -19,7 +19,7 @@ use onion_vm::{
     },
     types::{
         lambda::{
-            definition::{LambdaBody, LambdaType, OnionLambdaDefinition},
+            definition::{LambdaBody, LambdaType, OnionLambdaDefinitionInner},
             launcher::OnionLambdaRunnableLauncher,
             parameter::LambdaParameter,
             vm_instructions::{
@@ -28,6 +28,7 @@ use onion_vm::{
         },
         object::OnionObject,
         tuple::OnionTuple,
+        undefined::OnionUndefined,
     },
     unwrap_object,
     utils::fastmap::OnionFastMap,
@@ -369,7 +370,7 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
     // 尝试将标准库对象添加到捕获变量中（当字符串池没有stdlib时会自动忽略）
     capture.push("stdlib", stdlib.weak().clone());
     // Create Lambda definition
-    let lambda = OnionLambdaDefinition::new_static(
+    let lambda = OnionLambdaDefinitionInner::new_static(
         LambdaParameter::Multiple([].into()),
         LambdaBody::Instruction(Arc::new(vm_instructions_package.clone())),
         capture,
@@ -380,13 +381,8 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
     let args = OnionTuple::new_static(vec![]);
 
     let mut scheduler: Box<dyn Runnable> = Box::new(Scheduler::new(vec![Box::new(
-        OnionLambdaRunnableLauncher::new(
-            lambda.weak(),
-            OnionObject::Undefined(None).stabilize(),
-            args,
-            Ok,
-        )
-        .map_err(|e| format!("Failed to create runnable Lambda: {e:?}"))?,
+        OnionLambdaRunnableLauncher::new(lambda.weak(), OnionUndefined::new_static(None), args, Ok)
+            .map_err(|e| format!("Failed to create runnable Lambda: {e:?}"))?,
     )]));
     // Execute code
     loop {
@@ -427,52 +423,74 @@ fn execute_bytecode_package(vm_instructions_package: &VMInstructionPackage) -> R
                 unreachable!()
             }
             StepResult::Return(ref result) => {
-                let result_borrowed = result.weak();
-                let result = unwrap_object!(result_borrowed, OnionObject::Pair)
-                    .map_err(|e| format!("Failed to unwrap result: {e:?}"))?;
-                let success = *unwrap_object!(result.get_key(), OnionObject::BooleanValue)
-                    .map_err(|e| format!("Failed to get success key: {e:?}"))?;
-                if !success {
-                    // 这是程序逻辑上的失败（例如，断言失败），而不是 VM 崩溃
-                    // 我们也可以在这里利用 format_context
-                    eprintln!(
-                        "{} {}",
-                        "Execution returned a failure value:".red().bold(),
-                        result
-                            .get_value()
-                            .to_string(&vec![])
-                            .map_err(|e| { format!("Failed to get error message: {e:?}") })?
-                    );
+                // 在 with_data 闭包内提取所有需要的数据
+                let result_data = result
+                    .weak()
+                    .with_data(|obj| {
+                        // 解包 Pair
+                        let pair = unwrap_object!(obj, OnionObject::Pair)?;
 
-                    // 打印上下文以帮助调试为什么会返回失败
+                        // 提取 success 标志
+                        let success = pair.get_key().with_data(|key_obj| {
+                            let bool_val = unwrap_object!(key_obj, OnionObject::BooleanValue)?;
+                            Ok(bool_val.value())
+                        })?;
+
+                        // 提取错误消息（如果失败的话）
+                        let error_message = if !success {
+                            Some(pair.get_value().display(&vec![])?)
+                        } else {
+                            None
+                        };
+
+                        // 检查是否需要打印结果
+                        let should_print = if success {
+                            pair.get_value().with_data(|value_obj| match value_obj {
+                                OnionObject::Undefined(v) if matches!(v.value(), None) => Ok(false),
+                                OnionObject::Tuple(tuple) => Ok(!tuple.get_elements().is_empty()),
+                                _ => Ok(true),
+                            })?
+                        } else {
+                            false
+                        };
+
+                        // 获取要打印的内容（如果需要打印的话）
+                        let print_content = if success && should_print {
+                            Some(pair.get_value().display(&vec![])?)
+                        } else {
+                            None
+                        };
+
+                        Ok((success, error_message, print_content))
+                    })
+                    .map_err(|e| format!("Failed to process return value: {e:?}"))?;
+
+                let (success, error_message, print_content) = result_data;
+
+                if !success {
+                    // 处理失败情况
+                    if let Some(error_msg) = error_message {
+                        eprintln!(
+                            "{} {}",
+                            "Execution returned a failure value:".red().bold(),
+                            error_msg
+                        );
+                    }
                     eprintln!(
                         "\n{}",
                         "Context at Time of Failure Return:".yellow().underline()
                     );
                     eprintln!("{}", scheduler.format_context());
-
                     return Err("Execution failed with a returned error value.".to_string());
                 }
-                let do_not_print = result
-                    .get_value()
-                    .with_data(|data| match data {
-                        OnionObject::Undefined(None) => Ok(true),
-                        OnionObject::Tuple(tuple) => Ok(tuple.get_elements().is_empty()),
-                        _ => Ok(false),
-                    })
-                    .map_err(|e| format!("Failed to check if result is undefined: {e:?}"))?;
-                if do_not_print {
-                    return Ok(());
+
+                match print_content {
+                    Some(content) => {
+                        println!("{}", content);
+                        break;
+                    }
+                    None => return Ok(()), // 不需要打印，直接返回
                 }
-                // Print result and exit
-                println!(
-                    "{}",
-                    result
-                        .get_value()
-                        .to_string(&vec![])
-                        .map_err(|e| format!("Failed to get result value: {e:?}"))?
-                );
-                break;
             }
         }
     }

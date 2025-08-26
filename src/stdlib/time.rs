@@ -4,16 +4,20 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use chrono::DateTime;
 use indexmap::IndexMap;
 use onion_vm::{
     GC,
     lambda::runnable::{Runnable, RuntimeError, StepResult},
     types::{
+        integer_value::OnionIntegerValue,
         lambda::{
-            definition::{LambdaBody, LambdaType, OnionLambdaDefinition},
+            definition::{LambdaBody, LambdaType, OnionLambdaDefinitionInner},
             parameter::LambdaParameter,
         },
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
+        string_value::OnionStringValue,
+        undefined::OnionUndefined,
     },
     unwrap_step_result,
     utils::fastmap::{OnionFastMap, OnionKeyPool},
@@ -35,7 +39,7 @@ fn get_integer_arg(
         )
     })?;
     match obj.weak() {
-        OnionObject::IntegerValue(i) => Ok(*i),
+        OnionObject::IntegerValue(i) => Ok(i.value()),
         _ => Err(RuntimeError::InvalidType(
             format!("Argument '{name}' must be an integer")
                 .to_string()
@@ -51,7 +55,7 @@ fn timestamp(
 ) -> Result<OnionStaticObject, RuntimeError> {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| OnionObject::IntegerValue(d.as_secs() as i64).stabilize())
+        .map(|d| OnionIntegerValue::new_static(d.as_secs() as i64))
         .map_err(|e| RuntimeError::DetailedError(format!("Failed to get timestamp: {e}").into()))
 }
 
@@ -62,7 +66,7 @@ fn timestamp_millis(
 ) -> Result<OnionStaticObject, RuntimeError> {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| OnionObject::IntegerValue(d.as_millis() as i64).stabilize())
+        .map(|d| OnionIntegerValue::new_static(d.as_millis() as i64))
         .map_err(|e| RuntimeError::DetailedError(format!("Failed to get timestamp: {e}").into()))
 }
 
@@ -73,7 +77,7 @@ fn timestamp_nanos(
 ) -> Result<OnionStaticObject, RuntimeError> {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| OnionObject::IntegerValue(d.as_nanos() as i64).stabilize()) // Note: might overflow on 32-bit systems in the future
+        .map(|d| OnionIntegerValue::new_static(d.as_nanos() as i64))
         .map_err(|e| RuntimeError::DetailedError(format!("Failed to get timestamp: {e}").into()))
 }
 
@@ -89,7 +93,7 @@ fn sleep_seconds(
         ));
     }
     thread::sleep(Duration::from_secs(seconds as u64));
-    Ok(OnionObject::Null.stabilize())
+    Ok(OnionUndefined::new_static(None))
 }
 
 /// 睡眠指定的毫秒数
@@ -104,7 +108,7 @@ fn sleep_millis(
         ));
     }
     thread::sleep(Duration::from_millis(millis as u64));
-    Ok(OnionObject::Null.stabilize())
+    Ok(OnionUndefined::new_static(None))
 }
 
 /// 睡眠指定的微秒数
@@ -119,22 +123,18 @@ fn sleep_micros(
         ));
     }
     thread::sleep(Duration::from_micros(micros as u64));
-    Ok(OnionObject::Null.stabilize())
+    Ok(OnionUndefined::new_static(None))
 }
 
-/// 将时间戳转换为日期时间字符串（简单实现）
+/// 将时间戳转换为日期时间字符串（使用chrono精确实现）
 fn format_timestamp(timestamp: u64) -> String {
-    const SECS_PER_DAY: u64 = 86400;
-    let days = timestamp / SECS_PER_DAY;
-    let rem_secs = timestamp % SECS_PER_DAY;
-    let year = 1970 + days / 365; // Simplified calculation
-    let rem_days = days % 365;
-    let month = rem_days / 30 + 1; // Simplified calculation
-    let day = rem_days % 30 + 1; // Simplified calculation
-    let hour = rem_secs / 3600;
-    let minute = (rem_secs % 3600) / 60;
-    let second = rem_secs % 60;
-    format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02} UTC")
+    // 将timestamp转换为DateTime<Utc>
+    if let Some(dt) = DateTime::from_timestamp(timestamp as i64, 0) {
+        dt.format("%Y-%m-%d %H:%M:%S UTC").to_string()
+    } else {
+        // 如果时间戳无效，回退到错误信息
+        format!("Invalid timestamp: {}", timestamp)
+    }
 }
 
 /// 获取格式化的当前时间字符串（UTC）
@@ -146,7 +146,7 @@ fn now_utc(
         RuntimeError::DetailedError(format!("Failed to get current time: {e}").into())
     })?;
     let datetime = format_timestamp(duration.as_secs());
-    Ok(OnionObject::StringValue(datetime.into()).stabilize())
+    Ok(OnionStringValue::new_static(datetime))
 }
 
 /// 从时间戳格式化时间字符串
@@ -161,17 +161,83 @@ fn format_time(
         ));
     }
     let datetime = format_timestamp(timestamp as u64);
-    Ok(OnionObject::StringValue(datetime.into()).stabilize())
+    Ok(OnionStringValue::new_static(datetime))
 }
 
-/// 计算两个时间戳之间的差值（秒）
-fn time_diff(
+/// 从时间戳格式化时间字符串（自定义格式）
+fn format_time_custom(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
-    let start = get_integer_arg(argument, "start")?;
-    let end = get_integer_arg(argument, "end")?;
-    Ok(OnionObject::IntegerValue(end - start).stabilize())
+    let timestamp = get_integer_arg(argument, "timestamp")?;
+    if timestamp < 0 {
+        return Err(RuntimeError::DetailedError(
+            "Timestamp cannot be negative".into(),
+        ));
+    }
+
+    // 获取格式字符串
+    let format_obj = argument.get("format").ok_or_else(|| {
+        RuntimeError::DetailedError("Function requires a 'format' argument".into())
+    })?;
+    let format_str = match format_obj.weak() {
+        OnionObject::StringValue(s) => s.value(),
+        _ => {
+            return Err(RuntimeError::InvalidType(
+                "Argument 'format' must be a string".into(),
+            ));
+        }
+    };
+
+    if let Some(dt) = DateTime::from_timestamp(timestamp, 0) {
+        let formatted = dt.format(&format_str).to_string();
+        Ok(OnionStringValue::new_static(formatted))
+    } else {
+        Err(RuntimeError::DetailedError(
+            format!("Invalid timestamp: {}", timestamp).into(),
+        ))
+    }
+}
+
+/// 解析时间字符串为时间戳
+fn parse_time(
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
+    _gc: &mut GC<OnionObjectCell>,
+) -> Result<OnionStaticObject, RuntimeError> {
+    // 获取时间字符串
+    let time_obj = argument.get("time_str").ok_or_else(|| {
+        RuntimeError::DetailedError("Function requires a 'time_str' argument".into())
+    })?;
+    let time_str = match time_obj.weak() {
+        OnionObject::StringValue(s) => s.value(),
+        _ => {
+            return Err(RuntimeError::InvalidType(
+                "Argument 'time_str' must be a string".into(),
+            ));
+        }
+    };
+
+    // 获取格式字符串（可选，默认为 "%Y-%m-%d %H:%M:%S %Z"）
+    let format_str = if let Some(format_obj) = argument.get("format") {
+        match format_obj.weak() {
+            OnionObject::StringValue(s) => s.value().to_string(),
+            _ => {
+                return Err(RuntimeError::InvalidType(
+                    "Argument 'format' must be a string".into(),
+                ));
+            }
+        }
+    } else {
+        "%Y-%m-%d %H:%M:%S %Z".to_string()
+    };
+
+    // 尝试解析时间
+    match DateTime::parse_from_str(&time_str, &format_str) {
+        Ok(dt) => Ok(OnionIntegerValue::new_static(dt.timestamp())),
+        Err(e) => Err(RuntimeError::DetailedError(
+            format!("Failed to parse time string: {}", e).into(),
+        )),
+    }
 }
 
 #[derive(Clone)]
@@ -185,7 +251,7 @@ impl Runnable for AsyncSleep {
             RuntimeError::DetailedError(format!("Failed to get elapsed time: {e}").into())
         }));
         if elapsed.as_millis() >= self.millis as u128 {
-            StepResult::Return(OnionObject::Null.stabilize().into())
+            StepResult::Return(OnionUndefined::new_static(None).into())
         } else {
             StepResult::Continue
         }
@@ -220,7 +286,7 @@ fn async_sleep(
         ));
     }
 
-    Ok(OnionLambdaDefinition::new_static(
+    Ok(OnionLambdaDefinitionInner::new_static(
         LambdaParameter::Multiple([].into()),
         LambdaBody::NativeFunction((
             Arc::new(move |_, _, _, _| {
@@ -329,6 +395,40 @@ pub fn build_module() -> OnionStaticObject {
     );
 
     module.insert(
+        "format_time_custom".to_string(),
+        wrap_native_function(
+            LambdaParameter::Multiple(
+                [
+                    LambdaParameter::top("timestamp"),
+                    LambdaParameter::top("format"),
+                ]
+                .into(),
+            ),
+            OnionFastMap::default(),
+            "time::format_time_custom",
+            OnionKeyPool::create(vec!["timestamp".into(), "format".into()]),
+            &format_time_custom,
+        ),
+    );
+
+    module.insert(
+        "parse_time".to_string(),
+        wrap_native_function(
+            LambdaParameter::Multiple(
+                [
+                    LambdaParameter::top("time_str"),
+                    LambdaParameter::top("format"),
+                ]
+                .into(),
+            ),
+            OnionFastMap::default(),
+            "time::parse_time",
+            OnionKeyPool::create(vec!["time_str".into(), "format".into()]),
+            &parse_time,
+        ),
+    );
+
+    module.insert(
         "async_sleep".to_string(),
         wrap_native_function(
             LambdaParameter::top("millis"),
@@ -336,20 +436,6 @@ pub fn build_module() -> OnionStaticObject {
             "time::async_sleep",
             OnionKeyPool::create(vec!["millis".into()]),
             &async_sleep,
-        ),
-    );
-
-    // --- Functions with multiple arguments ---
-    module.insert(
-        "time_diff".to_string(),
-        wrap_native_function(
-            LambdaParameter::Multiple(
-                [LambdaParameter::top("start"), LambdaParameter::top("end")].into(),
-            ),
-            OnionFastMap::default(),
-            "time::time_diff",
-            OnionKeyPool::create(vec!["start".into(), "end".into()]),
-            &time_diff,
         ),
     );
 

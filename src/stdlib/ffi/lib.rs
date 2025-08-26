@@ -137,13 +137,16 @@ impl OnionObjectProtocol for CLib {
 impl OnionObjectProtocolAny for CLib {
     fn with_attribute(
         &self,
-        _self_object: &OnionObject,
+        self_object: &OnionObject,
         key: &OnionObject,
-        f: &mut dyn FnMut(&OnionObject) -> Result<(), RuntimeError>,
+        f: &mut dyn FnMut(&OnionObject, &OnionObject) -> Result<(), RuntimeError>,
     ) -> Result<(), RuntimeError> {
         if let OnionObject::StringValue(attr) = key {
             match attr.value() {
-                "path" => f(&OnionObject::StringValue(OnionStringValue::new(&self.path))),
+                "path" => f(
+                    self_object,
+                    &OnionObject::StringValue(OnionStringValue::new(&self.path)),
+                ),
                 _ => Err(RuntimeError::InvalidOperation(
                     format!("CLib has no attribute {:?}", attr).into(),
                 )),
@@ -361,28 +364,34 @@ impl OnionObjectProtocol for CFunctionHandle {
 impl OnionObjectProtocolAny for CFunctionHandle {
     fn with_attribute(
         &self,
-        _self_object: &OnionObject,
+        self_object: &OnionObject,
         key: &OnionObject,
-        f: &mut dyn FnMut(&OnionObject) -> Result<(), RuntimeError>,
+        f: &mut dyn FnMut(&OnionObject, &OnionObject) -> Result<(), RuntimeError>,
     ) -> Result<(), RuntimeError> {
         if let OnionObject::StringValue(attr) = key {
             match attr.value() {
-                "name" => f(&OnionObject::StringValue(OnionStringValue::new(
-                    &self.function_name,
-                ))),
-                "library" => f(&OnionObject::Custom(Arc::new(
-                    self.library.as_ref().clone(),
-                ))),
-                "return_type" => f(&OnionObject::StringValue(OnionStringValue::new(
-                    &self.return_type,
-                ))),
+                "name" => f(
+                    self_object,
+                    &OnionObject::StringValue(OnionStringValue::new(&self.function_name)),
+                ),
+                "library" => f(
+                    self_object,
+                    &OnionObject::Custom(Arc::new(self.library.as_ref().clone())),
+                ),
+                "return_type" => f(
+                    self_object,
+                    &OnionObject::StringValue(OnionStringValue::new(&self.return_type)),
+                ),
                 "param_types" => {
                     let types = self
                         .param_types
                         .iter()
                         .map(|t| OnionObject::StringValue(OnionStringValue::new(t)))
                         .collect();
-                    f(&OnionObject::Tuple(OnionTuple::new(types).into()))
+                    f(
+                        self_object,
+                        &OnionObject::Tuple(OnionTuple::new(types).into()),
+                    )
                 }
                 _ => Err(RuntimeError::InvalidOperation(
                     format!("CFunctionHandle has no attribute {:?}", attr).into(),

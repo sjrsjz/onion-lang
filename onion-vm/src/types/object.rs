@@ -188,14 +188,9 @@ impl OnionObjectCell {
     /// - `key`: 属性键对象
     /// - `f`: 处理属性值的闭包
     #[inline(always)]
-    pub fn with_attribute<T, F>(
-        &self,
-        self_object: &OnionObject,
-        key: &OnionObject,
-        f: &F,
-    ) -> Result<T, RuntimeError>
+    pub fn with_attribute<F>(&self, key: &OnionObject, f: &F) -> Result<(), RuntimeError>
     where
-        F: Fn(&OnionObject) -> Result<T, RuntimeError>,
+        F: Fn(&OnionObject, &OnionObject) -> Result<(), RuntimeError>,
     {
         self.0
             .read()
@@ -206,7 +201,7 @@ impl OnionObjectCell {
                         .into(),
                 )
             })?
-            .with_attribute(self_object, key, f)
+            .with_attribute(key, f)
     }
 
     /// 升级对象的弱引用为强引用。
@@ -592,7 +587,7 @@ pub trait OnionObjectProtocolStatic: OnionObjectProtocol {
         f: &F,
     ) -> Result<R, RuntimeError>
     where
-        F: Fn(&OnionObject) -> Result<R, RuntimeError>,
+        F: Fn(&OnionObject, &OnionObject) -> Result<R, RuntimeError>,
     {
         Err(RuntimeError::InvalidOperation(
             format!(
@@ -610,7 +605,7 @@ pub trait OnionObjectProtocolAny: OnionObjectProtocol {
         &self,
         self_object: &OnionObject,
         key: &OnionObject,
-        f: &mut dyn FnMut(&OnionObject) -> Result<(), RuntimeError>,
+        f: &mut dyn FnMut(&OnionObject, &OnionObject) -> Result<(), RuntimeError>,
     ) -> Result<(), RuntimeError> {
         Err(RuntimeError::InvalidOperation(
             format!(
@@ -1346,40 +1341,35 @@ impl OnionObject {
         })
     }
 
-    pub fn with_attribute<F, R>(
-        &self,
-        self_object: &OnionObject,
-        key: &OnionObject,
-        f: &F,
-    ) -> Result<R, RuntimeError>
+    pub fn with_attribute<F, R>(&self, key: &OnionObject, f: &F) -> Result<R, RuntimeError>
     where
-        F: Fn(&OnionObject) -> Result<R, RuntimeError>,
+        F: Fn(&OnionObject, &OnionObject) -> Result<R, RuntimeError>,
     {
         self.with_data(|obj| match obj {
-            OnionObject::IntegerValue(v) => v.with_attribute(self_object, key, f),
-            OnionObject::FloatValue(v) => v.with_attribute(self_object, key, f),
-            OnionObject::BooleanValue(v) => v.with_attribute(self_object, key, f),
+            OnionObject::IntegerValue(v) => v.with_attribute(obj, key, f),
+            OnionObject::FloatValue(v) => v.with_attribute(obj, key, f),
+            OnionObject::BooleanValue(v) => v.with_attribute(obj, key, f),
 
-            OnionObject::StringValue(v) => v.with_attribute(self_object, key, f),
-            OnionObject::BytesValue(v) => v.with_attribute(self_object, key, f),
-            OnionObject::Range(v) => v.with_attribute(self_object, key, f),
-            OnionObject::Null(v) => v.with_attribute(self_object, key, f),
-            OnionObject::Undefined(v) => v.with_attribute(self_object, key, f),
-            OnionObject::InstructionPackage(v) => v.with_attribute(self_object, key, f),
-            OnionObject::Tuple(v) => v.with_attribute(self_object, key, f),
-            OnionObject::Pair(v) => v.with_attribute(self_object, key, f),
-            OnionObject::LazySet(v) => v.with_attribute(self_object, key, f),
+            OnionObject::StringValue(v) => v.with_attribute(obj, key, f),
+            OnionObject::BytesValue(v) => v.with_attribute(obj, key, f),
+            OnionObject::Range(v) => v.with_attribute(obj, key, f),
+            OnionObject::Null(v) => v.with_attribute(obj, key, f),
+            OnionObject::Undefined(v) => v.with_attribute(obj, key, f),
+            OnionObject::InstructionPackage(v) => v.with_attribute(obj, key, f),
+            OnionObject::Tuple(v) => v.with_attribute(obj, key, f),
+            OnionObject::Pair(v) => v.with_attribute(obj, key, f),
+            OnionObject::LazySet(v) => v.with_attribute(obj, key, f),
 
-            OnionObject::Lambda(lambda_def) => lambda_def.with_attribute(self_object, key, f),
+            OnionObject::Lambda(lambda_def) => lambda_def.with_attribute(obj, key, f),
             OnionObject::Custom(custom) => {
                 let mut result: Result<R, RuntimeError> = Err(RuntimeError::InvalidOperation(
                     "Custom with_attribute not called".into(),
                 ));
                 custom.with_attribute(
-                    self_object,
+                    obj,
                     key,
-                    &mut |obj: &OnionObject| -> Result<(), RuntimeError> {
-                        result = f(obj);
+                    &mut |super_obj, obj| -> Result<(), RuntimeError> {
+                        result = f(super_obj, obj);
                         Ok(())
                     },
                 )?;

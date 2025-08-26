@@ -34,9 +34,6 @@ stdlib.time.sleep_seconds(2);
 end_time := stdlib.time.timestamp();
 stdlib.io.println(@strcat("End time: ", $end_time));
 
-time_diff := stdlib.time.time_diff(start_time, end_time);
-stdlib.io.println(@strcat("Time difference (seconds): ", $time_diff));
-
 // Test millisecond sleep
 stdlib.io.println("Sleeping for 500 milliseconds...");
 stdlib.time.sleep_millis(500);

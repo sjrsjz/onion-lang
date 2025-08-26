@@ -114,7 +114,7 @@ render_scene := (all_particles?, frame?) -> {
     stdlib.io.println("\u001b[2J\u001b[H");
     
     // Display title
-    stdlib.io.println(colorize("🎆 Particle Fireworks Simulator - Frame " + stdlib.types.to_string(frame) + " 🎆", "bright_yellow", "bg_black"));
+    stdlib.io.println(colorize("🎆 Particle Fireworks Simulator - Frame " + stdlib.types.display(frame) + " 🎆", "bright_yellow", "bg_black"));
     // 直接渲染每个位置
     y := mut 0;
     floor := stdlib.math.floor;

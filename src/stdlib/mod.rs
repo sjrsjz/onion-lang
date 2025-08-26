@@ -52,11 +52,12 @@ use onion_vm::{
     lambda::runnable::{Runnable, RuntimeError, StepResult},
     types::{
         lambda::{
-            definition::{LambdaBody, LambdaType, OnionLambdaDefinition},
+            definition::{LambdaBody, LambdaType, OnionLambdaDefinitionInner},
             parameter::LambdaParameter,
         },
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         pair::OnionPair,
+        string_value::OnionStringValue,
         tuple::OnionTuple,
     },
     unwrap_step_result,
@@ -90,7 +91,7 @@ pub fn build_dict(dict: IndexMap<String, OnionStaticObject>) -> OnionStaticObjec
     let mut pairs = vec![];
     for (key, value) in dict {
         pairs.push(OnionPair::new_static(
-            &OnionObject::StringValue(key.into()).stabilize(),
+            &OnionStringValue::new_static(key),
             &value,
         ));
     }
@@ -134,7 +135,7 @@ where
             (self.function)(&self.captured, gc).map(|result| StepResult::Return(result.into()))
         )
     }
-    
+
     /// 格式化当前执行上下文，用于调试和错误报告。
     ///
     /// 返回包含函数类型名称和捕获参数的详细信息。
@@ -203,7 +204,7 @@ where
         + 'static,
 {
     let cloned_pool = string_pool.clone();
-    OnionLambdaDefinition::new_static(
+    OnionLambdaDefinitionInner::new_static(
         params,
         LambdaBody::NativeFunction((
             Arc::new(

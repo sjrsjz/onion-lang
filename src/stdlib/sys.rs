@@ -6,7 +6,9 @@ use onion_vm::{
         lambda::parameter::LambdaParameter,
         object::{OnionObject, OnionObjectCell, OnionStaticObject},
         pair::OnionPair,
+        string_value::OnionStringValue,
         tuple::OnionTuple,
+        undefined::OnionUndefined,
     },
     utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
@@ -28,7 +30,7 @@ fn get_string_arg<'a>(
         )
     })?;
     match obj.weak() {
-        OnionObject::StringValue(s) => Ok(s.as_ref()),
+        OnionObject::StringValue(s) => Ok(s.value()),
         _ => Err(RuntimeError::InvalidType(
             format!("Argument '{name}' must be a string")
                 .to_string()
@@ -50,7 +52,7 @@ fn get_integer_arg(
         )
     })?;
     match obj.weak() {
-        OnionObject::IntegerValue(i) => Ok(*i),
+        OnionObject::IntegerValue(i) => Ok(i.value()),
         _ => Err(RuntimeError::InvalidType(
             format!("Argument '{name}' must be an integer")
                 .to_string()
@@ -65,7 +67,7 @@ fn argv(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     let args: Vec<_> = env::args()
-        .map(|arg| OnionObject::StringValue(arg.into()))
+        .map(|arg| OnionObject::StringValue(OnionStringValue::new(arg)))
         .collect();
     Ok(OnionObject::Tuple(OnionTuple::new(args).into()).stabilize())
 }
@@ -77,8 +79,8 @@ fn getenv(
 ) -> Result<OnionStaticObject, RuntimeError> {
     let key_str = get_string_arg(argument, "key")?;
     match env::var(key_str) {
-        Ok(value) => Ok(OnionObject::StringValue(value.into()).stabilize()),
-        Err(_) => Ok(OnionObject::Null.stabilize()),
+        Ok(value) => Ok(OnionStringValue::new_static(value)),
+        Err(_) => Ok(OnionUndefined::new_static(None)),
     }
 }
 
@@ -90,7 +92,7 @@ fn setenv(
     let key_str = get_string_arg(argument, "key")?;
     let value_str = get_string_arg(argument, "value")?;
     unsafe { env::set_var(key_str, value_str) }
-    Ok(OnionObject::Null.stabilize())
+    Ok(OnionUndefined::new_static(None))
 }
 
 /// 删除环境变量
@@ -100,7 +102,7 @@ fn unsetenv(
 ) -> Result<OnionStaticObject, RuntimeError> {
     let key_str = get_string_arg(argument, "key")?;
     unsafe { env::remove_var(key_str) }
-    Ok(OnionObject::Null.stabilize())
+    Ok(OnionUndefined::new_static(None))
 }
 
 /// 获取所有环境变量
@@ -110,8 +112,8 @@ fn environ(
 ) -> Result<OnionStaticObject, RuntimeError> {
     let env_vars: Vec<_> = env::vars()
         .map(|(key, value)| {
-            let key_obj = OnionObject::StringValue(key.into());
-            let value_obj = OnionObject::StringValue(value.into());
+            let key_obj = OnionObject::StringValue(OnionStringValue::new(key));
+            let value_obj = OnionObject::StringValue(OnionStringValue::new(value));
             OnionObject::Pair(OnionPair::new(key_obj, value_obj).into())
         })
         .collect();
@@ -124,7 +126,7 @@ fn getcwd(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     match env::current_dir() {
-        Ok(path) => Ok(OnionObject::StringValue(path.to_string_lossy().into()).stabilize()),
+        Ok(path) => Ok(OnionStringValue::new_static(path.to_string_lossy())),
         Err(e) => Err(RuntimeError::DetailedError(
             format!("Failed to get current directory: {e}").into(),
         )),
@@ -154,7 +156,7 @@ fn platform(
     } else {
         "unknown"
     };
-    Ok(OnionObject::StringValue(platform.into()).stabilize())
+    Ok(OnionStringValue::new_static(platform))
 }
 
 /// 获取系统架构信息
@@ -173,7 +175,7 @@ fn arch(
     } else {
         "unknown"
     };
-    Ok(OnionObject::StringValue(arch.into()).stabilize())
+    Ok(OnionStringValue::new_static(arch))
 }
 
 /// 获取程序执行路径
@@ -182,7 +184,7 @@ fn executable(
     _gc: &mut GC<OnionObjectCell>,
 ) -> Result<OnionStaticObject, RuntimeError> {
     match env::current_exe() {
-        Ok(path) => Ok(OnionObject::StringValue(path.to_string_lossy().into()).stabilize()),
+        Ok(path) => Ok(OnionStringValue::new_static(path.to_string_lossy())),
         Err(e) => Err(RuntimeError::DetailedError(
             format!("Failed to get executable path: {e}").into(),
         )),

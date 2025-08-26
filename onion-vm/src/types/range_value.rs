@@ -5,6 +5,7 @@ use arc_gc::{arc::GCArcWeak, traceable::GCTraceable};
 use crate::{
     lambda::runnable::RuntimeError,
     types::{
+        integer_value::OnionIntegerValue,
         lambda::{
             native::{
                 native_bool_converter, native_bytes_converter, native_elements_method,
@@ -119,6 +120,14 @@ impl OnionObjectProtocol for OnionRange {
             )),
         }
     }
+
+    fn key_of(&self) -> Result<OnionStaticObject, RuntimeError> {
+        Ok(OnionIntegerValue::new_static(self.start))
+    }
+
+    fn value_of(&self) -> Result<OnionStaticObject, RuntimeError> {
+        Ok(OnionIntegerValue::new_static(self.end))
+    }
 }
 
 impl OnionObjectProtocolStatic for OnionRange {
@@ -129,7 +138,7 @@ impl OnionObjectProtocolStatic for OnionRange {
         f: &F,
     ) -> Result<R, RuntimeError>
     where
-        F: Fn(&OnionObject) -> Result<R, RuntimeError>,
+        F: Fn(&OnionObject, &OnionObject) -> Result<R, RuntimeError>,
     {
         if let OnionObject::StringValue(key_str) = key {
             match key_str.value() {
@@ -142,7 +151,7 @@ impl OnionObjectProtocolStatic for OnionRange {
                         OnionKeyPool::create(vec![]),
                         &native_int_converter,
                     );
-                    return f(converter.weak());
+                    return f(self_object, converter.weak());
                 }
                 "float" => {
                     let converter = wrap_native_function(
@@ -153,7 +162,7 @@ impl OnionObjectProtocolStatic for OnionRange {
                         OnionKeyPool::create(vec![]),
                         &native_float_converter,
                     );
-                    return f(converter.weak());
+                    return f(self_object, converter.weak());
                 }
                 "string" => {
                     let converter = wrap_native_function(
@@ -164,7 +173,7 @@ impl OnionObjectProtocolStatic for OnionRange {
                         OnionKeyPool::create(vec![]),
                         &native_string_converter,
                     );
-                    return f(converter.weak());
+                    return f(self_object, converter.weak());
                 }
                 "bool" => {
                     let converter = wrap_native_function(
@@ -175,7 +184,7 @@ impl OnionObjectProtocolStatic for OnionRange {
                         OnionKeyPool::create(vec![]),
                         &native_bool_converter,
                     );
-                    return f(converter.weak());
+                    return f(self_object, converter.weak());
                 }
                 "bytes" => {
                     let converter = wrap_native_function(
@@ -186,7 +195,7 @@ impl OnionObjectProtocolStatic for OnionRange {
                         OnionKeyPool::create(vec![]),
                         &native_bytes_converter,
                     );
-                    return f(converter.weak());
+                    return f(self_object, converter.weak());
                 }
                 "length" => {
                     let length_method = wrap_native_function(
@@ -197,7 +206,7 @@ impl OnionObjectProtocolStatic for OnionRange {
                         OnionKeyPool::create(vec![]),
                         &native_length_method,
                     );
-                    return f(length_method.weak());
+                    return f(self_object, length_method.weak());
                 }
                 "elements" => {
                     let elements_method = wrap_native_function(
@@ -208,7 +217,7 @@ impl OnionObjectProtocolStatic for OnionRange {
                         OnionKeyPool::create(vec![]),
                         &native_elements_method,
                     );
-                    return f(elements_method.weak());
+                    return f(self_object, elements_method.weak());
                 }
                 _ => {}
             }

@@ -12,16 +12,27 @@
 use std::{collections::VecDeque, fmt::Debug, sync::Arc};
 
 use arc_gc::{
-    arc::{GCArc, GCArcWeak}, gc::GC, traceable::GCTraceable
+    arc::{GCArc, GCArcWeak},
+    gc::GC,
+    traceable::GCTraceable,
 };
 
 use crate::{
     lambda::runnable::{RuntimeError, StepResult},
     types::{
         integer_value::OnionIntegerValue,
+        lambda::{
+            native::{
+                native_bool_converter, native_bytes_converter, native_elements_method,
+                native_float_converter, native_int_converter, native_length_method,
+                native_string_converter, wrap_native_function,
+            },
+            parameter::LambdaParameter,
+        },
         object::{OnionObjectProtocol, OnionObjectProtocolStatic},
         undefined::OnionUndefined,
     },
+    utils::fastmap::{OnionFastMap, OnionKeyPool},
 };
 
 use super::object::{OnionObject, OnionObjectCell, OnionStaticObject};
@@ -243,7 +254,7 @@ impl OnionObjectProtocol for OnionTuple {
         value: &OnionObject,
         _gc: &mut GC<OnionObjectCell>,
     ) -> Result<Result<StepResult, OnionStaticObject>, RuntimeError> {
-        match value {
+        value.with_data(|value| match value {
             OnionObject::IntegerValue(i) => {
                 let idx = i.value();
                 let len = self.elements.len();
@@ -279,7 +290,7 @@ impl OnionObjectProtocol for OnionTuple {
             _ => Err(RuntimeError::InvalidOperation(
                 format!("Cannot apply {} to Tuple", value.repr(&vec![])?).into(),
             )),
-        }
+        })
     }
 
     fn contains(&self, other: &OnionObject) -> Result<bool, RuntimeError> {
@@ -316,15 +327,8 @@ impl OnionObjectProtocol for OnionTuple {
         self.elements.iter().for_each(|e| e.upgrade(collected));
     }
 
-    fn repr(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
-        let mut repr = String::new();
-        repr.push('(');
-        for element in self.elements.iter() {
-            repr.push_str(&element.repr(ptrs)?);
-            repr.push_str(", ");
-        }
-        repr.push(')');
-        Ok(repr)
+    fn repr(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+        Ok(format!("{:?}", self))
     }
 
     fn display(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
@@ -332,7 +336,7 @@ impl OnionObjectProtocol for OnionTuple {
     }
 
     fn type_of(&self) -> Result<String, RuntimeError> {
-        todo!()
+        Ok("Tuple".into())
     }
 }
 
@@ -349,23 +353,107 @@ impl OnionObjectProtocolStatic for OnionTuple {
 
     fn with_attribute<F, R>(
         &self,
-        _self_object: &OnionObject,
+        self_object: &OnionObject,
         key: &OnionObject,
         f: &F,
     ) -> Result<R, RuntimeError>
     where
-        F: Fn(&OnionObject) -> Result<R, RuntimeError>,
+        F: Fn(&OnionObject, &OnionObject) -> Result<R, RuntimeError>,
     {
         for element in self.elements.as_ref() {
-            match element {
-                OnionObject::Pair(pair) => {
-                    if pair.get_key().equals(key)? {
-                        return f(&pair.get_value());
-                    }
+            if let Some(result) = element.with_data(|element| match element {
+                OnionObject::Pair(pair) if key.equals(pair.get_key())? => {
+                    f(self_object, &pair.get_value()).map(Some)
+                }
+                _ => Ok(None),
+            })? {
+                return Ok(result);
+            }
+        }
+
+        if let OnionObject::StringValue(key_str) = key {
+            match key_str.value() {
+                "int" => {
+                    let converter = wrap_native_function(
+                        LambdaParameter::Multiple(Box::new([])),
+                        OnionFastMap::new(OnionKeyPool::create(vec![])),
+                        self_object,
+                        "converter::int",
+                        OnionKeyPool::create(vec![]),
+                        &native_int_converter,
+                    );
+                    return f(self_object, converter.weak());
+                }
+                "float" => {
+                    let converter = wrap_native_function(
+                        LambdaParameter::Multiple(Box::new([])),
+                        OnionFastMap::new(OnionKeyPool::create(vec![])),
+                        self_object,
+                        "converter::float",
+                        OnionKeyPool::create(vec![]),
+                        &native_float_converter,
+                    );
+                    return f(self_object, converter.weak());
+                }
+                "string" => {
+                    let converter = wrap_native_function(
+                        LambdaParameter::Multiple(Box::new([])),
+                        OnionFastMap::new(OnionKeyPool::create(vec![])),
+                        self_object,
+                        "converter::string",
+                        OnionKeyPool::create(vec![]),
+                        &native_string_converter,
+                    );
+                    return f(self_object, converter.weak());
+                }
+                "bool" => {
+                    let converter = wrap_native_function(
+                        LambdaParameter::Multiple(Box::new([])),
+                        OnionFastMap::new(OnionKeyPool::create(vec![])),
+                        self_object,
+                        "converter::bool",
+                        OnionKeyPool::create(vec![]),
+                        &native_bool_converter,
+                    );
+                    return f(self_object, converter.weak());
+                }
+                "bytes" => {
+                    let converter = wrap_native_function(
+                        LambdaParameter::Multiple(Box::new([])),
+                        OnionFastMap::new(OnionKeyPool::create(vec![])),
+                        self_object,
+                        "converter::bytes",
+                        OnionKeyPool::create(vec![]),
+                        &native_bytes_converter,
+                    );
+                    return f(self_object, converter.weak());
+                }
+                "length" => {
+                    let length_method = wrap_native_function(
+                        LambdaParameter::Multiple(Box::new([])),
+                        OnionFastMap::new(OnionKeyPool::create(vec![])),
+                        self_object,
+                        "builtin::length",
+                        OnionKeyPool::create(vec![]),
+                        &native_length_method,
+                    );
+                    return f(self_object, length_method.weak());
+                }
+                "elements" => {
+                    let elements_method = wrap_native_function(
+                        LambdaParameter::Multiple(Box::new([])),
+                        OnionFastMap::new(OnionKeyPool::create(vec![])),
+                        self_object,
+                        "builtin::elements",
+                        OnionKeyPool::create(vec![]),
+                        &native_elements_method,
+                    );
+                    return f(self_object, elements_method.weak());
                 }
                 _ => {}
             }
         }
+
         Err(RuntimeError::InvalidOperation(
             format!("Attribute {:?} not found in tuple", key).into(),
         ))

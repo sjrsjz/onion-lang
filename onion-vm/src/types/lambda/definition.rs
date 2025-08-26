@@ -342,7 +342,8 @@ impl OnionObjectProtocol for OnionLambdaDefinition {
 
     fn repr(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
         Ok(format!(
-            "({:?}) -> &{:?}",
+            "{}::({}) -> &{:?}",
+            self.signature,
             self.parameter,
             self.capture.keys()
         ))
@@ -390,29 +391,34 @@ impl OnionObjectProtocol for OnionLambdaDefinition {
         };
         return Ok(Ok(StepResult::NewRunnable(new_runnable)));
     }
+
+    fn key_of(&self) -> Result<OnionStaticObject, RuntimeError> {
+        Ok(self.parameter.to_onion())
+    }
 }
 
 impl OnionObjectProtocolStatic for OnionLambdaDefinition {
     fn with_attribute<F, R>(
         &self,
-        _self_object: &OnionObject,
+        self_object: &OnionObject,
         key: &OnionObject,
         f: &F,
     ) -> Result<R, RuntimeError>
     where
-        F: Fn(&OnionObject) -> Result<R, RuntimeError>,
+        F: Fn(&OnionObject, &OnionObject) -> Result<R, RuntimeError>,
     {
         match key {
             OnionObject::StringValue(s) if s.value() == "$parameter" => {
                 let parameter = self.parameter.to_onion();
-                f(parameter.weak())
+                f(self_object, parameter.weak())
             }
             OnionObject::StringValue(s) if s.value() == "$signature" => f(
+                self_object,
                 &OnionObject::StringValue(OnionStringValue::new(&self.signature)),
             ),
             OnionObject::StringValue(s) => {
                 if let Some(value) = self.capture.get(s.value()) {
-                    f(value)
+                    f(self_object, value)
                 } else {
                     Err(RuntimeError::InvalidOperation(
                         format!("Attribute {:?} not found in lambda definition", key).into(),

@@ -114,7 +114,7 @@ demo_strlen := (lib?) -> {
     i := mut 0;
     while (i < 7) {
         test_str := test_cases[i];
-        c_string := stdlib.ffi.ctypes.string(value => test_str);
+        c_string := stdlib.ffi.ctypes.string(test_str);
         
         result := stdlib.ffi.lib.call(
             strlen_handle,
