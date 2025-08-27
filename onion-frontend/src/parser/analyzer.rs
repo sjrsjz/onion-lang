@@ -438,6 +438,28 @@ fn analyze_node(
             check_postorder_break(node, break_at_position, context, context_at_break);
             assumed_type
         }
+        ASTNodeType::Fix(var_name) => {
+            check_children_exact!(diagnostics, node, 1, "Fix");
+            context.define_variable(
+                var_name.clone(),
+                Variable {
+                    assumed_type: AssumedType::Undefined, // Fix节点的类型默认为未定义
+                },
+            );
+            let assumed_type = analyze_node(
+                &node.children[0],
+                context,
+                diagnostics,
+                dynamic,
+                break_at_position,
+                context_at_break,
+            );
+            if context_at_break.is_some() {
+                return AssumedType::Unknown;
+            }
+            check_postorder_break(node, break_at_position, context, context_at_break);
+            assumed_type
+        }
         ASTNodeType::Variable(var_name) => {
             check_children_exact!(diagnostics, node, 0, "Variable");
             if !dynamic && context.get_variable_current_context(var_name).is_none() {
@@ -911,6 +933,26 @@ pub fn auto_capture(
                     assumed_type: AssumedType::Unknown,
                 },
             );
+
+            let mut new_node = node.clone();
+            new_node.children = vec![new_value_node];
+            (value_req_vars, new_node)
+        }
+
+        ASTNodeType::Fix(name) => {
+            if node.children.len() != 1 {
+                return empty_result();
+            } // Robustness check
+            let value_node = &node.children[0];
+
+            context.define_variable(
+                name.clone(),
+                Variable {
+                    assumed_type: AssumedType::Undefined,
+                },
+            );
+
+            let (value_req_vars, new_value_node) = auto_capture(context, value_node, dynamic);
 
             let mut new_node = node.clone();
             new_node.children = vec![new_value_node];

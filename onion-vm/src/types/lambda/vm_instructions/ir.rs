@@ -109,6 +109,8 @@ pub enum IR {
     MakeAsync,                       // make lambda async
     MakeSync,                        // make lambda sync
     MakeAtomic,                      // make lambda atomic
+    Represent,                       // get the representation of an object
+    Display,                         // get the display of an object
 }
 
 /// IR 指令包结构。

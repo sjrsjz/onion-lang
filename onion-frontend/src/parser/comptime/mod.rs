@@ -255,6 +255,7 @@ impl OnionObjectProtocolAny for OnionASTObject {
                             ASTNodeType::Dynamic => "Dynamic",
                             ASTNodeType::Static => "Static",
                             ASTNodeType::Comptime => "Comptime",
+                            ASTNodeType::Fix(_) => "Fix",
                         };
                         let type_obj = OnionObject::StringValue(OnionStringValue::new(type_name));
                         f(self_object, &type_obj)
@@ -266,7 +267,7 @@ impl OnionObjectProtocolAny for OnionASTObject {
                             ASTNodeType::String(_) | ASTNodeType::Boolean(_) | ASTNodeType::Number(_) |
                             ASTNodeType::Base64(_) | ASTNodeType::Variable(_) | ASTNodeType::Required(_) |
                             ASTNodeType::Let(_) | ASTNodeType::LambdaDef(_, _) | ASTNodeType::Operation(_) |
-                            ASTNodeType::Modifier(_) | ASTNodeType::Namespace(_)
+                            ASTNodeType::Modifier(_) | ASTNodeType::Namespace(_) | ASTNodeType::Fix(_)
                         );
                         let has_data_obj = OnionObject::BooleanValue(OnionBooleanValue::new(has_data));
                         f(self_object, &has_data_obj)
@@ -294,7 +295,7 @@ impl OnionObjectProtocolAny for OnionASTObject {
                                 f(self_object, &data_obj)
                             },
                             ASTNodeType::Variable(name) | ASTNodeType::Required(name) | 
-                            ASTNodeType::Let(name) | ASTNodeType::Namespace(name) => {
+                            ASTNodeType::Let(name) | ASTNodeType::Namespace(name) | ASTNodeType::Fix(name) => {
                                 let data_obj = OnionObject::StringValue(OnionStringValue::new(name));
                                 f(self_object, &data_obj)
                             },
@@ -351,6 +352,8 @@ impl OnionObjectProtocolAny for OnionASTObject {
                                     crate::parser::ast::ASTNodeModifier::Async => "async",
                                     crate::parser::ast::ASTNodeModifier::Sync => "sync",
                                     crate::parser::ast::ASTNodeModifier::Atomic => "atomic",
+                                    crate::parser::ast::ASTNodeModifier::Represent => "repr",
+                                    crate::parser::ast::ASTNodeModifier::Display => "display",
                                 };
                                 let data_obj = OnionObject::StringValue(OnionStringValue::new(mod_str));
                                 f(self_object, &data_obj)
@@ -440,6 +443,8 @@ impl OnionObjectProtocolAny for OnionASTObject {
                                     crate::parser::ast::ASTNodeModifier::Async => "async",
                                     crate::parser::ast::ASTNodeModifier::Sync => "sync",
                                     crate::parser::ast::ASTNodeModifier::Atomic => "atomic",
+                                    crate::parser::ast::ASTNodeModifier::Represent => "repr",
+                                    crate::parser::ast::ASTNodeModifier::Display => "display",
                                 };
                                 let mod_obj = OnionObject::StringValue(OnionStringValue::new(mod_str));
                                 f(self_object, &mod_obj)

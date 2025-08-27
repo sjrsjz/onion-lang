@@ -10,13 +10,13 @@ assert := (condition?, message?) -> {
 
 assert_eq := (expected?, actual?, message?) -> {
     if (expected != actual) {
-        raise "Assertion failed: " + message + " (expected: " + stdlib.types.to_string(expected) + ", actual: " + stdlib.types.to_string(actual) + ")";
+        raise "Assertion failed: " + message + " (expected: " + stdlib.types.display(expected) + ", actual: " + stdlib.types.display(actual) + ")";
     }
 };
 
 assert_ne := (expected?, actual?, message?) -> {
     if (expected == actual) {
-        raise "Assertion failed: " + message + " (values should not be equal: " + stdlib.types.to_string(expected) + ")";
+        raise "Assertion failed: " + message + " (values should not be equal: " + stdlib.types.display(expected) + ")";
     }
 };
 
@@ -41,7 +41,7 @@ Test := (tests => Tuple) -> {
     };
     logger := logger(writter);
     n := lengthof tests;
-    logger(INFO, "Running tests: " + stdlib.types.to_string(n));
+    logger(INFO, "Running tests: " + stdlib.types.display(n));
     i := mut 0;
     
     guard := (x => Pair) -> x;
@@ -57,9 +57,9 @@ Test := (tests => Tuple) -> {
         logger(INFO, "Running test: " + test_name);
         result := try(test_func);
         if (result.is_err()) {
-            logger(ERROR, "Test " + test_name + " failed: " + stdlib.types.to_string(result.unwrap_err()));
+            logger(ERROR, "Test " + test_name + " failed: " + stdlib.types.display(result.unwrap_err()));
         } else {
-            logger(INFO, "Test " + test_name + " passed: " + stdlib.types.to_string(result.unwrap()));
+            logger(INFO, "Test " + test_name + " passed: " + stdlib.types.display(result.unwrap()));
         };
         i = i + 1;
     };

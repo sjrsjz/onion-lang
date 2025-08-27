@@ -234,6 +234,25 @@ fn let_var(
     })
 }
 
+fn fix_point(
+    argument: &OnionFastMap<Box<str>, OnionStaticObject>,
+    _gc: &mut GC<OnionObjectCell>,
+) -> Result<OnionStaticObject, RuntimeError> {
+    let name = argument.get("name").ok_or_else(|| {
+        RuntimeError::InvalidOperation("fix_point() requires a 'name' argument".into())
+    })?;
+    name.weak().with_data(|data| match data {
+        OnionObject::StringValue(s) => Ok(ast_wrapper(ASTNode {
+            node_type: ASTNodeType::Fix(s.value().to_string()),
+            children: vec![],
+            source_location: None,
+        })),
+        _ => Err(RuntimeError::InvalidType(
+            "Argument 'name' for fix_point() must be a string".into(),
+        )),
+    })
+}
+
 /// 构造 Operation 类型 AST 节点。
 fn operation(
     argument: &OnionFastMap<Box<str>, OnionStaticObject>,
@@ -307,6 +326,8 @@ fn modifier(
                 "async" => ASTNodeModifier::Async,
                 "sync" => ASTNodeModifier::Sync,
                 "atomic" => ASTNodeModifier::Atomic,
+                "repr" => ASTNodeModifier::Represent,
+                "display" => ASTNodeModifier::Display,
                 _ => {
                     return Err(RuntimeError::InvalidOperation(
                         format!("Unsupported modifier: {}", s.value()).into(),
@@ -442,6 +463,7 @@ pub fn build_module() -> OnionStaticObject {
         ("bytes", bytes, vec!["value"]),
         ("variable", variable, vec!["name"]),
         ("let", let_var, vec!["name"]),
+        ("fix", fix_point, vec!["name"]),
         ("operation", operation, vec!["op"]),
         ("modifier", modifier, vec!["name"]),
         ("lambda_def", lambda_def, vec!["dyn", "captures"]),

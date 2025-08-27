@@ -143,7 +143,7 @@ impl OnionObjectProtocol for OnionStringValue {
                 let start = range.start();
                 let end = range.end();
                 let len = self.value.len();
-                if start < 0 || end < 0 || start >= len as i64 || end >= len as i64 {
+                if start < 0 || end < 0 || start >= len as i64 || end > len as i64 || start > end {
                     return Err(RuntimeError::InvalidOperation(
                         format!("Range {}..{} out of bounds for Bytes", start, end).into(),
                     ));

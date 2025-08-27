@@ -15,6 +15,7 @@ pub enum SemanticTokenTypes {
     LambdaCall,
     Operation,
     Let,
+    Fix,
     Assign,
     Return,
     If,
@@ -50,6 +51,7 @@ impl From<ASTNodeType> for SemanticTokenTypes {
             ASTNodeType::Base64(_) => Self::Base64,
             ASTNodeType::Variable(_) => Self::Variable,
             ASTNodeType::Let(_) => Self::Let,
+            ASTNodeType::Fix(_) => Self::Fix,
             ASTNodeType::Frame => Self::Body,
             ASTNodeType::Assign => Self::Assign,
             ASTNodeType::LambdaDef(_, _) => Self::LambdaDef,
@@ -285,7 +287,7 @@ const MOD_DEFAULT: u32 = 1 << 9;
 
 fn get_token_type_index(token_type: &SemanticTokenTypes) -> Option<u32> {
     match token_type {
-        SemanticTokenTypes::Null => None,
+        SemanticTokenTypes::Null => Some(22),
         SemanticTokenTypes::Undefined => Some(22),
         SemanticTokenTypes::String => Some(18),
         SemanticTokenTypes::Boolean => Some(23),
@@ -293,6 +295,7 @@ fn get_token_type_index(token_type: &SemanticTokenTypes) -> Option<u32> {
         SemanticTokenTypes::Base64 => Some(24),
         SemanticTokenTypes::Variable => Some(8),
         SemanticTokenTypes::Let => Some(25),
+        SemanticTokenTypes::Fix => Some(25),
         SemanticTokenTypes::Body => Some(26),
         SemanticTokenTypes::Assign => Some(28),
         SemanticTokenTypes::LambdaDef => Some(29),
@@ -322,7 +325,7 @@ fn get_token_type_index(token_type: &SemanticTokenTypes) -> Option<u32> {
 fn get_token_modifiers(token_type: &SemanticTokenTypes) -> u32 {
     match token_type {
         SemanticTokenTypes::KeyValue => MOD_DEFINITION | MOD_DECLARATION,
-        SemanticTokenTypes::Let => MOD_DECLARATION | MOD_DEFINITION,
+        SemanticTokenTypes::Let | SemanticTokenTypes::Fix => MOD_DECLARATION | MOD_DEFINITION,
         SemanticTokenTypes::Variable => MOD_NONE,
         SemanticTokenTypes::LambdaDef => MOD_DECLARATION | MOD_DEFINITION,
         SemanticTokenTypes::Assign => MOD_MODIFICATION,

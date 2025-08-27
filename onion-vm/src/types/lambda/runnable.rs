@@ -142,6 +142,8 @@ static INSTRUCTION_TABLE: std::sync::LazyLock<Vec<InstructionHandler>> =
         instruction_table[VMInstruction::Import as usize] = vm_instructions::import;
 
         instruction_table[VMInstruction::Assert as usize] = vm_instructions::assert;
+        instruction_table[VMInstruction::Represent as usize] = vm_instructions::represent;
+        instruction_table[VMInstruction::Display as usize] = vm_instructions::display;
 
         instruction_table
     });

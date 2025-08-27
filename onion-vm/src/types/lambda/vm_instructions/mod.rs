@@ -513,10 +513,10 @@ pub fn get_attr(
     let obj = unwrap_step_result!(runnable.context.get_object_rev(1));
     let element =
         unwrap_step_result!(obj.weak().with_data(|inner| attr.weak().with_data(|attr| {
-            Ok(inner.with_attribute(attr, &|super_object, attr| {
+            Ok(inner.with_attribute(attr, &|_super_object, attr| {
                 Ok(match attr {
                     OnionObject::Lambda(lambda) => {
-                        OnionObject::Lambda(lambda.bind_self_object(super_object.clone()))
+                        OnionObject::Lambda(lambda.bind_self_object(inner.clone()))
                     }
                     _ => attr.clone(),
                 })
@@ -1384,5 +1384,35 @@ pub fn make_atomic(
 
     unwrap_step_result!(runnable.context.discard_objects(1));
     unwrap_step_result!(runnable.context.push_object(new_lambda));
+    StepResult::Continue
+}
+
+pub fn represent(
+    runnable: &mut LambdaRunnable,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObjectCell>,
+) -> StepResult {
+    let value = unwrap_step_result!(runnable.context.get_object_rev(0));
+
+    let repr = unwrap_step_result!(value.weak().repr(&vec![]));
+    let repr = OnionStringValue::new_static(repr);
+
+    unwrap_step_result!(runnable.context.discard_objects(1));
+    unwrap_step_result!(runnable.context.push_object(repr));
+    StepResult::Continue
+}
+
+pub fn display(
+    runnable: &mut LambdaRunnable,
+    _opcode: &ProcessedOpcode,
+    _gc: &mut GC<OnionObjectCell>,
+) -> StepResult {
+    let value = unwrap_step_result!(runnable.context.get_object_rev(0));
+
+    let display = unwrap_step_result!(value.weak().display(&vec![]));
+    let display = OnionStringValue::new_static(display);
+
+    unwrap_step_result!(runnable.context.discard_objects(1));
+    unwrap_step_result!(runnable.context.push_object(display));
     StepResult::Continue
 }

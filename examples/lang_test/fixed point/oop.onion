@@ -1,0 +1,21 @@
+@required 'stdlib';
+fix A := {
+    data => 42,
+    getData => A : () -> {
+        return self.data;
+    }
+};
+
+stdlib.io.println(A);
+stdlib.io.println(A.getData());
+
+A = A + {
+    data2 => 84,
+    getData2 => A : () -> {
+        return self.data2;
+    }
+};
+
+stdlib.io.println(A);
+stdlib.io.println(A.getData());
+stdlib.io.println(A.getData2());

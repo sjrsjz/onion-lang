@@ -1,0 +1,6 @@
+@required 'stdlib';
+pair := "Hello world!" : () -> stdlib.io.println(self);
+pair(); // calling the pair will let `self` refer to the key of the pair
+
+pair2 := "A" : ("B" : () -> stdlib.io.println(self));
+pair2(); // calling the pair2 will let `self` refer to the last key of the pair, which is "A"

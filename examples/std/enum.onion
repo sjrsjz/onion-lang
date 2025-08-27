@@ -2,9 +2,8 @@
 if (not keyof (sync (() -> Modules.Enum))()) {
     @include "constraint.onion";
     // Define temporary Enum constructor
-    _Enum_Temp_Constructor := mut undefined;
     // Configure temporary Enum constructor
-    _Enum_Temp_Constructor = (tags => Tuple) -> {
+    Enum := (tags => Tuple) -> {
         @include "prototype.onion";
         @include "result.onion";
         
@@ -43,7 +42,7 @@ if (not keyof (sync (() -> Modules.Enum))()) {
     };
 
     // Cache the configured temporary Enum constructor
-    Modules = Modules + (Enum => _Enum_Temp_Constructor,);
+    Modules = Modules + (Enum => Enum,);
 };
 
 // Assign the cached constructor to global Enum

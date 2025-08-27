@@ -104,7 +104,7 @@ render_frame := (grid?, w?, h?, generation?) -> {
     display_buffer = display_buffer + "\u001b[2J\u001b[H";
     
     // Build title
-    title := "🔬 Conway's Game of Life [Generation " + stdlib.types.to_string(generation) + "] 🧬";
+    title := "🔬 Conway's Game of Life [Generation " + stdlib.types.display(generation) + "] 🧬";
     display_buffer = display_buffer + colorize(title, "bright_cyan", "bg_black") + "\n";
     
     // Count number of live cells
@@ -122,7 +122,7 @@ render_frame := (grid?, w?, h?, generation?) -> {
     };
     
     // Build info line
-    info := "Live cells: " + stdlib.types.to_string(alive_count) + " | Double-buffered rendering | Size: " + stdlib.types.to_string(w) + "x" + stdlib.types.to_string(h);
+    info := "Live cells: " + stdlib.types.display(alive_count) + " | Double-buffered rendering | Size: " + stdlib.types.display(w) + "x" + stdlib.types.display(h);
     display_buffer = display_buffer + colorize(info, "bright_yellow", "bg_black") + "\n";
     
     // Build top border

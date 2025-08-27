@@ -1,13 +1,10 @@
 @required 'Modules';
 if (not keyof (sync (() -> Modules.Result))()) {
-    // Define temporary Result constructor and helper functions
-    _Result_Temp_Constructor := mut undefined;
-    _Ok_Temp_Helper := (v?) -> _Result_Temp_Constructor.new(true : v);
-    _Err_Temp_Helper := (v?) -> _Result_Temp_Constructor.new(false : v);
-
     // Configure temporary Result constructor
-    _Result_Temp_Constructor = {
+    fix Result := {
         @include "prototype.onion";
+        _Ok_Temp_Helper := (v?) -> Result.new(true : v);
+        _Err_Temp_Helper := (v?) -> Result.new(false : v);
         // Interface definition for Result instance
         Result_Interface := interface {
             is_ok => () -> keyof keyof self,
@@ -16,21 +13,21 @@ if (not keyof (sync (() -> Modules.Result))()) {
                 if (self.is_ok()) {
                     return _Ok_Temp_Helper(f(valueof keyof self));
                 } else {
-                    return _Result_Temp_Constructor.new(keyof self);
+                    return Result.new(keyof self);
                 }
             },
             map_err => (f?) -> {
                 if (self.is_err()) {
                     return _Err_Temp_Helper(f(valueof keyof self));
                 } else {
-                    return _Result_Temp_Constructor.new(keyof self);
+                    return Result.new(keyof self);
                 }
             },
             add_then => (f?) -> {
                 if (self.is_ok()) {
                     return f(valueof keyof self);
                 } else {
-                    return _Result_Temp_Constructor.new(keyof self);
+                    return Result.new(keyof self);
                 }
             },
             unwrap => () -> {
@@ -66,7 +63,7 @@ if (not keyof (sync (() -> Modules.Result))()) {
     };
 
     // Cache the configured temporary Result constructor
-    Modules = Modules + (Result => _Result_Temp_Constructor,);
+    Modules = Modules + (Result => Result,);
 };
 
 // Assign the cached constructor to global Result
@@ -81,7 +78,6 @@ try := (f?) -> {
 };
 
 @def(try_expr => "expr" -> {
-    expr := ast.deserialize(expr);
     return ast.apply << (
         ast.variable("try"),
         ast.lambda_def(false,()) << ((), expr)

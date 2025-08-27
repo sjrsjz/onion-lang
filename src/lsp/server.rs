@@ -252,6 +252,9 @@ impl LspServer {
             "this",
             "dynamic",
             "static",
+            "fix",
+            "repr",
+            "display",
         ];
         for keyword in keywords {
             items.push(CompletionItem {

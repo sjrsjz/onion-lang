@@ -98,6 +98,8 @@ pub enum VMInstruction {
     // ===== 特殊操作 (100-109) =====
     ForkInstruction = 100, // 复制当前函数指令集
     Assert = 101,          // 断言
+    Represent = 102,       // 表示 (获取表示形式)
+    Display = 103,         // 显示 (获取显示形式)
 
     // ===== 其他 =====
     Nop = 255, // 空操作
@@ -197,6 +199,8 @@ impl VMInstruction {
             // ===== 特殊操作 (100-109) =====
             100 => Some(Self::ForkInstruction),
             101 => Some(Self::Assert),
+            102 => Some(Self::Represent),
+            103 => Some(Self::Display),
 
             // ===== 其他 =====
             255 => Some(Self::Nop),

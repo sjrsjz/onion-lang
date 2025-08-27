@@ -1,14 +1,11 @@
 @required 'Modules';
 if (not keyof (sync (() -> Modules.Option))()) {
-    // Define temporary Option constructor and helper functions
-    _Option_Temp_Constructor := mut undefined;
-    _Some_Temp_Helper := (v?) -> _Option_Temp_Constructor.new(true : v);
-    _None_Temp_Helper := () -> _Option_Temp_Constructor.new(false : undefined);
-
     // Configure temporary Option constructor
-    _Option_Temp_Constructor = {
+    fix Option := {
         @include "result.onion";
         @include "prototype.onion";
+        _Some_Temp_Helper := (v?) -> Option.new(true : v);
+        _None_Temp_Helper := () -> Option.new(false : undefined);
         // Interface definition for Option instance
         Option_Interface := interface {
             is_some => () -> keyof keyof self,
@@ -57,7 +54,7 @@ if (not keyof (sync (() -> Modules.Option))()) {
             },
             or_else => (f?) -> {
                 if (self.is_some()) {
-                    return _Option_Temp_Constructor.new(keyof self);
+                    return Option.new(keyof self);
                 } else {
                     return f();
                 }
@@ -67,7 +64,7 @@ if (not keyof (sync (() -> Modules.Option))()) {
     };
 
     // Cache the configured temporary Option constructor
-    Modules = Modules + (Option => _Option_Temp_Constructor,);
+    Modules = Modules + (Option => Option,);
 };
 
 // Assign the cached constructor to global Option

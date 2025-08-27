@@ -582,6 +582,17 @@ impl IRTranslator {
                             .get_opcode(),
                     );
                 }
+                IR::Represent => {
+                    self.code.push(
+                        Opcode32::build_opcode(VMInstruction::Represent as u8, 0, 0, 0)
+                            .get_opcode(),
+                    );
+                }
+                IR::Display => {
+                    self.code.push(
+                        Opcode32::build_opcode(VMInstruction::Display as u8, 0, 0, 0).get_opcode(),
+                    );
+                }
                 _ => {
                     return Err(IRTranslatorError::InvalidInstruction(ir));
                 }

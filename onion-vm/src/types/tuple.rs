@@ -273,7 +273,7 @@ impl OnionObjectProtocol for OnionTuple {
                 let start = range.start();
                 let end = range.end();
                 let len = self.elements.len();
-                if start < 0 || end < 0 || start >= len as i64 || end >= len as i64 {
+                if start < 0 || end < 0 || start >= len as i64 || end > len as i64 || start > end {
                     return Err(RuntimeError::InvalidOperation(
                         format!("Range {}..{} out of bounds for Tuple", start, end).into(),
                     ));
@@ -327,8 +327,16 @@ impl OnionObjectProtocol for OnionTuple {
         self.elements.iter().for_each(|e| e.upgrade(collected));
     }
 
-    fn repr(&self, _ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
-        Ok(format!("{:?}", self))
+    fn repr(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {
+        let mut elements = Vec::new();
+        for element in self.elements.iter() {
+            elements.push(element.repr(ptrs)?);
+        }
+        match self.elements.len() {
+            0 => Ok("()".into()),
+            1 => Ok(format!("({},)", elements[0])),
+            _ => Ok(format!("({})", elements.join(", "))),
+        }
     }
 
     fn display(&self, ptrs: &Vec<*const OnionObject>) -> Result<String, RuntimeError> {

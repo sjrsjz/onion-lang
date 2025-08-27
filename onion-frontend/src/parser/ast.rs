@@ -49,6 +49,7 @@
 //! - **断言**：`assert condition`
 //! - **导入**：`import module`
 //! - **并发**：`launch`, `spawn`, `async`, `sync`, `atomic`
+//! - **变量描述**：`repr`, `display`
 //!
 //! ## 编译时特性
 //! - **编译时求值**：`@ expression`
@@ -323,6 +324,7 @@ pub enum ASTNodeType {
     Required(String), // 变量存在性占位符，我们不直接硬编码对应的AST，我们通过comptime中调用`required "var"`来生成
 
     Let(String),                      // x := expression
+    Fix(String),                      // fix var := expression
     Frame,                            // {...}
     Assign,                           // x = expression
     LambdaDef(bool, HashSet<String>), // tuple -> body or tuple -> dyn expression
@@ -368,6 +370,7 @@ impl Display for ASTNodeType {
                 ASTNodeType::Variable(_) => "Variable",
                 ASTNodeType::Required(_) => "Required",
                 ASTNodeType::Let(_) => "Let",
+                ASTNodeType::Fix(_) => "Fix",
                 ASTNodeType::Frame => "Frame",
                 ASTNodeType::Assign => "Assign",
                 ASTNodeType::LambdaDef(_, _) => "LambdaDef",
@@ -482,21 +485,25 @@ pub enum ASTNodeOperation {
 /// ## 其他修饰符
 /// - `Assert`：断言 `assert condition`，在运行时检查条件
 /// - `Import`：导入模块 `import module`，引入外部字节码
+/// - `Represent`：表示 `repr expression`，获取表达式的字符串表示
+/// - `Display`：显示 `display expression`，获取表达式的用户友好显示
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum ASTNodeModifier {
-    Mut,      // Mut
-    Const,    // Const
-    KeyOf,    // KeyOf
-    ValueOf,  // ValueOf
-    Assert,   // Assert
-    Import,   // Import
-    TypeOf,   // TypeOf
-    LengthOf, // LengthOf
-    Launch,   // Launch
-    Spawn,    // Spawn
-    Async,    // Async
-    Sync,     // Sync
-    Atomic,   // Atomic
+    Mut,       // Mut
+    Const,     // Const
+    KeyOf,     // KeyOf
+    ValueOf,   // ValueOf
+    Assert,    // Assert
+    Import,    // Import
+    TypeOf,    // TypeOf
+    LengthOf,  // LengthOf
+    Launch,    // Launch
+    Spawn,     // Spawn
+    Async,     // Async
+    Sync,      // Sync
+    Atomic,    // Atomic
+    Represent, // Represent
+    Display,   // Display
 }
 
 /// AST 节点结构体。
@@ -952,7 +959,7 @@ fn match_all<'t>(
     node_matcher.add_matcher(match_tuple);
     node_matcher.add_matcher(match_comptime);
     node_matcher.add_matcher(match_serialize_to_base64);
-    node_matcher.add_matcher(match_let);
+    node_matcher.add_matcher(match_let_and_fix);
     node_matcher.add_matcher(match_assign);
     node_matcher.add_matcher(match_map);
     node_matcher.add_matcher(match_set_def);
@@ -1157,28 +1164,49 @@ fn match_tuple(
     )))
 }
 
-fn match_let(
+fn match_let_and_fix(
     collector: &mut DiagnosticCollector,
     tokens: &[GatheredTokens],
 ) -> Result<Option<ASTNode>, ()> {
-    if tokens.len() <= 2 || !is_symbol(&tokens[1], ":=") {
-        return Ok(None);
-    }
-    let left_tokens = gather(collector, tokens[0])?;
-    let left = try_match_node!(collector, &left_tokens);
-    let right = try_match_node!(collector, &tokens[2..]);
+    // Handle "fix var := expr" syntax
+    if tokens.len() >= 3 && is_identifier(&tokens[0], "fix") && is_symbol(&tokens[2], ":=") {
+        let var_tokens = gather(collector, tokens[1])?;
+        let var_node = try_match_node!(collector, &var_tokens);
+        let right = try_match_node!(collector, &tokens[3..]);
 
-    match left.node_type {
-        ASTNodeType::Variable(name) | ASTNodeType::String(name) => Ok(Some(ASTNode::new(
-            ASTNodeType::Let(name),
-            span_from_tokens(&tokens),
-            vec![right],
-        ))),
-        _ => {
-            return collector.fatal(ASTParseDiagnostic::InvalidVariableName(span_from_tokens(
-                &left_tokens,
-            )));
+        match var_node.node_type {
+            ASTNodeType::Variable(name) | ASTNodeType::String(name) => Ok(Some(ASTNode::new(
+                ASTNodeType::Fix(name),
+                span_from_tokens(&tokens),
+                vec![right],
+            ))),
+            _ => {
+                return collector.fatal(ASTParseDiagnostic::InvalidVariableName(span_from_tokens(
+                    &var_tokens,
+                )));
+            }
         }
+    }
+    // Handle regular "var := expr" syntax
+    else if tokens.len() >= 2 && is_symbol(&tokens[1], ":=") {
+        let left_tokens = gather(collector, tokens[0])?;
+        let left = try_match_node!(collector, &left_tokens);
+        let right = try_match_node!(collector, &tokens[2..]);
+
+        match left.node_type {
+            ASTNodeType::Variable(name) | ASTNodeType::String(name) => Ok(Some(ASTNode::new(
+                ASTNodeType::Let(name),
+                span_from_tokens(&tokens),
+                vec![right],
+            ))),
+            _ => {
+                return collector.fatal(ASTParseDiagnostic::InvalidVariableName(span_from_tokens(
+                    &left_tokens,
+                )));
+            }
+        }
+    } else {
+        Ok(None)
     }
 }
 
@@ -1827,7 +1855,7 @@ fn match_modifier(
     if tokens[0].len() == 1
         && vec![
             "mut", "const", "keyof", "valueof", "assert", "import", "typeof", "lengthof", "launch",
-            "spawn", "async", "sync", "atomic",
+            "spawn", "async", "sync", "atomic", "repr", "display",
         ]
         .contains(&tokens[0].first().unwrap().token().as_str())
     {
@@ -1846,6 +1874,8 @@ fn match_modifier(
             "async" => ASTNodeModifier::Async,
             "sync" => ASTNodeModifier::Sync,
             "atomic" => ASTNodeModifier::Atomic,
+            "repr" => ASTNodeModifier::Represent,
+            "display" => ASTNodeModifier::Display,
             _ => return Ok(None),
         };
         return Ok(Some(ASTNode::new(

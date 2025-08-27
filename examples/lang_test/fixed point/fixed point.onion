@@ -1,0 +1,22 @@
+@required 'stdlib';
+
+/*
+`fix var := expr` is a way to create a recursive structure.
+
+`fix var := expr` is equivalent to:
+```onion
+var := mut undefined;
+var = expr;
+```
+So the `fix point` is always mutable.
+
+Here, `A` is defined as a tuple containing itself and the integer `1`.
+When we print `A`, it will show the recursive structure as `(..., 1)`, indicating that `A` contains itself.
+*/
+fix A := (A, 1);
+
+stdlib.io.println(A);
+
+fix M := fix N := (M, (N, 42));
+
+stdlib.io.println(M);

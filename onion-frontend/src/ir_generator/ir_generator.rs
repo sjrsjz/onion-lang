@@ -333,6 +333,18 @@ impl<'t> IRGenerator<'t> {
                 instructions.push((self.generate_debug_info(ast_node), IR::Let(name.clone())));
                 Ok(instructions)
             }
+            ASTNodeType::Fix(name) => {
+                // Expects 1 child: value
+                check_children_exact!(collector, ast_node, 1);
+                let mut instructions = Vec::new();
+                instructions.push((self.generate_debug_info(ast_node), IR::LoadUndefined)); // Load undefined value
+                instructions.push((self.generate_debug_info(ast_node), IR::Mut)); // Mark as mutable
+                instructions.push((self.generate_debug_info(ast_node), IR::Let(name.clone()))); // Let binding, it will return `mut undefined`, so we don't need to load var
+                instructions
+                    .extend(self.generate_without_redirect(collector, &ast_node.children[0])?);
+                instructions.push((self.generate_debug_info(ast_node), IR::Set)); // Set the actual value
+                Ok(instructions)
+            }
             ASTNodeType::Apply => {
                 // Expects any number of children
                 let mut instructions = Vec::new();
@@ -580,7 +592,7 @@ impl<'t> IRGenerator<'t> {
             ASTNodeType::Expressions => {
                 // Expects any number of children
                 let mut instructions = Vec::new();
-                for (i,child) in ast_node.children.iter().enumerate() {
+                for (i, child) in ast_node.children.iter().enumerate() {
                     // instructions.push((self.generate_debug_info(child), IR::ResetStack)); // 这个是严重错误的，会导致(;)把栈清空
                     instructions.extend(self.generate_without_redirect(collector, child)?);
                     if i < ast_node.children.len() - 1 {
@@ -818,6 +830,12 @@ impl<'t> IRGenerator<'t> {
                     }
                     ASTNodeModifier::Atomic => {
                         instructions.push((self.generate_debug_info(ast_node), IR::MakeAtomic));
+                    }
+                    ASTNodeModifier::Represent => {
+                        instructions.push((self.generate_debug_info(ast_node), IR::Represent));
+                    }
+                    ASTNodeModifier::Display => {
+                        instructions.push((self.generate_debug_info(ast_node), IR::Display));
                     }
                 }
                 Ok(instructions)
