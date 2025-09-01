@@ -1,6 +1,7 @@
 use std::{collections::VecDeque, fmt::Debug, sync::Arc};
 
 use arc_gc::{arc::GCArcWeak, traceable::GCTraceable};
+use smallvec::SmallVec;
 
 use crate::{
     lambda::runnable::RuntimeError,
@@ -100,6 +101,7 @@ impl OnionObjectProtocolStatic for OnionUndefined {
         &self,
         self_object: &OnionObject,
         key: &OnionObject,
+        _path: &mut SmallVec<[*const (); 8]>,
         f: &F,
     ) -> Result<R, RuntimeError>
     where

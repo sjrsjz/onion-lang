@@ -1188,6 +1188,7 @@ dependencies = [
  "rust-arc-gc",
  "rustc-hash",
  "serde",
+ "smallvec",
  "unicode-width 0.2.1",
 ]
 

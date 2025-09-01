@@ -4,6 +4,7 @@ use indexmap::IndexMap;
 use onion_vm::{
     GC,
     lambda::runnable::RuntimeError,
+    smallvec::SmallVec,
     types::{
         lambda::parameter::LambdaParameter,
         object::{OnionObjectCell, OnionStaticObject},
@@ -51,8 +52,9 @@ fn find(
     let key_borrowed = key.weak();
     match obj
         .weak()
-        .with_attribute(key_borrowed, &|_, obj| Ok(obj.stabilize()))
-    {
+        .with_attribute(key_borrowed, &mut SmallVec::new(), &|_, obj| {
+            Ok(obj.stabilize())
+        }) {
         Ok(value) => Ok(value),
         Err(RuntimeError::InvalidOperation(ref err)) => {
             // If the attribute is not found, return undefined

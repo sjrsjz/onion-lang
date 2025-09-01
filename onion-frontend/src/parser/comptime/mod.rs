@@ -23,7 +23,7 @@ pub mod solver;
 use std::sync::Arc;
 
 use onion_vm::{
-    lambda::runnable::{RuntimeError, StepResult}, types::{
+    lambda::runnable::{RuntimeError, StepResult}, smallvec::SmallVec, types::{
         boolean_value::OnionBooleanValue, bytes_value::OnionBytesValue, integer_value::OnionIntegerValue, null::OnionNull, object::{OnionObject, OnionObjectCell, OnionObjectProtocol, OnionObjectProtocolAny, OnionStaticObject}, string_value::OnionStringValue, tuple::OnionTuple
     }, GCTraceable
 };
@@ -212,6 +212,7 @@ impl OnionObjectProtocolAny for OnionASTObject {
         &self,
         self_object: &OnionObject,
         key: &OnionObject,
+        _path: &mut SmallVec<[*const (); 8]>,
         f: &mut dyn FnMut(&OnionObject, &OnionObject) -> Result<(), RuntimeError>,
     ) -> Result<(), RuntimeError> {
         key.with_data(|key_data| match key_data {

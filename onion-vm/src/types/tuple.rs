@@ -16,6 +16,7 @@ use arc_gc::{
     gc::GC,
     traceable::GCTraceable,
 };
+use smallvec::SmallVec;
 
 use crate::{
     lambda::runnable::{RuntimeError, StepResult},
@@ -363,6 +364,7 @@ impl OnionObjectProtocolStatic for OnionTuple {
         &self,
         self_object: &OnionObject,
         key: &OnionObject,
+        _path: &mut SmallVec<[*const (); 8]>,
         f: &F,
     ) -> Result<R, RuntimeError>
     where

@@ -81,6 +81,7 @@ use arc_gc::{
     gc::GC,
     traceable::GCTraceable,
 };
+use smallvec::SmallVec;
 
 use super::{
     lambda::definition::OnionLambdaDefinition, lazy_set::OnionLazySet, pair::OnionPair,
@@ -188,7 +189,12 @@ impl OnionObjectCell {
     /// - `key`: 属性键对象
     /// - `f`: 处理属性值的闭包
     #[inline(always)]
-    pub fn with_attribute<F>(&self, key: &OnionObject, f: &F) -> Result<(), RuntimeError>
+    pub fn with_attribute<F>(
+        &self,
+        key: &OnionObject,
+        path: &mut SmallVec<[*const (); 8]>,
+        f: &F,
+    ) -> Result<(), RuntimeError>
     where
         F: Fn(&OnionObject, &OnionObject) -> Result<(), RuntimeError>,
     {
@@ -201,7 +207,7 @@ impl OnionObjectCell {
                         .into(),
                 )
             })?
-            .with_attribute(key, f)
+            .with_attribute(key, path, f)
     }
 
     /// 升级对象的弱引用为强引用。
@@ -584,6 +590,7 @@ pub trait OnionObjectProtocolStatic: OnionObjectProtocol {
         &self,
         self_object: &OnionObject,
         key: &OnionObject,
+        path: &mut SmallVec<[*const (); 8]>,
         f: &F,
     ) -> Result<R, RuntimeError>
     where
@@ -605,6 +612,7 @@ pub trait OnionObjectProtocolAny: OnionObjectProtocol {
         &self,
         self_object: &OnionObject,
         key: &OnionObject,
+        path: &mut SmallVec<[*const (); 8]>,
         f: &mut dyn FnMut(&OnionObject, &OnionObject) -> Result<(), RuntimeError>,
     ) -> Result<(), RuntimeError> {
         Err(RuntimeError::InvalidOperation(
@@ -1341,41 +1349,55 @@ impl OnionObject {
         })
     }
 
-    pub fn with_attribute<F, R>(&self, key: &OnionObject, f: &F) -> Result<R, RuntimeError>
+    pub fn with_attribute<F, R>(
+        &self,
+        key: &OnionObject,
+        path: &mut SmallVec<[*const (); 8]>,
+        f: &F,
+    ) -> Result<R, RuntimeError>
     where
         F: Fn(&OnionObject, &OnionObject) -> Result<R, RuntimeError>,
     {
-        self.with_data(|obj| match obj {
-            OnionObject::IntegerValue(v) => v.with_attribute(obj, key, f),
-            OnionObject::FloatValue(v) => v.with_attribute(obj, key, f),
-            OnionObject::BooleanValue(v) => v.with_attribute(obj, key, f),
-
-            OnionObject::StringValue(v) => v.with_attribute(obj, key, f),
-            OnionObject::BytesValue(v) => v.with_attribute(obj, key, f),
-            OnionObject::Range(v) => v.with_attribute(obj, key, f),
-            OnionObject::Null(v) => v.with_attribute(obj, key, f),
-            OnionObject::Undefined(v) => v.with_attribute(obj, key, f),
-            OnionObject::InstructionPackage(v) => v.with_attribute(obj, key, f),
-            OnionObject::Tuple(v) => v.with_attribute(obj, key, f),
-            OnionObject::Pair(v) => v.with_attribute(obj, key, f),
-            OnionObject::LazySet(v) => v.with_attribute(obj, key, f),
-
-            OnionObject::Lambda(lambda_def) => lambda_def.with_attribute(obj, key, f),
-            OnionObject::Custom(custom) => {
-                let mut result: Result<R, RuntimeError> = Err(RuntimeError::InvalidOperation(
-                    "Custom with_attribute not called".into(),
+        self.with_data(|obj| {
+            if path.contains(&(obj as *const _ as *const ())) {
+                return Err(RuntimeError::InvalidOperation(
+                    "Cyclic reference detected in with_attribute".into(),
                 ));
-                custom.with_attribute(
-                    obj,
-                    key,
-                    &mut |super_obj, obj| -> Result<(), RuntimeError> {
-                        result = f(super_obj, obj);
-                        Ok(())
-                    },
-                )?;
-                result
             }
-            OnionObject::Mut(_) => unreachable!(),
+            path.push(obj as *const _ as *const ());
+            match obj {
+                OnionObject::IntegerValue(v) => v.with_attribute(obj, key, path, f),
+                OnionObject::FloatValue(v) => v.with_attribute(obj, key, path, f),
+                OnionObject::BooleanValue(v) => v.with_attribute(obj, key, path, f),
+
+                OnionObject::StringValue(v) => v.with_attribute(obj, key, path, f),
+                OnionObject::BytesValue(v) => v.with_attribute(obj, key, path, f),
+                OnionObject::Range(v) => v.with_attribute(obj, key, path, f),
+                OnionObject::Null(v) => v.with_attribute(obj, key, path, f),
+                OnionObject::Undefined(v) => v.with_attribute(obj, key, path, f),
+                OnionObject::InstructionPackage(v) => v.with_attribute(obj, key, path, f),
+                OnionObject::Tuple(v) => v.with_attribute(obj, key, path, f),
+                OnionObject::Pair(v) => v.with_attribute(obj, key, path, f),
+                OnionObject::LazySet(v) => v.with_attribute(obj, key, path, f),
+
+                OnionObject::Lambda(lambda_def) => lambda_def.with_attribute(obj, key, path, f),
+                OnionObject::Custom(custom) => {
+                    let mut result: Result<R, RuntimeError> = Err(RuntimeError::InvalidOperation(
+                        "Custom with_attribute not called".into(),
+                    ));
+                    custom.with_attribute(
+                        obj,
+                        key,
+                        path,
+                        &mut |super_obj, obj| -> Result<(), RuntimeError> {
+                            result = f(super_obj, obj);
+                            Ok(())
+                        },
+                    )?;
+                    result
+                }
+                OnionObject::Mut(_) => unreachable!(),
+            }
         })
     }
 

@@ -6,6 +6,7 @@ use arc_gc::{
     traceable::GCTraceable,
 };
 use base64::Engine;
+use smallvec::SmallVec;
 
 use crate::{
     lambda::runnable::{RuntimeError, StepResult},
@@ -188,6 +189,7 @@ impl OnionObjectProtocolStatic for OnionBytesValue {
         &self,
         self_object: &OnionObject,
         key: &OnionObject,
+        _path: &mut SmallVec<[*const (); 8]>,
         f: &F,
     ) -> Result<R, RuntimeError>
     where

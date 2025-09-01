@@ -6,9 +6,7 @@ use arc_gc::{
 };
 use indexmap::IndexMap;
 use onion_vm::{
-    GC,
-    lambda::runnable::RuntimeError,
-    types::{
+    lambda::runnable::RuntimeError, smallvec::SmallVec, types::{
         boolean_value::OnionBooleanValue,
         bytes_value::OnionBytesValue,
         float_value::OnionFloatValue,
@@ -20,8 +18,7 @@ use onion_vm::{
             OnionStaticObject,
         },
         string_value::OnionStringValue,
-    },
-    utils::fastmap::{OnionFastMap, OnionKeyPool},
+    }, utils::fastmap::{OnionFastMap, OnionKeyPool}, GC
 };
 
 // 引入所需的辅助函数
@@ -145,6 +142,7 @@ impl OnionObjectProtocolAny for CTypes {
         &self,
         self_object: &OnionObject,
         key: &OnionObject,
+        _path: &mut SmallVec<[*const (); 8]>,
         f: &mut dyn FnMut(&OnionObject, &OnionObject) -> Result<(), RuntimeError>,
     ) -> Result<(), RuntimeError> {
         if let OnionObject::StringValue(attr) = key {

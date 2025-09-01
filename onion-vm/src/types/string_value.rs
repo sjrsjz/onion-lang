@@ -24,6 +24,7 @@ use arc_gc::{
     gc::GC,
     traceable::GCTraceable,
 };
+use smallvec::SmallVec;
 
 #[derive(Clone)]
 pub struct OnionStringValue {
@@ -165,6 +166,7 @@ impl OnionObjectProtocolStatic for OnionStringValue {
         &self,
         self_object: &OnionObject,
         key: &OnionObject,
+        _path: &mut SmallVec<[*const (); 8]>,
         f: &F,
     ) -> Result<R, RuntimeError>
     where

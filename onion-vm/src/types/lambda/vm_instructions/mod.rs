@@ -4,6 +4,7 @@ use instruction_set::VMInstructionPackage;
 
 use arc_gc::gc::GC;
 use opcode::{OpcodeArgument, ProcessedOpcode};
+use smallvec::SmallVec;
 
 use crate::{
     lambda::{
@@ -513,14 +514,16 @@ pub fn get_attr(
     let obj = unwrap_step_result!(runnable.context.get_object_rev(1));
     let element =
         unwrap_step_result!(obj.weak().with_data(|inner| attr.weak().with_data(|attr| {
-            Ok(inner.with_attribute(attr, &|_super_object, attr| {
-                Ok(match attr {
-                    OnionObject::Lambda(lambda) => {
-                        OnionObject::Lambda(lambda.bind_self_object(inner.clone()))
-                    }
-                    _ => attr.clone(),
-                })
-            })?)
+            Ok(
+                inner.with_attribute(attr, &mut SmallVec::new(), &|_super_object, attr| {
+                    Ok(match attr {
+                        OnionObject::Lambda(lambda) => {
+                            OnionObject::Lambda(lambda.bind_self_object(inner.clone()))
+                        }
+                        _ => attr.clone(),
+                    })
+                })?,
+            )
         })))
         .consume_and_stabilize();
 

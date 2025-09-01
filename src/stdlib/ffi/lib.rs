@@ -8,9 +8,7 @@ use indexmap::IndexMap;
 use libffi::middle::{Arg, Cif, Type};
 use libloading::Library;
 use onion_vm::{
-    GC,
-    lambda::runnable::RuntimeError,
-    types::{
+    lambda::runnable::RuntimeError, smallvec::SmallVec, types::{
         lambda::parameter::LambdaParameter,
         object::{
             OnionObject, OnionObjectCell, OnionObjectProtocol, OnionObjectProtocolAny,
@@ -18,8 +16,7 @@ use onion_vm::{
         },
         string_value::OnionStringValue,
         tuple::OnionTuple,
-    },
-    utils::fastmap::{OnionFastMap, OnionKeyPool},
+    }, utils::fastmap::{OnionFastMap, OnionKeyPool}, GC
 };
 
 // 引入所需的辅助函数和类型
@@ -139,6 +136,7 @@ impl OnionObjectProtocolAny for CLib {
         &self,
         self_object: &OnionObject,
         key: &OnionObject,
+        _path: &mut SmallVec<[*const (); 8]>,
         f: &mut dyn FnMut(&OnionObject, &OnionObject) -> Result<(), RuntimeError>,
     ) -> Result<(), RuntimeError> {
         if let OnionObject::StringValue(attr) = key {
@@ -366,6 +364,7 @@ impl OnionObjectProtocolAny for CFunctionHandle {
         &self,
         self_object: &OnionObject,
         key: &OnionObject,
+        _path: &mut SmallVec<[*const (); 8]>,
         f: &mut dyn FnMut(&OnionObject, &OnionObject) -> Result<(), RuntimeError>,
     ) -> Result<(), RuntimeError> {
         if let OnionObject::StringValue(attr) = key {

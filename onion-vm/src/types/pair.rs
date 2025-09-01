@@ -15,6 +15,7 @@ use arc_gc::{
     arc::{GCArc, GCArcWeak},
     traceable::GCTraceable,
 };
+use smallvec::SmallVec;
 
 use crate::{
     lambda::runnable::RuntimeError,
@@ -161,6 +162,7 @@ impl OnionObjectProtocolStatic for OnionPair {
         &self,
         _self_object: &OnionObject,
         key: &OnionObject,
+        path: &mut SmallVec<[*const (); 8]>,
         f: &F,
     ) -> Result<R, RuntimeError>
     where
@@ -168,7 +170,7 @@ impl OnionObjectProtocolStatic for OnionPair {
     {
         self.value
             .1
-            .with_attribute(key, f)
-            .or_else(|_| self.value.0.with_attribute(key, f))
+            .with_attribute(key, path, f)
+            .or_else(|_| self.value.0.with_attribute(key, path, f))
     }
 }
